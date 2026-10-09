@@ -28,7 +28,8 @@
 			"decreaseFontSize": "Reducir tamaño de fuente",
 			"increaseFontSize": "Aumentar tamaño de fuente",
 			"mirror": "Reflejar horizontalmente"
-		}
+		},
+		"confirmDiscardRecording": "Haz clic otra vez para descartar esta grabación"
 	},
 	"audio": {
 		"enableSystemAudio": "Activar audio del sistema",

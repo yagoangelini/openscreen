@@ -44,7 +44,11 @@
 		"permissionDenied": "Permiso de grabación denegado. Por favor permite la grabación de pantalla.",
 		"accessibilityAllowAndRetry": "Permite el acceso de accesibilidad para OpenScreen y luego pulsa grabar de nuevo para iniciar la cuenta atrás.",
 		"selectSource": "Por favor selecciona una fuente para grabar",
-		"takeInterrupted": "La grabación se detuvo antes de tiempo por un error. Se guardó todo lo grabado hasta ese momento."
+		"takeInterrupted": "La grabación se detuvo antes de tiempo por un error. Se guardó todo lo grabado hasta ese momento.",
+		"diskSpaceCritical": "No hay suficiente espacio libre en disco para grabar. Libera al menos 1 GB e inténtalo de nuevo.",
+		"diskSpaceLow": "Poco espacio en disco: caben unos {{minutes}} minutos de grabación.",
+		"crashProtectionOff": "La protección contra fallos está desactivada en esta grabación: si la app se cierra inesperadamente, la toma no podrá recuperarse.",
+		"takeStoppedDiskFull": "La grabación se detuvo porque el disco está casi lleno. Se guardó todo lo grabado hasta ahora."
 	},
 	"loadingVideo": "Cargando video...",
 	"loadingEditor": "Cargando editor...",

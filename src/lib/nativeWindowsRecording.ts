@@ -66,6 +66,12 @@ export type NativeWindowsRecordingStartResult = {
 	 * probably is not the one the user chose.
 	 */
 	microphoneDefaulted?: boolean;
+	/** Machine-readable reason a start was refused, e.g. "disk-space-critical". */
+	errorCode?: string;
+	/** The MP4 flavour the helper settled on; only "fragmented-mp4" survives a crash. */
+	containerFormat?: string | null;
+	/** Set when the disk holds less than about half an hour: the minutes it does hold. */
+	lowDiskSpaceMinutes?: number | null;
 };
 
 export function parseWindowHandleFromSourceId(sourceId?: string | null) {

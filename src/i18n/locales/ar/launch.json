@@ -28,7 +28,8 @@
 			"decreaseFontSize": "تصغير حجم الخط",
 			"increaseFontSize": "تكبير حجم الخط",
 			"mirror": "عكس أفقي"
-		}
+		},
+		"confirmDiscardRecording": "انقر مرة أخرى لتجاهل هذا التسجيل"
 	},
 	"audio": {
 		"enableSystemAudio": "تفعيل صوت النظام",

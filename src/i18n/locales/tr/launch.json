@@ -28,7 +28,8 @@
 			"decreaseFontSize": "Yazı tipi boyutunu küçült",
 			"increaseFontSize": "Yazı tipi boyutunu büyüt",
 			"mirror": "Yatay aynala"
-		}
+		},
+		"confirmDiscardRecording": "Bu kaydı silmek için tekrar tıklayın"
 	},
 	"audio": {
 		"enableSystemAudio": "Sistem sesini etkinleştir",

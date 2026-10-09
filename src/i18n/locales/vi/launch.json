@@ -28,7 +28,8 @@
 			"decreaseFontSize": "Giảm cỡ chữ",
 			"increaseFontSize": "Tăng cỡ chữ",
 			"mirror": "Lật ngang"
-		}
+		},
+		"confirmDiscardRecording": "Nhấp lần nữa để hủy bản ghi này"
 	},
 	"audio": {
 		"enableSystemAudio": "Bật âm thanh hệ thống",

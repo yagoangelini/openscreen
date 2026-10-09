@@ -52,7 +52,11 @@
 		"permissionDenied": "Oprávnění k nahrávání odepřeno. Povolte prosím záznam obrazovky.",
 		"accessibilityAllowAndRetry": "Povolte přístup k usnadnění pro OpenScreen a poté znovu stiskněte tlačítko nahrávání pro zahájení odpočítávání.",
 		"selectSource": "Vyberte prosím zdroj pro nahrávání",
-		"takeInterrupted": "Nahrávání se kvůli chybě zastavilo předčasně. Vše nahrané do té chvíle bylo uloženo."
+		"takeInterrupted": "Nahrávání se kvůli chybě zastavilo předčasně. Vše nahrané do té chvíle bylo uloženo.",
+		"diskSpaceCritical": "Na disku není dost místa pro nahrávání. Uvolněte alespoň 1 GB a zkuste to znovu.",
+		"diskSpaceLow": "Málo místa na disku: vejde se asi {{minutes}} minut nahrávky.",
+		"crashProtectionOff": "Ochrana proti pádu je pro tuto nahrávku vypnutá: pokud se aplikace nečekaně zavře, záznam nepůjde obnovit.",
+		"takeStoppedDiskFull": "Nahrávání bylo zastaveno, protože je disk téměř plný. Vše dosud nahrané bylo uloženo."
 	},
 	"emptyState": {
 		"title": "Žádný projekt není otevřen",

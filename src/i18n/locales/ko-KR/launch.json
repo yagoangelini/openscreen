@@ -28,7 +28,8 @@
 			"decreaseFontSize": "글꼴 크기 줄이기",
 			"increaseFontSize": "글꼴 크기 늘리기",
 			"mirror": "좌우 반전"
-		}
+		},
+		"confirmDiscardRecording": "이 녹화를 삭제하려면 다시 클릭하세요"
 	},
 	"audio": {
 		"enableSystemAudio": "시스템 오디오 활성화",

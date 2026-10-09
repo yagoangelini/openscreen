@@ -312,6 +312,9 @@ function resetLaunchMocks() {
 	recorderState.value.softwareEncoderFallbackNoticeVisible = false;
 	recorderState.value.dismissSoftwareEncoderFallbackNotice.mockClear();
 	recorderState.value.recording = false;
+	recorderState.value.elapsedSeconds = 0;
+	recorderState.value.restartRecording.mockClear();
+	recorderState.value.cancelRecording.mockClear();
 	recorderState.value.canPauseRecording = false;
 	recorderState.value.microphoneEnabled = false;
 	recorderState.value.setMicrophoneEnabled.mockClear();
@@ -472,6 +475,34 @@ describe("LaunchWindow record button", () => {
 			"aria-label",
 			"tooltips.cancelRecording",
 		);
+	});
+
+	it("discards a short take on the first click of Cancel", async () => {
+		recorderState.value.recording = true;
+		recorderState.value.elapsedSeconds = 4;
+		renderLaunchWindow();
+
+		fireEvent.click(await screen.findByTestId("launch-cancel-button"));
+		expect(recorderState.value.cancelRecording).toHaveBeenCalledTimes(1);
+	});
+
+	it("asks for a second click before Cancel or Restart throws a real take away", async () => {
+		recorderState.value.recording = true;
+		recorderState.value.elapsedSeconds = 600;
+		renderLaunchWindow();
+
+		const cancel = await screen.findByTestId("launch-cancel-button");
+		fireEvent.click(cancel);
+		expect(recorderState.value.cancelRecording).not.toHaveBeenCalled();
+		expect(cancel).toHaveAttribute("aria-label", "tooltips.confirmDiscardRecording");
+		fireEvent.click(cancel);
+		expect(recorderState.value.cancelRecording).toHaveBeenCalledTimes(1);
+
+		const restart = screen.getByTestId("launch-restart-button");
+		fireEvent.click(restart);
+		expect(recorderState.value.restartRecording).not.toHaveBeenCalled();
+		fireEvent.click(restart);
+		expect(recorderState.value.restartRecording).toHaveBeenCalledTimes(1);
 	});
 
 	it("clears record-after-selection intent when the source picker closes without a selection", async () => {

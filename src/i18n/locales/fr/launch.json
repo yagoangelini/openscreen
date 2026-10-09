@@ -28,7 +28,8 @@
 			"decreaseFontSize": "Réduire la taille de police",
 			"increaseFontSize": "Augmenter la taille de police",
 			"mirror": "Miroir horizontal"
-		}
+		},
+		"confirmDiscardRecording": "Cliquez encore pour supprimer cet enregistrement"
 	},
 	"audio": {
 		"enableSystemAudio": "Activer l'audio système",

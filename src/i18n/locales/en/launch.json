@@ -28,7 +28,8 @@
 			"decreaseFontSize": "Decrease font size",
 			"increaseFontSize": "Increase font size",
 			"mirror": "Mirror horizontally"
-		}
+		},
+		"confirmDiscardRecording": "Click again to discard this recording"
 	},
 	"audio": {
 		"enableSystemAudio": "Enable system audio",

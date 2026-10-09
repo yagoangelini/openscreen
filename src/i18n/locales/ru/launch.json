@@ -28,7 +28,8 @@
 			"decreaseFontSize": "Уменьшить размер шрифта",
 			"increaseFontSize": "Увеличить размер шрифта",
 			"mirror": "Отразить по горизонтали"
-		}
+		},
+		"confirmDiscardRecording": "Нажмите ещё раз, чтобы удалить эту запись"
 	},
 	"audio": {
 		"enableSystemAudio": "Включить системное аудио",

@@ -28,7 +28,8 @@
 			"decreaseFontSize": "Schrift verkleinern",
 			"increaseFontSize": "Schrift vergrößern",
 			"mirror": "Horizontal spiegeln"
-		}
+		},
+		"confirmDiscardRecording": "Erneut klicken, um diese Aufnahme zu verwerfen"
 	},
 	"audio": {
 		"enableSystemAudio": "Systemton aktivieren",

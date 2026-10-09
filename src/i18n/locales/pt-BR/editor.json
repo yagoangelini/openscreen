@@ -52,7 +52,11 @@
 		"permissionDenied": "Permissão de gravação negada. Por favor, permita a gravação de tela.",
 		"accessibilityAllowAndRetry": "Permita o acesso de Acessibilidade para o OpenScreen e pressione gravar novamente para iniciar a contagem regressiva.",
 		"selectSource": "Por favor, selecione uma fonte para gravar",
-		"takeInterrupted": "A gravação parou antes da hora por causa de um erro. Tudo o que foi gravado até ali foi salvo."
+		"takeInterrupted": "A gravação parou antes da hora por causa de um erro. Tudo o que foi gravado até ali foi salvo.",
+		"diskSpaceCritical": "Não há espaço livre suficiente em disco para gravar. Libere pelo menos 1 GB e tente de novo.",
+		"diskSpaceLow": "Pouco espaço em disco: cabe cerca de {{minutes}} minutos de gravação.",
+		"crashProtectionOff": "A proteção contra falhas está desligada nesta gravação: se o app fechar de repente, o take não poderá ser recuperado.",
+		"takeStoppedDiskFull": "A gravação foi parada porque o disco está quase cheio. Tudo o que foi gravado até agora foi salvo."
 	},
 	"emptyState": {
 		"title": "Nenhum projeto aberto",

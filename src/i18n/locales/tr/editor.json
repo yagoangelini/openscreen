@@ -44,7 +44,11 @@
 		"microphoneUnavailable": "Bu macOS sürümü mikrofonu kaydedemiyor. Mikrofonsuz kaydediliyor.",
 		"accessibilityAllowAndRetry": "OpenScreen için Erişilebilirlik erişimine izin verin, ardından geri sayımı başlatmak için tekrar kayda basın.",
 		"selectSource": "Lütfen kayıt için bir kaynak seçin",
-		"takeInterrupted": "Kayıt bir hata nedeniyle erken durdu. O ana kadar kaydedilen her şey saklandı."
+		"takeInterrupted": "Kayıt bir hata nedeniyle erken durdu. O ana kadar kaydedilen her şey saklandı.",
+		"diskSpaceCritical": "Kayıt için yeterli boş disk alanı yok. En az 1 GB boşaltıp tekrar deneyin.",
+		"diskSpaceLow": "Disk alanı az: yaklaşık {{minutes}} dakikalık kayıt sığar.",
+		"crashProtectionOff": "Bu kayıtta çökme koruması kapalı: uygulama beklenmedik şekilde kapanırsa kayıt kurtarılamaz.",
+		"takeStoppedDiskFull": "Disk neredeyse dolu olduğu için kayıt durduruldu. Şimdiye kadar kaydedilen her şey saklandı."
 	},
 	"loadingVideo": "Video yükleniyor...",
 	"loadingEditor": "Editör yükleniyor...",

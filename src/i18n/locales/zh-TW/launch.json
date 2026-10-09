@@ -28,7 +28,8 @@
 			"decreaseFontSize": "縮小字體",
 			"increaseFontSize": "放大字體",
 			"mirror": "水平鏡像"
-		}
+		},
+		"confirmDiscardRecording": "再按一次以捨棄此錄製"
 	},
 	"audio": {
 		"enableSystemAudio": "啟用系統音訊",

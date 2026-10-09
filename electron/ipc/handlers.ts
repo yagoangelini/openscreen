@@ -100,6 +100,7 @@ import {
 import { CompositorViewService } from "../native-bridge/services/compositorViewService";
 import { getMacPermissions, showPermissionsWindow } from "../permissions";
 import { scoreDeviceNameMatch } from "../recording/deviceNameMatching";
+import { assessFreeSpace, readFreeBytes, STOP_RECORDING_FREE_BYTES } from "../recording/diskSpace";
 import {
 	describeSalvagedTake,
 	nativeMacSalvageTarget,
@@ -746,6 +747,12 @@ let nativeWindowsStopInFlight = false;
  * or simply exited. Read at stop to tell the user the take ends early.
  */
 let nativeWindowsTakeEndedEarly = false;
+/** Why the app itself ended the take early, when the helper did not fail. */
+let nativeWindowsInterruptionReason: string | null = null;
+/** Polls free space while a take records; cleared with the rest of the state. */
+let nativeWindowsDiskWatch: ReturnType<typeof setInterval> | null = null;
+/** How often free space is checked during a take. */
+const NATIVE_WINDOWS_DISK_WATCH_MS = 30_000;
 
 function detachNativeWindowsCaptureOutputDrain() {
 	nativeWindowsCaptureDrainCleanup?.();
@@ -766,6 +773,11 @@ function resetNativeWindowsCaptureState() {
 	nativeWindowsIsPaused = false;
 	nativeWindowsCaptureContainer = null;
 	nativeWindowsTakeEndedEarly = false;
+	nativeWindowsInterruptionReason = null;
+	if (nativeWindowsDiskWatch) {
+		clearInterval(nativeWindowsDiskWatch);
+		nativeWindowsDiskWatch = null;
+	}
 }
 
 /** Reads the file, then defers the judgement to the tested predicate. */
@@ -2793,6 +2805,20 @@ export function registerIpcHandlers(
 					return { success: false, error: "Native Windows capture helper is not available." };
 				}
 
+				// A take started on a nearly full disk ends wherever the disk does.
+				// Refused outright below a floor; under about half an hour of room
+				// it starts, and the HUD says how long it can run.
+				await fs.mkdir(RECORDINGS_DIR, { recursive: true }).catch(() => undefined);
+				const freeBytes = await readFreeBytes(RECORDINGS_DIR);
+				const freeSpace = freeBytes === null ? null : assessFreeSpace(freeBytes);
+				if (freeSpace?.level === "critical") {
+					return {
+						success: false,
+						errorCode: "disk-space-critical",
+						error: `Not enough free disk space to record (${Math.round(freeSpace.freeBytes / 1024 / 1024)} MB free).`,
+					};
+				}
+
 				if (!request?.source?.sourceId) {
 					return {
 						success: false,
@@ -3002,6 +3028,26 @@ export function registerIpcHandlers(
 					});
 				}
 
+				// Checked again while the take runs: the free space at start says
+				// nothing about another program filling the disk an hour in. Stopped
+				// with room to spare, so the helper can still finalize the file.
+				nativeWindowsDiskWatch = setInterval(() => {
+					void readFreeBytes(RECORDINGS_DIR).then((free) => {
+						if (
+							free === null ||
+							free >= STOP_RECORDING_FREE_BYTES ||
+							nativeWindowsCaptureProcess !== proc ||
+							nativeWindowsStopInFlight
+						) {
+							return;
+						}
+						console.warn("[native-wgc] stopping the take: the disk is almost full", { free });
+						nativeWindowsTakeEndedEarly = true;
+						nativeWindowsInterruptionReason = "low-disk-space";
+						handleNativeWindowsTakeEndedEarly();
+					});
+				}, NATIVE_WINDOWS_DISK_WATCH_MS);
+
 				return {
 					success: true,
 					recordingId,
@@ -3009,8 +3055,13 @@ export function registerIpcHandlers(
 					helperPath,
 					videoEncoderSelection: encoderSelection?.video ?? null,
 					videoEncoderRuntime: encoderSelection?.videoEncoderRuntime ?? null,
+					// Only the fragmented container survives a crash. The helper falls
+					// back to a plain MP4 rather than not recording, and the user should
+					// know this take has lost that protection.
+					containerFormat: encoderSelection?.container ?? null,
 					webcamUnavailable,
 					microphoneDefaulted,
+					lowDiskSpaceMinutes: freeSpace?.level === "low" ? freeSpace.minutesLeft : null,
 				};
 			} catch (error) {
 				console.error("Failed to start native Windows recording:", error);
@@ -3581,7 +3632,7 @@ export function registerIpcHandlers(
 				session,
 				recovered,
 				interrupted,
-				interruptionStage: captureFailureStage,
+				interruptionStage: captureFailureStage ?? nativeWindowsInterruptionReason,
 				// `preferredWebcamPath` is non-null only for a take that asked for a
 				// camera, so the pair means "a camera was requested and none survived".
 				// This is the second, quieter way to lose one: the helper opened the

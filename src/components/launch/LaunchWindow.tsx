@@ -1223,6 +1223,8 @@ export function LaunchWindow() {
 							pauseLabel={paused ? t("tooltips.resumeRecording") : t("tooltips.pauseRecording")}
 							restartLabel={t("tooltips.restartRecording")}
 							cancelLabel={t("tooltips.cancelRecording")}
+							confirmDiscard={elapsedSeconds >= 10}
+							confirmLabel={t("tooltips.confirmDiscardRecording")}
 							onTogglePause={togglePaused}
 							onRestart={restartRecording}
 							onCancel={cancelRecording}

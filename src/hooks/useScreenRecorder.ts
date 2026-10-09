@@ -730,7 +730,14 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			// Said before the editor opens, so a take that is shorter than the
 			// user thinks is not discovered halfway through editing it.
 			if (result.interrupted) {
-				toast.warning(tRef.current("recording.takeInterrupted"), { duration: 15_000 });
+				toast.warning(
+					tRef.current(
+						result.interruptionStage === "low-disk-space"
+							? "recording.takeStoppedDiskFull"
+							: "recording.takeInterrupted",
+					),
+					{ duration: 15_000 },
+				);
 			}
 			if (result.session) {
 				await window.electronAPI.setCurrentRecordingSession(result.session);
@@ -1249,7 +1256,19 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			};
 			const result = await window.electronAPI.startNativeWindowsRecording(request);
 			if (!result.success || !result.recordingId) {
-				throw new Error(result.error ?? "Native Windows capture failed.");
+				throw new Error(
+					result.errorCode === "disk-space-critical"
+						? t("recording.diskSpaceCritical")
+						: (result.error ?? "Native Windows capture failed."),
+				);
+			}
+			if (typeof result.lowDiskSpaceMinutes === "number") {
+				toast.warning(t("recording.diskSpaceLow", { minutes: result.lowDiskSpaceMinutes }), {
+					duration: 15_000,
+				});
+			}
+			if (result.containerFormat && result.containerFormat !== "fragmented-mp4") {
+				toast.warning(t("recording.crashProtectionOff"), { duration: 15_000 });
 			}
 
 			// The take goes on without the camera rather than failing, so this is the

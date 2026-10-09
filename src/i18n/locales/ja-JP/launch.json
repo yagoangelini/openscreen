@@ -28,7 +28,8 @@
 			"decreaseFontSize": "フォントサイズを小さくする",
 			"increaseFontSize": "フォントサイズを大きくする",
 			"mirror": "左右反転"
-		}
+		},
+		"confirmDiscardRecording": "もう一度クリックするとこの録画を破棄します"
 	},
 	"audio": {
 		"enableSystemAudio": "システム音声を有効にする",

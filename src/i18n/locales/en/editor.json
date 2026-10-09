@@ -52,7 +52,11 @@
 		"permissionDenied": "Recording permission denied. Please allow screen recording.",
 		"accessibilityAllowAndRetry": "Allow Accessibility access for OpenScreen, then press record again to start the countdown.",
 		"selectSource": "Choose a screen or window to record",
-		"takeInterrupted": "The recording stopped early because of an error. Everything recorded up to that point was saved."
+		"takeInterrupted": "The recording stopped early because of an error. Everything recorded up to that point was saved.",
+		"diskSpaceCritical": "Not enough free disk space to record. Free up at least 1 GB and try again.",
+		"diskSpaceLow": "Low disk space: room for about {{minutes}} minutes of recording.",
+		"crashProtectionOff": "Crash protection is off for this recording: if the app closes unexpectedly, the take cannot be recovered.",
+		"takeStoppedDiskFull": "The recording was stopped because the disk is almost full. Everything recorded so far was saved."
 	},
 	"emptyState": {
 		"title": "Start with a recording",

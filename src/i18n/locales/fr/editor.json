@@ -50,7 +50,11 @@
 		"permissionDenied": "Permission d'enregistrement refusée. Veuillez autoriser l'enregistrement d'écran.",
 		"accessibilityAllowAndRetry": "Autorisez l'accès Accessibilité pour OpenScreen, puis appuyez de nouveau sur enregistrer pour lancer le compte à rebours.",
 		"selectSource": "Veuillez sélectionner une source à enregistrer",
-		"takeInterrupted": "L'enregistrement s'est arrêté plus tôt à cause d'une erreur. Tout ce qui a été enregistré jusque-là a été conservé."
+		"takeInterrupted": "L'enregistrement s'est arrêté plus tôt à cause d'une erreur. Tout ce qui a été enregistré jusque-là a été conservé.",
+		"diskSpaceCritical": "Pas assez d'espace disque pour enregistrer. Libérez au moins 1 Go et réessayez.",
+		"diskSpaceLow": "Espace disque faible : environ {{minutes}} minutes d'enregistrement possibles.",
+		"crashProtectionOff": "La protection contre les plantages est désactivée pour cet enregistrement : si l'app se ferme brusquement, la prise ne pourra pas être récupérée.",
+		"takeStoppedDiskFull": "L'enregistrement a été arrêté car le disque est presque plein. Tout ce qui a été enregistré a été conservé."
 	},
 	"loadingVideo": "Chargement de la vidéo...",
 	"loadingEditor": "Chargement de l'éditeur...",

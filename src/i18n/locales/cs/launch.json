@@ -28,7 +28,8 @@
 			"decreaseFontSize": "Zmenšit písmo",
 			"increaseFontSize": "Zvětšit písmo",
 			"mirror": "Zrcadlit vodorovně"
-		}
+		},
+		"confirmDiscardRecording": "Klikněte znovu pro zahození této nahrávky"
 	},
 	"audio": {
 		"enableSystemAudio": "Povolit systémový zvuk",

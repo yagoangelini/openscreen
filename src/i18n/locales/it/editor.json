@@ -52,7 +52,11 @@
 		"permissionDenied": "Autorizzazione di registrazione negata. Consenti la registrazione dello schermo.",
 		"accessibilityAllowAndRetry": "Consenti l'accesso all'accessibilità per OpenScreen, poi premi di nuovo registra per avviare il conto alla rovescia.",
 		"selectSource": "Seleziona una sorgente da registrare",
-		"takeInterrupted": "La registrazione si è interrotta prima per un errore. Tutto ciò che è stato registrato fino a quel momento è stato salvato."
+		"takeInterrupted": "La registrazione si è interrotta prima per un errore. Tutto ciò che è stato registrato fino a quel momento è stato salvato.",
+		"diskSpaceCritical": "Spazio su disco insufficiente per registrare. Libera almeno 1 GB e riprova.",
+		"diskSpaceLow": "Poco spazio su disco: circa {{minutes}} minuti di registrazione disponibili.",
+		"crashProtectionOff": "La protezione dai crash è disattivata per questa registrazione: se l'app si chiude all'improvviso, la ripresa non potrà essere recuperata.",
+		"takeStoppedDiskFull": "La registrazione è stata interrotta perché il disco è quasi pieno. Tutto ciò che è stato registrato è stato salvato."
 	},
 	"emptyState": {
 		"title": "Nessun progetto aperto",

@@ -52,7 +52,11 @@
 		"permissionDenied": "Aufnahmeberechtigung verweigert. Bitte erlaube die Bildschirmaufnahme.",
 		"accessibilityAllowAndRetry": "Erlaube OpenScreen den Zugriff auf die Bedienungshilfen und drücke dann erneut auf Aufnehmen, um den Countdown zu starten.",
 		"selectSource": "Bitte wähle eine Quelle für die Aufnahme",
-		"takeInterrupted": "Die Aufnahme wurde wegen eines Fehlers vorzeitig beendet. Alles bis dahin Aufgenommene wurde gespeichert."
+		"takeInterrupted": "Die Aufnahme wurde wegen eines Fehlers vorzeitig beendet. Alles bis dahin Aufgenommene wurde gespeichert.",
+		"diskSpaceCritical": "Nicht genug freier Speicherplatz für eine Aufnahme. Gib mindestens 1 GB frei und versuche es erneut.",
+		"diskSpaceLow": "Wenig Speicherplatz: Platz für etwa {{minutes}} Minuten Aufnahme.",
+		"crashProtectionOff": "Der Absturzschutz ist für diese Aufnahme aus: Wird die App unerwartet beendet, lässt sich die Aufnahme nicht wiederherstellen.",
+		"takeStoppedDiskFull": "Die Aufnahme wurde beendet, weil der Datenträger fast voll ist. Alles bisher Aufgenommene wurde gespeichert."
 	},
 	"emptyState": {
 		"title": "Kein Projekt geöffnet",

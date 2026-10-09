@@ -1,5 +1,5 @@
 import { Check, Languages, NotepadText, Settings } from "lucide-react";
-import { memo } from "react";
+import { memo, useEffect, useState } from "react";
 import { formatTimePadded } from "../../utils/timeUtils";
 import { Button } from "../ui/button";
 import { Tooltip } from "../ui/tooltip";
@@ -399,6 +399,9 @@ export const HudNotesButton = memo(function HudNotesButton({
 	);
 });
 
+/** How long a first click on Restart or Cancel stays armed, waiting for the second. */
+export const DISCARD_CONFIRM_WINDOW_MS = 3_000;
+
 export const HudRecordingControls = memo(function HudRecordingControls({
 	vertical,
 	paused,
@@ -407,6 +410,8 @@ export const HudRecordingControls = memo(function HudRecordingControls({
 	pauseLabel,
 	restartLabel,
 	cancelLabel,
+	confirmDiscard = false,
+	confirmLabel,
 	onTogglePause,
 	onRestart,
 	onCancel,
@@ -418,10 +423,38 @@ export const HudRecordingControls = memo(function HudRecordingControls({
 	pauseLabel: string;
 	restartLabel: string;
 	cancelLabel: string;
+	/**
+	 * Both buttons throw the take away, and they sit next to Pause on a HUD
+	 * whose click target the user cannot see until the cursor is on it. One
+	 * stray click deleted twenty minutes. Once a take is worth keeping, the
+	 * first click only arms the button and the second, within a few seconds,
+	 * acts.
+	 */
+	confirmDiscard?: boolean;
+	confirmLabel?: string;
 	onTogglePause: () => void;
 	onRestart: () => void;
 	onCancel: () => void;
 }) {
+	const [armed, setArmed] = useState<"restart" | "cancel" | null>(null);
+	useEffect(() => {
+		if (!armed) {
+			return;
+		}
+		const timer = setTimeout(() => setArmed(null), DISCARD_CONFIRM_WINDOW_MS);
+		return () => clearTimeout(timer);
+	}, [armed]);
+	const discardClick = (action: "restart" | "cancel", run: () => void) => () => {
+		if (!confirmDiscard || armed === action) {
+			setArmed(null);
+			run();
+			return;
+		}
+		setArmed(action);
+	};
+	const armedLabel = (action: "restart" | "cancel", label: string) =>
+		armed === action && confirmLabel ? confirmLabel : label;
+
 	return (
 		<div
 			className={`flex items-center gap-0.5 ${vertical ? "flex-col" : ""} ${styles.electronNoDrag}`}
@@ -439,26 +472,28 @@ export const HudRecordingControls = memo(function HudRecordingControls({
 					</button>
 				</Tooltip>
 			)}
-			<Tooltip content={restartLabel}>
+			<Tooltip content={armedLabel("restart", restartLabel)}>
 				<button
 					data-testid="launch-restart-button"
 					className={hudAuxIconBtnClasses}
-					aria-label={restartLabel}
-					onClick={onRestart}
+					aria-label={armedLabel("restart", restartLabel)}
+					data-armed={armed === "restart" ? "true" : undefined}
+					onClick={discardClick("restart", onRestart)}
 					disabled={saving}
 				>
-					{getIcon("restart")}
+					{getIcon("restart", armed === "restart" ? "text-amber-400" : undefined)}
 				</button>
 			</Tooltip>
-			<Tooltip content={cancelLabel}>
+			<Tooltip content={armedLabel("cancel", cancelLabel)}>
 				<button
 					data-testid="launch-cancel-button"
 					className={hudAuxIconBtnClasses}
-					aria-label={cancelLabel}
-					onClick={onCancel}
+					aria-label={armedLabel("cancel", cancelLabel)}
+					data-armed={armed === "cancel" ? "true" : undefined}
+					onClick={discardClick("cancel", onCancel)}
 					disabled={saving}
 				>
-					{getIcon("cancel")}
+					{getIcon("cancel", armed === "cancel" ? "text-amber-400" : undefined)}
 				</button>
 			</Tooltip>
 		</div>
