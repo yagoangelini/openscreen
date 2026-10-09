@@ -1157,7 +1157,9 @@ int wmain(int argc, wchar_t* argv[]) {
                     int64_t wgcTimestampHns = 0;
                     const bool gotFrame = session.tryGetNextFrame(&wgcTexture, &wgcTimestampHns);
                     if (!gotFrame && session.frameSourceFailed()) {
-                        failCapture("frame-source", session.frameSourceError());
+                        failCapture(
+                            session.sourceClosed() ? "source-closed" : "frame-source",
+                            session.frameSourceError());
                         break;
                     }
                     if (gotFrame) {

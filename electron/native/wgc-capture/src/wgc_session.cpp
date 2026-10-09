@@ -132,6 +132,8 @@ bool WgcSession::createD3DDevice() {
 }
 
 bool WgcSession::createCaptureItem(HMONITOR monitor) {
+    monitor_ = monitor;
+    window_ = nullptr;
     auto factory = winrt::get_activation_factory<wgcap::GraphicsCaptureItem>();
     auto interop = factory.as<IGraphicsCaptureItemInterop>();
 
@@ -146,12 +148,18 @@ bool WgcSession::createCaptureItem(HMONITOR monitor) {
 
     item_ = item;
     const auto size = item_.Size();
-    width_ = static_cast<int>(size.Width);
-    height_ = static_cast<int>(size.Height);
+    // Rounded up for the same reason as a window (see roundUpToEven): the
+    // encoder takes an even size, and a pool one pixel off makes every
+    // CopyResource a silent no-op -- a whole take of black frames on a monitor
+    // whose mode has an odd dimension.
+    width_ = roundUpToEven(static_cast<int>(size.Width));
+    height_ = roundUpToEven(static_cast<int>(size.Height));
     return width_ > 0 && height_ > 0;
 }
 
 bool WgcSession::createCaptureItem(HWND window) {
+    window_ = window;
+    monitor_ = nullptr;
     auto factory = winrt::get_activation_factory<wgcap::GraphicsCaptureItem>();
     auto interop = factory.as<IGraphicsCaptureItemInterop>();
 
@@ -302,6 +310,7 @@ bool WgcSession::tryGetNextFrame(ID3D11Texture2D** outTexture, int64_t* outTimes
     try {
         frame = framePool_.TryGetNextFrame();
         if (!frame) {
+            checkSourceStillExists();
             return false;
         }
 
@@ -330,6 +339,36 @@ bool WgcSession::tryGetNextFrame(ID3D11Texture2D** outTexture, int64_t* outTimes
     *outTexture = texture.Get();
     *outTimestampHns = timestampHns;
     return true;
+}
+
+void WgcSession::checkSourceStillExists() {
+    // The captured window closed, or the monitor was unplugged or switched
+    // off. WGC simply stops delivering frames, so the writer kept re-encoding
+    // the last one for the rest of the take: a frozen picture, with sound, and
+    // no word to anyone. GraphicsCaptureItem::Closed would say so, but it is
+    // never raised in this helper -- it has no dispatcher queue to raise it on
+    // (measured: a captured window killed mid-take, no event in 12 s). Asking
+    // the source directly works anywhere. Only while frames are not arriving,
+    // and at most once a second, so a live take pays nothing for it.
+    const auto now = std::chrono::steady_clock::now();
+    if (now - lastSourceCheck_ < std::chrono::seconds(1)) {
+        return;
+    }
+    lastSourceCheck_ = now;
+
+    bool exists = true;
+    if (window_) {
+        exists = IsWindow(window_) != FALSE;
+    } else if (monitor_) {
+        MONITORINFO info{};
+        info.cbSize = sizeof(info);
+        exists = GetMonitorInfoW(monitor_, &info) != FALSE;
+    }
+    if (!exists) {
+        sourceClosed_ = true;
+        frameSourceError_ = HRESULT_FROM_WIN32(ERROR_INVALID_WINDOW_HANDLE);
+        frameSourceFailed_ = true;
+    }
 }
 
 void WgcSession::setFrameCallback(FrameCallback callback) {

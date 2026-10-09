@@ -10,6 +10,7 @@
 #include <wrl/client.h>
 
 #include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <functional>
 #include <mutex>
@@ -66,6 +67,8 @@ public:
     // this to tell "no new frame yet" from "no frame will ever come again".
     bool frameSourceFailed() const { return frameSourceFailed_.load(); }
     HRESULT frameSourceError() const { return frameSourceError_.load(); }
+    // The failure above was the captured window closing or the monitor going away.
+    bool sourceClosed() const { return sourceClosed_.load(); }
 
     // Legacy push-based path (OPENSCREEN_WGC_LEGACY_FRAME_CALLBACK=1 only).
     // callback runs on a WGC-owned thread inside FrameArrived and may be
@@ -121,4 +124,9 @@ private:
     bool started_ = false;
     std::atomic<bool> frameSourceFailed_ = false;
     std::atomic<HRESULT> frameSourceError_ = S_OK;
+    std::atomic<bool> sourceClosed_ = false;
+    HWND window_ = nullptr;
+    HMONITOR monitor_ = nullptr;
+    std::chrono::steady_clock::time_point lastSourceCheck_{};
+    void checkSourceStillExists();
 };

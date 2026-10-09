@@ -942,6 +942,13 @@ bool MFEncoder::initialize(
     if (configureSinkWriterAttempt(true, kVideoEncoderSelectionSoftwareFallback, false, true)) {
         return true;
     }
+    // Hardware first, even here. Reaching this line means the fragmented sink
+    // itself is what failed, not the encoder, and forcing the software encoder
+    // along with the plain container cost a 4K60 take most of its frames on
+    // top of its crash protection.
+    if (configureUnfragmentedFallback(false, kVideoEncoderSelectionDefault)) {
+        return true;
+    }
     return configureUnfragmentedFallback(true, kVideoEncoderSelectionSoftwareFallback);
 }
 
