@@ -1,11 +1,11 @@
 name: Setup Node.js
-description: Install Node 22, restore npm cache, run npm ci
+description: Install Node 24, restore npm cache, run npm ci
 runs:
   using: composite
   steps:
     - uses: actions/setup-node@v7
       with:
-        node-version: 22
+        node-version-file: .nvmrc
         cache: npm
     - run: npm ci
       shell: bash

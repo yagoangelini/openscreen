@@ -1,7 +1,7 @@
 {
   lib,
   buildNpmPackage,
-  nodejs_22,
+  nodejs_24,
   electron,
   ffmpeg-headless,
   compositor-view,
@@ -23,7 +23,7 @@ let
   ffmpegLgpl = ffmpeg-headless.override { withGPL = false; };
 in
 buildNpmPackage {
-  nodejs = nodejs_22;
+  nodejs = nodejs_24;
   pname = "openscreen";
   # Read, not restated. A hand-copied version is one more thing to remember at
   # release time and it had already drifted two minors behind the app it names.

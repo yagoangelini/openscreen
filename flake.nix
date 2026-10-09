@@ -108,7 +108,7 @@
         {
           default = pkgs.mkShell {
             packages = with pkgs; [
-              nodejs_22
+              nodejs_24
               electron
 
               # Native module compilation

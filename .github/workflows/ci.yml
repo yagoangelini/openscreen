@@ -59,11 +59,11 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       # No ./.github/actions/setup: check-docs.mjs imports only node builtins,
-      # so npm ci would be a minute of install for nothing. Node 22 is here for
+      # so npm ci would be a minute of install for nothing. Node 24 is here for
       # import.meta.dirname (needs >= 20.11).
       - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version-file: .nvmrc
       - run: npm run docs:check
 
   appstream:
