@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
 	isSalvageableFragmentedCapture,
 	NATIVE_WINDOWS_SALVAGEABLE_OUTPUT_BYTES,
+	readCaptureFailureStage,
 	readMicrophoneDefaulted,
 	readMicrophoneUnavailable,
 	readStoppedPath,
@@ -515,5 +516,33 @@ describe("terminateNativeWindowsCapture", () => {
 
 		await expect(pending).resolves.toBe(true);
 		expect(helper.killCalls).toBe(1);
+	});
+});
+
+describe("readCaptureFailureStage", () => {
+	it("names the stage a mid-recording failure happened in", () => {
+		const output = [
+			'{"event":"recording-started","schemaVersion":2}',
+			"ERROR: WriteSample failed (hr=0x80070070)",
+			'{"event":"error","schemaVersion":2,"code":"capture-failed","stage":"video-write","hr":"0x80004005"}',
+			'{"event":"recording-stopped","schemaVersion":2,"screenPath":"C:\\\\r.mp4","truncated":true}',
+		].join("\n");
+		expect(readCaptureFailureStage(output)).toBe("video-write");
+	});
+
+	it("finds it when stderr glued a diagnostic in front of the event", () => {
+		expect(
+			readCaptureFailureStage(
+				'INFO: x{"event":"error","schemaVersion":2,"code":"capture-failed","stage":"frame-source","hr":"0x887a0005"}',
+			),
+		).toBe("frame-source");
+	});
+
+	it("is null for a take that ran to the user's stop", () => {
+		expect(
+			readCaptureFailureStage(
+				'{"event":"recording-stopped","schemaVersion":2,"screenPath":"C:\\\\r.mp4"}',
+			),
+		).toBeNull();
 	});
 });

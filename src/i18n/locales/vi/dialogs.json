@@ -88,5 +88,14 @@
 		"audioFiles": "Tệp âm thanh",
 		"openscreenProject": "Dự án OpenScreen",
 		"allFiles": "Tất cả các tệp"
+	},
+	"recovery": {
+		"title": "Khôi phục bản ghi",
+		"message": "Một bản ghi chưa được mở",
+		"detail": "OpenScreen đã đóng trước khi bản ghi này đến trình chỉnh sửa. Tệp vẫn nguyên vẹn và có thể mở ngay.",
+		"open": "Mở trong trình chỉnh sửa",
+		"later": "Để sau",
+		"forget": "Bỏ qua",
+		"takeInterrupted": "Bản ghi đã dừng sớm do lỗi. Mọi thứ đã ghi đến lúc đó đều đã được lưu."
 	}
 }

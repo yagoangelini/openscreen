@@ -88,5 +88,14 @@
 		"audioFiles": "Audiodateien",
 		"openscreenProject": "OpenScreen-Projekt",
 		"allFiles": "Alle Dateien"
+	},
+	"recovery": {
+		"title": "Aufnahme wiederherstellen",
+		"message": "Eine Aufnahme wurde nicht geöffnet",
+		"detail": "OpenScreen wurde geschlossen, bevor diese Aufnahme den Editor erreichte. Die Datei ist intakt und kann jetzt geöffnet werden.",
+		"open": "Im Editor öffnen",
+		"later": "Nicht jetzt",
+		"forget": "Verwerfen",
+		"takeInterrupted": "Die Aufnahme wurde wegen eines Fehlers vorzeitig beendet. Alles bis dahin Aufgenommene wurde gespeichert."
 	}
 }

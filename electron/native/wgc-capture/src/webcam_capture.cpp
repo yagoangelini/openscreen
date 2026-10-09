@@ -320,11 +320,19 @@ bool WebcamCapture::start() {
 void WebcamCapture::stop() {
     directShowCapture_.stop();
     stopRequested_ = true;
-    if (thread_.joinable()) {
-        thread_.join();
-    }
+    // Shut the source down BEFORE joining. captureLoop() sits in a synchronous
+    // ReadSample(), and a camera that stopped delivering (unplugged, claimed by
+    // another app, a driver that stalled) never returns from it on its own.
+    // Joining first meant waiting on that call until the helper's stop
+    // watchdog killed the whole process -- before the screen encoder had been
+    // finalized, which is the step that makes the screen file playable. A shut
+    // down source fails the pending read with MF_E_SHUTDOWN, the loop sees
+    // stopRequested_, and the join returns.
     if (mediaSource_) {
         mediaSource_->Shutdown();
+    }
+    if (thread_.joinable()) {
+        thread_.join();
     }
     sourceReader_.Reset();
     mediaSource_.Reset();
@@ -336,6 +344,7 @@ void WebcamCapture::stop() {
 
 void WebcamCapture::captureLoop() {
     CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    HRESULT lastReadError = S_OK;
 
     while (!stopRequested_) {
         DWORD streamIndex = 0;
@@ -353,11 +362,22 @@ void WebcamCapture::captureLoop() {
         (void)timestamp;
 
         if (FAILED(hr)) {
-            std::cerr << "WARNING: Failed to read webcam sample (hr=0x" << std::hex << hr << std::dec << ")"
-                      << std::endl;
+            if (stopRequested_) {
+                break;
+            }
+            // Once per distinct error, not once per retry. A camera that went
+            // away fails every 20 ms for the rest of the take, and the app
+            // keeps all helper output in memory: two hours of this line was
+            // tens of megabytes of the same warning.
+            if (hr != lastReadError) {
+                std::cerr << "WARNING: Failed to read webcam sample (hr=0x" << std::hex << hr << std::dec << ")"
+                          << std::endl;
+                lastReadError = hr;
+            }
             std::this_thread::sleep_for(std::chrono::milliseconds(20));
             continue;
         }
+        lastReadError = S_OK;
         if ((flags & MF_SOURCE_READERF_ENDOFSTREAM) != 0) {
             break;
         }

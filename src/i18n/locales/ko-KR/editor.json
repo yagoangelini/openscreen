@@ -51,7 +51,8 @@
 		"microphoneDefaulted": "선택한 마이크를 확인할 수 없습니다. 기본 입력을 녹음합니다.",
 		"microphoneUnavailable": "이 버전의 macOS에서는 마이크를 녹음할 수 없습니다. 마이크 없이 녹화합니다.",
 		"accessibilityAllowAndRetry": "OpenScreen의 손쉬운 사용 접근을 허용한 다음, 카운트다운을 시작하려면 다시 녹화를 누르세요.",
-		"selectSource": "녹화할 소스를 선택해 주세요"
+		"selectSource": "녹화할 소스를 선택해 주세요",
+		"takeInterrupted": "오류로 인해 녹화가 일찍 중지되었습니다. 그때까지 녹화된 내용은 모두 저장되었습니다."
 	},
 	"emptyState": {
 		"title": "열린 프로젝트 없음",

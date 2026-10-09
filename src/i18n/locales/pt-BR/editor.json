@@ -51,7 +51,8 @@
 		"microphoneUnavailable": "Esta versão do macOS não consegue gravar o microfone. Gravando sem ele.",
 		"permissionDenied": "Permissão de gravação negada. Por favor, permita a gravação de tela.",
 		"accessibilityAllowAndRetry": "Permita o acesso de Acessibilidade para o OpenScreen e pressione gravar novamente para iniciar a contagem regressiva.",
-		"selectSource": "Por favor, selecione uma fonte para gravar"
+		"selectSource": "Por favor, selecione uma fonte para gravar",
+		"takeInterrupted": "A gravação parou antes da hora por causa de um erro. Tudo o que foi gravado até ali foi salvo."
 	},
 	"emptyState": {
 		"title": "Nenhum projeto aberto",

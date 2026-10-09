@@ -51,7 +51,8 @@
 		"microphoneUnavailable": "Diese macOS-Version kann das Mikrofon nicht aufnehmen. Die Aufnahme läuft ohne Mikrofon.",
 		"permissionDenied": "Aufnahmeberechtigung verweigert. Bitte erlaube die Bildschirmaufnahme.",
 		"accessibilityAllowAndRetry": "Erlaube OpenScreen den Zugriff auf die Bedienungshilfen und drücke dann erneut auf Aufnehmen, um den Countdown zu starten.",
-		"selectSource": "Bitte wähle eine Quelle für die Aufnahme"
+		"selectSource": "Bitte wähle eine Quelle für die Aufnahme",
+		"takeInterrupted": "Die Aufnahme wurde wegen eines Fehlers vorzeitig beendet. Alles bis dahin Aufgenommene wurde gespeichert."
 	},
 	"emptyState": {
 		"title": "Kein Projekt geöffnet",

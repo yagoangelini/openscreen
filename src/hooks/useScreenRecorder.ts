@@ -727,6 +727,11 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			if (result.webcamDropped) {
 				toast.error(tRef.current("recording.cameraCaptureUnavailable"));
 			}
+			// Said before the editor opens, so a take that is shorter than the
+			// user thinks is not discovered halfway through editing it.
+			if (result.interrupted) {
+				toast.warning(tRef.current("recording.takeInterrupted"), { duration: 15_000 });
+			}
 			if (result.session) {
 				await window.electronAPI.setCurrentRecordingSession(result.session);
 			} else if (result.path) {
@@ -1065,9 +1070,11 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			allowAutoFinalize.current = false;
 			restarting.current = false;
 			discardRecordingId.current = null;
-			if (nativeWindowsRecording.current) {
-				void finalizeNativeWindowsRecording(true);
-			}
+			// A Windows take is left running on purpose. This cleanup also runs
+			// when the effect merely re-subscribes (its dependencies change), and
+			// discarding here deleted a live take over a preference change. The
+			// main process owns the helper and saves the take itself when the HUD
+			// goes away for real: a crashed renderer, a quit, a logoff.
 			if (nativeMacRecording.current) {
 				void finalizeNativeMacRecording(true);
 			}
@@ -1102,7 +1109,6 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 	}, [
 		teardownMedia,
 		safeHideCountdownOverlay,
-		finalizeNativeWindowsRecording,
 		finalizeNativeMacRecording,
 		finalizeNativeLinuxRecording,
 	]);

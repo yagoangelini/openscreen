@@ -171,6 +171,7 @@ private:
     bool initializeBridgeTexture();
     bool initializeSampleAllocator(IMFMediaType* inputType);
     void applyHardwareRateControl(int bitrate);
+    void applyKeyframeInterval();
     int64_t nextSampleTime(int64_t timestampHns, int64_t sampleDuration);
     Nv12ConvertResult convertBgraTextureToNv12(
         ID3D11Texture2D* texture,

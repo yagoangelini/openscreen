@@ -876,6 +876,7 @@ bool MFEncoder::initialize(
         if (!forceSoftwareEncoder) {
             applyHardwareRateControl(std::max(1, bitrate));
         }
+        applyKeyframeInterval();
         if (!succeeded(sinkWriter_->BeginWriting(), "BeginWriting")) {
             return false;
         }
@@ -1397,6 +1398,35 @@ void MFEncoder::applyHardwareRateControl(int bitrate) {
     value.ulVal = static_cast<ULONG>(bitrate);
     if (FAILED(codecApi->SetValue(&CODECAPI_AVEncCommonMeanBitRate, &value))) {
         std::cerr << "WARNING: Could not set the hardware H.264 encoder bitrate" << std::endl;
+    }
+}
+
+void MFEncoder::applyKeyframeInterval() {
+    // kFragmentDurationHns is a floor, not a period: the fragmented sink can
+    // only cut at a keyframe, so a fragment lasts until the next IDR. Nothing
+    // set the GOP before, which left both how much a crash loses (everything
+    // since the last complete fragment) and how much the sink buffers in RAM
+    // up to whatever the encoder picked -- vendor defaults run from a second to
+    // "only when the scene changes", and a static desktop rarely changes.
+    // Two seconds is the keyframe spacing YouTube asks uploads for, and it
+    // bounds a crash's loss to about that much.
+    //
+    // Best effort, like the bitrate: an encoder without the knob still
+    // records, just with its own spacing.
+    Microsoft::WRL::ComPtr<ICodecAPI> codecApi;
+    if (FAILED(sinkWriter_->GetServiceForStream(
+            videoStreamIndex_,
+            GUID_NULL,
+            IID_PPV_ARGS(&codecApi)))) {
+        std::cerr << "WARNING: The H.264 encoder exposes no ICodecAPI; "
+                  << "its default keyframe interval applies." << std::endl;
+        return;
+    }
+    VARIANT value{};
+    value.vt = VT_UI4;
+    value.ulVal = static_cast<ULONG>(fps_ * 2);
+    if (FAILED(codecApi->SetValue(&CODECAPI_AVEncMPVGOPSize, &value))) {
+        std::cerr << "WARNING: Could not set the H.264 keyframe interval" << std::endl;
     }
 }
 

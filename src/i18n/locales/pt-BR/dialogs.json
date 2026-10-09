@@ -88,5 +88,14 @@
 		"audioFiles": "Arquivos de áudio",
 		"openscreenProject": "Projeto OpenScreen",
 		"allFiles": "Todos os Arquivos"
+	},
+	"recovery": {
+		"title": "Recuperar gravação",
+		"message": "Uma gravação não foi aberta",
+		"detail": "O OpenScreen fechou antes de esta gravação chegar ao editor. O arquivo está intacto e pode ser aberto agora.",
+		"open": "Abrir no editor",
+		"later": "Agora não",
+		"forget": "Esquecer",
+		"takeInterrupted": "A gravação parou antes da hora por causa de um erro. Tudo o que foi gravado até ali foi salvo."
 	}
 }

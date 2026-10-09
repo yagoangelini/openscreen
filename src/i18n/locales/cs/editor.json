@@ -51,7 +51,8 @@
 		"microphoneUnavailable": "Tato verze macOS neumí nahrávat mikrofon. Nahrávání probíhá bez něj.",
 		"permissionDenied": "Oprávnění k nahrávání odepřeno. Povolte prosím záznam obrazovky.",
 		"accessibilityAllowAndRetry": "Povolte přístup k usnadnění pro OpenScreen a poté znovu stiskněte tlačítko nahrávání pro zahájení odpočítávání.",
-		"selectSource": "Vyberte prosím zdroj pro nahrávání"
+		"selectSource": "Vyberte prosím zdroj pro nahrávání",
+		"takeInterrupted": "Nahrávání se kvůli chybě zastavilo předčasně. Vše nahrané do té chvíle bylo uloženo."
 	},
 	"emptyState": {
 		"title": "Žádný projekt není otevřen",

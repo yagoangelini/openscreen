@@ -18,6 +18,7 @@
 #include <cctype>
 #include <cstdint>
 #include <functional>
+#include <cstdio>
 #include <iostream>
 #include <memory>
 #include <mutex>
@@ -1014,6 +1015,24 @@ int wmain(int argc, wchar_t* argv[]) {
     CaptureControl control;
     std::atomic<bool> firstFrameWritten = false;
     std::atomic<bool> encodeFailed = false;
+    // Says so the moment a take dies, not at the next stop. Until this the
+    // only trace was an ERROR line on stderr that nobody reads mid-recording,
+    // so the HUD kept counting for as long as the user kept talking -- a
+    // recording that ended at minute 10 was discovered at minute 120. The app
+    // stops the take on this event (or on the exit that follows it) and keeps
+    // what was written.
+    std::atomic<bool> captureFailureReported = false;
+    const auto failCapture = [&](const char* stage, HRESULT hr) {
+        encodeFailed = true;
+        if (!captureFailureReported.exchange(true)) {
+            char hrText[16];
+            std::snprintf(hrText, sizeof(hrText), "0x%08lx", static_cast<unsigned long>(hr));
+            std::cout << "{\"event\":\"error\",\"schemaVersion\":2,\"code\":\"capture-failed\",\"stage\":\""
+                      << stage << "\",\"hr\":\"" << hrText << "\"}" << std::endl;
+            std::cerr << "ERROR: capture failed during " << stage << " (hr=" << hrText << ")" << std::endl;
+        }
+        control.requestStop();
+    };
     // Frames the GPU bridge was too busy to take. Reported at stop rather than
     // per frame: a handful over a recording is normal contention, a stream of
     // them is the next bug report, and neither is worth a log line each.
@@ -1046,8 +1065,7 @@ int wmain(int argc, wchar_t* argv[]) {
                 desc.CPUAccessFlags = 0;
                 desc.MiscFlags = 0;
                 if (FAILED(session.device()->CreateTexture2D(&desc, nullptr, &latestFrameTexture))) {
-                    encodeFailed = true;
-                    control.requestStop();
+                    failCapture("frame-texture", E_FAIL);
                     return;
                 }
             }
@@ -1138,6 +1156,10 @@ int wmain(int argc, wchar_t* argv[]) {
                     ID3D11Texture2D* wgcTexture = nullptr;
                     int64_t wgcTimestampHns = 0;
                     const bool gotFrame = session.tryGetNextFrame(&wgcTexture, &wgcTimestampHns);
+                    if (!gotFrame && session.frameSourceFailed()) {
+                        failCapture("frame-source", session.frameSourceError());
+                        break;
+                    }
                     if (gotFrame) {
                         if (!latestFrameTexture) {
                             D3D11_TEXTURE2D_DESC desc{};
@@ -1146,8 +1168,7 @@ int wmain(int argc, wchar_t* argv[]) {
                             desc.CPUAccessFlags = 0;
                             desc.MiscFlags = 0;
                             if (FAILED(session.device()->CreateTexture2D(&desc, nullptr, &latestFrameTexture))) {
-                                encodeFailed = true;
-                                control.requestStop();
+                                failCapture("frame-texture", E_FAIL);
                                 break;
                             }
                         }
@@ -1232,8 +1253,7 @@ int wmain(int argc, wchar_t* argv[]) {
                         // slow WriteSample can't hold up the next frame pull.
                         hasWebcamSample = webcamEncoder.captureBgraSample(webcamFrame, webcamTimestampHns, webcamSample);
                         if (!hasWebcamSample) {
-                            encodeFailed = true;
-                            control.requestStop();
+                            failCapture("webcam-sample", E_FAIL);
                             break;
                         }
                         lastWebcamTimestampHns = webcamTimestampHns;
@@ -1279,8 +1299,7 @@ int wmain(int argc, wchar_t* argv[]) {
                             videoSample);
                     }
                     if (!captured) {
-                        encodeFailed = true;
-                        control.requestStop();
+                        failCapture("video-sample", E_FAIL);
                         break;
                     }
                     // The DXGI path returns success with no sample when the
@@ -1316,13 +1335,11 @@ int wmain(int argc, wchar_t* argv[]) {
             // CaptureControl::stopMutex/stopCv, checked by the loop condition
             // above, unrelated to sample submission (issue #252).
             if (hasWebcamSample && !webcamEncoder.submitVideoSample(webcamSample.Get())) {
-                encodeFailed = true;
-                control.requestStop();
+                failCapture("webcam-write", E_FAIL);
                 break;
             }
             if (hasVideoSample && !encoder.submitVideoSample(videoSample.Get())) {
-                encodeFailed = true;
-                control.requestStop();
+                failCapture("video-write", E_FAIL);
                 break;
             }
 
@@ -1375,8 +1392,7 @@ int wmain(int argc, wchar_t* argv[]) {
             config.microphoneGain,
             [&](const BYTE* data, DWORD byteCount, int64_t timestampHns, int64_t durationHns) {
                 if (!encoder.writeAudio(data, byteCount, timestampHns, durationHns)) {
-                    encodeFailed = true;
-                    control.requestStop();
+                    failCapture("audio-write", E_FAIL);
                     return false;
                 }
                 return true;
@@ -1767,11 +1783,21 @@ int wmain(int argc, wchar_t* argv[]) {
     // webcam step no budget at all and get the process killed before this line
     // ever ran. A webcam that fails below is an error on stderr and a non-zero
     // exit -- not a lost recording.
-    if (!encodeFailed && screenFinalized) {
+    //
+    // A take that failed mid-recording still gets the line once its screen
+    // file finalized: Finalize() wrote a valid index over everything up to the
+    // failure, so the file is as playable as any other. Withholding the line
+    // used to turn exactly that file into "could not be saved" -- a plain MP4
+    // has no salvage path -- and leave it orphaned on disk. `truncated` tells
+    // the app the take ended early so it can say so.
+    if (screenFinalized) {
         std::cout << "{\"event\":\"recording-stopped\",\"schemaVersion\":2,\"screenPath\":\""
                   << jsonEscape(config.outputPath) << "\"";
         if (writeSeparateWebcam) {
             std::cout << ",\"webcamPath\":\"" << jsonEscape(config.webcamOutputPath) << "\"";
+        }
+        if (encodeFailed) {
+            std::cout << ",\"truncated\":true";
         }
         std::cout << "}" << std::endl;
         std::cout << "Recording stopped. Output path: " << config.outputPath << std::endl;

@@ -88,5 +88,14 @@
 		"audioFiles": "オーディオファイル",
 		"openscreenProject": "OpenScreen プロジェクト",
 		"allFiles": "すべてのファイル"
+	},
+	"recovery": {
+		"title": "録画を復元",
+		"message": "開かれていない録画があります",
+		"detail": "この録画がエディターに届く前に OpenScreen が終了しました。ファイルは無事で、今すぐ開けます。",
+		"open": "エディターで開く",
+		"later": "後で",
+		"forget": "破棄",
+		"takeInterrupted": "エラーのため録画が途中で停止しました。それまでに録画した内容は保存されています。"
 	}
 }

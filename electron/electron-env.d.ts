@@ -160,6 +160,13 @@ interface Window {
 			 * saved without it. Still a success — the screen video is intact.
 			 */
 			webcamDropped?: boolean;
+			/**
+			 * The take ended before the user stopped it (the helper failed or
+			 * exited). Still a success: what was recorded until then was saved.
+			 */
+			interrupted?: boolean;
+			/** Where the helper said it failed, e.g. "video-write"; null if it just exited. */
+			interruptionStage?: string | null;
 		}>;
 		pauseNativeWindowsRecording: () => Promise<{
 			success: boolean;

@@ -43,7 +43,8 @@
 		"microphoneUnavailable": "Esta versión de macOS no puede grabar el micrófono. Grabando sin él.",
 		"permissionDenied": "Permiso de grabación denegado. Por favor permite la grabación de pantalla.",
 		"accessibilityAllowAndRetry": "Permite el acceso de accesibilidad para OpenScreen y luego pulsa grabar de nuevo para iniciar la cuenta atrás.",
-		"selectSource": "Por favor selecciona una fuente para grabar"
+		"selectSource": "Por favor selecciona una fuente para grabar",
+		"takeInterrupted": "La grabación se detuvo antes de tiempo por un error. Se guardó todo lo grabado hasta ese momento."
 	},
 	"loadingVideo": "Cargando video...",
 	"loadingEditor": "Cargando editor...",

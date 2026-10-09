@@ -88,5 +88,14 @@
 		"audioFiles": "Ses dosyaları",
 		"openscreenProject": "OpenScreen Projesi",
 		"allFiles": "Tüm Dosyalar"
+	},
+	"recovery": {
+		"title": "Kaydı kurtar",
+		"message": "Bir kayıt açılmadı",
+		"detail": "OpenScreen bu kayıt düzenleyiciye ulaşmadan kapandı. Dosya sağlam ve şimdi açılabilir.",
+		"open": "Düzenleyicide aç",
+		"later": "Şimdi değil",
+		"forget": "Unut",
+		"takeInterrupted": "Kayıt bir hata nedeniyle erken durdu. O ana kadar kaydedilen her şey saklandı."
 	}
 }

@@ -134,6 +134,22 @@ export function readMicrophoneUnavailable(output: string) {
 }
 
 /**
+ * Did the take end before the user stopped it, and where?
+ *
+ * The helper announces a mid-recording failure as it happens -- a disk that
+ * filled, a GPU reset, an encoder that refused a frame -- and then finalizes
+ * what it had. That take is saved like any other, but the user has to be told
+ * it ends early, or they find out while editing. Returns the stage the helper
+ * named (e.g. "video-write", "frame-source"), or null for a take that ran to
+ * the user's own stop. A substring test, for the reason `readWebcamFormat`
+ * spells out.
+ */
+export function readCaptureFailureStage(output: string) {
+	const match = output.match(/"code":"capture-failed","stage":"([^"]+)"/);
+	return match?.[1] ?? null;
+}
+
+/**
  * Index of the `}` that closes the object starting at `start`, or -1.
  *
  * Stopping at the first `}` is wrong for a value that contains one, and a

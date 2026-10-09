@@ -88,5 +88,14 @@
 		"audioFiles": "오디오 파일",
 		"openscreenProject": "OpenScreen 프로젝트",
 		"allFiles": "모든 파일"
+	},
+	"recovery": {
+		"title": "녹화 복구",
+		"message": "열리지 않은 녹화가 있습니다",
+		"detail": "이 녹화가 편집기에 도달하기 전에 OpenScreen이 종료되었습니다. 파일은 손상되지 않았으며 지금 열 수 있습니다.",
+		"open": "편집기에서 열기",
+		"later": "나중에",
+		"forget": "무시",
+		"takeInterrupted": "오류로 인해 녹화가 일찍 중지되었습니다. 그때까지 녹화된 내용은 모두 저장되었습니다."
 	}
 }

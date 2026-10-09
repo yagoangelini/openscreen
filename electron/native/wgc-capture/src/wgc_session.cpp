@@ -286,16 +286,35 @@ bool WgcSession::tryGetNextFrame(ID3D11Texture2D** outTexture, int64_t* outTimes
     // does with *outTexture) is the caller's own doing on the caller's own
     // thread -- this class has no thread of its own left to hang on their
     // behalf.
-    auto frame = framePool_.TryGetNextFrame();
-    if (!frame) {
+    if (frameSourceFailed_) {
         return false;
     }
 
-    auto surface = frame.Surface();
-    auto access = surface.as<::Windows::Graphics::DirectX::Direct3D11::IDirect3DDxgiInterfaceAccess>();
+    // Every call below is a C++/WinRT projection, and a projection reports a
+    // failed HRESULT by throwing. Nothing up the stack catches it -- this runs
+    // on the writer thread -- so a device removed by a driver reset, a GPU
+    // switch on a hybrid laptop, or a closed capture item used to end in
+    // std::terminate: no Finalize(), and the take lost with it. Catching here
+    // turns that into a failure the writer loop can stop on cleanly.
+    winrt::Windows::Graphics::Capture::Direct3D11CaptureFrame frame{nullptr};
     Microsoft::WRL::ComPtr<ID3D11Texture2D> texture;
-    HRESULT hr = access->GetInterface(__uuidof(ID3D11Texture2D), reinterpret_cast<void**>(texture.GetAddressOf()));
-    if (FAILED(hr) || !texture) {
+    int64_t timestampHns = 0;
+    try {
+        frame = framePool_.TryGetNextFrame();
+        if (!frame) {
+            return false;
+        }
+
+        auto surface = frame.Surface();
+        auto access = surface.as<::Windows::Graphics::DirectX::Direct3D11::IDirect3DDxgiInterfaceAccess>();
+        HRESULT hr = access->GetInterface(__uuidof(ID3D11Texture2D), reinterpret_cast<void**>(texture.GetAddressOf()));
+        if (FAILED(hr) || !texture) {
+            return false;
+        }
+        timestampHns = timeSpanToHns(frame.SystemRelativeTime());
+    } catch (const winrt::hresult_error& error) {
+        frameSourceError_ = error.code();
+        frameSourceFailed_ = true;
         return false;
     }
 
@@ -309,7 +328,7 @@ bool WgcSession::tryGetNextFrame(ID3D11Texture2D** outTexture, int64_t* outTimes
     currentFrame_ = frame;
 
     *outTexture = texture.Get();
-    *outTimestampHns = timeSpanToHns(frame.SystemRelativeTime());
+    *outTimestampHns = timestampHns;
     return true;
 }
 

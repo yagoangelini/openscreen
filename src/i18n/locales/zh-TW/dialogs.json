@@ -88,5 +88,14 @@
 		"audioFiles": "音訊檔案",
 		"openscreenProject": "OpenScreen 專案",
 		"allFiles": "所有檔案"
+	},
+	"recovery": {
+		"title": "復原錄製",
+		"message": "有一個錄製未被開啟",
+		"detail": "此錄製到達編輯器之前 OpenScreen 已關閉。檔案完好，現在即可開啟。",
+		"open": "在編輯器中開啟",
+		"later": "暫不",
+		"forget": "忽略",
+		"takeInterrupted": "錄製因錯誤提前停止。截至該時刻錄製的內容皆已儲存。"
 	}
 }

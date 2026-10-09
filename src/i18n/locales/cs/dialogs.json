@@ -88,5 +88,14 @@
 		"audioFiles": "Zvukové soubory",
 		"openscreenProject": "Projekt OpenScreen",
 		"allFiles": "Všechny soubory"
+	},
+	"recovery": {
+		"title": "Obnovit nahrávku",
+		"message": "Nahrávka nebyla otevřena",
+		"detail": "OpenScreen se zavřel dřív, než se tato nahrávka dostala do editoru. Soubor je v pořádku a lze ho otevřít nyní.",
+		"open": "Otevřít v editoru",
+		"later": "Teď ne",
+		"forget": "Zapomenout",
+		"takeInterrupted": "Nahrávání se kvůli chybě zastavilo předčasně. Vše nahrané do té chvíle bylo uloženo."
 	}
 }

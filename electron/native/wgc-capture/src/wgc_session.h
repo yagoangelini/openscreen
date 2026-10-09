@@ -61,6 +61,11 @@ public:
     // out of it (e.g. via CopyResource) before either. Do not mix with
     // setFrameCallback() on the same session.
     bool tryGetNextFrame(ID3D11Texture2D** outTexture, int64_t* outTimestampHns);
+    // True once a frame pull threw (device removed, GPU switch, item closed).
+    // tryGetNextFrame() then keeps returning false, so the caller has to ask
+    // this to tell "no new frame yet" from "no frame will ever come again".
+    bool frameSourceFailed() const { return frameSourceFailed_.load(); }
+    HRESULT frameSourceError() const { return frameSourceError_.load(); }
 
     // Legacy push-based path (OPENSCREEN_WGC_LEGACY_FRAME_CALLBACK=1 only).
     // callback runs on a WGC-owned thread inside FrameArrived and may be
@@ -114,4 +119,6 @@ private:
     int fps_ = 60;
     bool captureCursor_ = false;
     bool started_ = false;
+    std::atomic<bool> frameSourceFailed_ = false;
+    std::atomic<HRESULT> frameSourceError_ = S_OK;
 };

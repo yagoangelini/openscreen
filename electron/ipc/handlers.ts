@@ -114,6 +114,7 @@ import {
 import {
 	isSalvageableFragmentedCapture,
 	NATIVE_WINDOWS_SALVAGEABLE_OUTPUT_BYTES,
+	readCaptureFailureStage,
 	readMicrophoneDefaulted,
 	readMicrophoneUnavailable,
 	readWebcamFormat,
@@ -121,6 +122,11 @@ import {
 	terminateNativeWindowsCapture,
 	waitForNativeWindowsCaptureStop,
 } from "../recording/nativeWindowsCaptureStop";
+import {
+	clearPendingTake,
+	collectRecoverableTakes,
+	recordPendingTake,
+} from "../recording/pendingTakes";
 import { patchWebmDurationOnDisk } from "../recording/webm-duration";
 import { reindexRecordingOnDisk } from "../recording/webm-seek-index";
 import {
@@ -730,6 +736,16 @@ let nativeWindowsIsPaused = false;
 let nativeWindowsCaptureContainer: string | null = null;
 /** Cuts a surviving helper's output loose so it cannot pollute the next recording. */
 let nativeWindowsCaptureDrainCleanup: (() => void) | null = null;
+/**
+ * Set while a stop of the current take is running, so the helper exiting
+ * because it was asked to is not mistaken for the take dying on its own.
+ */
+let nativeWindowsStopInFlight = false;
+/**
+ * The helper ended the take before anyone asked it to: it reported a failure,
+ * or simply exited. Read at stop to tell the user the take ends early.
+ */
+let nativeWindowsTakeEndedEarly = false;
 
 function detachNativeWindowsCaptureOutputDrain() {
 	nativeWindowsCaptureDrainCleanup?.();
@@ -749,6 +765,7 @@ function resetNativeWindowsCaptureState() {
 	nativeWindowsPauseRanges = [];
 	nativeWindowsIsPaused = false;
 	nativeWindowsCaptureContainer = null;
+	nativeWindowsTakeEndedEarly = false;
 }
 
 /** Reads the file, then defers the judgement to the tested predicate. */
@@ -1488,9 +1505,39 @@ function waitForNativeWindowsCaptureStart(proc: ChildProcessWithoutNullStreams) 
  * reproduced by driving the .exe by hand. macOS has had this since it shipped
  * (`attachNativeMacCaptureOutputDrain`); Windows never did.
  */
-function attachNativeWindowsCaptureOutputDrain(proc: ChildProcessWithoutNullStreams) {
+function attachNativeWindowsCaptureOutputDrain(
+	proc: ChildProcessWithoutNullStreams,
+	onTakeEnded: () => void,
+) {
+	// The same watch macOS has had since #621. Without it a take that died
+	// mid-recording -- a full disk, a GPU reset, a helper crash -- went
+	// unnoticed until the user pressed stop, while the HUD kept counting.
+	let lineBuffer = "";
+	let takeEndReported = false;
+	const watchLiveTake = createNativeMacMidCaptureErrorWatch(
+		() => nativeWindowsCaptureProcess === proc && !nativeWindowsStopInFlight,
+		() => {
+			// The failure event and the exit that follows it are one ending.
+			if (takeEndReported) {
+				return;
+			}
+			takeEndReported = true;
+			nativeWindowsTakeEndedEarly = true;
+			onTakeEnded();
+		},
+	);
 	const drain = (chunk: Buffer) => {
-		nativeWindowsCaptureOutput += chunk.toString();
+		const text = chunk.toString();
+		nativeWindowsCaptureOutput += text;
+		lineBuffer += text;
+		const lines = lineBuffer.split(/\r?\n/);
+		lineBuffer = lines.pop() ?? "";
+		for (const line of lines) {
+			const event = tryParseNativeHelperEvent(line.trim());
+			if (event) {
+				watchLiveTake(event);
+			}
+		}
 	};
 	const cleanup = () => {
 		proc.stdout.off("data", drain);
@@ -1499,7 +1546,10 @@ function attachNativeWindowsCaptureOutputDrain(proc: ChildProcessWithoutNullStre
 
 	proc.stdout.on("data", drain);
 	proc.stderr.on("data", drain);
-	proc.once("close", cleanup);
+	proc.once("close", () => {
+		cleanup();
+		watchLiveTake.exited();
+	});
 	// An 'error' event with no listener throws, and in the main process that is
 	// an uncaught exception rather than a rejected promise. Both streams need a
 	// sink for the whole life of the helper: stdin raises EPIPE when the helper
@@ -2885,8 +2935,21 @@ export function registerIpcHandlers(
 					windowsHide: true,
 				});
 				nativeWindowsCaptureProcess = proc;
-				nativeWindowsCaptureDrainCleanup = attachNativeWindowsCaptureOutputDrain(proc);
+				nativeWindowsCaptureDrainCleanup = attachNativeWindowsCaptureOutputDrain(proc, () =>
+					handleNativeWindowsTakeEndedEarly(),
+				);
 				console.info("[native-wgc] helper spawned", { pid: proc.pid });
+				// Journaled before the first frame, not after the stop: everything
+				// that can lose a take happens in between, and a take nobody wrote
+				// down is a file nobody will ever find.
+				void recordPendingTake(RECORDINGS_DIR, {
+					screenVideoPath: outputPath,
+					webcamVideoPath: request.webcam.enabled ? webcamOutputPath : undefined,
+					createdAt: recordingId,
+					cursorCaptureMode,
+				}).catch((error) => {
+					console.warn("[native-wgc] could not journal the take:", error);
+				});
 
 				await waitForNativeWindowsCaptureStart(proc);
 				const captureStartedAtMs = Date.now();
@@ -3267,17 +3330,54 @@ export function registerIpcHandlers(
 		}
 	});
 
-	ipcMain.handle("stop-native-windows-recording", async (_, discard?: boolean) => {
-		const proc = nativeWindowsCaptureProcess;
-		const preferredPath = nativeWindowsCaptureTargetPath;
-		const preferredWebcamPath = nativeWindowsCaptureWebcamTargetPath;
-		const recordingId = nativeWindowsCaptureRecordingId ?? Date.now();
-		const cursorCaptureMode = nativeWindowsCursorCaptureMode;
-
-		if (!proc) {
-			return { success: false, error: "Native Windows capture is not running." };
+	// A function and not only an IPC handler: the take has to be stoppable when
+	// the HUD that normally asks cannot -- its renderer crashed, the app is
+	// quitting, Windows is logging off. Those callers live in the main process.
+	let nativeWindowsStopPromise: ReturnType<typeof runNativeWindowsCaptureStop> | null = null;
+	const stopNativeWindowsCapture = (discard?: boolean) => {
+		// A second stop while one runs -- the tray and the HUD at once, or the
+		// take dying while the user presses stop -- joins the first rather than
+		// failing with "not running" halfway through the save.
+		if (nativeWindowsStopPromise) {
+			return nativeWindowsStopPromise;
 		}
+		const proc = nativeWindowsCaptureProcess;
+		if (!proc) {
+			return Promise.resolve({
+				success: false as const,
+				error: "Native Windows capture is not running.",
+			});
+		}
+		nativeWindowsStopInFlight = true;
+		nativeWindowsStopPromise = runNativeWindowsCaptureStop({
+			proc,
+			discard,
+			preferredPath: nativeWindowsCaptureTargetPath,
+			preferredWebcamPath: nativeWindowsCaptureWebcamTargetPath,
+			recordingId: nativeWindowsCaptureRecordingId ?? Date.now(),
+			cursorCaptureMode: nativeWindowsCursorCaptureMode,
+		}).finally(() => {
+			nativeWindowsStopInFlight = false;
+			nativeWindowsStopPromise = null;
+		});
+		return nativeWindowsStopPromise;
+	};
 
+	const runNativeWindowsCaptureStop = async ({
+		proc,
+		discard,
+		preferredPath,
+		preferredWebcamPath,
+		recordingId,
+		cursorCaptureMode,
+	}: {
+		proc: ChildProcessWithoutNullStreams;
+		discard?: boolean;
+		preferredPath: string | null;
+		preferredWebcamPath: string | null;
+		recordingId: number;
+		cursorCaptureMode: CursorCaptureMode;
+	}) => {
 		// Discarding does not need a finalized file, so it must not wait for one.
 		// Cancel and Restart both route here, and making them sit through the
 		// full stop handshake meant a wedged helper could not be escaped from at
@@ -3294,6 +3394,9 @@ export function registerIpcHandlers(
 					detachNativeWindowsCaptureOutputDrain();
 				}
 				await removeNativeWindowsCaptureOutputs(preferredPath, preferredWebcamPath);
+				if (preferredPath) {
+					await clearPendingTake(RECORDINGS_DIR, preferredPath).catch(() => undefined);
+				}
 				return { success: true, discarded: true };
 			} finally {
 				// Unconditional. Killing a wedged helper can itself throw, and
@@ -3398,10 +3501,23 @@ export function registerIpcHandlers(
 				pendingCursorRecordingData = null;
 			}
 
+			// From here on the video is final and playable. Everything below is
+			// bookkeeping around it, and none of it may turn a saved take into a
+			// failed one: a throw used to land in the catch below, report "could
+			// not be saved", and leave the MP4 orphaned on disk. A full disk can
+			// fail any of these writes, and the take matters more than its
+			// sidecars -- a take without its cursor file still opens.
 			if (cursorCaptureMode === "editable-overlay") {
-				compactPendingCursorTelemetryPauseRanges(nativeWindowsPauseRanges);
-				shiftPendingCursorTelemetry(nativeWindowsCursorOffsetMs);
-				await writePendingCursorTelemetry(screenVideoPath);
+				try {
+					compactPendingCursorTelemetryPauseRanges(nativeWindowsPauseRanges);
+					shiftPendingCursorTelemetry(nativeWindowsCursorOffsetMs);
+					await writePendingCursorTelemetry(screenVideoPath);
+				} catch (error) {
+					console.warn(
+						"[native-wgc] could not write the cursor telemetry; saving without it",
+						error,
+					);
+				}
 			}
 			let webcamVideoPath: string | undefined;
 			if (preferredWebcamPath) {
@@ -3435,14 +3551,37 @@ export function registerIpcHandlers(
 				RECORDINGS_DIR,
 				`${path.parse(screenVideoPath).name}${RECORDING_SESSION_SUFFIX}`,
 			);
-			await fs.writeFile(sessionManifestPath, JSON.stringify(session, null, 2), "utf-8");
-			await registerRecordingMediaLinks(screenVideoPath, { webcamVideoPath, cursorCaptureMode });
+			try {
+				await fs.writeFile(sessionManifestPath, JSON.stringify(session, null, 2), "utf-8");
+			} catch (error) {
+				console.warn("[native-wgc] could not write the session manifest", error);
+			}
+			try {
+				await registerRecordingMediaLinks(screenVideoPath, { webcamVideoPath, cursorCaptureMode });
+			} catch (error) {
+				console.warn("[native-wgc] could not register the recording's media links", error);
+			}
+			// The journal keeps the session as it was saved, so a take that never
+			// reaches the editor -- the app quit, or the editor never opened -- is
+			// offered back with its camera, not just the screen.
+			await recordPendingTake(RECORDINGS_DIR, session).catch(() => undefined);
+
+			const captureFailureStage = readCaptureFailureStage(nativeWindowsCaptureOutput);
+			const interrupted = nativeWindowsTakeEndedEarly || captureFailureStage !== null;
+			if (interrupted) {
+				console.warn("[native-wgc] the take ended before the user stopped it", {
+					stage: captureFailureStage,
+					path: screenVideoPath,
+				});
+			}
 
 			return {
 				success: true,
 				path: screenVideoPath,
 				session,
 				recovered,
+				interrupted,
+				interruptionStage: captureFailureStage,
 				// `preferredWebcamPath` is non-null only for a take that asked for a
 				// camera, so the pair means "a camera was requested and none survived".
 				// This is the second, quieter way to lose one: the helper opened the
@@ -3466,7 +3605,113 @@ export function registerIpcHandlers(
 				onRecordingStateChange(false, source.name);
 			}
 		}
-	});
+	};
+
+	ipcMain.handle("stop-native-windows-recording", (_, discard?: boolean) =>
+		stopNativeWindowsCapture(discard),
+	);
+
+	/**
+	 * Stops and saves the take without the HUD's help, for the callers that
+	 * cannot go through it: its renderer crashed, the take died on its own while
+	 * the HUD was gone, the app is quitting, Windows is logging off. With
+	 * `openEditor` the take opens in the editor as a normal stop would;
+	 * without it (quitting) it stays in the journal and is offered back at the
+	 * next launch.
+	 */
+	const stopAndSaveNativeWindowsRecording = async ({ openEditor }: { openEditor: boolean }) => {
+		if (!nativeWindowsCaptureProcess) {
+			return;
+		}
+		const result = await stopNativeWindowsCapture(false);
+		if (!result.success || !("session" in result) || !result.session) {
+			if (!result.success) {
+				console.error("[native-wgc] the main-process stop could not save the take", result);
+			}
+			return;
+		}
+		currentVideoPath = result.session.screenVideoPath;
+		if (!openEditor) {
+			return;
+		}
+		createEditorWindow();
+		if (result.interrupted) {
+			void dialog.showMessageBox({
+				type: "warning",
+				title: mainT("dialogs", "recovery.title"),
+				message: mainT("dialogs", "recovery.takeInterrupted"),
+			});
+		}
+	};
+
+	/**
+	 * The take ended without a stop request. The HUD, when it is alive, runs
+	 * the stop itself -- the same path as its own stop button, so it clears its
+	 * state and tells the user. Without a HUD the main process does it.
+	 */
+	function handleNativeWindowsTakeEndedEarly() {
+		console.warn("[native-wgc] the helper ended the take on its own", {
+			stage: readCaptureFailureStage(nativeWindowsCaptureOutput),
+		});
+		const hudWindow = getMainWindow();
+		if (hudWindow && !hudWindow.isDestroyed() && !hudWindow.webContents.isCrashed()) {
+			hudWindow.webContents.send("stop-recording-from-tray");
+			return;
+		}
+		void stopAndSaveNativeWindowsRecording({ openEditor: true });
+	}
+
+	/**
+	 * Offers back the newest take that never reached the editor. Called once
+	 * the app is up; the others stay listed and come up on a later launch.
+	 */
+	const offerPendingTakeRecovery = async () => {
+		const takes = await collectRecoverableTakes(RECORDINGS_DIR, {
+			excludeScreenVideoPath: nativeWindowsCaptureTargetPath,
+		}).catch(() => []);
+		const [take] = takes;
+		if (!take) {
+			return;
+		}
+		const parent = getMainWindow();
+		const options = {
+			type: "question" as const,
+			buttons: [
+				mainT("dialogs", "recovery.open"),
+				mainT("dialogs", "recovery.later"),
+				mainT("dialogs", "recovery.forget"),
+			],
+			defaultId: 0,
+			cancelId: 1,
+			title: mainT("dialogs", "recovery.title"),
+			message: mainT("dialogs", "recovery.message"),
+			detail: `${mainT("dialogs", "recovery.detail")}\n\n${take.screenVideoPath}`,
+		};
+		const { response } =
+			parent && !parent.isDestroyed()
+				? await dialog.showMessageBox(parent, options)
+				: await dialog.showMessageBox(options);
+		if (response === 2) {
+			await clearPendingTake(RECORDINGS_DIR, take.screenVideoPath).catch(() => undefined);
+			return;
+		}
+		if (response !== 0 || nativeWindowsCaptureProcess) {
+			return;
+		}
+		const session = normalizeRecordingSession({
+			screenVideoPath: take.screenVideoPath,
+			webcamVideoPath: take.webcamVideoPath,
+			createdAt: take.createdAt,
+			cursorCaptureMode: take.cursorCaptureMode,
+		});
+		if (!session) {
+			return;
+		}
+		setCurrentRecordingSessionState(session);
+		currentVideoPath = session.screenVideoPath;
+		currentProjectPath = null;
+		createEditorWindow();
+	};
 
 	ipcMain.handle("stop-native-mac-recording", async (_, discard?: boolean) => {
 		if (process.platform !== "darwin") {
@@ -4669,6 +4914,12 @@ export function registerIpcHandlers(
 			nativeMacRecordingWarning?.screenVideoPath === currentRecordingSession.screenVideoPath
 				? nativeMacRecordingWarning.message
 				: undefined;
+		// The editor asking for the take is the proof it arrived. Until now the
+		// journal kept it, so a crash anywhere between capture and here offers it
+		// back on the next launch.
+		void clearPendingTake(RECORDINGS_DIR, currentRecordingSession.screenVideoPath).catch(
+			() => undefined,
+		);
 		return { success: true, session: currentRecordingSession, ...(warning ? { warning } : {}) };
 	});
 
@@ -4878,4 +5129,10 @@ export function registerIpcHandlers(
 			renameSession(projectId, sessionId, title),
 		deleteAiEditionChatSession: (projectId, sessionId) => deleteSession(projectId, sessionId),
 	});
+
+	return {
+		isNativeWindowsCaptureActive: () => nativeWindowsCaptureProcess !== null,
+		stopAndSaveNativeWindowsRecording,
+		offerPendingTakeRecovery,
+	};
 }

@@ -51,7 +51,8 @@
 		"microphoneDefaulted": "選択したマイクを特定できませんでした。既定の入力を録音します。",
 		"microphoneUnavailable": "このバージョンの macOS ではマイクを録音できません。マイクなしで録画します。",
 		"accessibilityAllowAndRetry": "OpenScreenにアクセシビリティアクセスを許可してから、もう一度録画を押してカウントダウンを開始してください。",
-		"selectSource": "録画するソースを選択してください"
+		"selectSource": "録画するソースを選択してください",
+		"takeInterrupted": "エラーのため録画が途中で停止しました。それまでに録画した内容は保存されています。"
 	},
 	"emptyState": {
 		"title": "プロジェクトが開かれていません",

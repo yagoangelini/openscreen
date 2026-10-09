@@ -49,7 +49,8 @@
 		"microphoneUnavailable": "Cette version de macOS ne permet pas d'enregistrer le micro. Enregistrement sans lui.",
 		"permissionDenied": "Permission d'enregistrement refusée. Veuillez autoriser l'enregistrement d'écran.",
 		"accessibilityAllowAndRetry": "Autorisez l'accès Accessibilité pour OpenScreen, puis appuyez de nouveau sur enregistrer pour lancer le compte à rebours.",
-		"selectSource": "Veuillez sélectionner une source à enregistrer"
+		"selectSource": "Veuillez sélectionner une source à enregistrer",
+		"takeInterrupted": "L'enregistrement s'est arrêté plus tôt à cause d'une erreur. Tout ce qui a été enregistré jusque-là a été conservé."
 	},
 	"loadingVideo": "Chargement de la vidéo...",
 	"loadingEditor": "Chargement de l'éditeur...",

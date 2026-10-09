@@ -157,12 +157,33 @@ const trayIconSize = isMac ? 16 : 24;
 const defaultTrayIcon = getTrayIcon("openscreen.png", trayIconSize);
 const recordingTrayIcon = getTrayIcon("rec-button.png", trayIconSize);
 
+/** What the main process needs from the recording handlers once they are registered. */
+let recordingControls: ReturnType<typeof registerIpcHandlers> | null = null;
+
 function createWindow() {
 	if (mainWindow && !mainWindow.isDestroyed()) {
 		return;
 	}
 
-	mainWindow = createHudOverlayWindow();
+	const hudWindow = createHudOverlayWindow();
+	mainWindow = hudWindow;
+	// The HUD is the only thing that can stop a take, so a HUD whose renderer
+	// died mid-recording used to leave the capture running with no way out
+	// but quitting -- and quitting lost the take too. Stop and save it here,
+	// then open it as any stop would.
+	hudWindow.webContents.on("render-process-gone", (_event, details) => {
+		if (!recordingControls?.isNativeWindowsCaptureActive()) {
+			return;
+		}
+		console.error("[hud] renderer gone mid-recording; saving the take", details);
+		void recordingControls.stopAndSaveNativeWindowsRecording({ openEditor: true });
+	});
+	// Windows logging off or shutting down does not go through before-quit and
+	// gives the app only a few seconds. Start the stop anyway: the helper also
+	// finalizes on its own when its stdin closes, and the take is journaled.
+	hudWindow.on("session-end", () => {
+		void recordingControls?.stopAndSaveNativeWindowsRecording({ openEditor: false });
+	});
 }
 
 function showMainWindow() {
@@ -883,9 +904,14 @@ function updateTrayMenu(recording: boolean = false) {
 				{
 					label: mainT("common", "actions.stopRecording") || "Stop Recording",
 					click: () => {
-						if (mainWindow && !mainWindow.isDestroyed()) {
+						// Through the HUD when it can answer, so it clears its own state.
+						// When it cannot -- closed, crashed -- the tray is the user's last
+						// way to stop, and it must not depend on the window that failed.
+						if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.webContents.isCrashed()) {
 							mainWindow.webContents.send("stop-recording-from-tray");
+							return;
 						}
+						void recordingControls?.stopAndSaveNativeWindowsRecording({ openEditor: true });
 					},
 				},
 			]
@@ -1108,6 +1134,8 @@ app.on("activate", () => {
 });
 
 let sttShutdownPromise: Promise<void> | null = null;
+let quitStopPromise: Promise<void> | null = null;
+
 let sttShutdownFinished = false;
 
 // Electron does not wait for an async event listener. Hold the first quit long
@@ -1121,6 +1149,24 @@ app.on("before-quit", (event) => {
 	// quit is deferred below: the user asked to leave, and a check they can re-run from the
 	// tray is not worth holding the helper's teardown behind.
 	updateCheckAbort?.abort();
+	// Quitting mid-take -- the HUD's quit button, Alt+F4, the tray -- used to end
+	// the capture with nothing written but the MP4: no cursor file, no session,
+	// no editor, and nothing that would ever point the user at it again. Finish
+	// the take first; it is journaled, so the next launch offers it back.
+	if (recordingControls?.isNativeWindowsCaptureActive()) {
+		event.preventDefault();
+		if (!quitStopPromise) {
+			quitStopPromise = recordingControls
+				.stopAndSaveNativeWindowsRecording({ openEditor: false })
+				.catch((error) => {
+					console.error("[recording] could not save the take while quitting:", error);
+				})
+				.finally(() => {
+					app.quit();
+				});
+		}
+		return;
+	}
 	if (sttShutdownFinished) return;
 	event.preventDefault();
 	if (sttShutdownPromise) return;
@@ -1360,7 +1406,7 @@ appReady?.then(async () => {
 		showMainWindow();
 	}
 
-	registerIpcHandlers(
+	recordingControls = registerIpcHandlers(
 		createEditorWindowWrapper,
 		createSourceSelectorWindowWrapper,
 		createCountdownOverlayWindowWrapper,
@@ -1407,4 +1453,7 @@ appReady?.then(async () => {
 	void showPermissionsWindowIfNeeded().catch((error) =>
 		console.warn("[permissions] could not read the permissions at launch:", error),
 	);
+	void recordingControls
+		?.offerPendingTakeRecovery()
+		.catch((error) => console.warn("[recording] could not check for takes to recover:", error));
 });

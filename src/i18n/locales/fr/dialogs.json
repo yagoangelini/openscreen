@@ -88,5 +88,14 @@
 		"audioFiles": "Fichiers audio",
 		"openscreenProject": "Projet OpenScreen",
 		"allFiles": "Tous les fichiers"
+	},
+	"recovery": {
+		"title": "Récupérer l'enregistrement",
+		"message": "Un enregistrement n'a pas été ouvert",
+		"detail": "OpenScreen s'est fermé avant que cet enregistrement n'arrive dans l'éditeur. Le fichier est intact et peut être ouvert maintenant.",
+		"open": "Ouvrir dans l'éditeur",
+		"later": "Plus tard",
+		"forget": "L'oublier",
+		"takeInterrupted": "L'enregistrement s'est arrêté plus tôt à cause d'une erreur. Tout ce qui a été enregistré jusque-là a été conservé."
 	}
 }
