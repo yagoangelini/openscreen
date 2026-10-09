@@ -36,6 +36,7 @@ Decidido em 2026-10-09, a partir de uma auditoria completa feita em 7 frentes: g
 - **Compositor na RTX.** O compositor escolhe a GPU de alto desempenho (`EnumAdapterByGpuPreference`) e aceita uma variável de ambiente para forçar outra.
 - **NVENC primeiro.** Na NVIDIA, o codificador de hardware NVENC é tentado antes dos outros. A GPU e o codificador usados aparecem no "Salvar diagnóstico".
 - **Captura na GPU do monitor.** O gravador cria o dispositivo na GPU que liga o monitor gravado, para nunca copiar quadros entre GPUs. O fornecedor do codificador passa a constar no evento `encoder-selection`.
+- **Transcrição na RTX.** O whisper usa hoje o Vulkan 0, que é a Intel. Isso travou o preview por cerca de 1 a 3 min depois da 1ª gravação (confirmado). A correção escolhe a GPU dedicada e não deixa a transcrição pós-gravação disputar com o play.
 - **Preferência do Windows (opcional).** Uma opção grava "Alto desempenho" para `Openscreen.exe`, `wgc-capture.exe` e `whisper-stt-server.exe`.
 
 ## Fase 4 — Novo auto-zoom calmo
@@ -44,6 +45,8 @@ Decidido em 2026-10-09, a partir de uma auditoria completa feita em 7 frentes: g
 - **Pan suave entre alvos.** Cliques próximos no tempo viram uma cena só. O próximo alvo, mesmo longe, é alcançado com pan suave sem voltar a 1x. A volta a 1x só acontece depois de ~5 s sem ação.
 - **Modo da câmera no editor.** Uma opção troca **todos** os auto-zooms de uma vez entre fixo, híbrido (zona morta) e seguir o mouse.
 - **Enquadrar menus e popups.** UI Automation do Windows dá o retângulo do elemento clicado e dos menus (só a posição, nunca o texto). A diferença de quadros antes e depois do clique cobre web e painéis. Quando a página inteira muda, o app afasta o zoom em vez de aproximar.
+- **Hover explicativo (decidido 2026-10-09).** Quando o mouse passa devagar sobre opções sem clicar, o zoom é leve e enquadra toda a área percorrida (menu, lista), parado, sem seguir item a item.
+- **Ritmo (feedback do 1º teste).** Os zooms de 2 s a 1,8x "entram e saem rápido demais" e caem em lugar ou momento errado. O novo preset usa zooms mais longos, transições mais lentas e foco no conjunto da ação.
 - **Antecipação.** O zoom começa junto com o movimento do mouse em direção ao alvo e fica completo 0,7 s antes do clique.
 - **Novos sinais.** Digitar segura o zoom (o app registra só o instante das teclas, nunca quais foram). Clique direito, duplo-clique e roda passam a contar. Ficar parado ou navegar devolve a 1x.
 - **Preset "Tutorial".** Zoom de até 1,5x (1,8x só para alvos pequenos), transição simétrica de ~1,1 s e no mínimo 2,5 s parado. Sliders no editor permitem ajustar.
@@ -64,6 +67,7 @@ Decidido em 2026-10-09, a partir de uma auditoria completa feita em 7 frentes: g
 - **Atalhos.** Ctrl+Shift+O deixa de ser o padrão. Atalhos do editor param de disparar com um dropdown focado, o Caps Lock deixa de quebrar Ctrl+S, e o avanço quadro a quadro usa o fps real do vídeo.
 - **Textos em pt-BR.** Os avisos que estão em inglês fixo no código passam a ser traduzidos.
 - **Export 1440p.**
+- **Largura do export.** O 1º teste saiu em 1752×1080, e não em 1920×1080 (16:9). Investigar a causa.
 - **Projeto corrompido.** Aparece na lista como danificado, e um `.bak` é mantido a cada salvamento.
 
 ## Fase 7 — Recursos novos (todos opcionais e editáveis)
