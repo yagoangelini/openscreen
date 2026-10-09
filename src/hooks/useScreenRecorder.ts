@@ -638,6 +638,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 
 					if (!result.success) {
 						console.error("Failed to store recording session:", result.message);
+						toast.error(tRef.current("recording.saveFailedFileKept"), { duration: 15_000 });
 						return;
 					}
 					// store-recorded-session has flushed and closed the saved streams.
@@ -652,15 +653,18 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 					await window.electronAPI.switchToEditor();
 				} catch (error) {
 					console.error("Error saving recording:", error);
+					toast.error(tRef.current("recording.saveFailedFileKept"), { duration: 15_000 });
 				} finally {
-					// Discard any recorder whose data wasn't part of a successful save (discarded
-					// run, failed save, or a webcam whose disk write failed while the screen still
-					// saved) so no stream or partial file is left open or orphaned.
+					// Close any recorder whose data wasn't part of a successful save so no
+					// stream is left open. Only a run the user threw away loses its files: a
+					// failed save keeps them, because the failure can come after the streams
+					// were already finalized into a complete recording.
+					const userDiscarded = discardRecordingId.current === activeRecordingId;
 					if (!storeSucceeded) {
-						await activeScreenRecorder.discard().catch(() => undefined);
+						await activeScreenRecorder.discard({ keepFile: !userDiscarded }).catch(() => undefined);
 					}
 					if (activeWebcamRecorder && !(storeSucceeded && webcamIncludedInSave)) {
-						await activeWebcamRecorder.discard().catch(() => undefined);
+						await activeWebcamRecorder.discard({ keepFile: !userDiscarded }).catch(() => undefined);
 					}
 					if (finalizingRecordingId.current === activeRecordingId) {
 						finalizingRecordingId.current = null;

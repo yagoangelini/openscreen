@@ -56,7 +56,8 @@
 		"diskSpaceCritical": "Na disku není dost místa pro nahrávání. Uvolněte alespoň 1 GB a zkuste to znovu.",
 		"diskSpaceLow": "Málo místa na disku: vejde se asi {{minutes}} minut nahrávky.",
 		"crashProtectionOff": "Ochrana proti pádu je pro tuto nahrávku vypnutá: pokud se aplikace nečekaně zavře, záznam nepůjde obnovit.",
-		"takeStoppedDiskFull": "Nahrávání bylo zastaveno, protože je disk téměř plný. Vše dosud nahrané bylo uloženo."
+		"takeStoppedDiskFull": "Nahrávání bylo zastaveno, protože je disk téměř plný. Vše dosud nahrané bylo uloženo.",
+		"saveFailedFileKept": "Nahrávku se nepodařilo otevřít v editoru, ale její soubor zůstal ve složce nahrávek."
 	},
 	"emptyState": {
 		"title": "Žádný projekt není otevřen",

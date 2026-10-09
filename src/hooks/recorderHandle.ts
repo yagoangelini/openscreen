@@ -16,8 +16,10 @@ export type RecorderHandle = {
 	/**
 	 * Close the disk stream (if any) and delete its partial file. Called when a recording
 	 * is discarded or fails before save, so cancelled runs don't leak. No-op in-memory.
+	 * `keepFile` closes the stream but leaves the file: a failed save must not delete
+	 * what was recorded.
 	 */
-	discard: () => Promise<void>;
+	discard: (options?: { keepFile?: boolean }) => Promise<void>;
 };
 
 /**
@@ -132,9 +134,13 @@ export function createRecorderHandle(
 		return new Blob(memoryChunks, { type: mimeType });
 	}
 
-	async function discard(): Promise<void> {
+	async function discard(options?: { keepFile?: boolean }): Promise<void> {
 		if (streamOpened && fileName && api?.closeRecordingStream) {
-			await api.closeRecordingStream(fileName);
+			if (options?.keepFile) {
+				await api.closeRecordingStream(fileName, true);
+			} else {
+				await api.closeRecordingStream(fileName);
+			}
 		}
 	}
 

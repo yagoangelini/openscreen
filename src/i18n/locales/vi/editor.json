@@ -56,7 +56,8 @@
 		"diskSpaceCritical": "Không đủ dung lượng đĩa để ghi. Hãy giải phóng ít nhất 1 GB rồi thử lại.",
 		"diskSpaceLow": "Dung lượng đĩa thấp: đủ cho khoảng {{minutes}} phút ghi.",
 		"crashProtectionOff": "Bảo vệ khi sự cố đang tắt cho bản ghi này: nếu ứng dụng đóng đột ngột, bản ghi sẽ không thể khôi phục.",
-		"takeStoppedDiskFull": "Đã dừng ghi vì đĩa gần đầy. Mọi thứ đã ghi đều được lưu."
+		"takeStoppedDiskFull": "Đã dừng ghi vì đĩa gần đầy. Mọi thứ đã ghi đều được lưu.",
+		"saveFailedFileKept": "Không thể mở bản ghi trong trình chỉnh sửa, nhưng tệp vẫn được giữ trong thư mục bản ghi."
 	},
 	"emptyState": {
 		"title": "Không có dự án nào được mở",

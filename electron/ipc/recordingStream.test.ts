@@ -66,6 +66,17 @@ describe("RecordingStreamRegistry", () => {
 		expect(await registry.finalize("rec.webm")).toBe(false);
 	});
 
+	it("keeps the file when asked to close without discarding it", async () => {
+		const registry = new RecordingStreamRegistry();
+		await registry.open("rec.webm", pathFor("rec.webm"));
+		await registry.append("rec.webm", Buffer.from("partial"));
+
+		await registry.discard("rec.webm", pathFor("rec.webm"), true);
+
+		expect(registry.has("rec.webm")).toBe(false);
+		expect((await stat(pathFor("rec.webm"))).size).toBe("partial".length);
+	});
+
 	it("discard tolerates a missing file", async () => {
 		const registry = new RecordingStreamRegistry();
 		await expect(registry.discard("never.webm", pathFor("never.webm"))).resolves.toBeUndefined();

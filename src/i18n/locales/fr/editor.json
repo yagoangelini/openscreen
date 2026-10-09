@@ -54,7 +54,8 @@
 		"diskSpaceCritical": "Pas assez d'espace disque pour enregistrer. Libérez au moins 1 Go et réessayez.",
 		"diskSpaceLow": "Espace disque faible : environ {{minutes}} minutes d'enregistrement possibles.",
 		"crashProtectionOff": "La protection contre les plantages est désactivée pour cet enregistrement : si l'app se ferme brusquement, la prise ne pourra pas être récupérée.",
-		"takeStoppedDiskFull": "L'enregistrement a été arrêté car le disque est presque plein. Tout ce qui a été enregistré a été conservé."
+		"takeStoppedDiskFull": "L'enregistrement a été arrêté car le disque est presque plein. Tout ce qui a été enregistré a été conservé.",
+		"saveFailedFileKept": "L'enregistrement n'a pas pu s'ouvrir dans l'éditeur, mais son fichier a été conservé dans le dossier des enregistrements."
 	},
 	"loadingVideo": "Chargement de la vidéo...",
 	"loadingEditor": "Chargement de l'éditeur...",

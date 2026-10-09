@@ -69,12 +69,19 @@ export class RecordingStreamRegistry {
 	}
 
 	/**
-	 * Close the stream (if any) and delete the partial file, so a discarded or
-	 * failed recording doesn't leak descriptors or orphan partial files on disk.
+	 * Close the stream (if any) and delete the partial file, so a discarded
+	 * recording doesn't leak descriptors or orphan partial files on disk.
+	 *
+	 * `keepFile` closes without deleting. A save that failed is not a discard:
+	 * by then the file may already be complete -- `store-recorded-session`
+	 * finalizes the streams before the step that threw -- and deleting it threw
+	 * away a recording the user never asked to lose.
 	 */
-	async discard(fileName: string, filePath: string): Promise<void> {
+	async discard(fileName: string, filePath: string, keepFile = false): Promise<void> {
 		await this.endStream(fileName);
-		await unlink(filePath).catch(() => undefined);
+		if (!keepFile) {
+			await unlink(filePath).catch(() => undefined);
+		}
 	}
 
 	private async endStream(fileName: string): Promise<void> {
@@ -127,9 +134,13 @@ export function registerRecordingStreamHandlers(
 
 	ipcMain.handle(
 		"close-recording-stream",
-		async (_, fileName: string): Promise<{ success: boolean; error?: string }> => {
+		async (
+			_,
+			fileName: string,
+			keepFile?: boolean,
+		): Promise<{ success: boolean; error?: string }> => {
 			try {
-				await registry.discard(fileName, resolveRecordingOutputPath(fileName));
+				await registry.discard(fileName, resolveRecordingOutputPath(fileName), keepFile === true);
 				return { success: true };
 			} catch (error) {
 				return { success: false, error: String(error) };

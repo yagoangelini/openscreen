@@ -56,7 +56,8 @@
 		"diskSpaceCritical": "Nicht genug freier Speicherplatz für eine Aufnahme. Gib mindestens 1 GB frei und versuche es erneut.",
 		"diskSpaceLow": "Wenig Speicherplatz: Platz für etwa {{minutes}} Minuten Aufnahme.",
 		"crashProtectionOff": "Der Absturzschutz ist für diese Aufnahme aus: Wird die App unerwartet beendet, lässt sich die Aufnahme nicht wiederherstellen.",
-		"takeStoppedDiskFull": "Die Aufnahme wurde beendet, weil der Datenträger fast voll ist. Alles bisher Aufgenommene wurde gespeichert."
+		"takeStoppedDiskFull": "Die Aufnahme wurde beendet, weil der Datenträger fast voll ist. Alles bisher Aufgenommene wurde gespeichert.",
+		"saveFailedFileKept": "Die Aufnahme konnte nicht im Editor geöffnet werden, ihre Datei wurde aber im Aufnahmeordner behalten."
 	},
 	"emptyState": {
 		"title": "Kein Projekt geöffnet",

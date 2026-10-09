@@ -56,7 +56,8 @@
 		"diskSpaceCritical": "Not enough free disk space to record. Free up at least 1 GB and try again.",
 		"diskSpaceLow": "Low disk space: room for about {{minutes}} minutes of recording.",
 		"crashProtectionOff": "Crash protection is off for this recording: if the app closes unexpectedly, the take cannot be recovered.",
-		"takeStoppedDiskFull": "The recording was stopped because the disk is almost full. Everything recorded so far was saved."
+		"takeStoppedDiskFull": "The recording was stopped because the disk is almost full. Everything recorded so far was saved.",
+		"saveFailedFileKept": "The recording could not be opened in the editor, but its file was kept in the recordings folder."
 	},
 	"emptyState": {
 		"title": "Start with a recording",

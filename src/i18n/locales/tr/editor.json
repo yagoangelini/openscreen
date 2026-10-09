@@ -48,7 +48,8 @@
 		"diskSpaceCritical": "Kayıt için yeterli boş disk alanı yok. En az 1 GB boşaltıp tekrar deneyin.",
 		"diskSpaceLow": "Disk alanı az: yaklaşık {{minutes}} dakikalık kayıt sığar.",
 		"crashProtectionOff": "Bu kayıtta çökme koruması kapalı: uygulama beklenmedik şekilde kapanırsa kayıt kurtarılamaz.",
-		"takeStoppedDiskFull": "Disk neredeyse dolu olduğu için kayıt durduruldu. Şimdiye kadar kaydedilen her şey saklandı."
+		"takeStoppedDiskFull": "Disk neredeyse dolu olduğu için kayıt durduruldu. Şimdiye kadar kaydedilen her şey saklandı.",
+		"saveFailedFileKept": "Kayıt düzenleyicide açılamadı, ancak dosyası kayıtlar klasöründe tutuldu."
 	},
 	"loadingVideo": "Video yükleniyor...",
 	"loadingEditor": "Editör yükleniyor...",

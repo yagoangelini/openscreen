@@ -56,7 +56,8 @@
 		"diskSpaceCritical": "Não há espaço livre suficiente em disco para gravar. Libere pelo menos 1 GB e tente de novo.",
 		"diskSpaceLow": "Pouco espaço em disco: cabe cerca de {{minutes}} minutos de gravação.",
 		"crashProtectionOff": "A proteção contra falhas está desligada nesta gravação: se o app fechar de repente, o take não poderá ser recuperado.",
-		"takeStoppedDiskFull": "A gravação foi parada porque o disco está quase cheio. Tudo o que foi gravado até agora foi salvo."
+		"takeStoppedDiskFull": "A gravação foi parada porque o disco está quase cheio. Tudo o que foi gravado até agora foi salvo.",
+		"saveFailedFileKept": "Não foi possível abrir a gravação no editor, mas o arquivo foi mantido na pasta de gravações."
 	},
 	"emptyState": {
 		"title": "Nenhum projeto aberto",
