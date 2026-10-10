@@ -1283,11 +1283,29 @@ function queryDirectShowVideoInputRegistry() {
 	});
 }
 
+/**
+ * DirectShow CLSIDs already found, by device name. The lookup spawns reg.exe on
+ * the record path; a camera's CLSID does not change while the app runs, so it
+ * is asked once. Misses are not cached: a camera plugged in later must be found.
+ */
+const directShowClsidCache = new Map<string, string>();
+
 async function resolveDirectShowWebcamClsid(deviceName?: string) {
 	if (process.platform !== "win32" || !deviceName?.trim()) {
 		return null;
 	}
+	const cached = directShowClsidCache.get(deviceName.trim());
+	if (cached) {
+		return cached;
+	}
+	const clsid = await lookupDirectShowWebcamClsid(deviceName);
+	if (clsid) {
+		directShowClsidCache.set(deviceName.trim(), clsid);
+	}
+	return clsid;
+}
 
+async function lookupDirectShowWebcamClsid(deviceName: string) {
 	const output = await queryDirectShowVideoInputRegistry();
 	let current: { friendlyName?: string; clsid?: string } = {};
 	const entries: Array<{ friendlyName?: string; clsid?: string }> = [];
@@ -2997,13 +3015,20 @@ export function registerIpcHandlers(
 				nativeWindowsPauseRanges = [];
 				nativeWindowsIsPaused = false;
 
+				// The cursor sampler and the helper start side by side: they are
+				// independent processes, and the sampler's warm-up used to be paid in
+				// full before the helper was even spawned. Its samples are timed
+				// against `cursorStartTimeMs`, and the offset to the first frame is
+				// measured below, so starting both at once changes no timestamp.
 				const cursorStartTimeMs = Date.now();
+				let cursorSamplerReady: Promise<void> = Promise.resolve();
 				if (cursorCaptureMode === "editable-overlay") {
 					nativeWindowsCursorRecordingStartMs = cursorStartTimeMs;
-					await startCursorRecording(cursorStartTimeMs);
-					console.info("[native-wgc] cursor sampler ready", {
-						cursorStartTimeMs,
-						warmupMs: Date.now() - cursorStartTimeMs,
+					cursorSamplerReady = startCursorRecording(cursorStartTimeMs).then(() => {
+						console.info("[native-wgc] cursor sampler ready", {
+							cursorStartTimeMs,
+							warmupMs: Date.now() - cursorStartTimeMs,
+						});
 					});
 				} else {
 					pendingCursorRecordingData = null;
@@ -3031,7 +3056,7 @@ export function registerIpcHandlers(
 					console.warn("[native-wgc] could not journal the take:", error);
 				});
 
-				await waitForNativeWindowsCaptureStart(proc);
+				await Promise.all([waitForNativeWindowsCaptureStart(proc), cursorSamplerReady]);
 				const captureStartedAtMs = Date.now();
 				nativeWindowsCaptureStartedAtMs = captureStartedAtMs;
 				nativeWindowsCursorOffsetMs =
