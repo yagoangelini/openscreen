@@ -1,5 +1,5 @@
 import { fixWebmDuration } from "@fix-webm-duration/fix";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useScopedT } from "@/contexts/I18nContext";
 import { mixAudioTracks, nativeMicrophoneGain } from "@/lib/audioMix";
@@ -468,8 +468,19 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 		[t],
 	);
 
+	// On Windows the native helper records the camera itself; the renderer's stream only
+	// checks the device and reads its name before the take. Held from the HUD's opening it
+	// lit the camera for as long as the bar was up, so it is opened when a countdown starts
+	// (`webcamArmed`) and let go of as soon as the helper takes over.
+	const deferWebcamToCountdown = useMemo(() => window.electronAPI?.getPlatform?.() === "win32", []);
+	const [webcamArmed, setWebcamArmed] = useState(false);
+
 	useEffect(() => {
 		if (!webcamEnabled) return;
+		if (deferWebcamToCountdown && !webcamArmed) {
+			webcamReady.current = true;
+			return;
+		}
 
 		let cancelled = false;
 		let acquiredStream: MediaStream | null = null;
@@ -545,7 +556,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				webcamStream.current = null;
 			}
 		};
-	}, [webcamEnabled, webcamDeviceId, webcamDeviceName, t]);
+	}, [webcamEnabled, webcamDeviceId, webcamDeviceName, t, deferWebcamToCountdown, webcamArmed]);
 
 	const finalizeRecording = useCallback(
 		(
@@ -1165,6 +1176,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 		const activeRunId = countdownRunId.current;
 		countdownRunId.current += 1;
 		setCountdownActive(false);
+		setWebcamArmed(false);
 		void safeHideCountdownOverlay(activeRunId);
 	};
 
@@ -1239,6 +1251,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				// the only moment where the id and the name are known to describe the
 				// same camera (see readWebcamDeviceIdentity).
 				webcamIdentity = readWebcamDeviceIdentity();
+				setWebcamArmed(false);
 				// Release the renderer-side validation stream before asking the native
 				// helper to open the same device: most webcams only allow one exclusive
 				// capture session, and native (Media Foundation/DirectShow) now owns
@@ -1662,6 +1675,11 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 
 		const runId = countdownRunId.current + 1;
 		countdownRunId.current = runId;
+		// The camera opens with the countdown, which leaves it the countdown to come up.
+		if (webcamEnabled) {
+			webcamReady.current = false;
+			setWebcamArmed(true);
+		}
 
 		let selectedSource: ProcessedDesktopSource | null = null;
 		try {
