@@ -38,7 +38,9 @@
   "publish": [
     {
       "provider": "github",
-      "owner": "getopenscreen",
+      // This fork's releases, not upstream's: the installed app reads its update feed from
+      // here, and upstream's feed would offer to replace the fork with the original app.
+      "owner": "yagoangelini",
       "repo": "openscreen"
     }
   ],

@@ -11,6 +11,7 @@
 import { app } from "electron";
 import type { InstallChannel } from "./install-channel";
 import { ownsItsUpdates } from "./install-channel";
+import { compareVersions } from "./update-checker";
 
 export type UpdateOutcome =
 	| { kind: "unsupported" }
@@ -61,8 +62,12 @@ export async function checkForSelfUpdate(channel: InstallChannel): Promise<Updat
 		const autoUpdater = await getUpdater();
 		const result = await autoUpdater.checkForUpdates();
 		// null when no feed resolved; equal versions come back with no downloadPromise.
+		// Newer only, not merely different: electron-updater hands back the feed's version
+		// even when it is OLDER than this build (a fork ahead of its upstream, an RC user
+		// against the latest stable), and an equality test offered that as an "update"
+		// every 24 hours -- one whose download then failed, since nothing was armed.
 		const version = result?.updateInfo?.version;
-		if (!version || version === app.getVersion()) return { kind: "current" };
+		if (!version || compareVersions(version, app.getVersion()) <= 0) return { kind: "current" };
 		return { kind: "downloaded", version };
 	} catch (error) {
 		// A missing or malformed feed is the expected failure on any release published before

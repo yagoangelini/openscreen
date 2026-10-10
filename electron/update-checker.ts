@@ -1,5 +1,7 @@
-const LATEST_RELEASE_API = "https://api.github.com/repos/getopenscreen/openscreen/releases/latest";
-const OFFICIAL_RELEASE_PREFIX = "/getopenscreen/openscreen/releases/tag/";
+// This fork's own releases. Pointing at upstream offered upstream's build as an "update",
+// and installing it over this one replaced the fork with the original app.
+const LATEST_RELEASE_API = "https://api.github.com/repos/yagoangelini/openscreen/releases/latest";
+const OFFICIAL_RELEASE_PREFIX = "/yagoangelini/openscreen/releases/tag/";
 
 interface ReleaseResponse {
 	ok: boolean;

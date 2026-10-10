@@ -119,6 +119,11 @@ describe("self-update flow", () => {
 		await expect(checkForSelfUpdate("appimage")).resolves.toEqual({ kind: "current" });
 	});
 
+	it("reports current when the feed only has an older version", async () => {
+		mocks.autoUpdater.checkForUpdates.mockResolvedValue({ updateInfo: { version: "1.9.1" } });
+		await expect(checkForSelfUpdate("nsis")).resolves.toEqual({ kind: "current" });
+	});
+
 	it("reports current when no feed resolves, rather than claiming an update", async () => {
 		mocks.autoUpdater.checkForUpdates.mockResolvedValue(null);
 		await expect(checkForSelfUpdate("deb")).resolves.toEqual({ kind: "current" });
