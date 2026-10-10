@@ -98,5 +98,12 @@
 		"later": "Teď ne",
 		"forget": "Zapomenout",
 		"takeInterrupted": "Nahrávání se kvůli chybě zastavilo předčasně. Vše nahrané do té chvíle bylo uloženo."
+	},
+	"exportRunning": {
+		"title": "Probíhá export",
+		"message": "Export stále probíhá.",
+		"detail": "Zavřením editoru se zruší a video se neuloží.",
+		"keep": "Pokračovat v exportu",
+		"cancelAndClose": "Zrušit export a zavřít"
 	}
 }

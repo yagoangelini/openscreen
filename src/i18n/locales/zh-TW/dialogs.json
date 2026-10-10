@@ -98,5 +98,12 @@
 		"later": "暫不",
 		"forget": "忽略",
 		"takeInterrupted": "錄製因錯誤提前停止。截至該時刻錄製的內容皆已儲存。"
+	},
+	"exportRunning": {
+		"title": "正在匯出",
+		"message": "匯出仍在進行中。",
+		"detail": "關閉編輯器會取消匯出，影片不會被儲存。",
+		"keep": "繼續匯出",
+		"cancelAndClose": "取消匯出並關閉"
 	}
 }

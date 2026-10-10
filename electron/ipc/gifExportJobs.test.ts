@@ -21,6 +21,19 @@ function pending() {
 }
 
 describe("GIF export jobs", () => {
+	it("says whether a window has an export running, for the editor's close", async () => {
+		const jobs = new GifExportJobs();
+		const sender = owner(7);
+		const job = pending();
+		expect(jobs.isRunning(7)).toBe(false);
+		const run = jobs.run(sender, "job_1", () => job, vi.fn());
+		expect(jobs.isRunning(7)).toBe(true);
+		expect(jobs.isRunning(8)).toBe(false);
+		job.resolve(1);
+		await run;
+		expect(jobs.isRunning(7)).toBe(false);
+	});
+
 	it("binds cancel to the sender and ID, including before native compute starts", async () => {
 		const jobs = new GifExportJobs();
 		const sender = owner();

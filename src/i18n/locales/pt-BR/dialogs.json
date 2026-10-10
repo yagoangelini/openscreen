@@ -98,5 +98,12 @@
 		"later": "Agora não",
 		"forget": "Esquecer",
 		"takeInterrupted": "A gravação parou antes da hora por causa de um erro. Tudo o que foi gravado até ali foi salvo."
+	},
+	"exportRunning": {
+		"title": "Exportação em andamento",
+		"message": "Uma exportação ainda está em andamento.",
+		"detail": "Fechar o editor cancela a exportação, e o vídeo não será salvo.",
+		"keep": "Continuar exportando",
+		"cancelAndClose": "Cancelar exportação e fechar"
 	}
 }

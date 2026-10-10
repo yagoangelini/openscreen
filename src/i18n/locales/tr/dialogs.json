@@ -98,5 +98,12 @@
 		"later": "Şimdi değil",
 		"forget": "Unut",
 		"takeInterrupted": "Kayıt bir hata nedeniyle erken durdu. O ana kadar kaydedilen her şey saklandı."
+	},
+	"exportRunning": {
+		"title": "Dışa aktarma sürüyor",
+		"message": "Bir dışa aktarma hâlâ sürüyor.",
+		"detail": "Düzenleyiciyi kapatmak onu iptal eder ve video kaydedilmez.",
+		"keep": "Dışa aktarmaya devam et",
+		"cancelAndClose": "Dışa aktarmayı iptal et ve kapat"
 	}
 }
