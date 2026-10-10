@@ -36,8 +36,21 @@ Decidido em 2026-10-09, a partir de uma auditoria completa feita em 7 frentes: g
 - **Compositor na RTX.** O compositor escolhe a GPU de alto desempenho (`EnumAdapterByGpuPreference`) e aceita uma variável de ambiente para forçar outra.
 - **NVENC primeiro.** Na NVIDIA, o codificador de hardware NVENC é tentado antes dos outros. A GPU e o codificador usados aparecem no "Salvar diagnóstico".
 - **Captura na GPU do monitor.** O gravador cria o dispositivo na GPU que liga o monitor gravado, para nunca copiar quadros entre GPUs. O fornecedor do codificador passa a constar no evento `encoder-selection`.
-- **Transcrição na RTX.** O whisper usa hoje o Vulkan 0, que é a Intel. Isso travou o preview por cerca de 1 a 3 min depois da 1ª gravação (confirmado). A correção escolhe a GPU dedicada e não deixa a transcrição pós-gravação disputar com o play.
+- **Transcrição na RTX — feito antes da fase (2026-10-09).** O whisper passou a escolher a GPU dedicada e a usar no máximo 4 threads. Medido num take de 19 s: 28,7 s na Intel com 16 threads, 1,8 s na RTX com 4 threads. Uma rejeição do guardrail DTW não é mais tentada 3 vezes.
 - **Preferência do Windows (opcional).** Uma opção grava "Alto desempenho" para `Openscreen.exe`, `wgc-capture.exe` e `whisper-stt-server.exe`.
+
+## Fase 3.5 — Performance (pedido em 2026-10-09)
+
+Medido pela investigação: hoje passam cerca de 5 a 8 s entre o clique em gravar e o cronômetro começar.
+
+- **Preparar o gravador durante a contagem regressiva.** O gravador e o leitor do cursor iniciam junto com a contagem e só começam a gravar com um comando "vai". Hoje tudo começa depois dela (o Linux já faz assim). Ganho estimado: 1 a 3 s.
+- **Leitor do cursor em paralelo com o gravador**, e não um depois do outro.
+- **Não abrir a webcam ao abrir o HUD no Windows.** Hoje ela é aberta só para a pré-visualização, e o gravador precisa reabri-la ao começar. Abrir só quando a pré-visualização de configurações for aberta.
+- **Janela da contagem regressiva criada antecipadamente**, e cache da consulta do registro da webcam (`reg.exe`).
+- **Contagem regressiva configurável**: 0, 3 ou 5 s.
+- **HUD mais responsivo ao clique.** A verificação de passagem de clique (poll do cursor a cada 32 ms) é revista.
+- **Abertura do app mais rápida.** Medir com `console.time` o caminho app pronto → HUD carregado. Avaliar o bundle do HUD (1,3 MB + 0,46 MB) e a primeira inicialização da GPU.
+- **Abertura do editor mais leve.** A transcrição automática passa a ser de baixa prioridade, ou só roda quando o player está parado, e ganha uma opção para desligá-la.
 
 ## Fase 4 — Novo auto-zoom calmo
 
