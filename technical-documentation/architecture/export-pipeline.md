@@ -203,7 +203,11 @@ adapter, and `gpuAdapterInfo()` reports it with the last export's encoder.
 
 ### Audio: stems, loudness and the delivery extras
 
-The MP4's audio is AAC at 320 kbps (`AUDIO_BITRATE`, `audio.rs`). A clip whose asset has
+The MP4's audio is AAC at 320 kbps (`AUDIO_BITRATE`, `audio.rs`), streamed a window at a time
+(`ProgrammeAudio`, `audio_stream.rs`), so a two-hour take never sits in memory whole. The
+click sounds (the cursor's *mouse clicks* setting) are summed into each window after the
+imported tracks and before the output trim and the limiter (`ClickHits`), the order of the
+whole-buffer `mix_click_hits`. A clip whose asset has
 `audioStems` (see [recording.md](recording.md#output-files-and-sidecars)) is not read from
 the screen video's mixed track: `clip_source` (`audio_stream.rs`) opens the two stems, gives
 the voice its loudness gain plus `audio.voiceGainDb` and the computer sound only

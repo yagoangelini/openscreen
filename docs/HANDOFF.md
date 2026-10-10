@@ -1,4 +1,4 @@
-# Handoff do fork — estado em 10/10/2026 (v1.19.0)
+# Handoff do fork — estado em 10/10/2026 (v2.1.0)
 
 Leia isto antes de mexer no fork **yagoangelini/openscreen**. Aqui estão:
 
@@ -31,7 +31,7 @@ As decisões e o porquê de cada fase estão em [`PLANO-FORK.md`](PLANO-FORK.md)
 
 ## Estado atual
 
-`main` do fork = **v1.19.1**, publicada e marcada como Latest. O histórico do fork, em ordem:
+`main` do fork = **v2.1.0**, publicada e marcada como Latest. Desde a 2.1.0 o fork contém o **OpenScreen 2.0** do upstream (veja "Sincronizar com o upstream" abaixo). O histórico do fork, em ordem:
 
 | Versão | Como entrou | Conteúdo |
 |---|---|---|
@@ -42,6 +42,7 @@ As decisões e o porquê de cada fase estão em [`PLANO-FORK.md`](PLANO-FORK.md)
 | 1.18.0 | PR yagoangelini/openscreen#3 | decisões da manhã (lista abaixo) |
 | 1.19.0 | PR yagoangelini/openscreen#4 | voz e som do computador gravados à parte, com dois volumes |
 | 1.19.1 | PR yagoangelini/openscreen#6 | correções dos recursos do fork achadas na análise de 10/10 ([`ANALISE-MELHORIAS.md`](ANALISE-MELHORIAS.md) §2) |
+| 2.1.0 | PR yagoangelini/openscreen#7 | merge do OpenScreen 2.0: 408 commits do upstream, base 28/09 até `125ebd95` |
 
 **O que a 1.16.0 trouxe:**
 
@@ -83,7 +84,7 @@ Os PRs do fork são abertos e mesclados com `gh pr merge N --merge`, sem CI. Ant
 | NVENC/DXGI na RTX | `main.cpp` (`deviceAdapterVendorId`, 0x10DE); env `OPENSCREEN_WGC_ENABLE_DXGI_INPUT` 0/1 vence | ligado em NVIDIA |
 | Compositor na GPU forte | `Gpu::create_backend` (Rust); env `OPENSCREEN_COMPOSITOR_ADAPTER` | alto desempenho |
 | Anel de clique | Rust `click_ring` (SceneCursor); TS `cursor.clickRing` / `cursorClickRing` | ligado em projeto novo |
-| Spotlight | Rust `spotlight_cb` (modo 19, **só D3D11/Windows**); TS `cursor.spotlight` / `cursorSpotlight`; toggle "Holofote" | desligado |
+| Spotlight | Rust `spotlight_cb` (modo 20 — o 19 é o Glass Lens —, **só D3D11/Windows**); TS `cursor.spotlight` / `cursorSpotlight`; toggle "Holofote" | desligado |
 | Atalhos na tela | `src/lib/ai-edition/keystrokes.ts` (seguro para o main) + `keystrokeRegions.ts` (renderer) | ligado em projeto novo |
 | Desfoque automático (OCR) | `ocr-scan.cpp` → `electron/recording/ocrScan.ts` → `src/lib/ai-edition/redaction.ts`; `recordingImport.applyFreshRecordingRedactions`; pref `autoRedact` | ligado (como sugestão) |
 | Menus de sites no auto-zoom | `ocr-scan.exe --popups`; `src/lib/ai-edition/timeline/framePopups.ts` | ligado |
@@ -157,7 +158,7 @@ Notas sobre o portão:
 
 - **`build-vite` é obrigatório.** O `tsc` não pega um import `@/` num módulo que o processo main carrega; só o bundle do main quebra.
 - **Durante o trabalho, rode só os testes tocados:** `npx vitest --run <arquivo>`.
-- **Suíte completa:** cerca de 3850 testes em cerca de 295 arquivos. Rode uma vez no fim.
+- **Suíte completa:** cerca de 4700 testes em cerca de 340 arquivos. Rode uma vez no fim.
 
 **Testes nativos:**
 
@@ -198,6 +199,44 @@ Ancorado como `release-local`. A ordem:
    ```
 
 O app instalado oferece a atualização a partir do `latest.yml`. O feed está em `electron-builder.json5` → `publish` (owner `yagoangelini`).
+
+## Sincronizar com o upstream
+
+O fork acompanha `getopenscreen/openscreen`. O último merge (2.1.0) foi até `125ebd95`.
+
+### Para trazer o que o upstream fizer depois
+
+1. **Buscar o upstream, só lendo:**
+
+   ```bash
+   git fetch https://github.com/getopenscreen/openscreen.git main:refs/remotes/upstream/main
+   ```
+
+2. **Medir os conflitos sem tocar na árvore:**
+
+   ```bash
+   git merge-tree --write-tree --name-only main upstream/main
+   ```
+
+3. **Fazer o merge num branch** (`merge/upstream-AAAA-MM-DD`), com `git merge --no-ff --no-commit upstream/main`.
+4. **Resolver os conflitos:**
+   - nas traduções, com o merge de 3 vias por chave (no merge de 10/10 foi um script que combinou base, fork e upstream);
+   - no resto, à mão.
+5. **Validar com o portão completo**, mais `build:native:win`, `build:native:compositor` e os testes Rust.
+6. **Gravar de verdade numa instância isolada**: a tela do notebook e a do monitor da RTX.
+
+### Decisões tomadas no merge de 10/10, a manter nos próximos
+
+- **Export:** fica o cancelamento **do fork**, com um controle só para MP4 e GIF (`createExportControl` / `cancelExport`, `EXPORT_CANCELLED`), a fase "finalizing" e o áudio em streaming (`ProgrammeAudio`).
+  - O som de clique do upstream entra no streaming (`ClickHits` em `audio_stream.rs`).
+  - `export_control.rs` oferece também a assinatura do upstream (`with_staged_output(target, control, |file, path|)`). O arquivo de staging termina com a extensão do destino.
+  - O GIF usa o encoder em pool do upstream.
+- **Mixer de áudio (C++):** fica o colchão de 100 ms e o relógio do upstream, com a soma em double, o limitador, o seletor de canal e os stems do fork.
+- **Pasta de gravações:** fica a configuração do fork (`Vídeos\OpenScreen`). A linha duplicada do upstream no modo Record foi removida. O mecanismo dele (`RecordingsDirManager`) continua no código, sem interface.
+- **Shader:** o modo 19 é o Glass Lens do upstream e o **spotlight é o modo 20**.
+- **HUD:** fica o layout do upstream, com a confirmação de Reiniciar/Cancelar, o canal do microfone e a dica do NVIDIA Broadcast do fork.
+- **Padrões do fork que o upstream não tem:** 16:9 para projetos novos, NVENC/DXGI na RTX, transcrição automática desligada e anel de clique ligado.
+- **Dependências:** `@noble/hashes` está declarado em `devDependencies`. O npm 11 não instala dependências peer opcionais, e o teste do AppImage precisa dele.
 
 ## Armadilhas já encontradas
 

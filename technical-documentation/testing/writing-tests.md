@@ -90,7 +90,7 @@ import { SUPPORTED_LOCALES } from "@/i18n/config";
 
 ### Running locally
 
-The full run is ~3850 tests over ~295 files and takes over a minute. Run it once, at the end of a
+The full run is ~4700 tests over ~340 files and takes over a minute. Run it once, at the end of a
 task — not after each edit.
 
 ```bash

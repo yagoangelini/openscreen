@@ -55,7 +55,7 @@ This working copy is **yagoangelini/openscreen**, a personal fork tuned for reco
 
 ### When to run what
 
-The full unit suite is ~3850 tests over ~295 files and takes over a minute. Running it after
+The full unit suite is ~4700 tests over ~340 files and takes over a minute. Running it after
 every edit is the main way an agent turns a 5-minute task into a 30-minute one, so don't:
 
 - **While you work** — run only what you touched: `npx vitest --run src/lib/foo.test.ts`,
