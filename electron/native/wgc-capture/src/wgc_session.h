@@ -90,7 +90,7 @@ public:
     ID3D11DeviceContext* context() const;
 
 private:
-    bool createD3DDevice();
+    bool createD3DDevice(HMONITOR targetMonitor);
     bool createCaptureItem(HMONITOR monitor);
     bool createCaptureItem(HWND window);
     bool applySessionOptions(bool captureCursor);

@@ -975,6 +975,7 @@ int wmain(int argc, wchar_t* argv[]) {
               // different bug report than "default" plus "hardware" stalling
               // on stop.
               << ",\"videoEncoderRuntime\":\"" << encoder.videoEncoderRuntime()
+              << "\",\"videoEncoderName\":\"" << jsonEscape(encoder.videoEncoderName())
               << "\"}" << std::endl;
     MFEncoder webcamEncoder;
     if (writeSeparateWebcam) {

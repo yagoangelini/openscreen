@@ -8,6 +8,7 @@
 
 #include <chrono>
 #include <iostream>
+#include <string>
 #include <thread>
 
 namespace wf = winrt::Windows::Foundation;
@@ -57,13 +58,51 @@ int roundUpToEven(int value) {
     return (clamped % 2 == 0) ? clamped : clamped + 1;
 }
 
+// The adapter driving `monitor`, or null when none claims it (or the lookup
+// fails). Creating the capture device there keeps every captured frame on the
+// GPU it was rendered on: on a hybrid laptop the default adapter is the iGPU, so
+// recording a monitor wired to the discrete GPU made WGC copy each frame across
+// the bus, driver work on both GPUs, before the encoder ever saw it -- and the
+// reverse for the laptop panel when the app runs on the discrete GPU.
+// OPENSCREEN_WGC_ADAPTER=default restores the old default-adapter behaviour.
+Microsoft::WRL::ComPtr<IDXGIAdapter1> findAdapterForMonitor(HMONITOR monitor) {
+    if (!monitor) {
+        return nullptr;
+    }
+    char override[32]{};
+    if (GetEnvironmentVariableA("OPENSCREEN_WGC_ADAPTER", override, sizeof(override)) > 0 &&
+        std::string(override) == "default") {
+        return nullptr;
+    }
+    Microsoft::WRL::ComPtr<IDXGIFactory1> factory;
+    if (FAILED(CreateDXGIFactory1(IID_PPV_ARGS(&factory)))) {
+        return nullptr;
+    }
+    for (UINT adapterIndex = 0;; ++adapterIndex) {
+        Microsoft::WRL::ComPtr<IDXGIAdapter1> adapter;
+        if (FAILED(factory->EnumAdapters1(adapterIndex, &adapter)) || !adapter) {
+            return nullptr;
+        }
+        for (UINT outputIndex = 0;; ++outputIndex) {
+            Microsoft::WRL::ComPtr<IDXGIOutput> output;
+            if (FAILED(adapter->EnumOutputs(outputIndex, &output)) || !output) {
+                break;
+            }
+            DXGI_OUTPUT_DESC desc{};
+            if (SUCCEEDED(output->GetDesc(&desc)) && desc.Monitor == monitor) {
+                return adapter;
+            }
+        }
+    }
+}
+
 } // namespace
 
 WgcSession::~WgcSession() {
     stop();
 }
 
-bool WgcSession::createD3DDevice() {
+bool WgcSession::createD3DDevice(HMONITOR targetMonitor) {
     UINT flags = D3D11_CREATE_DEVICE_BGRA_SUPPORT | D3D11_CREATE_DEVICE_VIDEO_SUPPORT;
 #if defined(_DEBUG)
     flags |= D3D11_CREATE_DEVICE_DEBUG;
@@ -77,17 +116,40 @@ bool WgcSession::createD3DDevice() {
     };
     D3D_FEATURE_LEVEL featureLevel{};
 
-    HRESULT hr = D3D11CreateDevice(
-        nullptr,
-        D3D_DRIVER_TYPE_HARDWARE,
-        nullptr,
-        flags,
-        featureLevels,
-        ARRAYSIZE(featureLevels),
-        D3D11_SDK_VERSION,
-        &d3dDevice_,
-        &featureLevel,
-        &d3dContext_);
+    HRESULT hr = E_FAIL;
+    const Microsoft::WRL::ComPtr<IDXGIAdapter1> monitorAdapter = findAdapterForMonitor(targetMonitor);
+    if (monitorAdapter) {
+        // An explicit adapter requires D3D_DRIVER_TYPE_UNKNOWN.
+        hr = D3D11CreateDevice(
+            monitorAdapter.Get(),
+            D3D_DRIVER_TYPE_UNKNOWN,
+            nullptr,
+            flags,
+            featureLevels,
+            ARRAYSIZE(featureLevels),
+            D3D11_SDK_VERSION,
+            &d3dDevice_,
+            &featureLevel,
+            &d3dContext_);
+        if (FAILED(hr)) {
+            std::cerr << "WARNING: Could not create the capture device on the monitor's adapter (hr=0x"
+                      << std::hex << static_cast<uint32_t>(hr) << std::dec
+                      << "); using the default adapter" << std::endl;
+        }
+    }
+    if (FAILED(hr)) {
+        hr = D3D11CreateDevice(
+            nullptr,
+            D3D_DRIVER_TYPE_HARDWARE,
+            nullptr,
+            flags,
+            featureLevels,
+            ARRAYSIZE(featureLevels),
+            D3D11_SDK_VERSION,
+            &d3dDevice_,
+            &featureLevel,
+            &d3dContext_);
+    }
 
 #if defined(_DEBUG)
     if (FAILED(hr)) {
@@ -227,7 +289,7 @@ bool WgcSession::applySessionOptions(bool captureCursor) {
 
 bool WgcSession::initialize(HMONITOR monitor, int fps, bool captureCursor) {
     fps_ = fps > 0 ? fps : 60;
-    if (!createD3DDevice()) {
+    if (!createD3DDevice(monitor)) {
         return false;
     }
     if (!createCaptureItem(monitor)) {
@@ -250,7 +312,8 @@ bool WgcSession::initialize(HMONITOR monitor, int fps, bool captureCursor) {
 
 bool WgcSession::initialize(HWND window, int fps, bool captureCursor) {
     fps_ = fps > 0 ? fps : 60;
-    if (!createD3DDevice()) {
+    // A window is captured from the monitor it sits on when the take starts.
+    if (!createD3DDevice(MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST))) {
         return false;
     }
     if (!createCaptureItem(window)) {

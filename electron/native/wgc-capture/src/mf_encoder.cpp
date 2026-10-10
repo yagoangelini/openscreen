@@ -467,6 +467,55 @@ const char* detectVideoEncoderRuntime(IMFSinkWriter* sinkWriter, DWORD videoStre
     }
 }
 
+// The friendly name of the encoder MFT the sink writer inserted, or "" -- diagnostics
+// only, like detectVideoEncoderRuntime above, so any unexpected shape is just "".
+std::string detectVideoEncoderName(IMFSinkWriter* sinkWriter, DWORD videoStreamIndex) {
+    Microsoft::WRL::ComPtr<IMFSinkWriterEx> sinkWriterEx;
+    if (FAILED(sinkWriter->QueryInterface(IID_PPV_ARGS(&sinkWriterEx)))) {
+        return {};
+    }
+    for (DWORD mftIndex = 0;; mftIndex += 1) {
+        GUID category{};
+        Microsoft::WRL::ComPtr<IMFTransform> transform;
+        if (FAILED(sinkWriterEx->GetTransformForStream(videoStreamIndex, mftIndex, &category, &transform))) {
+            return {};
+        }
+        if (category != MFT_CATEGORY_VIDEO_ENCODER) {
+            continue;
+        }
+        Microsoft::WRL::ComPtr<IMFAttributes> attributes;
+        if (FAILED(transform->GetAttributes(&attributes))) {
+            return {};
+        }
+        // The friendly name lives on the activation object and is often absent from a
+        // created transform; hardware MFTs do carry their vendor ("VEN_10DE" NVIDIA,
+        // "VEN_8086" Intel, "VEN_1002" AMD). Whichever the transform has.
+        const GUID* keys[] = {&MFT_FRIENDLY_NAME_Attribute, &MFT_ENUM_HARDWARE_VENDOR_ID_Attribute};
+        std::wstring name;
+        for (const GUID* key : keys) {
+            UINT32 length = 0;
+            if (FAILED(attributes->GetStringLength(*key, &length)) || length == 0) {
+                continue;
+            }
+            std::wstring value(length + 1, L'\0');
+            if (SUCCEEDED(attributes->GetString(*key, value.data(), length + 1, &length))) {
+                value.resize(length);
+                name = value;
+                break;
+            }
+        }
+        if (name.empty()) {
+            return {};
+        }
+        const int bytes = WideCharToMultiByte(CP_UTF8, 0, name.c_str(), static_cast<int>(name.size()), nullptr, 0, nullptr, nullptr);
+        std::string utf8(bytes > 0 ? bytes : 0, '\0');
+        if (bytes > 0) {
+            WideCharToMultiByte(CP_UTF8, 0, name.c_str(), static_cast<int>(name.size()), utf8.data(), bytes, nullptr, nullptr);
+        }
+        return utf8;
+    }
+}
+
 void logSinkWriterCreateFailure(
     HRESULT sinkWriterHr,
     const char* createCall,
@@ -602,6 +651,10 @@ const char* MFEncoder::videoEncoderSelection() const {
 
 const char* MFEncoder::videoEncoderRuntime() const {
     return videoEncoderRuntime_;
+}
+
+const std::string& MFEncoder::videoEncoderName() const {
+    return videoEncoderName_;
 }
 
 const char* MFEncoder::containerFormat() const {
@@ -883,6 +936,7 @@ bool MFEncoder::initialize(
 
         videoEncoderSelection_ = selection;
         videoEncoderRuntime_ = detectVideoEncoderRuntime(sinkWriter_.Get(), videoStreamIndex_);
+        videoEncoderName_ = detectVideoEncoderName(sinkWriter_.Get(), videoStreamIndex_);
         containerFormat_ = fragmented ? kContainerFormatFragmentedMp4 : kContainerFormatMp4;
         return true;
     };

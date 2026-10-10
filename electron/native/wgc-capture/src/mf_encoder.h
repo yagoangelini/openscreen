@@ -133,6 +133,10 @@ public:
     // Best-effort, read only after initialize() returns true. See the
     // kVideoEncoderRuntime* constants above for what each value means.
     const char* videoEncoderRuntime() const;
+    // The encoder MFT's friendly name ("NVIDIA H.264 Encoder MFT", "Intel(R) Quick Sync
+    // Video H.264 Encoder MFT", ...), or empty when it could not be read. Says WHICH GPU
+    // encodes, which videoEncoderRuntime ("hardware") cannot.
+    const std::string& videoEncoderName() const;
     // Which container initialize() settled on, which is not necessarily the one
     // it asked for: the fragmented sink degrades to the plain one rather than
     // failing a recording. A bug report that cannot tell the two apart cannot
@@ -240,5 +244,6 @@ private:
     bool useDxgiInput_ = false;
     const char* videoEncoderSelection_ = kVideoEncoderSelectionDefault;
     const char* videoEncoderRuntime_ = kVideoEncoderRuntimeUnknown;
+    std::string videoEncoderName_;
     const char* containerFormat_ = kContainerFormatMp4;
 };
