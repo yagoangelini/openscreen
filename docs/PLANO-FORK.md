@@ -107,3 +107,28 @@ Medido pela investigação: hoje passam cerca de 5 a 8 s entre o clique em grava
 
 - **Sempre:** testes unitários dos arquivos tocados, os dois typechecks, lint e um teste completo no fim da fase.
 - **Fases 1, 2, 3 e 5:** passe manual pelo [manual-e2e-checklist](../technical-documentation/testing/manual-e2e-checklist.md) usando computer-use, com gravação curta, gravação de 1 h ou mais, export 1080p/1440p e checagem de NVENC no `nvidia-smi`.
+
+## Decisões para a execução noturna (2026-10-09)
+
+- **Entrega:** cada fase é autovalidada, vai para a `main` do fork por merge e ganha uma release publicada pelo app. O GitHub Actions do fork está desligado.
+- **Export:** o padrão é 1080p 16:9 (1920×1080), com 1440p como opção. Áudio a 320 kbps; o preset YouTube normaliza para −14 LUFS.
+- **Transcrição automática:** desligada por padrão. Fica um botão para transcrever e uma opção para ligá-la.
+- **Modelo Whisper:** large-v3-turbo vira o padrão e é baixado na primeira transcrição. Vem acompanhado do glossário técnico padrão, que pode ser editado.
+- **Desfoque automático (OCR):** roda depois de gravar e cria regiões ativas como sugestão, para você revisar. Detecta e-mails, domínios do tenant M365, IDs/GUIDs, segredos, tokens e telefones.
+- **Áudio:** microfone e sistema em faixas separadas, com volume independente no editor.
+- **Pasta das gravações:** Vídeos\OpenScreen, com opção de trocar. As gravações antigas continuam onde estão.
+- **Atalhos globais:**
+
+  | Atalho | Ação |
+  |---|---|
+  | Ctrl+Shift+F9 | iniciar/parar |
+  | Ctrl+Shift+F10 | pausar |
+  | Ctrl+Shift+F8 | marcador |
+  | Ctrl+Shift+F12 | mostrar o app |
+
+  Todos configuráveis.
+- **Não incomodar:** um aviso antes de gravar com botão que abre a configuração do Windows. Nada de mecanismo não documentado.
+- **Capítulos:** gerados localmente, sem IA, com o botão "melhorar títulos com IA" quando houver chave de API.
+- **Acelerar esperas:** só sugere; nada é aplicado sem a sua aprovação.
+- **Recursos visuais em projetos novos:** destaque de clique e atalhos na tela vêm ligados; spotlight vem desligado. Todos podem ser ligados, desligados e editados.
+- **Avisos:** só de manhã. Uma dúvida que surgir pausa aquela tarefa, e o trabalho segue nas outras.
