@@ -5,6 +5,7 @@ import {
 	appendAutoZoomSuggestions,
 	collectAutoZoomSuggestionsForDocument,
 	collectAutoZoomSuggestionsForLatestDocument,
+	withoutAutoZooms,
 } from "./apply-auto-zooms";
 
 // A click at `atMs`, in a take whose pointer moves on until 9.5 s: the click is not its last.
@@ -58,7 +59,7 @@ describe("collectAutoZoomSuggestionsForDocument", () => {
 			clickAt(4000, 0.4, 0.6),
 		);
 		expect(suggestions).toEqual([
-			{ span: { start: 3500, end: 5500 }, focus: { cx: 0.4, cy: 0.6 }, depth: 3 },
+			{ span: { start: 3600, end: 6100 }, focus: { cx: 0.4, cy: 0.6 }, depth: 2 },
 		]);
 	});
 
@@ -107,7 +108,7 @@ describe("collectAutoZoomSuggestionsForDocument", () => {
 		const suggestions = await collectAutoZoomSuggestionsForDocument(document, async (videoPath) =>
 			videoPath.endsWith("second.mp4") ? clickAt(1000, 0.5, 0.5) : clickAt(7000, 0.5, 0.5),
 		);
-		expect(suggestions.map((s) => s.span)).toEqual([{ start: 6500, end: 8500 }]);
+		expect(suggestions.map((s) => s.span)).toEqual([{ start: 6300, end: 9000 }]);
 	});
 
 	it("keeps clear of the zooms already on the timeline", async () => {
@@ -141,9 +142,32 @@ describe("appendAutoZoomSuggestions", () => {
 			startMs: 3000,
 			endMs: 5000,
 			depth: 2,
-			focusMode: "auto",
+			source: "auto",
 			clipId: "clip_1",
 		});
+		expect(next.zoomRanges[0]).not.toHaveProperty("focusMode");
+	});
+
+	it("keeps an exact scale the depth table does not have", () => {
+		const next = appendAutoZoomSuggestions(documentWithClip(), [
+			{ span: { start: 3000, end: 5000 }, focus: { cx: 0.4, cy: 0.6 }, depth: 1, customScale: 1.3 },
+		]);
+		expect(next.zoomRanges[0]).toMatchObject({ depth: 1, customScale: 1.3 });
+	});
+});
+
+describe("withoutAutoZooms", () => {
+	it("drops the automatic zooms and keeps the ones drawn by hand", () => {
+		const document: AxcutDocument = {
+			...documentWithClip(),
+			zoomRanges: [
+				{ id: "a", startMs: 0, endMs: 1000, depth: 2, focus: { cx: 0.5, cy: 0.5 }, source: "auto" },
+				{ id: "h", startMs: 2000, endMs: 3000, depth: 2, focus: { cx: 0.5, cy: 0.5 } },
+			],
+		};
+		expect(withoutAutoZooms(document).zoomRanges.map((z) => z.id)).toEqual(["h"]);
+		const handOnly = withoutAutoZooms(document);
+		expect(withoutAutoZooms(handOnly)).toBe(handOnly);
 	});
 });
 

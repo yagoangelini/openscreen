@@ -5,7 +5,9 @@
 import type { CursorTelemetryPoint } from "@/components/video-editor/types";
 import { createId } from "../document/ids";
 import type { AxcutAsset, AxcutDocument } from "../schema";
+import { getEditorSettings } from "../store/editorSettings";
 import { anchorRegionsWithDerivedMs } from "./timelineMap";
+import { autoZoomMotion, motionTransitionSec } from "./zoom-motion";
 import { effectiveZoomScale } from "./zoom-scale";
 import { type AutoZoomSuggestion, buildAutoZoomSuggestionsForClips } from "./zoom-suggestions";
 
@@ -34,15 +36,30 @@ export async function collectAutoZoomSuggestionsForDocument(
 			),
 		),
 	);
+	const settings = getEditorSettings(document).autoZoom;
+	const motion = autoZoomMotion(settings);
 	return buildAutoZoomSuggestionsForClips({
 		telemetryByAssetId,
 		clips: document.timeline.clips,
-		existingRegions: document.zoomRanges.map((region) => ({
-			startMs: region.startMs,
-			endMs: region.endMs,
-			scale: effectiveZoomScale(region),
-		})),
+		settings,
+		existingRegions: document.zoomRanges.map((region) => {
+			const scale = effectiveZoomScale(region);
+			return {
+				startMs: region.startMs,
+				endMs: region.endMs,
+				scale,
+				// An automatic zoom moves with the project's motion, and ramps for that long.
+				...(region.source === "auto" ? { rampMs: motionTransitionSec(motion, scale) * 1000 } : {}),
+			};
+		}),
 	});
+}
+
+/** The automatic zooms of a document, replaced by a fresh plan: what "re-plan" does after the
+ *  auto-zoom settings changed. Zooms drawn by hand stay where they are and are planned around. */
+export function withoutAutoZooms(document: AxcutDocument): AxcutDocument {
+	const zoomRanges = document.zoomRanges.filter((region) => region.source !== "auto");
+	return zoomRanges.length === document.zoomRanges.length ? document : { ...document, zoomRanges };
 }
 
 /**
@@ -110,8 +127,12 @@ export function appendAutoZoomSuggestions(
 					startMs: Math.round(suggestion.span.start),
 					endMs: Math.round(suggestion.span.end),
 					depth: suggestion.depth,
+					...(suggestion.customScale !== undefined ? { customScale: suggestion.customScale } : {}),
 					focus: { cx: suggestion.focus.cx, cy: suggestion.focus.cy },
-					focusMode: "auto" as const,
+					// Automatic: how it moves (fixed, hybrid, following) is the project's auto-zoom
+					// camera, read at render time (`resolveZoomRendering`), so one control switches
+					// them all. Its own focus mode is left unset.
+					source: "auto" as const,
 				},
 			],
 			document.timeline.clips,
