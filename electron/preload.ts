@@ -311,6 +311,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	openNotificationSettings: () => {
 		return ipcRenderer.invoke("open-notification-settings");
 	},
+	scanRecordingText: (videoPath: string) => {
+		return ipcRenderer.invoke("scan-recording-text", videoPath);
+	},
 	openExternalUrl: (url: string) => {
 		return ipcRenderer.invoke("open-external-url", url);
 	},

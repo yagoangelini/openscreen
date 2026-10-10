@@ -189,7 +189,9 @@
 		"noAudioTrack": "لا يوجد مسار صوتي",
 		"noAudioTrackHint": "لا يحتوي هذا الملف على مسار صوتي — لا يوجد ما يمكن نسخه.",
 		"noSpeechDetected": "لم يتم اكتشاف كلام",
-		"autoTranscribe": "تفريغ التسجيلات الجديدة تلقائيًا عند فتح المحرر"
+		"autoTranscribe": "تفريغ التسجيلات الجديدة تلقائيًا عند فتح المحرر",
+		"autoRedact": "تمويه البيانات الحساسة في التسجيلات الجديدة",
+		"autoRedactHint": "بعد التسجيل، يعثر التعرّف الضوئي على عناوين البريد ونطاقات المستأجر والمعرّفات والأسرار وأرقام الهواتف على الشاشة ويموّهها. كل تمويه تعليق عادي يمكنك إبقاؤه أو حذفه. يعمل دون اتصال."
 	},
 	"exportDialog": {
 		"title": "تصدير",
@@ -440,7 +442,8 @@
 		"addVideoBeforeExport": "Add a video to the project before exporting.",
 		"regionPasted": "Region pasted",
 		"regionCopied": "Region copied",
-		"cameraCheckFailed": "Could not check for a camera recording near {{name}}"
+		"cameraCheckFailed": "Could not check for a camera recording near {{name}}",
+		"sensitiveBlurred": "تم تمويه {{count}} منطقة حساسة تلقائيًا. راجعها على المخطط الزمني."
 	},
 	"exportPipeline": {
 		"quality1440p": "1440p",

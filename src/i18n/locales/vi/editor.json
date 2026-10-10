@@ -189,7 +189,9 @@
 		"noAudioTrack": "Không có bản âm thanh",
 		"noAudioTrackHint": "Media này không có bản âm thanh — không có gì để phiên âm.",
 		"noSpeechDetected": "Không phát hiện giọng nói",
-		"autoTranscribe": "Tự động chép lời bản ghi mới khi mở trình chỉnh sửa"
+		"autoTranscribe": "Tự động chép lời bản ghi mới khi mở trình chỉnh sửa",
+		"autoRedact": "Làm mờ dữ liệu nhạy cảm trong bản ghi mới",
+		"autoRedactHint": "Sau khi ghi, OCR tìm email, tên miền tenant, GUID, khóa bí mật và số điện thoại trên màn hình rồi làm mờ. Mỗi vùng mờ là một chú thích thông thường, bạn có thể giữ hoặc xóa. Chạy ngoại tuyến."
 	},
 	"exportDialog": {
 		"title": "Xuất",
@@ -440,7 +442,8 @@
 		"addVideoBeforeExport": "Add a video to the project before exporting.",
 		"regionPasted": "Region pasted",
 		"regionCopied": "Region copied",
-		"cameraCheckFailed": "Could not check for a camera recording near {{name}}"
+		"cameraCheckFailed": "Could not check for a camera recording near {{name}}",
+		"sensitiveBlurred": "Đã tự động làm mờ {{count}} vùng nhạy cảm. Hãy kiểm tra trên dòng thời gian."
 	},
 	"exportPipeline": {
 		"quality1440p": "1440p",

@@ -189,7 +189,9 @@
 		"noAudioTrack": "Keine Audiospur",
 		"noAudioTrackHint": "Dieses Medium hat keine Audiospur — es gibt nichts zu transkribieren.",
 		"noSpeechDetected": "Keine Sprache erkannt",
-		"autoTranscribe": "Neue Aufnahmen beim Öffnen des Editors automatisch transkribieren"
+		"autoTranscribe": "Neue Aufnahmen beim Öffnen des Editors automatisch transkribieren",
+		"autoRedact": "Sensible Daten in neuen Aufnahmen verwischen",
+		"autoRedactHint": "Nach einer Aufnahme findet die Texterkennung E-Mails, Tenant-Domains, GUIDs, Geheimnisse und Telefonnummern auf dem Bildschirm und verwischt sie. Jede Unschärfe ist eine normale Anmerkung zum Behalten oder Löschen. Läuft offline."
 	},
 	"exportDialog": {
 		"title": "Export",
@@ -440,7 +442,8 @@
 		"addVideoBeforeExport": "Füge dem Projekt vor dem Export ein Video hinzu.",
 		"regionPasted": "Bereich eingefügt",
 		"regionCopied": "Bereich kopiert",
-		"cameraCheckFailed": "Neben {{name}} konnte keine Kameraaufnahme gesucht werden"
+		"cameraCheckFailed": "Neben {{name}} konnte keine Kameraaufnahme gesucht werden",
+		"sensitiveBlurred": "{{count}} sensible Bereiche wurden automatisch verwischt. Prüfe sie in der Zeitleiste."
 	},
 	"exportPipeline": {
 		"quality1440p": "1440p",

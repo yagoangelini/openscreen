@@ -17,6 +17,12 @@
 import type { CursorTelemetryPoint } from "@/components/video-editor/types";
 import { createId } from "@/lib/ai-edition/document/ids";
 import { clipAwaitsProbedDuration } from "@/lib/ai-edition/document/timeline";
+import {
+	AUTO_REDACT_SOURCE,
+	parseOcrScan,
+	redactionAnnotations,
+	trackDetections,
+} from "@/lib/ai-edition/redaction";
 import type { AxcutDocument } from "@/lib/ai-edition/schema";
 import {
 	DOCUMENT_SAVES_WAIT_TIMEOUT_MS,
@@ -28,6 +34,7 @@ import {
 	appendAutoZoomSuggestions,
 	collectAutoZoomSuggestionsForLatestDocument,
 } from "@/lib/ai-edition/timeline/apply-auto-zooms";
+import { loadUserPreferences } from "@/lib/userPreferences";
 import { nativeBridgeClient } from "@/native/client";
 
 // Fresh recordings used to get cursor-dwell zooms on load (legacy editor
@@ -322,6 +329,65 @@ export async function maybeSaveFreshRecordingAutoZooms(
  * reopening the most recent project. Throws if the import itself fails, leaving
  * the session in place so a later mount can retry it.
  */
+export type FreshRecordingRedactionDeps = {
+	scan?: (videoPath: string) => Promise<{ success: boolean; output?: string } | undefined>;
+	createId?: (prefix: string) => string;
+	/** How long to wait for the take's real length before giving up. Tests shorten it. */
+	probeWaitMs?: number;
+	saveTimeoutMs?: number;
+	waitTimeoutMs?: number;
+};
+
+/**
+ * The automatic privacy blur for a fresh take: OCR over the recording, then a blur
+ * on every e-mail, tenant domain, GUID, secret and phone number it shows, added as
+ * one undoable edit. Returns how many were added.
+ *
+ * Runs beside everything else on the import -- the scan takes a few seconds per
+ * minute of a busy screen -- and writes the way the auto-zoom does: against the
+ * live document, once the take's real length is known, and not over an edit that
+ * landed while it worked.
+ */
+export async function applyFreshRecordingRedactions(
+	screenPath: string,
+	deps: FreshRecordingRedactionDeps = {},
+): Promise<number> {
+	const scan =
+		deps.scan ?? ((videoPath: string) => window.electronAPI?.scanRecordingText?.(videoPath));
+	const result = await Promise.resolve(scan(screenPath)).catch(() => undefined);
+	if (!result?.success || !result.output) return 0;
+	const spans = trackDetections(parseOcrScan(result.output));
+	if (spans.length === 0) return 0;
+
+	const deadline = Date.now() + (deps.probeWaitMs ?? 60_000);
+	for (let attempt = 0; attempt < 3; ) {
+		if ((await waitForDocumentSaves(deps.waitTimeoutMs)) === "timeout") return 0;
+		const latest = useProjectStore.getState().document;
+		const asset = latest?.assets.find((a) => a.originalPath === screenPath);
+		if (!latest || !asset) return 0;
+		if (latest.annotations.some((a) => a.annotationSource === AUTO_REDACT_SOURCE)) return 0;
+		if (latest.timeline.clips.some((clip) => clipAwaitsProbedDuration(clip, asset.id))) {
+			if (Date.now() > deadline) return 0;
+			await new Promise((resolve) => setTimeout(resolve, 500));
+			continue;
+		}
+		const added = redactionAnnotations(latest, asset.id, spans, deps.createId ?? createId);
+		if (added.length === 0) return 0;
+		const next: AxcutDocument = { ...latest, annotations: [...latest.annotations, ...added] };
+		if ((await waitForDocumentSaves(deps.waitTimeoutMs)) === "timeout") return 0;
+		if (useProjectStore.getState().document !== latest) {
+			attempt += 1;
+			continue;
+		}
+		const saved = await saveWithDeadline(
+			useProjectStore.getState().saveDocument(next, { history: true }),
+			deps.saveTimeoutMs ?? DOCUMENT_SAVES_WAIT_TIMEOUT_MS,
+		);
+		return saved === true ? added.length : 0;
+	}
+	return 0;
+}
+
 export async function importPendingRecording(
 	/**
 	 * Called once the import succeeded, with why the take ended before it was
@@ -329,6 +395,8 @@ export async function importPendingRecording(
 	 * the editor is the only window left to say it.
 	 */
 	onWarning?: (message: string) => void,
+	/** Called when the privacy pass blurred something, with how many areas. */
+	onRedacted?: (count: number) => void,
 ): Promise<boolean> {
 	const api = window.electronAPI;
 	if (!api) return false;
@@ -353,6 +421,11 @@ export async function importPendingRecording(
 	// preference.
 	if (cursorCaptureMode !== "system") {
 		markFreshRecordingAutoZoomPending(screenPath);
+	}
+	if (loadUserPreferences().autoRedact) {
+		void applyFreshRecordingRedactions(screenPath).then((count) => {
+			if (count > 0) onRedacted?.(count);
+		});
 	}
 	// Consumed: the recording now lives in a project. Cleared here rather than
 	// after the timeline seed below so a failure down there can't hand the same

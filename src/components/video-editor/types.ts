@@ -424,7 +424,7 @@ export interface AnnotationRegion {
 	style: AnnotationTextStyle;
 	zIndex: number;
 	/** When set, layout/style edits on one region can sync to all auto-caption siblings. */
-	annotationSource?: "auto-caption";
+	annotationSource?: "auto-caption" | "auto-redact";
 	figureData?: FigureData;
 	blurData?: BlurData;
 }

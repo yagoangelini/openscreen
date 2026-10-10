@@ -189,7 +189,9 @@
 		"noAudioTrack": "Nessuna traccia audio",
 		"noAudioTrackHint": "Questo contenuto non ha una traccia audio: non c'è nulla da trascrivere.",
 		"noSpeechDetected": "Nessun parlato rilevato",
-		"autoTranscribe": "Trascrivi automaticamente le nuove registrazioni all'apertura dell'editor"
+		"autoTranscribe": "Trascrivi automaticamente le nuove registrazioni all'apertura dell'editor",
+		"autoRedact": "Sfoca i dati sensibili nelle nuove registrazioni",
+		"autoRedactHint": "Dopo una ripresa, l'OCR trova e-mail, domini del tenant, GUID, segreti e numeri di telefono sullo schermo e li sfoca. Ogni sfocatura è una normale annotazione da tenere o eliminare. Funziona offline."
 	},
 	"exportDialog": {
 		"title": "Esporta",
@@ -440,7 +442,8 @@
 		"addVideoBeforeExport": "Aggiungi un video al progetto prima di esportare.",
 		"regionPasted": "Regione incollata",
 		"regionCopied": "Regione copiata",
-		"cameraCheckFailed": "Impossibile cercare una registrazione della fotocamera vicino a {{name}}"
+		"cameraCheckFailed": "Impossibile cercare una registrazione della fotocamera vicino a {{name}}",
+		"sensitiveBlurred": "{{count}} aree sensibili sono state sfocate automaticamente. Controllale sulla timeline."
 	},
 	"exportPipeline": {
 		"quality1440p": "1440p",

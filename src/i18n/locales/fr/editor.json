@@ -189,7 +189,9 @@
 		"noAudioTrack": "Aucune piste audio",
 		"noAudioTrackHint": "Ce média n'a pas de piste audio — il n'y a rien à transcrire.",
 		"noSpeechDetected": "Aucune parole détectée",
-		"autoTranscribe": "Transcrire automatiquement les nouveaux enregistrements à l'ouverture de l'éditeur"
+		"autoTranscribe": "Transcrire automatiquement les nouveaux enregistrements à l'ouverture de l'éditeur",
+		"autoRedact": "Flouter les données sensibles des nouveaux enregistrements",
+		"autoRedactHint": "Après une prise, l'OCR repère les e-mails, domaines de tenant, GUID, secrets et numéros de téléphone à l'écran et les floute. Chaque flou est une annotation ordinaire à garder ou supprimer. Fonctionne hors ligne."
 	},
 	"exportDialog": {
 		"title": "Exporter",
@@ -440,7 +442,8 @@
 		"addVideoBeforeExport": "Ajoutez une vidéo au projet avant d'exporter.",
 		"regionPasted": "Région collée",
 		"regionCopied": "Région copiée",
-		"cameraCheckFailed": "Impossible de chercher un enregistrement caméra près de {{name}}"
+		"cameraCheckFailed": "Impossible de chercher un enregistrement caméra près de {{name}}",
+		"sensitiveBlurred": "{{count}} zones sensibles ont été floutées automatiquement. Vérifiez-les sur la timeline."
 	},
 	"exportPipeline": {
 		"quality1440p": "1440p",

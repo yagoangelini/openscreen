@@ -189,7 +189,9 @@
 		"noAudioTrack": "音声トラックがありません",
 		"noAudioTrackHint": "このメディアには音声トラックがないため、文字起こしできません。",
 		"noSpeechDetected": "音声が検出されませんでした",
-		"autoTranscribe": "エディターを開いたときに新しい録画を自動で文字起こしする"
+		"autoTranscribe": "エディターを開いたときに新しい録画を自動で文字起こしする",
+		"autoRedact": "新しい録画の機密情報をぼかす",
+		"autoRedactHint": "録画後、OCR が画面上のメールアドレス、テナントのドメイン、GUID、シークレット、電話番号を見つけてぼかします。各ぼかしは通常の注釈なので、残すことも削除することもできます。オフラインで動作します。"
 	},
 	"exportDialog": {
 		"title": "エクスポート",
@@ -440,7 +442,8 @@
 		"addVideoBeforeExport": "Add a video to the project before exporting.",
 		"regionPasted": "Region pasted",
 		"regionCopied": "Region copied",
-		"cameraCheckFailed": "Could not check for a camera recording near {{name}}"
+		"cameraCheckFailed": "Could not check for a camera recording near {{name}}",
+		"sensitiveBlurred": "{{count}} か所の機密情報を自動でぼかしました。タイムラインで確認してください。"
 	},
 	"exportPipeline": {
 		"quality1440p": "1440p",

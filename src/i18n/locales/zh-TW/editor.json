@@ -189,7 +189,9 @@
 		"noAudioTrack": "無音訊軌道",
 		"noAudioTrackHint": "此媒體沒有音訊軌道，沒有可轉錄的內容。",
 		"noSpeechDetected": "未偵測到語音",
-		"autoTranscribe": "開啟編輯器時自動轉錄新錄製"
+		"autoTranscribe": "開啟編輯器時自動轉錄新錄製",
+		"autoRedact": "模糊新錄製中的敏感資料",
+		"autoRedactHint": "錄製後，OCR 會找出螢幕上的電子郵件、租用戶網域、GUID、密鑰與電話號碼並加以模糊。每處模糊都是一般註解，可保留或刪除。離線執行。"
 	},
 	"exportDialog": {
 		"title": "匯出",
@@ -440,7 +442,8 @@
 		"addVideoBeforeExport": "Add a video to the project before exporting.",
 		"regionPasted": "Region pasted",
 		"regionCopied": "Region copied",
-		"cameraCheckFailed": "Could not check for a camera recording near {{name}}"
+		"cameraCheckFailed": "Could not check for a camera recording near {{name}}",
+		"sensitiveBlurred": "已自動模糊 {{count}} 處敏感區域，請在時間軸上檢查。"
 	},
 	"exportPipeline": {
 		"quality1440p": "1440p",

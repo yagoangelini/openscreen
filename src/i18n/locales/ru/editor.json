@@ -189,7 +189,9 @@
 		"noAudioTrack": "Нет аудиодорожки",
 		"noAudioTrackHint": "В этом медиафайле нет аудиодорожки — расшифровывать нечего.",
 		"noSpeechDetected": "Речь не обнаружена",
-		"autoTranscribe": "Автоматически расшифровывать новые записи при открытии редактора"
+		"autoTranscribe": "Автоматически расшифровывать новые записи при открытии редактора",
+		"autoRedact": "Размывать конфиденциальные данные в новых записях",
+		"autoRedactHint": "После записи OCR находит на экране адреса почты, домены тенанта, GUID, секреты и номера телефонов и размывает их. Каждое размытие — обычная аннотация, её можно оставить или удалить. Работает офлайн."
 	},
 	"exportDialog": {
 		"title": "Экспорт",
@@ -440,7 +442,8 @@
 		"addVideoBeforeExport": "Add a video to the project before exporting.",
 		"regionPasted": "Region pasted",
 		"regionCopied": "Region copied",
-		"cameraCheckFailed": "Could not check for a camera recording near {{name}}"
+		"cameraCheckFailed": "Could not check for a camera recording near {{name}}",
+		"sensitiveBlurred": "Автоматически размыто областей с конфиденциальными данными: {{count}}. Проверьте их на шкале времени."
 	},
 	"exportPipeline": {
 		"quality1440p": "1440p",

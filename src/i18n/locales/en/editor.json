@@ -189,7 +189,9 @@
 		"noAudioTrack": "No audio track",
 		"noAudioTrackHint": "This media has no audio track — there is nothing to transcribe.",
 		"noSpeechDetected": "No speech detected",
-		"autoTranscribe": "Transcribe new recordings automatically when the editor opens"
+		"autoTranscribe": "Transcribe new recordings automatically when the editor opens",
+		"autoRedact": "Blur sensitive data in new recordings",
+		"autoRedactHint": "After a take, OCR finds e-mails, tenant domains, GUIDs, secrets and phone numbers on screen and blurs them. Each blur is a regular annotation you can keep or delete. Runs offline."
 	},
 	"exportDialog": {
 		"title": "Export",
@@ -440,7 +442,8 @@
 		"addVideoBeforeExport": "Add a video to the project before exporting.",
 		"regionPasted": "Region pasted",
 		"regionCopied": "Region copied",
-		"cameraCheckFailed": "Could not check for a camera recording near {{name}}"
+		"cameraCheckFailed": "Could not check for a camera recording near {{name}}",
+		"sensitiveBlurred": "{{count}} sensitive areas were blurred automatically. Check them on the timeline."
 	},
 	"exportPipeline": {
 		"quality1440p": "1440p",

@@ -189,7 +189,9 @@
 		"noAudioTrack": "Sem faixa de áudio",
 		"noAudioTrackHint": "Esta mídia não tem faixa de áudio — não há nada para transcrever.",
 		"noSpeechDetected": "Nenhuma fala detectada",
-		"autoTranscribe": "Transcrever novas gravações automaticamente ao abrir o editor"
+		"autoTranscribe": "Transcrever novas gravações automaticamente ao abrir o editor",
+		"autoRedact": "Desfocar dados sensíveis nas novas gravações",
+		"autoRedactHint": "Depois de gravar, o OCR encontra e-mails, domínios de tenant, GUIDs, segredos e telefones na tela e os desfoca. Cada desfoque é uma anotação comum, que você mantém ou apaga. Funciona offline."
 	},
 	"exportDialog": {
 		"title": "Exportar",
@@ -440,7 +442,8 @@
 		"addVideoBeforeExport": "Adicione um vídeo ao projeto antes de exportar.",
 		"regionPasted": "Região colada",
 		"regionCopied": "Região copiada",
-		"cameraCheckFailed": "Não foi possível procurar uma gravação de câmera junto de {{name}}"
+		"cameraCheckFailed": "Não foi possível procurar uma gravação de câmera junto de {{name}}",
+		"sensitiveBlurred": "{{count}} áreas sensíveis foram desfocadas automaticamente. Confira na timeline."
 	},
 	"exportPipeline": {
 		"quality1440p": "1440p",

@@ -492,7 +492,8 @@ export const annotationRegionSchema = endGteStart(
 		}),
 		style: annotationStyleSchema,
 		zIndex: z.number().int().nonnegative(),
-		annotationSource: z.literal("auto-caption").optional(),
+		// "auto-redact": a privacy blur the OCR pass suggested after the take (`redaction.ts`).
+		annotationSource: z.enum(["auto-caption", "auto-redact"]).optional(),
 		figureData: figureDataSchema,
 		blurData: blurDataSchema,
 	}),

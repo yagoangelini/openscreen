@@ -189,7 +189,9 @@
 		"noAudioTrack": "오디오 트랙 없음",
 		"noAudioTrackHint": "이 미디어에는 오디오 트랙이 없어 받아쓸 내용이 없습니다.",
 		"noSpeechDetected": "음성이 감지되지 않음",
-		"autoTranscribe": "편집기를 열 때 새 녹화를 자동으로 받아쓰기"
+		"autoTranscribe": "편집기를 열 때 새 녹화를 자동으로 받아쓰기",
+		"autoRedact": "새 녹화에서 민감한 정보 흐리게 처리",
+		"autoRedactHint": "녹화 후 OCR이 화면의 이메일, 테넌트 도메인, GUID, 비밀 키, 전화번호를 찾아 흐리게 처리합니다. 각 흐림은 일반 주석이라 유지하거나 삭제할 수 있습니다. 오프라인으로 실행됩니다."
 	},
 	"exportDialog": {
 		"title": "내보내기",
@@ -440,7 +442,8 @@
 		"addVideoBeforeExport": "Add a video to the project before exporting.",
 		"regionPasted": "Region pasted",
 		"regionCopied": "Region copied",
-		"cameraCheckFailed": "Could not check for a camera recording near {{name}}"
+		"cameraCheckFailed": "Could not check for a camera recording near {{name}}",
+		"sensitiveBlurred": "민감한 영역 {{count}}곳을 자동으로 흐리게 처리했습니다. 타임라인에서 확인하세요."
 	},
 	"exportPipeline": {
 		"quality1440p": "1440p",

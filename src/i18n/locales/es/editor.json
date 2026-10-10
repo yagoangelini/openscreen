@@ -189,7 +189,9 @@
 		"noAudioTrack": "Sin pista de audio",
 		"noAudioTrackHint": "Este medio no tiene pista de audio: no hay nada que transcribir.",
 		"noSpeechDetected": "No se detectó voz",
-		"autoTranscribe": "Transcribir automáticamente las grabaciones nuevas al abrir el editor"
+		"autoTranscribe": "Transcribir automáticamente las grabaciones nuevas al abrir el editor",
+		"autoRedact": "Difuminar datos sensibles en las nuevas grabaciones",
+		"autoRedactHint": "Tras grabar, el OCR encuentra correos, dominios de tenant, GUID, secretos y teléfonos en pantalla y los difumina. Cada difuminado es una anotación normal que puedes conservar o borrar. Funciona sin conexión."
 	},
 	"exportDialog": {
 		"title": "Exportar",
@@ -440,7 +442,8 @@
 		"addVideoBeforeExport": "Añade un vídeo al proyecto antes de exportar.",
 		"regionPasted": "Región pegada",
 		"regionCopied": "Región copiada",
-		"cameraCheckFailed": "No se pudo buscar una grabación de cámara junto a {{name}}"
+		"cameraCheckFailed": "No se pudo buscar una grabación de cámara junto a {{name}}",
+		"sensitiveBlurred": "Se difuminaron {{count}} áreas sensibles automáticamente. Revísalas en la línea de tiempo."
 	},
 	"exportPipeline": {
 		"quality1440p": "1440p",

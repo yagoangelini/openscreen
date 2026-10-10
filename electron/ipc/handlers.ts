@@ -132,6 +132,7 @@ import {
 	terminateNativeWindowsCapture,
 	waitForNativeWindowsCaptureStop,
 } from "../recording/nativeWindowsCaptureStop";
+import { runOcrScan } from "../recording/ocrScan";
 import {
 	clearPendingTake,
 	collectRecoverableTakes,
@@ -4433,6 +4434,15 @@ export function registerIpcHandlers(
 	// Outlook toast does not land in the middle of a take. A fixed URI on purpose:
 	// the renderer names no target, so this cannot widen the allowlist above. There
 	// is no public API to toggle Do not disturb itself, and the app does not try.
+	// The text on screen in a take, for the automatic privacy blur. Only a file in a
+	// recordings folder: this runs a helper over whatever path it is given.
+	ipcMain.handle("scan-recording-text", async (_, videoPath: unknown) => {
+		if (typeof videoPath !== "string" || !isInRecordingDirs(videoPath)) {
+			return { success: false, error: "Not a recording." };
+		}
+		return runOcrScan(videoPath);
+	});
+
 	ipcMain.handle("open-notification-settings", async () => {
 		if (process.platform !== "win32") {
 			return { success: false };

@@ -189,7 +189,9 @@
 		"noAudioTrack": "Žádná zvuková stopa",
 		"noAudioTrackHint": "Toto médium nemá zvukovou stopu, takže není co přepisovat.",
 		"noSpeechDetected": "Žádná řeč nezjištěna",
-		"autoTranscribe": "Automaticky přepisovat nové nahrávky při otevření editoru"
+		"autoTranscribe": "Automaticky přepisovat nové nahrávky při otevření editoru",
+		"autoRedact": "Rozmazat citlivá data v nových nahrávkách",
+		"autoRedactHint": "Po nahrání najde OCR na obrazovce e-maily, domény tenantu, GUID, tajné klíče a telefonní čísla a rozmaže je. Každé rozmazání je běžná anotace, kterou můžete ponechat nebo smazat. Funguje offline."
 	},
 	"exportDialog": {
 		"title": "Export",
@@ -440,7 +442,8 @@
 		"addVideoBeforeExport": "Add a video to the project before exporting.",
 		"regionPasted": "Region pasted",
 		"regionCopied": "Region copied",
-		"cameraCheckFailed": "Could not check for a camera recording near {{name}}"
+		"cameraCheckFailed": "Could not check for a camera recording near {{name}}",
+		"sensitiveBlurred": "Automaticky rozmazáno {{count}} citlivých oblastí. Zkontrolujte je na časové ose."
 	},
 	"exportPipeline": {
 		"quality1440p": "1440p",

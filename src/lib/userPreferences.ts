@@ -34,6 +34,8 @@ export interface UserPreferences {
 	autoTranscribe: boolean;
 	/** Exports at YouTube's −14 LUFS instead of the −16 the voice is normalised to. */
 	youtubeLoudness: boolean;
+	/** After a take, blur the e-mails, tenant domains, GUIDs, secrets and phones it shows. */
+	autoRedact: boolean;
 }
 
 export const DEFAULT_PREFS: UserPreferences = {
@@ -48,6 +50,7 @@ export const DEFAULT_PREFS: UserPreferences = {
 	hideSoftwareEncoderFallbackNotice: false,
 	autoTranscribe: false,
 	youtubeLoudness: true,
+	autoRedact: true,
 };
 
 /** Parses stored preferences without throwing on malformed JSON. */
@@ -115,6 +118,7 @@ export function loadUserPreferences(): UserPreferences {
 			typeof raw.youtubeLoudness === "boolean"
 				? raw.youtubeLoudness
 				: DEFAULT_PREFS.youtubeLoudness,
+		autoRedact: typeof raw.autoRedact === "boolean" ? raw.autoRedact : DEFAULT_PREFS.autoRedact,
 	};
 }
 
