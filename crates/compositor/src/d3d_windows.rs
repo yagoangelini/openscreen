@@ -90,6 +90,68 @@ fn adapter_choice_from_env() -> AdapterChoice {
     parse_adapter_choice(std::env::var("OPENSCREEN_COMPOSITOR_ADAPTER").ok().as_deref())
 }
 
+/// The GPU went away under a live device: a driver reset (TDR), a driver update, a removed
+/// external GPU. Every call on the device fails from then on, so the export stops; this is
+/// the error it stops with, instead of a panic on the first `Map` that tripped over it.
+///
+/// The message starts with `GPU_DEVICE_LOST`, which the app matches to show its own wording.
+#[derive(Debug)]
+pub struct GpuDeviceLost {
+    pub code: windows::core::HRESULT,
+    pub reason: windows::core::HRESULT,
+}
+
+impl std::fmt::Display for GpuDeviceLost {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "GPU_DEVICE_LOST: the GPU was reset or removed while exporting (HRESULT 0x{:08x}, \
+             reason 0x{:08x}). The project is fine: export again. If it keeps happening, update \
+             the graphics driver.",
+            self.code.0 as u32, self.reason.0 as u32
+        )
+    }
+}
+
+impl std::error::Error for GpuDeviceLost {}
+
+/// The HRESULTs that mean the device itself is gone, not that one call was refused.
+pub fn is_device_lost(code: windows::core::HRESULT) -> bool {
+    use windows::Win32::Graphics::Dxgi::{
+        DXGI_ERROR_DEVICE_HUNG, DXGI_ERROR_DEVICE_REMOVED, DXGI_ERROR_DEVICE_RESET,
+        DXGI_ERROR_DRIVER_INTERNAL_ERROR,
+    };
+    [
+        DXGI_ERROR_DEVICE_REMOVED,
+        DXGI_ERROR_DEVICE_HUNG,
+        DXGI_ERROR_DEVICE_RESET,
+        DXGI_ERROR_DRIVER_INTERNAL_ERROR,
+    ]
+    .contains(&code)
+}
+
+/// The error a failed D3D call on `device` should surface as: `GpuDeviceLost` (with the
+/// driver's removal reason) when the device is gone, a plain message otherwise.
+pub fn device_error(device: &ID3D11Device, code: windows::core::HRESULT) -> anyhow::Error {
+    if is_device_lost(code) {
+        let reason = match unsafe { device.GetDeviceRemovedReason() } {
+            Ok(()) => windows::core::HRESULT(0),
+            Err(error) => error.code(),
+        };
+        anyhow::Error::new(GpuDeviceLost { code, reason })
+    } else {
+        anyhow::anyhow!("Direct3D call failed: {}", windows::core::Error::from(code))
+    }
+}
+
+/// `error` as `GpuDeviceLost` when its cause is a lost device, unchanged otherwise.
+pub fn classify_device_error(device: &ID3D11Device, error: anyhow::Error) -> anyhow::Error {
+    match error.downcast_ref::<windows::core::Error>() {
+        Some(win) if is_device_lost(win.code()) => device_error(device, win.code()),
+        _ => error,
+    }
+}
+
 /// What a device runs on, as support needs to read it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AdapterInfo {
