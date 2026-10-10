@@ -28,7 +28,15 @@ export interface RecordingPreferences {
 	recordingsFolder: string | null;
 	/** Seconds of countdown before a take starts: 0 (none), 3 or 5. */
 	countdownSeconds: number;
+	/**
+	 * Which channel of the microphone carries the voice. "auto" notices a dead channel and
+	 * copies the live one over it; the others force it (`MicrophoneChannelPicker`).
+	 */
+	micChannelMode: MicChannelMode;
 }
+
+export const MIC_CHANNEL_MODES = ["auto", "left", "right", "mix"] as const;
+export type MicChannelMode = (typeof MIC_CHANNEL_MODES)[number];
 
 /** The countdown lengths offered; anything else reads as the default. */
 export const COUNTDOWN_SECONDS_OPTIONS = [0, 3, 5] as const;
@@ -46,6 +54,7 @@ export const DEFAULT_RECORDING_PREFERENCES: RecordingPreferences = {
 	autoZoomEnabled: true,
 	recordingsFolder: null,
 	countdownSeconds: 3,
+	micChannelMode: "auto",
 };
 
 export interface RecordingSourceDescriptor {
@@ -131,6 +140,9 @@ function parseRecording(raw: RawSettings): RecordingPreferences {
 		)
 			? (raw.countdownSeconds as number)
 			: DEFAULT_RECORDING_PREFERENCES.countdownSeconds,
+		micChannelMode: (MIC_CHANNEL_MODES as readonly unknown[]).includes(raw.micChannelMode)
+			? (raw.micChannelMode as MicChannelMode)
+			: DEFAULT_RECORDING_PREFERENCES.micChannelMode,
 	};
 }
 
@@ -200,6 +212,9 @@ function validateRecordingPatch(patch: Partial<RecordingPreferences>): void {
 			!(COUNTDOWN_SECONDS_OPTIONS as readonly unknown[]).includes(value)
 		) {
 			throw new TypeError("countdownSeconds must be 0, 3 or 5");
+		}
+		if (key === "micChannelMode" && !(MIC_CHANNEL_MODES as readonly unknown[]).includes(value)) {
+			throw new TypeError("micChannelMode must be auto, left, right or mix");
 		}
 	}
 }

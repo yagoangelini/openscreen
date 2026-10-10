@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <functional>
 #include <mutex>
+#include <string>
 #include <thread>
 #include <vector>
 
@@ -81,8 +82,12 @@ void mixAudioInPlace(
 // recorded in one ear. This watches the long-run level of each channel and, once
 // exactly one of them is live and every other sits 30 dB under it, copies the live
 // one over the rest. A genuinely stereo (or array) mic is left as it is.
+enum class MicrophoneChannelMode { Auto, Left, Right, Mix };
+MicrophoneChannelMode parseMicrophoneChannelMode(const std::string& value);
+
 class MicrophoneChannelPicker {
 public:
+    void setMode(MicrophoneChannelMode mode) { mode_ = mode; }
     void reset();
     // Rewrites the interleaved packet in place. Returns the channel being copied
     // to the others, or -1 while every channel is kept.
@@ -92,6 +97,7 @@ public:
 private:
     std::vector<double> energy_;
     int liveChannel_ = -1;
+    MicrophoneChannelMode mode_ = MicrophoneChannelMode::Auto;
 };
 
 // A peak limiter on the final mix: instant attack, ~150 ms release. A boosted
@@ -139,6 +145,7 @@ public:
     AudioMixer& operator=(const AudioMixer&) = delete;
 
     bool start();
+    void setMicrophoneChannelMode(MicrophoneChannelMode mode) { microphoneChannels_.setMode(mode); }
     void beginTimeline();
     void setPaused(bool paused);
     void stop();

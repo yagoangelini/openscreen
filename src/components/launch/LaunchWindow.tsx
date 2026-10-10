@@ -1086,6 +1086,12 @@ export function LaunchWindow() {
 			about: t("deviceSettings.about"),
 			checkForUpdates: tCommon("actions.checkForUpdates"),
 			checkingForUpdates: t("deviceSettings.checkingForUpdates"),
+			micChannel: t("deviceSettings.micChannel"),
+			micChannelAuto: t("deviceSettings.micChannelAuto"),
+			micChannelLeft: t("deviceSettings.micChannelLeft"),
+			micChannelRight: t("deviceSettings.micChannelRight"),
+			micChannelMix: t("deviceSettings.micChannelMix"),
+			broadcastTip: t("deviceSettings.broadcastTip"),
 		}),
 		[t, tCommon],
 	);

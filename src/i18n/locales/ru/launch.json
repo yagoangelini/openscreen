@@ -96,7 +96,13 @@
 		"previewUnavailable": "Предпросмотр недоступен",
 		"about": "О программе",
 		"version": "Версия {{version}}",
-		"checkingForUpdates": "Проверка…"
+		"checkingForUpdates": "Проверка…",
+		"micChannel": "Канал голоса",
+		"micChannelAuto": "Авто",
+		"micChannelLeft": "Лев.",
+		"micChannelRight": "Прав.",
+		"micChannelMix": "Микс",
+		"broadcastTip": "Совет: выберите микрофон «NVIDIA Broadcast», чтобы убрать фоновый шум."
 	},
 	"permissions": {
 		"title": "OpenScreen нужны некоторые разрешения",

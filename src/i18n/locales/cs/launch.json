@@ -96,7 +96,13 @@
 		"previewUnavailable": "Náhled nedostupný",
 		"about": "O aplikaci",
 		"version": "Verze {{version}}",
-		"checkingForUpdates": "Kontrola…"
+		"checkingForUpdates": "Kontrola…",
+		"micChannel": "Kanál hlasu",
+		"micChannelAuto": "Auto",
+		"micChannelLeft": "Levý",
+		"micChannelRight": "Pravý",
+		"micChannelMix": "Mix",
+		"broadcastTip": "Tip: zvolte mikrofon „NVIDIA Broadcast“ pro odstranění šumu v pozadí."
 	},
 	"permissions": {
 		"title": "OpenScreen potřebuje několik oprávnění",

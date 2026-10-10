@@ -51,6 +51,7 @@ struct CaptureConfig {
     std::string microphoneDeviceId;
     std::string microphoneDeviceName;
     double microphoneGain = 1.0;
+    std::string microphoneChannelMode = "auto";
     std::string webcamDeviceId;
     std::string webcamDeviceName;
     std::string webcamDirectShowClsid;
@@ -620,6 +621,7 @@ bool parseConfig(const std::string& json, CaptureConfig& config) {
     config.microphoneDeviceId = findString(json, "microphoneDeviceId");
     config.microphoneDeviceName = findString(json, "microphoneDeviceName");
     config.microphoneGain = findDouble(json, "microphoneGain", 1.0);
+    config.microphoneChannelMode = findString(json, "microphoneChannelMode");
     config.webcamDeviceId = findString(json, "webcamDeviceId");
     config.webcamDeviceName = findString(json, "webcamDeviceName");
     config.webcamDirectShowClsid = findString(json, "webcamDirectShowClsid");
@@ -1428,6 +1430,7 @@ int wmain(int argc, wchar_t* argv[]) {
                 return true;
             });
 
+        audioMixer->setMicrophoneChannelMode(parseMicrophoneChannelMode(config.microphoneChannelMode));
         if (!audioMixer->start()) {
             std::cerr << "ERROR: Failed to start native audio mixer" << std::endl;
             return false;

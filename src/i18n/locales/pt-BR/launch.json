@@ -96,7 +96,13 @@
 		"previewUnavailable": "Pré-visualização indisponível",
 		"about": "Sobre",
 		"version": "Versão {{version}}",
-		"checkingForUpdates": "Verificando…"
+		"checkingForUpdates": "Verificando…",
+		"micChannel": "Canal da voz",
+		"micChannelAuto": "Auto",
+		"micChannelLeft": "Esq.",
+		"micChannelRight": "Dir.",
+		"micChannelMix": "Mix",
+		"broadcastTip": "Dica: escolha o microfone \"NVIDIA Broadcast\" para remover o ruído de fundo."
 	},
 	"permissions": {
 		"title": "O OpenScreen precisa de algumas permissões",

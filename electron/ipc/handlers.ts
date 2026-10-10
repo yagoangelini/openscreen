@@ -707,6 +707,8 @@ export interface RecordingPrefs {
 	recordingsFolder: string | null;
 	/** Countdown before a take starts: 0, 3 or 5 seconds. */
 	countdownSeconds: number;
+	/** The microphone's voice channel: auto, left, right or mix. */
+	micChannelMode: "auto" | "left" | "right" | "mix";
 }
 const defaultRecordingPrefs: RecordingPrefs = {
 	micEnabled: false,
@@ -721,6 +723,7 @@ const defaultRecordingPrefs: RecordingPrefs = {
 	autoZoomEnabled: true,
 	recordingsFolder: null,
 	countdownSeconds: 3,
+	micChannelMode: "auto",
 };
 
 // Cached source from the user's pick. Used by setDisplayMediaRequestHandler in main.ts for cursor-free capture.
@@ -3005,6 +3008,7 @@ export function registerIpcHandlers(
 					microphoneDeviceId: request.audio.microphone.deviceId ?? null,
 					microphoneDeviceName: request.audio.microphone.deviceName ?? null,
 					microphoneGain: request.audio.microphone.gain,
+					microphoneChannelMode: appSettings.getSnapshot().recording.micChannelMode,
 					webcamEnabled: request.webcam.enabled,
 					webcamDeviceId: request.webcam.deviceId ?? null,
 					webcamDeviceName: request.webcam.deviceName ?? null,

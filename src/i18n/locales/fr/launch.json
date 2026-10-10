@@ -96,7 +96,13 @@
 		"previewUnavailable": "Aperçu indisponible",
 		"about": "À propos",
 		"version": "Version {{version}}",
-		"checkingForUpdates": "Recherche…"
+		"checkingForUpdates": "Recherche…",
+		"micChannel": "Canal de la voix",
+		"micChannelAuto": "Auto",
+		"micChannelLeft": "G",
+		"micChannelRight": "D",
+		"micChannelMix": "Mixte",
+		"broadcastTip": "Astuce : choisissez le micro « NVIDIA Broadcast » pour supprimer le bruit de fond."
 	},
 	"permissions": {
 		"title": "OpenScreen a besoin de quelques autorisations",

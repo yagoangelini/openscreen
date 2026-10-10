@@ -1523,6 +1523,31 @@ int main() {
                    "first=" + std::to_string(first) + " after=" + std::to_string(after));
         }
         {
+            // Forced modes: the user picked the channel, or asked for a mix.
+            const auto forced = [&](MicrophoneChannelMode mode, double left, double right) {
+                MicrophoneChannelPicker picker;
+                picker.setMode(mode);
+                auto bytes = tonePacket(left, right, 480, 0);
+                picker.process(bytes.data(), static_cast<DWORD>(bytes.size()), f32stereo);
+                const auto* s = reinterpret_cast<const float*>(bytes.data());
+                // Frame 100 of a 440 Hz tone: a sample well away from zero.
+                return std::pair<double, double>(s[200], s[201]);
+            };
+            const double tone = std::sin(2.0 * kTestPi * 440.0 * 100.0 / 48000.0);
+            const auto [ll, lr] = forced(MicrophoneChannelMode::Left, 0.3, 0.1);
+            const auto [rl, rr] = forced(MicrophoneChannelMode::Right, 0.3, 0.1);
+            const auto [ml, mr] = forced(MicrophoneChannelMode::Mix, 0.3, 0.1);
+            const bool ok = std::abs(ll - 0.3 * tone) < 1e-6 && std::abs(lr - 0.3 * tone) < 1e-6 &&
+                            std::abs(rl - 0.1 * tone) < 1e-6 && std::abs(rr - 0.1 * tone) < 1e-6 &&
+                            std::abs(ml - 0.2 * tone) < 1e-6 && std::abs(mr - 0.2 * tone) < 1e-6;
+            expect("mic-picker-forced-left-right-mix", ok, "");
+            expect("mic-mode-parses",
+                   parseMicrophoneChannelMode("left") == MicrophoneChannelMode::Left &&
+                       parseMicrophoneChannelMode("mix") == MicrophoneChannelMode::Mix &&
+                       parseMicrophoneChannelMode("") == MicrophoneChannelMode::Auto,
+                   "");
+        }
+        {
             const AudioInputFormat pcmMono = makeFormat(MFAudioFormat_PCM, 48000, 1, 16);
             MicrophoneChannelPicker picker;
             std::vector<BYTE> mono(960, 0x10);

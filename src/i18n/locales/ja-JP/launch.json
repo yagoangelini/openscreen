@@ -96,7 +96,13 @@
 		"previewUnavailable": "プレビューを利用できません",
 		"about": "情報",
 		"version": "バージョン {{version}}",
-		"checkingForUpdates": "確認中…"
+		"checkingForUpdates": "確認中…",
+		"micChannel": "音声チャンネル",
+		"micChannelAuto": "自動",
+		"micChannelLeft": "左",
+		"micChannelRight": "右",
+		"micChannelMix": "ミックス",
+		"broadcastTip": "ヒント: 「NVIDIA Broadcast」マイクを選ぶと背景ノイズが除去されます。"
 	},
 	"permissions": {
 		"title": "OpenScreen にはいくつかの許可が必要です",

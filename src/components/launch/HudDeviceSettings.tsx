@@ -1,5 +1,5 @@
 import { Check, X } from "lucide-react";
-import { memo, useEffect, useRef } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { useAudioLevelMeter } from "../../hooks/useAudioLevelMeter";
 import type { CameraDevice } from "../../hooks/useCameraDevices";
 import { useCameraPreviewStream } from "../../hooks/useCameraPreviewStream";
@@ -25,6 +25,64 @@ export interface HudDeviceSettingsLabels {
 	about: string;
 	checkForUpdates: string;
 	checkingForUpdates: string;
+	micChannel: string;
+	micChannelAuto: string;
+	micChannelLeft: string;
+	micChannelRight: string;
+	micChannelMix: string;
+	/** Shown when an "NVIDIA Broadcast" microphone exists and is not the one picked. */
+	broadcastTip: string;
+}
+
+type MicChannelMode = "auto" | "left" | "right" | "mix";
+const MIC_CHANNEL_MODES: MicChannelMode[] = ["auto", "left", "right", "mix"];
+
+/** The voice channel, read and saved straight through the recording prefs. */
+function MicChannelPicker({ labels }: { labels: HudDeviceSettingsLabels }) {
+	const [mode, setMode] = useState<MicChannelMode>("auto");
+	useEffect(() => {
+		let cancelled = false;
+		void window.electronAPI
+			?.getRecordingPrefs?.()
+			.then((prefs) => {
+				const value = (prefs as { micChannelMode?: MicChannelMode } | undefined)?.micChannelMode;
+				if (!cancelled && value && MIC_CHANNEL_MODES.includes(value)) setMode(value);
+			})
+			.catch(() => undefined);
+		return () => {
+			cancelled = true;
+		};
+	}, []);
+	const text: Record<MicChannelMode, string> = {
+		auto: labels.micChannelAuto,
+		left: labels.micChannelLeft,
+		right: labels.micChannelRight,
+		mix: labels.micChannelMix,
+	};
+	return (
+		<div className={styles.hudModalMeterRow}>
+			<span className={styles.hudModalMeterLabel}>{labels.micChannel}</span>
+			<div role="radiogroup" aria-label={labels.micChannel} style={{ display: "flex", gap: 4 }}>
+				{MIC_CHANNEL_MODES.map((value) => (
+					<button
+						key={value}
+						type="button"
+						role="radio"
+						aria-checked={mode === value}
+						data-testid={`hud-mic-channel-${value}`}
+						className={`${styles.languageMenuItem} ${mode === value ? styles.languageMenuItemActive : ""}`}
+						style={{ width: "auto", padding: "2px 8px" }}
+						onClick={() => {
+							setMode(value);
+							void window.electronAPI?.setRecordingPrefs?.({ micChannelMode: value });
+						}}
+					>
+						{text[value]}
+					</button>
+				))}
+			</div>
+		</div>
+	);
 }
 
 /** Segmented input-level bar, driven by the live analyser. */
@@ -183,7 +241,15 @@ export const HudDeviceSettings = memo(function HudDeviceSettings({
 						<span className={styles.hudModalMeterLabel}>{labels.micLevel}</span>
 						<LevelMeter level={level} />
 					</div>
+					<MicChannelPicker labels={labels} />
 					<div className={styles.hudModalHint}>{labels.micHint}</div>
+					{micDevices.some(
+						(device) => /nvidia broadcast/i.test(device.label) && device.deviceId !== activeMicId,
+					) ? (
+						<div className={styles.hudModalHint} data-testid="hud-broadcast-tip">
+							{labels.broadcastTip}
+						</div>
+					) : null}
 				</>
 			) : null}
 

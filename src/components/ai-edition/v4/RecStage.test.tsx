@@ -230,6 +230,7 @@ describe("RecStage controls", () => {
 			autoZoomEnabled: true,
 			recordingsFolder: null,
 			countdownSeconds: 3,
+			micChannelMode: "auto",
 		};
 		stubRecordingPrefs();
 		let answerReread: ((prefs: RecordingPrefs) => void) | undefined;
@@ -432,6 +433,7 @@ describe("RecStage controls", () => {
 			autoZoomEnabled: true,
 			recordingsFolder: null,
 			countdownSeconds: 3,
+			micChannelMode: "auto",
 		};
 		act(() => {
 			recordingPrefsListeners.forEach((listener) => listener(resetPrefs));
