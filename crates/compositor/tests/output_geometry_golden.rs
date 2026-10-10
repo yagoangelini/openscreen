@@ -36,6 +36,9 @@ use openscreen_compositor::live::Player;
 use openscreen_compositor::scene::Scene;
 use openscreen_compositor::config;
 
+mod common;
+use common::write_ppm;
+
 /// Instant fixe dans la source. Un seek explicite (`present_frame`) plutôt que
 /// la lecture libre : le golden doit être reproductible à l'octet près.
 const AT_SEC: f64 = 2.0;
@@ -85,17 +88,6 @@ fn gradient_energy(rgba: &[u8], w: usize, h: usize) -> (f64, f64) {
     (gx / nx.max(1) as f64, gy / ny.max(1) as f64)
 }
 
-/// PPM P6 — pas de dépendance à encoder, et ça s'ouvre dans n'importe quel
-/// visionneur. Permet l'inspection à l'œil en plus de la comparaison de hash.
-fn write_ppm(path: &std::path::Path, rgba: &[u8], w: u32, h: u32) -> std::io::Result<()> {
-    let mut out = Vec::with_capacity(rgba.len() / 4 * 3 + 32);
-    out.extend_from_slice(format!("P6\n{w} {h}\n255\n").as_bytes());
-    for px in rgba.chunks_exact(4) {
-        out.extend_from_slice(&px[..3]);
-    }
-    std::fs::write(path, out)
-}
-
 fn scene_json(screen: &str, webcam: &str, w: u32, h: u32) -> String {
     // Chemins en slashes : le JSON n'échappe pas les backslashes Windows.
     let (s, c) = (screen.replace('\\', "/"), webcam.replace('\\', "/"));
@@ -103,7 +95,7 @@ fn scene_json(screen: &str, webcam: &str, w: u32, h: u32) -> String {
         r##"{{
         "clips": [{{"screenPath":"{s}","webcamPath":"{c}","sourceStartSec":0,"sourceEndSec":30,"webcamOffsetSec":0,"hasAudio":true}}],
         "layout": {{"preset":"picture-in-picture","webcamSize":1.0,"webcamShape":"rounded","webcamMirror":false,"webcamPosition":null,"webcamReactiveZoom":false}},
-        "effects": {{"padding":0.1,"blur":true,"shadow":1.0,"roundnessPx":24,"motionBlur":0.0}},
+        "effects": {{"padding":0.1,"blur":true,"shadow":1.0,"roundnessFrac":0.0222,"motionBlur":0.0}},
         "background": {{"kind":"gradient","angleDeg":135,"stops":["#eaebed","#bcc0c6"]}},
         "zoomRegions": [],
         "speedRegions": [],
@@ -220,7 +212,7 @@ fn golden_side_by_side_webcam_is_not_stretched() {
         "clips": [{{"screenPath":"{s}","webcamPath":"{c}","sourceStartSec":0,"sourceEndSec":30,"webcamOffsetSec":0,"hasAudio":true}}],
         "layout": {{"preset":"dual-frame","webcamSize":1.0,"webcamShape":"rectangle","webcamMirror":false,
                     "webcamRect":{{"x":0.66,"y":0.06,"width":0.31,"height":0.88}},"webcamReactiveZoom":false}},
-        "effects": {{"padding":0.0,"blur":true,"shadow":1.0,"roundnessPx":24,"motionBlur":0.0}},
+        "effects": {{"padding":0.0,"blur":true,"shadow":1.0,"roundnessFrac":0.0222,"motionBlur":0.0}},
         "background": {{"kind":"gradient","angleDeg":135,"stops":["#b02a2a","#7a1414"]}},
         "zoomRegions": [], "speedRegions": [],
         "cursor": {{"show":false,"size":1,"smoothing":0,"motionBlur":0,"clickBounce":0,"clipToBounds":false,"theme":"default"}},
@@ -286,7 +278,7 @@ fn golden_cropped_clip_is_not_stretched() {
         "clips": [{{"screenPath":"{s}","webcamPath":"{c}","sourceStartSec":0,"sourceEndSec":30,"webcamOffsetSec":0,"hasAudio":true}}],
         "layout": {{"preset":"no-webcam","webcamSize":1.0,"webcamShape":"rectangle","webcamMirror":false,
                     "screenRect":{{"x":{sx},"y":{sy},"width":{rect_w},"height":{rect_h}}},"webcamReactiveZoom":false}},
-        "effects": {{"padding":0.0,"blur":true,"shadow":1.0,"roundnessPx":24,"motionBlur":0.0}},
+        "effects": {{"padding":0.0,"blur":true,"shadow":1.0,"roundnessFrac":0.0222,"motionBlur":0.0}},
         "background": {{"kind":"gradient","angleDeg":135,"stops":["#1e3a5f","#0d1b2a"]}},
         "zoomRegions": [], "speedRegions": [],
         "cursor": {{"show":false,"size":1,"smoothing":0,"motionBlur":0,"clickBounce":0,"clipToBounds":false,"theme":"default"}},

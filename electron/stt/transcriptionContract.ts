@@ -129,6 +129,11 @@ export interface SttTranscribeRequest {
 	 * The spec locks language detection on by default; we only honour an explicit value.
 	 */
 	language?: string;
+	/**
+	 * The project's names and terms (issue #1023), handed to Whisper as its
+	 * initial prompt on every chunk. Omit or leave blank for none.
+	 */
+	prompt?: string;
 }
 
 /**
@@ -141,7 +146,17 @@ export interface SttTranscribeRequest {
  * a literal typed twice is a fallback that silently stops working.
  */
 export const STT_NATIVE_EXTRACTION_UNAVAILABLE = "stt:native-extraction-unavailable";
-export const STT_VAD_UNAVAILABLE = "stt:vad-unavailable";
+
+/**
+ * Marker carried in the error message when audio extraction could not read the
+ * `sourcePath` itself: the OS refused the read, or ffmpeg hung opening the file
+ * (macOS holds the read behind a pending folder-access prompt, issue #968).
+ *
+ * Only `extractAudio.ts` sets it, so the renderer can tell "this file's folder is
+ * not readable" from an engine failure that happens to mention a permission (model
+ * loading, the whisper helper). Same IPC reason as above for being a string.
+ */
+export const STT_MEDIA_UNREADABLE = "stt:media-unreadable";
 
 /** IPC response: main → renderer. */
 export interface SttTranscribeResponse {
@@ -164,9 +179,4 @@ export type SttTranscribeResult = SttTranscribeResponse;
 export interface SttVadSegment {
 	startSec: number;
 	endSec: number;
-}
-
-/** Response from the VAD speech detection pass. */
-export interface SttVadResponse {
-	segments: SttVadSegment[];
 }

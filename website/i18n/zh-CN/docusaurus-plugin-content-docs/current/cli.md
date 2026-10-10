@@ -119,7 +119,7 @@ openscreen sources -o s.json && jq '.displays' s.json                           
 
 ### `openscreen export` {#openscreen-export}
 
-使用编辑器预览和导出所用的原生合成器，把项目渲染为 MP4 或 GIF。缩放、剪辑区间、速度区间、标注和字幕、光标以及背景，全部取自项目。
+使用编辑器预览和导出所用的原生合成器，把项目渲染为 MP4 或 GIF。缩放、删减区间、速度区间、标注和字幕、光标以及背景，全部取自项目。
 
 ```bash
 openscreen export demo.openscreen                          # format and quality from the project
@@ -141,7 +141,7 @@ openscreen export demo.openscreen -o out.mp4 --auto-zoom --json
 | `--audio-offset <seconds>` | 配音开始前的延迟（默认为 0） |
 | `--json` | 在 stdout 上输出 NDJSON 格式的进度和结果 |
 
-CLI 导出的 MP4 始终是 **60 fps 的 H.264**。没有编码格式或帧率选项。桌面应用的[导出](./export.md)对话框另外还提供 H.265 以及 24 或 30 fps。
+CLI 导出的 MP4 始终是 **60 fps 的 H.264**。没有编码格式或帧率选项。桌面应用的[导出](./export.md)对话框另外还提供 24 或 30 fps。
 
 `--audio` 在渲染完成后才起作用：视频流会原样复制，然后混合出一条新的 AAC 音轨，并覆盖写入同一个输出文件。
 
@@ -175,7 +175,7 @@ openscreen pack demo.openscreen --out bundle/
 
 ### `openscreen info` {#openscreen-info}
 
-打印项目引用了哪些内容、其屏幕视频是否仍然存在，以及它的导出设置和其中包含的缩放、剪辑区间、速度区间和标注的数量。
+打印项目引用了哪些内容、其屏幕视频是否仍然存在，以及它的导出设置和其中包含的缩放、删减区间、速度区间和标注的数量。
 
 ```bash
 openscreen info demo.openscreen --json

@@ -183,6 +183,7 @@ describe("the mutating-tool table", () => {
 				"removeClip",
 				"removeModifier",
 				"removeTrim",
+				"removeWords",
 				"replaceTimeline",
 				"setAnnotation",
 				"setAudio",
@@ -1686,6 +1687,29 @@ describe("getCursorTrack", () => {
 		expect(result.resultJson).not.toContain('virtualSec":');
 	});
 
+	it("reports a hidden click and the return to visibility through the tool payload", () => {
+		const samples = [
+			{ timeMs: 0, cx: 0.5, cy: 0.5, visible: true, interactionType: "move" },
+			{ timeMs: 50, cx: 0.5, cy: 0.5, visible: false, interactionType: "click" },
+			{ timeMs: 100, cx: 0.5, cy: 0.5, visible: true, interactionType: "move" },
+			{ timeMs: 1000, cx: 0.5, cy: 0.5, visible: true, interactionType: "move" },
+		];
+		const result = executeAgentTool(fixtureDocument(), "getCursorTrack", "{}", {
+			cursorTelemetry: { load: { status: "ok", assetId: "asset_1", samples } },
+		});
+		const payload = JSON.parse(result.resultJson);
+
+		expect(result.ok).toBe(true);
+		expect(payload.points).toContainEqual({
+			atSec: 0.05,
+			cx: 0.5,
+			cy: 0.5,
+			kind: "click",
+			visible: false,
+		});
+		expect(payload.points).toContainEqual({ atSec: 0.1, cx: 0.5, cy: 0.5 });
+	});
+
 	it("says 'no-sidecar' when the asset was checked and has none", () => {
 		const result = executeAgentTool(fixtureDocument(), "getCursorTrack", "{}", {
 			cursorTelemetry: { load: { status: "no-sidecar", assetId: "asset_1" } },
@@ -2361,6 +2385,227 @@ describe("getTranscriptWords", () => {
 	});
 });
 
+describe("removeWords", () => {
+	function repeatedWordDocument(): AxcutDocument {
+		const base = fixtureDocument();
+		return {
+			...base,
+			transcripts: [
+				{
+					...base.transcripts[0],
+					words: [
+						{ id: "filler", segmentId: "seg_1", startSec: 1, endSec: 1.2, text: "like" },
+						{ id: "meaningful", segmentId: "seg_1", startSec: 3, endSec: 3.2, text: "like" },
+					],
+				},
+			],
+		};
+	}
+
+	it("cuts only the selected occurrence and reports the trim actually stored", () => {
+		const before = repeatedWordDocument();
+		const read = run(before, "getTranscriptWords", {});
+		expect(JSON.parse(read.resultJson).words.map((word: { id: string }) => word.id)).toEqual([
+			"filler",
+			"meaningful",
+		]);
+		const result = run(before, "removeWords", { wordIds: ["filler"] });
+		expect(result.ok).toBe(true);
+		const next = result.document as AxcutDocument;
+		const trim = next.timeline.trimRanges.at(-1);
+		expect(trim).toMatchObject({ assetId: "asset_1", clipId: "clip_1", origin: "agent" });
+		expect(trim?.endSec).toBeLessThan(3); // the second "like" still plays
+		expect(next.transcripts).toEqual(before.transcripts);
+		expect(next.timeline.clips).toEqual(before.timeline.clips);
+		const payload = JSON.parse(result.resultJson);
+		expect(payload).toMatchObject({
+			requested: 1,
+			removedCount: 1,
+			removed: [
+				{
+					wordId: "filler",
+					text: "like",
+					assetId: "asset_1",
+					clipId: "clip_1",
+					wordStartSec: 1,
+					wordEndSec: 1.2,
+					trimRangeId: trim?.id,
+					startSec: trim?.startSec,
+					endSec: trim?.endSec,
+				},
+			],
+		});
+		expect(next.timeline.trimRanges).toHaveLength(before.timeline.trimRanges.length + 1);
+	});
+
+	it("cuts consecutive words as one span, gaps included, and the others apart", () => {
+		const base = fixtureDocument();
+		const before: AxcutDocument = {
+			...base,
+			transcripts: [
+				{
+					...base.transcripts[0],
+					words: [
+						{ id: "word_1", segmentId: "seg_1", startSec: 1, endSec: 1.2, text: "so" },
+						{ id: "word_2", segmentId: "seg_1", startSec: 1.4, endSec: 1.5, text: "I" },
+						{ id: "word_3", segmentId: "seg_1", startSec: 1.6, endSec: 1.9, text: "mean" },
+						{ id: "word_4", segmentId: "seg_1", startSec: 2.2, endSec: 2.4, text: "the" },
+						{ id: "word_5", segmentId: "seg_1", startSec: 3, endSec: 3.2, text: "um" },
+					],
+				},
+			],
+		};
+		const result = run(before, "removeWords", { wordIds: ["word_3", "word_5", "word_2"] });
+		expect(result.ok).toBe(true);
+		const added = result.document?.timeline.trimRanges.slice(before.timeline.trimRanges.length);
+		expect(added?.map(({ startSec, endSec }) => [startSec, endSec])).toEqual([
+			[1.4, 1.9],
+			[3, 3.2],
+		]);
+		const removed = JSON.parse(result.resultJson).removed;
+		expect(removed.map((word: { wordId: string }) => word.wordId)).toEqual([
+			"word_2",
+			"word_3",
+			"word_5",
+		]);
+		expect(removed[1].trimRangeId).toBe(removed[0].trimRangeId);
+		expect(removed[2].trimRangeId).not.toBe(removed[0].trimRangeId);
+	});
+
+	it("refuses a duplicated or already-cut word without cutting anything", () => {
+		const before = repeatedWordDocument();
+		const duplicated = run(before, "removeWords", { wordIds: ["filler", "filler"] });
+		expect(duplicated.ok).toBe(false);
+		expect(duplicated.document).toBeUndefined();
+		const cut = run(before, "removeWords", { wordIds: ["filler"] }).document as AxcutDocument;
+		const again = run(cut, "removeWords", { wordIds: ["meaningful", "filler"] });
+		expect(again.ok).toBe(false);
+		expect(again.document).toBeUndefined();
+		expect(again.resultJson).toContain("already cut");
+	});
+
+	it("preserves addTrim warnings when removing a filler cuts a zoom transition", () => {
+		const before = repeatedWordDocument();
+		before.timeline.trimRanges = [];
+		const zoomed = run(before, "addZoom", { startSec: 2, endSec: 3, depth: 3 }).document;
+		expect(zoomed).toBeDefined();
+		if (!zoomed) throw new Error("Zoom fixture failed");
+		const directTrim = run(zoomed, "addTrim", {
+			assetId: "asset_1",
+			clipId: "clip_1",
+			startSec: 1,
+			endSec: 1.2,
+		});
+		const expected = JSON.parse(directTrim.resultJson).cutTransitions;
+		expect(expected.length).toBeGreaterThan(0);
+		const removed = run(zoomed, "removeWords", { assetId: "asset_1", wordIds: ["filler"] });
+		expect(removed.ok).toBe(true);
+		expect(JSON.parse(removed.resultJson).cutTransitions).toEqual(expected);
+	});
+
+	it("refuses an invalid ID atomically, including when another ID is valid", () => {
+		const before = repeatedWordDocument();
+		const result = run(before, "removeWords", { wordIds: ["filler", "missing"] });
+		expect(result.ok).toBe(false);
+		expect(result.document).toBeUndefined();
+		expect(result.resultJson).toContain("Unknown transcript word ID: missing");
+		expect(before.timeline.trimRanges).toHaveLength(1);
+	});
+
+	it("resolves a word ID to its own asset and clip, not the primary asset", () => {
+		const before = repeatedWordDocument();
+		before.assets.push({ ...before.assets[0], id: "asset_2" });
+		before.timeline.clips.push({
+			...before.timeline.clips[0],
+			id: "clip_3",
+			assetId: "asset_2",
+		});
+		before.transcripts.push({
+			...before.transcripts[0],
+			assetId: "asset_2",
+			words: [{ id: "other_filler", segmentId: "seg_1", startSec: 4, endSec: 4.2, text: "um" }],
+		});
+		const result = run(before, "removeWords", { wordIds: ["other_filler"] });
+		expect(result.ok).toBe(true);
+		expect(result.document?.timeline.trimRanges.at(-1)).toMatchObject({
+			assetId: "asset_2",
+			clipId: "clip_3",
+		});
+		expect(JSON.parse(result.resultJson).removed[0]).toMatchObject({
+			assetId: "asset_2",
+			clipId: "clip_3",
+		});
+	});
+
+	it("qualifies normally numbered word IDs by the asset read from the transcript", () => {
+		const before = repeatedWordDocument();
+		before.transcripts[0].words[0].id = "word_1";
+		before.assets.push({ ...before.assets[0], id: "asset_2" });
+		before.timeline.clips.push({ ...before.timeline.clips[0], id: "clip_3", assetId: "asset_2" });
+		before.transcripts.push({
+			...before.transcripts[0],
+			assetId: "asset_2",
+			words: [{ id: "word_1", segmentId: "seg_1", startSec: 4, endSec: 4.2, text: "um" }],
+		});
+		const read = JSON.parse(run(before, "getTranscriptWords", { assetId: "asset_2" }).resultJson);
+		expect(read.words[0].id).toBe("word_1");
+		const result = run(before, "removeWords", {
+			assetId: "asset_2",
+			wordIds: [read.words[0].id],
+		});
+		expect(result.ok).toBe(true);
+		expect(result.document?.timeline.trimRanges.at(-1)).toMatchObject({
+			assetId: "asset_2",
+			clipId: "clip_3",
+		});
+		expect(
+			result.document?.timeline.trimRanges.filter((trim) => trim.assetId === "asset_1"),
+		).toEqual(before.timeline.trimRanges);
+		expect(result.document?.transcripts).toEqual(before.transcripts);
+		const ambiguous = run(before, "removeWords", { wordIds: ["word_1"] });
+		expect(ambiguous.ok).toBe(false);
+		expect(ambiguous.document).toBeUndefined();
+		const unknownAsset = run(before, "removeWords", {
+			assetId: "missing_asset",
+			wordIds: ["word_1"],
+		});
+		expect(unknownAsset.ok).toBe(false);
+		expect(unknownAsset.document).toBeUndefined();
+	});
+
+	it("refuses invalid timestamps without guessing a span", () => {
+		const before = repeatedWordDocument();
+		before.transcripts[0].words[0].endSec = Number.NaN;
+		const result = run(before, "removeWords", { wordIds: ["filler"] });
+		expect(result.ok).toBe(false);
+		expect(result.document).toBeUndefined();
+		expect(result.resultJson).toContain("invalid source timestamps");
+	});
+
+	it("refuses a word covered by two clips", () => {
+		const before = repeatedWordDocument();
+		before.timeline.clips.push({
+			...before.timeline.clips[0],
+			id: "duplicate_clip",
+		});
+		const result = run(before, "removeWords", { wordIds: ["filler"] });
+		expect(result.ok).toBe(false);
+		expect(result.document).toBeUndefined();
+		expect(result.resultJson).toContain("exactly one clip; found 2");
+	});
+
+	it("honours project edit consent", () => {
+		const result = executeAgentTool(
+			repeatedWordDocument(),
+			"removeWords",
+			JSON.stringify({ wordIds: ["filler"] }),
+			{ editsAllowed: false },
+		);
+		expect(result.document).toBeUndefined();
+		expect(JSON.parse(result.resultJson).code).toBe("consent_required");
+	});
+});
+
 describe("setWordText", () => {
 	it("changes the text and leaves the timeline alone", () => {
 		const before = documentWithWords();
@@ -2503,5 +2748,205 @@ describe("addTrim shapes the cut like the transcript pane", () => {
 		);
 		expect(lastTrim(result.document)?.startSec).toBe(12);
 		expect(lastTrim(result.document)?.endSec).toBe(15);
+	});
+});
+
+describe("zoom transitions are reported, not hidden (#1028)", () => {
+	// 1.8× (depth 3): each move lasts 0.6 + 0.55·ln 1.8 ≈ 0.923 s of screen time.
+	const MOVE_SEC = 0.923;
+
+	function run(document: AxcutDocument, name: string, args: unknown) {
+		const result = executeAgentTool(document, name, JSON.stringify(args));
+		expect(result.ok).toBe(true);
+		return { document: result.document ?? document, payload: JSON.parse(result.resultJson) };
+	}
+
+	function zoomedAt10to12() {
+		return run(shortSingleClip(), "addZoom", { startSec: 10, endSec: 12, depth: 3 });
+	}
+
+	function snapshotZoom(document: AxcutDocument) {
+		return run(document, "getCurrentDocument", {}).payload.zoomRanges[0];
+	}
+
+	it("gives each zoom its move windows on the timeline", () => {
+		const added = zoomedAt10to12();
+		expect(added.payload.cutTransitions).toBeUndefined();
+		const zoom = snapshotZoom(added.document);
+		expect(zoom.transitionSec).toBe(MOVE_SEC);
+		expect(zoom.zoomInFromSec).toBe(10 - MOVE_SEC);
+		expect(zoom.zoomOutUntilSec).toBe(12 + MOVE_SEC);
+		expect(zoom.cutByTrim).toBeUndefined();
+	});
+
+	it("warns when a trim at the zoom's end cuts its whole zoom-out (the issue's repro)", () => {
+		const trimmed = run(zoomedAt10to12().document, "addTrim", { startSec: 12, endSec: 14 });
+		const zoomId = snapshotZoom(trimmed.document).id;
+		expect(trimmed.payload.cutTransitions).toEqual([
+			{ zoomId, side: "out", cutSec: MOVE_SEC, by: "trim" },
+		]);
+		expect(snapshotZoom(trimmed.document).cutByTrim).toBe("out");
+	});
+
+	it("flags a zoom on the second clip of an asset that a trim without clipId cuts", () => {
+		// Two clips over one recording, and a pre-v7 trim (no clipId): playback cuts it from
+		// both clips, while the ruler maps it through the first one only.
+		const base = shortSingleClip();
+		const clip = base.timeline.clips[0];
+		const length = (clip.sourceEndSec ?? 0) - clip.sourceStartSec;
+		const twoClips: AxcutDocument = {
+			...base,
+			timeline: {
+				...base.timeline,
+				clips: [
+					clip,
+					{
+						...clip,
+						id: "clip_2",
+						timelineStartSec: length,
+						timelineEndSec: 2 * length,
+					},
+				],
+				trimRanges: [
+					{
+						id: "trim_legacy",
+						assetId: clip.assetId,
+						startSec: 12,
+						endSec: 14,
+						reason: "",
+						origin: "user",
+					},
+				],
+			},
+		};
+		const added = run(twoClips, "addZoom", {
+			startSec: length + 10,
+			endSec: length + 12,
+			depth: 3,
+		});
+		expect(added.payload.cutTransitions).toEqual([
+			{ zoomId: added.payload.zoomId, side: "out", cutSec: MOVE_SEC, by: "trim" },
+		]);
+	});
+
+	it("stays quiet about a trim clear of both windows", () => {
+		const trimmed = run(zoomedAt10to12().document, "addTrim", { startSec: 14, endSec: 15 });
+		expect(trimmed.payload.cutTransitions).toBeUndefined();
+	});
+
+	it("warns the zoom write too, when it lands next to an existing cut", () => {
+		const trimmed = run(shortSingleClip(), "addTrim", { startSec: 8, endSec: 9.5 });
+		const added = run(trimmed.document, "addZoom", { startSec: 10, endSec: 12, depth: 3 });
+		expect(added.payload.cutTransitions).toEqual([
+			{ zoomId: added.payload.zoomId, side: "in", cutSec: 0.423, by: "trim" },
+		]);
+		expect(snapshotZoom(added.document).cutByTrim).toBe("in");
+	});
+
+	it("repeats the warning when setZoom moves a zoom that is still cut", () => {
+		const trimmed = run(zoomedAt10to12().document, "addTrim", { startSec: 12, endSec: 14 });
+		const zoomId = snapshotZoom(trimmed.document).id;
+		const moved = run(trimmed.document, "setZoom", { zoomId, startSec: 9 });
+		expect(moved.payload.cutTransitions).toEqual([
+			{ zoomId: moved.payload.zoomId, side: "out", cutSec: MOVE_SEC, by: "trim" },
+		]);
+	});
+
+	it("reports two zooms closer than 1.5 s as one pan, not a zoom-out and back in", () => {
+		const chained = run(zoomedAt10to12().document, "addZoom", {
+			startSec: 12.5,
+			endSec: 14,
+			depth: 3,
+		});
+		const [first, second] = run(chained.document, "getCurrentDocument", {}).payload.zoomRanges;
+		expect(first).toMatchObject({ panToZoomId: second.id, panUntilSec: 13 });
+		expect(first.zoomOutUntilSec).toBeUndefined();
+		expect(first.zoomInFromSec).toBe(10 - MOVE_SEC);
+		expect(second.panFromZoomId).toBe(first.id);
+		expect(second.zoomInFromSec).toBeUndefined();
+		expect(second.zoomOutUntilSec).toBe(14 + MOVE_SEC);
+	});
+
+	it("warns of both moves when a trim between two chained zooms breaks the chain", () => {
+		const chained = run(zoomedAt10to12().document, "addZoom", {
+			startSec: 12.5,
+			endSec: 14,
+			depth: 3,
+		});
+		const trimmed = run(chained.document, "addTrim", { startSec: 12, endSec: 12.5 });
+		const [first, second] = run(trimmed.document, "getCurrentDocument", {}).payload.zoomRanges;
+		expect(first.panToZoomId).toBeUndefined();
+		expect(trimmed.payload.cutTransitions).toEqual([
+			{ zoomId: first.id, side: "out", cutSec: MOVE_SEC, by: "trim" },
+			{ zoomId: second.id, side: "in", cutSec: MOVE_SEC, by: "trim" },
+		]);
+	});
+
+	it("does not chain zooms across a clip junction", () => {
+		const base = shortSingleClip();
+		const clip = base.timeline.clips[0];
+		const twoClips: AxcutDocument = {
+			...base,
+			timeline: {
+				...base.timeline,
+				clips: [
+					{ ...clip, sourceEndSec: 12, timelineEndSec: 12 },
+					{ ...clip, id: "clip_2", sourceStartSec: 12, timelineStartSec: 12 },
+				],
+			},
+		};
+		const first = run(twoClips, "addZoom", { startSec: 10, endSec: 12, depth: 3 });
+		const both = run(first.document, "addZoom", { startSec: 12.5, endSec: 14, depth: 3 });
+		const zooms = run(both.document, "getCurrentDocument", {}).payload.zoomRanges;
+		expect(zooms[0].panToZoomId).toBeUndefined();
+		expect(zooms[0].zoomOutUntilSec).toBe(12 + MOVE_SEC);
+
+		// Each clip renders on its own: the junction cuts the first zoom's whole zoom-out and
+		// the start of the second one's zoom-in, and says it is a junction, not a trim.
+		expect(first.payload.cutTransitions).toEqual([
+			{ zoomId: first.payload.zoomId, side: "out", cutSec: MOVE_SEC, by: "junction" },
+		]);
+		expect(both.payload.cutTransitions).toEqual([
+			{ zoomId: both.payload.zoomId, side: "in", cutSec: 0.423, by: "junction" },
+		]);
+		expect(zooms[0]).toMatchObject({ cutByJunction: "out" });
+		expect(zooms[1]).toMatchObject({ cutByJunction: "in" });
+		expect(zooms[0].cutByTrim).toBeUndefined();
+		expect(zooms[1].cutByTrim).toBeUndefined();
+	});
+
+	it("names a trim and a junction apart on the same zoom", () => {
+		const base = shortSingleClip();
+		const clip = base.timeline.clips[0];
+		const twoClips: AxcutDocument = {
+			...base,
+			timeline: {
+				...base.timeline,
+				clips: [
+					{ ...clip, sourceEndSec: 12.5, timelineEndSec: 12.5 },
+					{ ...clip, id: "clip_2", sourceStartSec: 12.5, timelineStartSec: 12.5 },
+				],
+			},
+		};
+		const zoomed = run(twoClips, "addZoom", { startSec: 10, endSec: 12, depth: 3 });
+		const trimmed = run(zoomed.document, "addTrim", { startSec: 9, endSec: 9.5 });
+		expect(snapshotZoom(trimmed.document)).toMatchObject({ cutByTrim: "in", cutByJunction: "out" });
+	});
+
+	it("does not call the end of the timeline a junction", () => {
+		const base = shortSingleClip();
+		const end = base.timeline.clips[0].timelineEndSec;
+		const added = run(base, "addZoom", { startSec: end - 2, endSec: end - 0.5, depth: 3 });
+		expect(added.payload.cutTransitions).toBeUndefined();
+		expect(snapshotZoom(added.document).cutByJunction).toBeUndefined();
+	});
+
+	it("stretches the zoom-out across a speed region, and catches a trim placed there", () => {
+		const sped = run(zoomedAt10to12().document, "addSpeed", { startSec: 12, endSec: 20, speed: 3 });
+		expect(snapshotZoom(sped.document).zoomOutUntilSec).toBe(14.77);
+		const trimmed = run(sped.document, "addTrims", { ranges: [{ startSec: 14, endSec: 15 }] });
+		expect(trimmed.payload.applied[0].cutTransitions).toEqual([
+			{ zoomId: snapshotZoom(trimmed.document).id, side: "out", cutSec: 0.77, by: "trim" },
+		]);
 	});
 });

@@ -36,9 +36,11 @@ export function ModalShell({
 	open,
 	onClose,
 	closeOnEscape = true,
+	closeOnBackdrop = true,
 	title,
 	subtitle,
 	wide,
+	footer,
 	children,
 }: BaseModalProps & {
 	title: string;
@@ -47,6 +49,12 @@ export function ModalShell({
 	/** Off for a dialog that handles Escape itself — two listeners both fire for one
 	 *  keypress, and this one's `onClose` wins whatever order they registered in. */
 	closeOnEscape?: boolean;
+	/** Off while a stray click beside the card would throw away an edit not yet applied.
+	 *  Escape, Cancel and the close button still discard it: that is what they mean. */
+	closeOnBackdrop?: boolean;
+	/** The dialog's actions, kept out of the scrolling body so a short window never hides
+	 *  them: a click where an unseen Apply sat used to land on the backdrop. */
+	footer?: ReactNode;
 	children: ReactNode;
 }) {
 	const tc = useScopedT("common");
@@ -78,7 +86,11 @@ export function ModalShell({
 			aria-modal="true"
 			aria-labelledby="modal-title"
 		>
-			<div className={styles.modalBackdrop} aria-hidden onClick={onClose} />
+			<div
+				className={styles.modalBackdrop}
+				aria-hidden
+				onClick={closeOnBackdrop ? onClose : undefined}
+			/>
 			<div className={`${styles.modalCard} ${wide ? styles.wide : ""}`}>
 				<header className={styles.modalHead}>
 					<div>
@@ -96,6 +108,7 @@ export function ModalShell({
 					</button>
 				</header>
 				<div className={styles.modalBody}>{children}</div>
+				{footer ? <footer className={styles.modalFoot}>{footer}</footer> : null}
 			</div>
 		</div>
 	);
@@ -679,6 +692,9 @@ export function EditClipModal({
 	const [videoAspectRatio, setVideoAspectRatio] = useState(16 / 9);
 	const cropFrameRef = useRef<HTMLDivElement | null>(null);
 	const cropVideoRef = useRef<HTMLVideoElement | null>(null);
+	// The frame the crop is framed on, on the source clock like the trim. Local to this
+	// dialog, and always inside the kept range.
+	const [playheadSec, setPlayheadSec] = useState(0);
 
 	// ponytail: sync local drag state to the clip every time the modal opens.
 	// `open` is the trigger so external clip changes don't fight the user mid-edit.
@@ -687,6 +703,7 @@ export function EditClipModal({
 		setDraftStart(clip.sourceStartSec);
 		setDraftEnd(clip.sourceEndSec ?? clip.sourceStartSec);
 		setActiveEdge(null);
+		setPlayheadSec(clip.sourceStartSec);
 		const region = clip.cropRegion ?? IDENTITY_CROP;
 		const pct = cropDraftToPct(cropDraftFromRegion(region));
 		setCropXPct(pct.x);
@@ -695,6 +712,19 @@ export function EditClipModal({
 		setCropHPct(pct.h);
 		setCropTouched(false);
 	}, [open, clip]);
+
+	// The picture follows the playhead: every seek of the preview is this one, including the
+	// first, and a scrub before the metadata lands is not lost.
+	useEffect(() => {
+		const v = cropVideoRef.current;
+		if (!open || !v) return;
+		const seek = () => {
+			v.currentTime = playheadSec;
+		};
+		if (v.readyState >= 1) seek();
+		else v.addEventListener("loadedmetadata", seek, { once: true });
+		return () => v.removeEventListener("loadedmetadata", seek);
+	}, [open, playheadSec]);
 
 	// Re-detect the active ratio preset whenever the stored region or the
 	// video's real aspect ratio changes — the latter only becomes accurate
@@ -709,8 +739,8 @@ export function EditClipModal({
 	}, [open, clip, videoAspectRatio, cropTouched]);
 
 	// Crop preview: a paused still frame is enough to judge a crop (mirrors
-	// the standalone CropModal this replaced) — seek once per open to the
-	// clip's original in-point, not on every trim drag.
+	// the standalone CropModal this replaced). The playhead effect above seeks
+	// it; this one reads the frame's aspect ratio.
 	useEffect(() => {
 		if (!open || !clip) return;
 		// A clip switch must not leave the previous clip's dimensions live: an
@@ -722,16 +752,15 @@ export function EditClipModal({
 		setVideoAspectRatio(16 / 9);
 		const v = cropVideoRef.current;
 		if (!v) return;
-		const seek = () => {
+		const onMetadata = () => {
 			v.pause();
-			if (Number.isFinite(clip.sourceStartSec)) v.currentTime = clip.sourceStartSec;
 			if (v.videoWidth > 0 && v.videoHeight > 0) {
 				setVideoAspectRatio(v.videoWidth / v.videoHeight);
 			}
 		};
-		if (v.readyState >= 1) seek();
-		else v.addEventListener("loadedmetadata", seek, { once: true });
-		return () => v.removeEventListener("loadedmetadata", seek);
+		if (v.readyState >= 1) onMetadata();
+		else v.addEventListener("loadedmetadata", onMetadata, { once: true });
+		return () => v.removeEventListener("loadedmetadata", onMetadata);
 	}, [open, clip]);
 
 	if (!clip) return null;
@@ -772,18 +801,46 @@ export function EditClipModal({
 		setActiveEdge(edge);
 		const move = (moveEvent: PointerEvent) => {
 			const deltaSec = ((moveEvent.clientX - startClientX) / widthPx) * sourceDurationSec;
+			// A trim that crosses the playhead pushes it along, so it never leaves the kept range.
 			if (edge === "start") {
-				setDraftStart(Math.min(Math.max(startDraftStart + deltaSec, 0), startDraftEnd - 0.05));
+				const next = Math.min(Math.max(startDraftStart + deltaSec, 0), startDraftEnd - 0.05);
+				setDraftStart(next);
+				setPlayheadSec((p) => Math.max(p, next));
 			} else {
-				setDraftEnd(
-					Math.max(Math.min(startDraftEnd + deltaSec, sourceDurationSec), startDraftStart + 0.05),
+				const next = Math.max(
+					Math.min(startDraftEnd + deltaSec, sourceDurationSec),
+					startDraftStart + 0.05,
 				);
+				setDraftEnd(next);
+				setPlayheadSec((p) => Math.min(p, next));
 			}
 		};
 		const end = () => {
 			window.removeEventListener("pointermove", move);
 			window.removeEventListener("pointerup", end);
 			setActiveEdge(null);
+		};
+		window.addEventListener("pointermove", move);
+		window.addEventListener("pointerup", end, { once: true });
+	};
+
+	// Click or drag the track to put the playhead on the frame to crop on, held inside the
+	// kept range. The grips stop their own pointerdown, so grabbing one trims instead.
+	const startScrub = (event: ReactPointerEvent<HTMLDivElement>) => {
+		const track = trackRef.current;
+		if (!track) return;
+		event.preventDefault();
+		const left = track.getBoundingClientRect().left;
+		const widthPx = Math.max(1, track.clientWidth);
+		const seekAt = (clientX: number) => {
+			const sec = ((clientX - left) / widthPx) * sourceDurationSec;
+			setPlayheadSec(Math.min(Math.max(sec, draftStart), draftEnd));
+		};
+		seekAt(event.clientX);
+		const move = (moveEvent: PointerEvent) => seekAt(moveEvent.clientX);
+		const end = () => {
+			window.removeEventListener("pointermove", move);
+			window.removeEventListener("pointerup", end);
 		};
 		window.addEventListener("pointermove", move);
 		window.addEventListener("pointerup", end, { once: true });
@@ -890,8 +947,10 @@ export function EditClipModal({
 	};
 
 	const handleReset = () => {
+		const end = clip.sourceEndSec ?? clip.sourceStartSec;
 		setDraftStart(clip.sourceStartSec);
-		setDraftEnd(clip.sourceEndSec ?? clip.sourceStartSec);
+		setDraftEnd(end);
+		setPlayheadSec((p) => Math.min(Math.max(p, clip.sourceStartSec), end));
 		const region = clip.cropRegion ?? IDENTITY_CROP;
 		const pct = cropDraftToPct(cropDraftFromRegion(region));
 		setCropXPct(pct.x);
@@ -918,9 +977,48 @@ export function EditClipModal({
 		<ModalShell
 			open={open}
 			onClose={onClose}
+			closeOnBackdrop={!hasChanges}
 			title={t("editClipDialog.title")}
 			subtitle={assetMeta?.label ?? undefined}
 			wide
+			footer={
+				<div
+					style={{
+						display: "flex",
+						justifyContent: "space-between",
+						alignItems: "center",
+						paddingTop: 10,
+						borderTop: "1px solid var(--border-soft)",
+					}}
+				>
+					<button
+						type="button"
+						className={`${styles.btn} ${styles.btnSecondary}`}
+						onClick={handleReset}
+						disabled={!hasChanges}
+					>
+						{t("editClipDialog.reset")}
+					</button>
+					<div style={{ display: "flex", gap: 8 }}>
+						<button
+							type="button"
+							className={`${styles.btn} ${styles.btnSecondary}`}
+							onClick={onClose}
+						>
+							{tc("actions.cancel")}
+						</button>
+						<button
+							type="button"
+							className={`${styles.btn} ${styles.btnPrimary}`}
+							onClick={handleApply}
+							disabled={!hasChanges}
+						>
+							<Pencil size={14} />
+							{t("editClipDialog.apply")}
+						</button>
+					</div>
+				</div>
+			}
 		>
 			<div ref={cropFrameRef} style={previewBoxStyle(videoAspectRatio)}>
 				{cropPreviewSource ? (
@@ -1036,8 +1134,14 @@ export function EditClipModal({
 					<span>{formatSeconds(sourceDurationSec)}</span>
 				</div>
 				{/* The kept range is the timeline's clip card; the bare groove around it is the
-				    discarded head and tail. Nothing else is painted over the grips. */}
-				<div ref={trackRef} data-testid="edit-clip-trim-track" className={styles.editClipTrack}>
+				    discarded head and tail. The playhead is the only thing painted over the grips, and
+				    it never takes a grab. */}
+				<div
+					ref={trackRef}
+					data-testid="edit-clip-trim-track"
+					className={styles.editClipTrack}
+					onPointerDown={startScrub}
+				>
 					<div
 						className={`${styles.editClipRange}${activeEdge ? ` ${styles.editClipRangeDragging}` : ""}`}
 						style={{
@@ -1062,6 +1166,11 @@ export function EditClipModal({
 							title={t("editClipDialog.adjustEnd")}
 						/>
 					</div>
+					<div
+						className={styles.editClipPlayhead}
+						data-testid="edit-clip-playhead"
+						style={{ left: `${(playheadSec / sourceDurationSec) * 100}%` }}
+					/>
 				</div>
 			</div>
 
@@ -1086,45 +1195,6 @@ export function EditClipModal({
 							onChange={handleCropRatioChange}
 						/>
 					</div>
-				</div>
-			</div>
-
-			<div
-				style={{
-					display: "flex",
-					justifyContent: "space-between",
-					alignItems: "center",
-					paddingTop: 10,
-					marginTop: 10,
-					flexShrink: 0,
-					borderTop: "1px solid var(--border-soft)",
-				}}
-			>
-				<button
-					type="button"
-					className={`${styles.btn} ${styles.btnSecondary}`}
-					onClick={handleReset}
-					disabled={!hasChanges}
-				>
-					{t("editClipDialog.reset")}
-				</button>
-				<div style={{ display: "flex", gap: 8 }}>
-					<button
-						type="button"
-						className={`${styles.btn} ${styles.btnSecondary}`}
-						onClick={onClose}
-					>
-						{tc("actions.cancel")}
-					</button>
-					<button
-						type="button"
-						className={`${styles.btn} ${styles.btnPrimary}`}
-						onClick={handleApply}
-						disabled={!hasChanges}
-					>
-						<Pencil size={14} />
-						{t("editClipDialog.apply")}
-					</button>
 				</div>
 			</div>
 		</ModalShell>

@@ -4,14 +4,19 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const spawnMock = vi.fn();
 const resolveFfmpegMock = vi.fn<() => string | null>();
+const audioArgsMock = vi.fn(async (..._args: unknown[]) => ["-vn", "-af", "aresample=first_pts=0"]);
 
 vi.mock("node:child_process", () => ({ spawn: (...args: unknown[]) => spawnMock(...args) }));
-vi.mock("../media/audioPeaks", () => ({ resolveFfmpeg: () => resolveFfmpegMock() }));
+vi.mock("../media/audioPeaks", () => ({
+	resolveFfmpeg: () => resolveFfmpegMock(),
+	mediaClockAudioArgs: (...args: unknown[]) => audioArgsMock(...args),
+}));
 
-const { extractMono16kPcm, FfmpegUnavailableError, NoAudioTrackError } = await import(
-	"./extractAudio"
+const { extractMono16kPcm, FfmpegUnavailableError, MediaUnreadableError, NoAudioTrackError } =
+	await import("./extractAudio");
+const { STT_MEDIA_UNREADABLE, STT_NATIVE_EXTRACTION_UNAVAILABLE } = await import(
+	"./transcriptionContract"
 );
-const { STT_NATIVE_EXTRACTION_UNAVAILABLE } = await import("./transcriptionContract");
 
 /** A stand-in for the ffmpeg child: two pipes and a close event, nothing more. */
 function fakeChild() {
@@ -24,6 +29,11 @@ function fakeChild() {
 	child.stderr = new PassThrough();
 	child.kill = vi.fn();
 	return child;
+}
+
+/** Extraction counts the audio streams before it spawns the decode: let it get there. */
+async function spawned(): Promise<void> {
+	for (let i = 0; i < 100 && spawnMock.mock.calls.length === 0; i++) await Promise.resolve();
 }
 
 /** The little-endian float32 bytes ffmpeg would emit for `values`. */
@@ -43,6 +53,7 @@ describe("extractMono16kPcm", () => {
 		const child = fakeChild();
 		spawnMock.mockReturnValue(child);
 		const promise = extractMono16kPcm("/tmp/a.mp3");
+		await spawned();
 		child.stdout.end(f32le([0.5]));
 		child.emit("close", 0);
 		await promise;
@@ -60,6 +71,7 @@ describe("extractMono16kPcm", () => {
 		const child = fakeChild();
 		spawnMock.mockReturnValue(child);
 		const promise = extractMono16kPcm("/tmp/a.mp3");
+		await spawned();
 		child.stdout.end(f32le([0, 0.5, -0.25]));
 		child.emit("close", 0);
 
@@ -74,6 +86,7 @@ describe("extractMono16kPcm", () => {
 		const child = fakeChild();
 		spawnMock.mockReturnValue(child);
 		const promise = extractMono16kPcm("/tmp/a.mp3");
+		await spawned();
 		const bytes = f32le([0.25, -0.75, 1]);
 		child.stdout.write(bytes.subarray(0, 6)); // one whole float + half of the next
 		child.stdout.write(bytes.subarray(6));
@@ -88,11 +101,69 @@ describe("extractMono16kPcm", () => {
 		const child = fakeChild();
 		spawnMock.mockReturnValue(child);
 		const promise = extractMono16kPcm("/tmp/silent.mp4");
+		await spawned();
 		child.stderr.end("Stream map '0:a' matches no streams");
 		child.stdout.end();
 		child.emit("close", 1);
 
 		await expect(promise).rejects.toBeInstanceOf(NoAudioTrackError);
+	});
+
+	// Issue #968: the renderer explains these as "check folder access" and retries
+	// them, so both must carry the marker, which is all that survives the IPC.
+	it("reports a read the OS refused as unreadable media, not as no audio", async () => {
+		const child = fakeChild();
+		spawnMock.mockReturnValue(child);
+		const promise = extractMono16kPcm("/Users/me/Downloads/a.mp4");
+		await spawned();
+		child.stderr.end("/Users/me/Downloads/a.mp4: Operation not permitted");
+		child.stdout.end();
+		child.emit("close", 1);
+
+		await expect(promise).rejects.toBeInstanceOf(MediaUnreadableError);
+		await expect(promise).rejects.toThrow(STT_MEDIA_UNREADABLE);
+	});
+
+	it("reports an ffmpeg that hangs opening the file as unreadable media", async () => {
+		vi.useFakeTimers();
+		try {
+			const child = fakeChild();
+			spawnMock.mockReturnValue(child);
+			const promise = extractMono16kPcm("/Users/me/Downloads/a.mp4");
+			await spawned();
+			const settled = expect(promise).rejects.toThrow(STT_MEDIA_UNREADABLE);
+			await vi.advanceTimersByTimeAsync(60_000);
+			await settled;
+			expect(child.kill).toHaveBeenCalled();
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it("reports a timeout AFTER audio came out as a plain stall, not unreadable media", async () => {
+		// The file was readable; pointing the user at folder access would be wrong.
+		vi.useFakeTimers();
+		try {
+			const child = fakeChild();
+			spawnMock.mockReturnValue(child);
+			const promise = extractMono16kPcm("/Users/me/Downloads/a.mp4");
+			await spawned();
+			const settled = promise.then(
+				() => {
+					throw new Error("expected a rejection");
+				},
+				(error: Error) => error,
+			);
+			child.stdout.write(f32le([0.5]));
+			await vi.advanceTimersByTimeAsync(60_000);
+			const error = await settled;
+			expect(error).not.toBeInstanceOf(MediaUnreadableError);
+			expect(error.message).not.toContain(STT_MEDIA_UNREADABLE);
+			expect(error.message).toBe("ffmpeg timed out after 60000ms on /Users/me/Downloads/a.mp4");
+			expect(child.kill).toHaveBeenCalledWith("SIGKILL");
+		} finally {
+			vi.useRealTimers();
+		}
 	});
 
 	it("keeps the samples when ffmpeg exits non-zero AFTER writing audio", async () => {
@@ -101,6 +172,7 @@ describe("extractMono16kPcm", () => {
 		const child = fakeChild();
 		spawnMock.mockReturnValue(child);
 		const promise = extractMono16kPcm("/tmp/truncated.mp3");
+		await spawned();
 		child.stdout.end(f32le([0.1, 0.2]));
 		child.emit("close", 1);
 
@@ -122,12 +194,27 @@ describe("extractMono16kPcm", () => {
 		spawnMock.mockReturnValue(child);
 		const controller = new AbortController();
 		const promise = extractMono16kPcm("/tmp/a.mp3", { signal: controller.signal });
+		await spawned();
 		controller.abort();
 
 		await expect(promise).rejects.toMatchObject({ name: "AbortError" });
 		// Not merely stopping to await: ffmpeg would keep decoding a long file for
 		// minutes, which is the same leak the STT cancel path exists to prevent.
 		expect(child.kill).toHaveBeenCalled();
+	});
+
+	it("hands the abort to the stream probe, and does not decode after it", async () => {
+		// The probe is a process too: a cancel must not wait out a wedged one.
+		const controller = new AbortController();
+		audioArgsMock.mockImplementationOnce(async (..._args: unknown[]) => {
+			controller.abort();
+			return ["-vn"];
+		});
+		await expect(
+			extractMono16kPcm("/tmp/a.mp3", { signal: controller.signal }),
+		).rejects.toMatchObject({ name: "AbortError" });
+		expect(audioArgsMock).toHaveBeenCalledWith("/usr/bin/ffmpeg", "/tmp/a.mp3", controller.signal);
+		expect(spawnMock).not.toHaveBeenCalled();
 	});
 
 	it("does not spawn at all when the signal is already aborted", async () => {

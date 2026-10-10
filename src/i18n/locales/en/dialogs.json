@@ -88,7 +88,8 @@
 		"audioFiles": "Audio files",
 		"openscreenProject": "OpenScreen project",
 		"allFiles": "All files",
-		"chooseRecordingsFolder": "Choose the folder for new recordings"
+		"chooseRecordingsFolder": "Choose the folder for new recordings",
+		"selectRecordingsFolder": "Choose a recordings folder"
 	},
 	"recovery": {
 		"title": "Recover recording",
@@ -105,5 +106,9 @@
 		"detail": "Closing the editor cancels it, and the video will not be saved.",
 		"keep": "Keep exporting",
 		"cancelAndClose": "Cancel export and close"
+	},
+	"recording": {
+		"lowDiskSpace": "Not enough disk space to start recording (only {{availableMb}} MB free). Free up space or choose a different recordings folder, then try again.",
+		"folderUnavailable": "Can't reach the recordings folder {{path}}. Reconnect its drive, or choose another folder in Record mode."
 	}
 }

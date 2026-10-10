@@ -1,5 +1,6 @@
 import type { ZoomFocus } from "@/components/video-editor/types";
-import { motionTransitionSec, type ZoomMotion } from "@/lib/ai-edition/timeline/zoom-motion";
+// Relative, not "@/": the main process loads this file too (the agent reads zoom timings).
+import { motionTransitionSec, type ZoomMotion } from "../ai-edition/timeline/zoom-motion";
 
 export const DEFAULT_FOCUS: ZoomFocus = { cx: 0.5, cy: 0.5 };
 export const TRANSITION_WINDOW_MS = 1015.05;
@@ -16,6 +17,11 @@ export function zoomTransitionMs(scale: number): number {
 export function zoomTransitionMsFor(scale: number, motion?: ZoomMotion): number {
 	return motion ? motionTransitionSec(motion, scale) * 1000 : zoomTransitionMs(scale);
 }
+// Two zooms at most this far apart on screen are chained: no zoom-out and back in, the camera
+// pans from one to the other over CONNECTED_ZOOM_PAN_DURATION_MS of screen time from the first
+// one's end. Mirror of `CHAINED_ZOOM_PAN_GAP_S` / `CONNECTED_ZOOM_PAN_DURATION_S` (regions.rs).
+export const CHAINED_ZOOM_PAN_GAP_MS = 1500;
+export const CONNECTED_ZOOM_PAN_DURATION_MS = 1000;
 export const SMOOTHING_FACTOR = 0.12;
 export const ZOOM_TRANSLATION_DEADZONE_PX = 1.25;
 export const ZOOM_SCALE_DEADZONE = 0.002;

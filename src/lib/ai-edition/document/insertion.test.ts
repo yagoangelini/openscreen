@@ -125,6 +125,44 @@ describe("insertGeneratedClip", () => {
 			[5, 10],
 		]);
 	});
+
+	it("keeps the speed and Full Camera regions of the right half, and both sides of one across the cut (#1037)", () => {
+		const region = (id: string, startSec: number, endSec: number) => ({
+			id,
+			clipId: "c1",
+			sourceStartSec: startSec,
+			sourceEndSec: endSec,
+			startMs: startSec * 1000,
+			endMs: endSec * 1000,
+		});
+		const next = withInsertion(
+			doc({
+				legacyEditor: {
+					speedRegions: [
+						{ ...region("right", 6, 8), speed: 2 },
+						{ ...region("across", 3, 5), speed: 2 },
+					],
+					cameraFullscreenRegions: [region("right", 7, 9), region("across", 3, 5)],
+				},
+			} as Partial<AxcutDocument>),
+		);
+		const rightId = next.timeline.clips[2].id;
+		const spans = (rows: unknown) =>
+			(rows as { clipId: string; sourceStartSec: number; sourceEndSec: number }[])
+				.map((r) => [r.clipId === rightId ? "right" : r.clipId, r.sourceStartSec, r.sourceEndSec])
+				.sort((a, b) => Number(a[1]) - Number(b[1]));
+		const legacy = next.legacyEditor as Record<string, unknown>;
+		expect(spans(legacy.speedRegions)).toEqual([
+			["c1", 3, 4],
+			["right", 4, 5],
+			["right", 6, 8],
+		]);
+		expect(spans(legacy.cameraFullscreenRegions)).toEqual([
+			["c1", 3, 4],
+			["right", 4, 5],
+			["right", 7, 9],
+		]);
+	});
 });
 
 describe("removeGeneratedClips", () => {
@@ -176,6 +214,76 @@ describe("removeGeneratedClips", () => {
 	it("is a no-op for a word that has no clip", () => {
 		const base = doc();
 		expect(removeGeneratedClips(base, ["synth_9"])).toBe(base);
+	});
+});
+
+describe("a music bed over the cut (#1011)", () => {
+	// 2–8 s of c1, so the word typed at 4 s cuts it in two.
+	const withBed = () =>
+		doc({
+			audioTracks: [
+				{
+					id: "bed",
+					trackId: "bed",
+					assetId: "music",
+					kind: "music",
+					clipId: "c1",
+					sourceStartSec: 2,
+					sourceEndSec: 8,
+					startMs: 2000,
+					endMs: 8000,
+					durationSec: 30,
+					offsetMs: 0,
+					gainDb: -18,
+					loop: false,
+					fadeInMs: 1000,
+					fadeOutMs: 1000,
+					muted: false,
+					label: "bed",
+					origin: "user",
+				},
+			],
+		} as Partial<AxcutDocument>);
+	/** Each piece of the bed in ruler order: c1, the word, or the right half (a minted id). */
+	const spans = (d: AxcutDocument) =>
+		[...d.audioTracks]
+			.sort((a, b) => a.startMs - b.startMs)
+			.map((t) => [
+				t.clipId?.startsWith("clip_") ? "right" : t.clipId,
+				t.startMs,
+				t.endMs,
+				t.offsetMs,
+			]);
+
+	it("plays on through the word, as one take", () => {
+		const next = withInsertion(withBed());
+		expect(spans(next)).toEqual([
+			["c1", 2000, 4000, 0],
+			["ext:synth_1", 4000, 4150, 2000],
+			["right", 4150, 8150, 2150],
+		]);
+		expect(new Set(next.audioTracks.map((t) => t.trackId)).size).toBe(1);
+	});
+
+	it("stays on the recording when the word is deleted", () => {
+		// The rejoined clip used to be re-cut against the clips as they were before the join,
+		// which put the right half's id back, and the bed lost everything after the word. Each
+		// piece keeps its place in the file: what played under the word stays played.
+		const back = removeGeneratedClips(withInsertion(withBed()), ["synth_1"]);
+		expect(spans(back)).toEqual([
+			["c1", 2000, 4000, 0],
+			["c1", 4000, 8000, 2150],
+		]);
+	});
+
+	it("stays on the recording when the word is dragged away", () => {
+		// The same join, reached by a reorder. The word takes the bed it carried with it.
+		const moved = moveClip(withInsertion(withBed()), "ext:synth_1", 2, "user", "");
+		expect(spans(moved)).toEqual([
+			["c1", 2000, 4000, 0],
+			["c1", 4000, 8000, 2150],
+			["ext:synth_1", 10_000, 10_150, 2000],
+		]);
 	});
 });
 

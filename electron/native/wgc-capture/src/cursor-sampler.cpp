@@ -7,6 +7,7 @@
 
 #include "dpi_awareness.h"
 #include "input_signals.h"
+#include "realtime_scheduling.h"
 
 #include <atomic>
 #include <algorithm>
@@ -733,6 +734,7 @@ int main(int argc, char* argv[]) {
         std::cerr << "ERROR: Could not enable per-monitor-v2 DPI awareness" << std::endl;
         return 1;
     }
+    const HighResolutionTiming highResolutionTiming;
 
     if (argc < 2) {
         std::cerr << "Usage: cursor-sampler <intervalMs> [windowHandle]" << std::endl;

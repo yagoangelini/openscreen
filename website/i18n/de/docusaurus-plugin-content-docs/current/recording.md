@@ -50,7 +50,7 @@ Unter Windows, macOS und Linux wechselt ein Schalter für den Cursormodus zwisch
 Was das bearbeitbare Overlay erfasst, hängt von der Plattform ab:
 - **Windows**: die echte Cursorform und Klicks.
 - **macOS**: Cursorform und Klicks, wofür die Berechtigung „Bedienungshilfen“ nötig ist. Fehlt sie, öffnet ein Klick auf Aufnahme in diesem Modus das Berechtigungsfenster, statt die Aufnahme zu starten (siehe [Installation unter macOS](./installation.md#macos)).
-- **Linux**: Position und Form über das ScreenCast-Portal, dazu Linksklicks, wenn dein Benutzer in der Gruppe `input` ist (siehe [Mausklicks unter Wayland](./installation.md#mouse-clicks-on-wayland)).
+- **Linux**: Position und Form über das ScreenCast-Portal, dazu Linksklicks, wenn dein Benutzer Lesezugriff auf die Maus hat, über eine udev-Regel (empfohlen) oder die Gruppe `input` (siehe [Mausklicks unter Wayland](./installation.md#mouse-clicks-on-wayland)).
 
 Ein Linux-Take, der auf die [Browser-Aufnahme](#native-vs-browser-capture) ausweicht, zeichnet den Systemcursor auf, egal welchen Modus du gewählt hast.
 
@@ -80,7 +80,7 @@ Du musst nicht im HUD anfangen. Stelle im Editor die obere Leiste auf **Aufnahme
 
 - **Quelle**: dieselbe Auswahl für Bildschirm oder Fenster, in einem modalen Dialog, unter macOS 15.2 und neuer die Systemauswahl von Apple. Unter Linux steht auch in dieser Zeile *Dein System fragt gleich, was du teilen möchtest*, und der Portal-Dialog übernimmt die Auswahl.
 - **Systemton**, **Mikrofon**, **Kamera**: jeweils eine Zeile mit Ein/Aus. Mikrofon und Kamera klappen zu einer Geräteliste auf, und die Kamera zeigt eine Live-Vorschau, damit du dich vor dem Start ins Bild rücken kannst.
-- **Cursor hervorheben**: Eingeschaltet steht für den bearbeitbaren Overlay-Cursor, ausgeschaltet für den einfachen Systemcursor.
+- **Bearbeitbarer Cursor**: Eingeschaltet steht für den bearbeitbaren Overlay-Cursor, ausgeschaltet für den einfachen Systemcursor.
 
 **Aufnahme starten** öffnet das Aufnahme-Widget und schließt das Editorfenster; ein Abbruch bringt dich zurück in den Modus **Schnitt**. Hier landest du auch über **Neues Projekt → Bildschirmaufnahme**.
 

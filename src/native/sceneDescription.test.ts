@@ -5,12 +5,14 @@
 // and verify every derivation branch listed in the spec (background / clips / zoomRegions /
 // crop / settings mapping / output dims).
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
+	type CursorTelemetryPoint,
 	DEFAULT_CROP_REGION,
 	getZoomScale,
 	ZOOM_DEPTH_SCALES,
 } from "@/components/video-editor/types";
+import { prepareClickSound } from "@/lib/ai-edition/clickSound";
 import type {
 	AxcutAsset,
 	AxcutClip,
@@ -22,6 +24,7 @@ import { autoZoomMotion, DEFAULT_AUTO_ZOOM_SETTINGS } from "@/lib/ai-edition/tim
 import { CURSOR_KIND_IDS, DEFAULT_CURSOR_THEME_ID } from "@/lib/cursor/cursorThemes";
 import { DEVICE_FRAMES } from "@/lib/projectDefaults";
 import { getFocusBoundsForScale } from "@/lib/zoomMath/focusUtils";
+import { nativeBridgeClient } from "./client";
 import {
 	annotationFootageRect,
 	buildSceneDescription,
@@ -1010,8 +1013,38 @@ describe("buildSceneDescription.cameraFullscreenRegions", () => {
 		});
 		const { cameraFullscreenRegions } = buildSceneDescription(doc);
 		expect(cameraFullscreenRegions).toEqual([
-			{ startSec: 103, endSec: 105, clipIndex: 0 },
-			{ startSec: 200, endSec: 202, clipIndex: 1 },
+			{ startSec: 103, endSec: 105, clipIndex: 0, continuesAfter: true },
+			{ startSec: 200, endSec: 202, clipIndex: 1, continuesBefore: true },
+		]);
+	});
+
+	it("marks the cut edges of a region a trim splits, so it stays full across the cut", () => {
+		// Region raw [2, 8] over src [0, 10], trim removes [4, 6]. Each piece ramps only at the
+		// region's own edge: lead-in on the first, lead-out on the second, none at the cut.
+		const doc = makeDoc({
+			assets: [makeAsset({ id: "a", originalPath: "/a.mp4" })],
+			clips: [
+				makeClip({
+					id: "c1",
+					assetId: "a",
+					sourceStartSec: 0,
+					sourceEndSec: 10,
+					timelineStartSec: 0,
+					timelineEndSec: 10,
+				}),
+			],
+			timeline: {
+				trimRanges: [
+					{ id: "t1", assetId: "a", startSec: 4, endSec: 6, reason: "", origin: "user" },
+				],
+			},
+			legacyEditor: {
+				cameraFullscreenRegions: [{ id: "cf1", startMs: 2000, endMs: 8000 }],
+			},
+		});
+		expect(buildSceneDescription(doc).cameraFullscreenRegions).toEqual([
+			{ startSec: 2, endSec: 4, clipIndex: 0, continuesAfter: true },
+			{ startSec: 6, endSec: 8, clipIndex: 1, continuesBefore: true },
 		]);
 	});
 
@@ -1352,11 +1385,11 @@ describe("buildSceneDescription.settings mapping", () => {
 		expect(buildSceneDescription(doc).layout.webcamSize).toBeCloseTo(0.334, 5);
 	});
 
-	it("webcamSize clamps below 15 and above 50", () => {
+	it("webcamSize clamps below 15 and above 60", () => {
 		const low = makeDoc({ legacyEditor: { webcamSizePreset: 2 } });
 		const high = makeDoc({ legacyEditor: { webcamSizePreset: 90 } });
 		expect(buildSceneDescription(low).layout.webcamSize).toBeCloseTo(0.15, 5);
-		expect(buildSceneDescription(high).layout.webcamSize).toBeCloseTo(0.5, 5);
+		expect(buildSceneDescription(high).layout.webcamSize).toBeCloseTo(0.6, 5);
 	});
 
 	it("carries the camera's anchor, the point its zoom-time shrink keeps fixed", () => {
@@ -1380,6 +1413,48 @@ describe("buildSceneDescription.settings mapping", () => {
 		// Omitted, not `false`: scene payloads without the option stay byte-identical.
 		const off = buildSceneDescription(makeDoc({ legacyEditor: {} })).cursor;
 		expect("clickImpact" in off).toBe(false);
+	});
+
+	it("sounds the recorded clicks only while the cursor is shown", async () => {
+		const take = makeAsset({ id: "a1", originalPath: "/rec.mp4", durationSec: 10 });
+		const clips = [
+			makeClip({
+				id: "c1",
+				assetId: "a1",
+				sourceStartSec: 0,
+				timelineStartSec: 0,
+				timelineEndSec: 10,
+			}),
+		];
+		const doc = (cursorShow: boolean) =>
+			makeDoc({ assets: [take], clips, legacyEditor: { cursorShow, cursorClickSound: true } });
+		const click: CursorTelemetryPoint = {
+			timeMs: 2000,
+			cx: 0.5,
+			cy: 0.5,
+			interactionType: "click",
+		};
+		const telemetry = vi
+			.spyOn(nativeBridgeClient.cursor, "getTelemetry")
+			.mockResolvedValue([click]);
+		// The main process stages the two samples; any path stands in for it here.
+		vi.stubGlobal("window", {
+			location: { href: "http://localhost/" },
+			electronAPI: {
+				stageClickSoundHit: async (name: string) => ({ success: true, path: `/sfx/${name}` }),
+			},
+		});
+		vi.stubGlobal("fetch", async () => new Response(new Uint8Array([1])));
+		try {
+			await prepareClickSound(doc(true));
+			// A press and its release.
+			expect(buildSceneDescription(doc(true)).clickSound?.hits).toHaveLength(2);
+			// Its row is hidden with the cursor, like the click impact, so it must not keep sounding.
+			expect(buildSceneDescription(doc(false)).clickSound).toBeUndefined();
+		} finally {
+			telemetry.mockRestore();
+			vi.unstubAllGlobals();
+		}
 	});
 
 	it("carries depth of field: on by default, off when the project turns it off", () => {
@@ -1466,7 +1541,7 @@ describe("buildSceneDescription.settings mapping", () => {
 					timelineEndSec: 1,
 				}),
 			],
-			legacyEditor: { webcamSizePreset: 25 },
+			legacyEditor: { webcamSizePreset: 25, webcamMaskShape: "rectangle" },
 		});
 		const scene = buildSceneDescription(doc);
 		const rect = scene.layout.webcamRect;
@@ -1529,7 +1604,7 @@ describe("buildSceneDescription.settings mapping", () => {
 					timelineEndSec: 1,
 				}),
 			],
-			legacyEditor: { webcamSizePreset: 25 },
+			legacyEditor: { webcamSizePreset: 25, webcamMaskShape: "rectangle" },
 		});
 		const scene = buildSceneDescription(doc);
 		const rect = scene.layout.webcamRect;

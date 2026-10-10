@@ -42,8 +42,18 @@ concurrency:
 
 jobs:
   build-windows:
-    name: Windows installer
-    runs-on: windows-latest
+    name: Windows ${{ matrix.arch }} installer
+    # Each arch builds NATIVELY, like the macOS job below. On an x64 runner every step
+    # that keys off the host — fetch-ffmpeg (which also runs the binary it downloads to
+    # verify the licence), fetch-onnxruntime, the compositor's cargo build — produced x64
+    # output for the arm64 package, and before-pack then refused it. On windows-11-arm
+    # `process.arch` is arm64 and the same steps that build the arm64 installer on a
+    # Snapdragon desktop run unchanged.
+    runs-on: ${{ matrix.arch == 'arm64' && 'windows-11-arm' || 'windows-latest' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x64, arm64]
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -51,42 +61,99 @@ jobs:
       - name: Setup Node.js
         uses: ./.github/actions/setup
 
+      - name: Ensure MSVC ARM64 build tools
+        if: matrix.arch == 'arm64'
+        shell: pwsh
+        run: |
+          $vswhere = "C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe"
+          $installPath = & $vswhere -latest -products * -property installationPath
+          $hasArm64 = & $vswhere -latest -products * `
+            -requires Microsoft.VisualStudio.Component.VC.Tools.ARM64 `
+            -property installationPath
+          if (-not $hasArm64) {
+            Write-Host "Installing MSVC ARM64 build tools component..."
+            $installer = "C:\Program Files (x86)\Microsoft Visual Studio\Installer\vs_installer.exe"
+            & $installer modify --installPath "$installPath" `
+              --add Microsoft.VisualStudio.Component.VC.Tools.ARM64 `
+              --quiet --norestart --wait
+          } else {
+            Write-Host "MSVC ARM64 build tools already present."
+          }
+
+      # Everything below resolves its target from the host. Should this job ever land on an
+      # x64 runner again, fail here rather than after a full build that before-pack rejects.
+      - name: Check the runner architecture
+        shell: bash
+        run: |
+          HOST="$(node -p process.arch)"
+          [ "$HOST" = "${{ matrix.arch }}" ] \
+            || { echo "::error::the ${{ matrix.arch }} installer must build on a ${{ matrix.arch }} runner, got $HOST"; exit 1; }
+
       # STT is the bundled whisper-stt-server (whisper.cpp with native DTW token
-      # timestamps); no VAD model is fetched here. The binary is built by
-      # build-whisper-stt.yml and staged below — without that step the installer
-      # ships without speech-to-text. See
-      # technical-documentation/architecture/transcription-and-captions.md.
+      # timestamps); no model is fetched here. The binary is built by
+      # build-whisper-stt.yml and staged below, from the run built from this
+      # commit's helper sources — without that step the installer ships without
+      # speech-to-text. See
+      # technical-documentation/architecture/transcription-and-captions.md, and
+      # technical-documentation/engineering/release-and-secrets.md for the run.
       - name: Stage whisper-stt binaries
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # win32-x64 for BOTH arches, deliberately: build-whisper-stt.yml produces no
+        # arm64 helper yet (scripts/build-whisper-stt.sh can build one natively on ARM,
+        # but no workflow runs it), so an arch-parameterised tag would fail the arm64 job.
+        # `candidateBinaryPaths` falls back to the win32-x64 directory on Windows on
+        # ARM, where the x64 helper runs under emulation — verified on a Snapdragon X
+        # Elite, Vulkan on the Adreno included. Point this at win32-arm64 the moment a
+        # native helper exists; the resolver already prefers it.
         run: bash scripts/stage-whisper-stt.sh win32-x64
 
-      - name: Build Windows app
+      - name: Build Windows app (x64)
+        if: matrix.arch == 'x64'
         run: npm run build:win -- --publish never
+
+      - name: Build Windows app (arm64)
+        if: matrix.arch == 'arm64'
+        run: npm run build:win:arm64 -- --publish never
+
+      # electron-builder writes a latest.yml per job that lists only that job's installer, and
+      # both land on the same path in the release — the second would overwrite the first and
+      # serve one arch the other's build. Same problem, same fix as macOS: each job describes
+      # its installer in a JSON sidecar and publish-release folds both into ONE latest.yml.
+      # latest.yml is still required here: it proves electron-builder's publish config
+      # produced a feed at all.
+      - name: Describe the installer for the update feed
+        shell: bash
+        run: |
+          test -f "$(find release -name latest.yml | head -1)" \
+            || { echo "::error::latest.yml missing — electron-updater has no feed to read"; exit 1; }
+          EXE="$(find release -name 'Openscreen.Setup.*-${{ matrix.arch }}.exe' | head -1)"
+          test -f "$EXE" \
+            || { echo "::error::no ${{ matrix.arch }} installer under release/"; exit 1; }
+          VERSION="$(node -p "require('./package.json').version")"
+          node scripts/mac-update-feed.mjs describe "$EXE" "$VERSION" \
+            "$(dirname "$EXE")/update-info-win-${{ matrix.arch }}.json"
 
       - name: Upload Windows installer
         uses: actions/upload-artifact@v7
         with:
-          name: openscreen-windows
-          # latest.yml is the update feed electron-updater reads; the .blockmap is what lets it
-          # download a delta instead of the full ~243 MB installer. Both were already produced
-          # by every build and thrown away here, because this glob only matched the .exe.
+          name: openscreen-windows-${{ matrix.arch }}
+          # The sidecar becomes latest.yml in publish-release; the .blockmap is what lets
+          # electron-updater download a delta instead of the full ~243 MB installer.
           path: |
             release/**/Openscreen.Setup.*.exe
             release/**/Openscreen.Setup.*.exe.blockmap
-            release/**/latest.yml
+            release/**/update-info-win-*.json
           if-no-files-found: error
           retention-days: 30
 
       # `if-no-files-found: error` evaluates the UNION of the globs above, so a dead pattern
       # among live ones never fails — that is exactly how the *.zsync glob rotted unnoticed on
-      # the Linux job. Assert the update feed specifically.
-      - name: Verify the update feed was produced
+      # the Linux job. Assert the blockmap specifically.
+      - name: Verify the blockmap was produced
         shell: bash
         run: |
-          test -f "$(find release -name latest.yml | head -1)" \
-            || { echo "::error::latest.yml missing — electron-updater has no feed to read"; exit 1; }
           test -f "$(find release -name 'Openscreen.Setup.*.exe.blockmap' | head -1)" \
             || { echo "::error::blockmap missing — differential updates would silently degrade"; exit 1; }
 
@@ -376,6 +443,13 @@ jobs:
       - name: Stage ONNX Runtime
         run: npm run fetch:onnxruntime
 
+      # Fourth step spelled out for the same reason: `build:mac`, `build:win` and
+      # `build:linux` chain it before electron-builder. It writes the licence texts of the
+      # bundled npm packages and of the crates in the addon; scripts/before-pack.cjs
+      # refuses to package without them.
+      - name: Generate third-party licences
+        run: npm run licenses:generate
+
       - name: Package .app bundle
         run: npx electron-builder --mac --${{ matrix.arch }} --dir --publish never
         env:
@@ -649,9 +723,9 @@ jobs:
 
       # bsdtar (libarchive-tools) is fpm's mtree generator for the pacman target.
       # rpmbuild (rpm) is what fpm shells out to for the rpm target; without it the
-      # build fails at packaging, not at config parse.
+      # build fails at packaging, not at config parse. zsync generates AppImageUpdate sidecars.
       - name: Install Linux packaging dependencies
-        run: sudo apt-get update && sudo apt-get install -y libarchive-tools rpm
+        run: sudo apt-get update && sudo apt-get install -y libarchive-tools rpm zsync
 
       # patchelf is what build-linux-compositor-addon.mjs renames the ffmpeg symbols
       # with, so the addon cannot bind to Chromium's bundled ffmpeg — an unconditional
@@ -706,6 +780,21 @@ jobs:
             exit 1
           fi
 
+      - name: Verify AppImage update information and sidecars
+        run: |
+          VERSION="$(node -p 'require("./package.json").version')"
+          EXPECTED='gh-releases-zsync|getopenscreen|openscreen|latest|Openscreen-Linux-*.AppImage.zsync'
+          # Helper-only prereleases can be selected by AppImageUpdate's latest-all channel.
+          # RCs keep using electron-updater; their .zsync is available by its explicit URL.
+          if [[ "$VERSION" == *-* ]]; then EXPECTED=''; fi
+          while IFS= read -r -d '' IMAGE; do
+            test -s "${IMAGE}.zsync" \
+              || { echo "::error::${IMAGE}.zsync missing — external AppImage updates have no sidecar"; exit 1; }
+            INFO="$("$IMAGE" --appimage-updateinformation)"
+            [[ "$INFO" == "$EXPECTED" ]] \
+              || { echo "::error::Unexpected AppImage update information in ${IMAGE}: ${INFO}"; exit 1; }
+          done < <(find release -type f -name '*.AppImage' -print0)
+
       # The Linux counterpart of the Windows job's "Verify native binaries load under
       # package identity", added for the same reason and after the same kind of miss:
       # 1.9.1 shipped three sonames that nothing declared and nothing bundled — libgbm.so.1
@@ -745,16 +834,12 @@ jobs:
           name: openscreen-linux
           path: |
             release/**/*.AppImage
+            release/**/*.AppImage.zsync
             release/**/*.deb
             release/**/*.pacman
             release/**/*.rpm
             release/**/latest-linux.yml
-          # Still no *.zsync, and there never will be: zsync was electron-updater's old delta
-          # format and app-builder-lib 26.x dropped it in favour of the block map it embeds
-          # directly in the AppImage. That glob had matched nothing since the dependency bump,
-          # silently — `if-no-files-found: error` evaluates the union of these patterns, so one
-          # dead glob among live ones never fails. Hence the explicit assertion below.
-          #
+          # .zsync serves external AppImage tools; electron-updater uses the embedded blockmap.
           # latest-linux.yml serves all four formats from one file: each updater picks its own
           # extension out of the `files:` list. app-update.yml and the `package-type` marker are
           # already inside the deb/rpm/pacman payloads — only this feed was missing.
@@ -778,8 +863,8 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
         with:
-          # Full history + tags: the RC notes below are built from `git log` over the
-          # range since the previous RC tag, and resolving that tag needs the tags.
+          # Full history + tags: the previous release's tag is picked from every tag in the
+          # repo, and the RC notes below are built from `git log` over the range since it.
           fetch-depth: 0
 
       - name: Resolve release tag
@@ -818,16 +903,11 @@ jobs:
           # Compute the previous stable tag for auto-generated release notes. We don't use
           # GitHub's "most recent prior release by date" because the fork carries re-published
           # upstream releases whose published_at is more recent than the fork's own first release.
-          # For SemVer X.Y.Z: previous is vX.Y.(Z-1) if Z>0, else vX.(Y-1).0, else v(X-1).0.0.
+          # Picked by SemVer among the tags that exist, never guessed from the version number:
+          # the script says what guessing cost (#1002). Left EMPTY when no stable tag sorts
+          # below this version; each consumer below decides what "no previous release" means.
           STABLE_VERSION="${VERSION%%-*}"
-          IFS='.' read -r PX PY PZ <<< "$STABLE_VERSION"
-          if (( PZ > 0 )); then
-            NOTES_START_TAG="v${PX}.${PY}.$((PZ - 1))"
-          elif (( PY > 0 )); then
-            NOTES_START_TAG="v${PX}.$((PY - 1)).0"
-          else
-            NOTES_START_TAG="v$((PX - 1)).0.0"
-          fi
+          NOTES_START_TAG="$(git tag -l 'v*' | node .github/scripts/previous-stable-tag.mjs "$STABLE_VERSION")"
           # For an RC, compare against the PREVIOUS RC of the same line, not the previous
           # stable. Deriving the start tag from STABLE_VERSION alone made every RC of a
           # line span the same range, so each re-cut just repeated the last RC's notes
@@ -843,27 +923,6 @@ jobs:
               fi
             done
           fi
-          # Everything above computes what the previous release was *called* and
-          # never checks that it exists. A version line that stopped at its RC
-          # makes that a name for nothing: 1.9.3 shipped only as rc.1, so
-          # v1.9.4-rc.1 asked git for v1.9.3..v1.9.4-rc.1 and the publish step
-          # died on `unknown revision` -- after all four platforms had already
-          # built, and with publish-msstore sitting behind publish-release, so
-          # the same gap would silently block a stable release's Store
-          # deployment too. The rc walk-down above handles a skipped RC; nothing
-          # handled a skipped stable, and it does not run at all for an rc.1.
-          if ! git rev-parse -q --verify "refs/tags/${NOTES_START_TAG}" >/dev/null; then
-            # The nearest tag reachable from the release commit's parent, which
-            # is what "since the last release" meant in the first place. Left
-            # EMPTY when no tag is reachable at all, rather than filled with the
-            # root commit: the stable path hands this to `gh release create
-            # --notes-start-tag`, which is the API's previous_tag_name and takes
-            # a tag NAME -- a commit SHA there is not a lenient fallback, it is
-            # an invalid argument. Each consumer below decides what "no previous
-            # release" means for it.
-            NOTES_START_TAG="$(git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || true)"
-            echo "Previous-release tag did not exist; using ${NOTES_START_TAG:-<none>}"
-          fi
           echo "Computed notes_start_tag=${NOTES_START_TAG} for tag=${TAG}"
 
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
@@ -873,11 +932,20 @@ jobs:
           echo "prerelease_flag=$PRERELEASE_FLAG" >> "$GITHUB_OUTPUT"
           echo "notes_start_tag=$NOTES_START_TAG" >> "$GITHUB_OUTPUT"
 
-      - name: Download Windows installer
+      # By name, not `pattern: openscreen-windows-*`: that pattern also matches
+      # openscreen-windows-store, and publish-release does not wait for the Store job, so
+      # whether its .appx reached the GitHub release depended on which job finished first.
+      - name: Download Windows x64 installer
         uses: actions/download-artifact@v8
         with:
-          name: openscreen-windows
-          path: artifacts/windows
+          name: openscreen-windows-x64
+          path: artifacts/windows-x64
+
+      - name: Download Windows arm64 installer
+        uses: actions/download-artifact@v8
+        with:
+          name: openscreen-windows-arm64
+          path: artifacts/windows-arm64
 
       - name: Download macOS arm64 DMG
         uses: actions/download-artifact@v8
@@ -916,6 +984,22 @@ jobs:
             || { echo "::error::latest-mac.yml lists ${ENTRIES} builds, expected 2 (one per arch)"; exit 1; }
           grep -q 'arm64' artifacts/latest-mac.yml \
             || { echo "::error::latest-mac.yml has no arm64 entry — Apple Silicon would update onto the Intel build"; exit 1; }
+
+      # Same fold for Windows (see "Describe the installer for the update feed"). The feed's
+      # arch-blind `path:` points at x64, which Windows on ARM still runs under emulation.
+      - name: Build the Windows update feed
+        run: |
+          X64_INFO="$(find artifacts/windows-x64 -name update-info-win-x64.json)"
+          ARM64_INFO="$(find artifacts/windows-arm64 -name update-info-win-arm64.json)"
+          node scripts/mac-update-feed.mjs merge "$X64_INFO" "$ARM64_INFO" artifacts/latest.yml
+          rm -f "$X64_INFO" "$ARM64_INFO"
+          ENTRIES="$(grep -c '^  - url:' artifacts/latest.yml)"
+          [ "$ENTRIES" -eq 2 ] \
+            || { echo "::error::latest.yml lists ${ENTRIES} installers, expected 2 (one per arch)"; exit 1; }
+          grep -q '^  - url: .*-x64\.exe$' artifacts/latest.yml \
+            || { echo "::error::latest.yml has no x64 installer"; exit 1; }
+          grep -q '^  - url: .*-arm64\.exe$' artifacts/latest.yml \
+            || { echo "::error::latest.yml has no arm64 installer"; exit 1; }
 
       - name: Publish release assets
         env:

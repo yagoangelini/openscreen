@@ -39,6 +39,7 @@ mod shim;
 
 use std::collections::HashSet;
 use std::io::{BufRead, Write};
+use std::os::fd::OwnedFd;
 use std::path::PathBuf;
 use std::sync::mpsc::{self, RecvTimeoutError, Sender};
 use std::sync::Arc;
@@ -316,8 +317,9 @@ fn main() {
     {
         let _ = emitter.emit(&Event::Warning {
             code: "click-capture-unavailable".to_owned(),
-            message: "no readable /dev/input pointer device — add this user to the 'input' \
-                      group to record click telemetry; cursor samples will otherwise all be moves"
+            message: "no readable /dev/input pointer device — grant this user access (a udev \
+                      uaccess rule for mice, or the 'input' group) to record click telemetry; \
+                      cursor samples will otherwise all be moves"
                 .to_owned(),
         });
     }
@@ -544,10 +546,20 @@ fn begin_stream<W: Write>(
     granted_kind: &mut Option<portal::SourceKind>,
     stream: portal::PortalStream,
     prefer_dmabuf: bool,
+    shared_memory_fallback: &mut Option<SharedMemoryFallback>,
 ) -> Result<(), ()> {
-    // The fd is consumed by libpipewire; the rest is kept for the
-    // `stream-started` event, emitted once the format is negotiated.
-    let portal::PortalStream { fd, node_id, position, source_kind, .. } = stream;
+    let portal::PortalStream { fd, fallback_fd, node_id, position, size, source_kind } = stream;
+    *shared_memory_fallback = if prefer_dmabuf {
+        fallback_fd.map(|fd| SharedMemoryFallback {
+            fd,
+            node_id,
+            position,
+            size,
+            source_kind,
+        })
+    } else {
+        None
+    };
     let forward = sender.clone();
     match shim::Session::start(
         fd,
@@ -582,6 +594,40 @@ struct StreamInfo {
     source_kind: Option<portal::SourceKind>,
 }
 
+/// Separate portal remote kept only until a DMA-BUF-first stream starts.
+struct SharedMemoryFallback {
+    fd: OwnedFd,
+    node_id: u32,
+    position: Option<(i32, i32)>,
+    size: Option<(i32, i32)>,
+    source_kind: Option<portal::SourceKind>,
+}
+
+fn should_retry_shared_memory(
+    state: &str,
+    error: Option<&str>,
+    capture_started: bool,
+    fallback_available: bool,
+) -> bool {
+    state == "error"
+        && !capture_started
+        && fallback_available
+        && error.is_some_and(|message| message.contains("alloc buffers"))
+}
+
+/// A stream error ends the helper only before capture has started, or the app
+/// waits on a recording that never starts. "Started" is the first staged frame
+/// in video mode, and `streaming` in cursor-only mode, which has no `Capture`.
+fn stream_error_is_fatal(
+    state: &str,
+    video: bool,
+    recording_started: bool,
+    stream_was_live: bool,
+) -> bool {
+    let started = if video { recording_started } else { stream_was_live };
+    state == "error" && !started
+}
+
 fn run<W: Write>(
     emitter: &mut Emitter<W>,
     receiver: mpsc::Receiver<Message>,
@@ -602,6 +648,9 @@ fn run<W: Write>(
     let mut crop_change_reported = false;
     // A `deferStart` grant held while the caller runs its countdown.
     let mut pending_portal: Option<portal::PortalStream> = None;
+    // Retain the portal grant while the preferred DMA-BUF format is starting,
+    // so a buffer-allocation failure can retry shared-memory-first once.
+    let mut shared_memory_fallback: Option<SharedMemoryFallback> = None;
     // `record` has been received. Latched, because it can arrive before the
     // picker has been answered.
     let mut armed = false;
@@ -662,8 +711,31 @@ fn run<W: Write>(
     // means the import never works, which would otherwise record nothing — see
     // MAX_CONSECUTIVE_IMPORT_FAILURES.
     let mut consecutive_drops: u32 = 0;
+    // When the capture clock last advanced. See the heartbeat at the top of the loop.
+    let mut last_advance = Instant::now();
 
     loop {
+        // THE HEARTBEAT, CHECKED ON EVERY PASS, NOT ONLY ON A TIMEOUT. `advance`
+        // holds the last picture forward and drains the audio rings, and it used
+        // to run only on a new frame or when `recv_timeout` expired. Any other
+        // message restarts that timeout, and cursor messages arrive at the
+        // compositor's rate while the mouse moves: a static screen with a moving
+        // mouse never timed out, so nothing drained and the 2 s rings dropped
+        // their oldest audio (getopenscreen/openscreen#936).
+        if heartbeat_due(last_advance, Instant::now(), config.tick) {
+            last_advance = Instant::now();
+            if let Some(capture) = capture.as_mut() {
+                if let Err(message) = capture.advance() {
+                    let _ = emitter.emit(&Event::Error {
+                        code: "encode-failed".to_owned(),
+                        message,
+                    });
+                    exit_code = 1;
+                    break;
+                }
+            }
+        }
+
         // Return PipeWire buffers whose dmabuf imports completed last iteration
         // (or that were superseded on the capture thread). This MUST run on this
         // loop, not the PipeWire thread — `Session::requeue` takes the thread-loop
@@ -918,6 +990,7 @@ fn run<W: Write>(
                     }
                 }
                 if let Some(capture) = capture.as_mut() {
+                    last_advance = Instant::now();
                     if let Err(message) = capture.advance() {
                         let _ = emitter.emit(&Event::Error {
                             code: "encode-failed".to_owned(),
@@ -945,6 +1018,7 @@ fn run<W: Write>(
                         &mut granted_kind,
                         stream,
                         prefer_dmabuf,
+                        &mut shared_memory_fallback,
                     ) {
                         exit_code = 1;
                         break;
@@ -1005,6 +1079,7 @@ fn run<W: Write>(
                         &mut granted_kind,
                         stream,
                         prefer_dmabuf,
+                        &mut shared_memory_fallback,
                     ) {
                         exit_code = 1;
                         break;
@@ -1139,10 +1214,72 @@ fn run<W: Write>(
                     if streaming_since.is_none() {
                         streaming_since = Some(timestamp_ms());
                     }
+                    // No retry is appropriate after the compositor accepted
+                    // the stream; release the extra portal fd immediately.
+                    shared_memory_fallback = None;
                 } else if state == "unconnected" {
                     streaming_since = None;
                 }
+                let recording_started = capture.as_ref().is_some_and(Capture::started);
+                let stream_was_live = streaming_since.is_some();
+                if should_retry_shared_memory(
+                    &state,
+                    error.as_deref(),
+                    recording_started || stream_was_live,
+                    shared_memory_fallback.is_some(),
+                ) {
+                    let fallback = shared_memory_fallback.take().expect("checked above");
+                    // Drop and join the failed stream before reconnecting with
+                    // the portal's independent remote. The second attempt
+                    // prefers shared memory; it will not arm another retry.
+                    drop(session.take());
+                    portal_stream = None;
+                    let _ = emitter.emit(&Event::Warning {
+                        code: "capture-retry-shared-memory".to_owned(),
+                        message: "PipeWire buffer allocation failed with DMA-BUF; retrying screen capture with shared-memory buffers."
+                            .to_owned(),
+                    });
+                    let retry = portal::PortalStream {
+                        fd: fallback.fd,
+                        fallback_fd: None,
+                        node_id: fallback.node_id,
+                        position: fallback.position,
+                        size: fallback.size,
+                        source_kind: fallback.source_kind,
+                    };
+                    if let Err(()) = begin_stream(
+                        emitter,
+                        &sender,
+                        &frames,
+                        &mut session,
+                        &mut portal_stream,
+                        &mut granted_kind,
+                        retry,
+                        false,
+                        &mut shared_memory_fallback,
+                    ) {
+                        exit_code = 1;
+                        break;
+                    }
+                    // `begin_stream` already replaced the session and info;
+                    // any queued messages from the old stream precede events
+                    // from this new PipeWire thread.
+                    continue;
+                }
                 if let Some(error) = error {
+                    if stream_error_is_fatal(
+                        &state,
+                        frames.is_some(),
+                        recording_started,
+                        stream_was_live,
+                    ) {
+                        let _ = emitter.emit(&Event::Error {
+                            code: "pipewire-capture-failed".to_owned(),
+                            message: format!("OpenScreen could not start screen capture: {error}"),
+                        });
+                        exit_code = 1;
+                        break;
+                    }
                     let _ = emitter.emit(&Event::Warning {
                         code: "stream-error".to_owned(),
                         message: format!("PipeWire stream reported an error in state {state}: {error}"),
@@ -1239,19 +1376,8 @@ fn run<W: Write>(
                     emit_sample(emitter, &cursor, content_rect(&capture, size), &mut pending_asset, None);
                     last_emit = Instant::now();
                 }
-                // The heartbeat that keeps the output at a constant frame rate
-                // while the screen is static: no frame arrived, but the clock
-                // moved, so the last picture is held forward.
-                if let Some(capture) = capture.as_mut() {
-                    if let Err(message) = capture.advance() {
-                        let _ = emitter.emit(&Event::Error {
-                            code: "encode-failed".to_owned(),
-                            message,
-                        });
-                        exit_code = 1;
-                        break;
-                    }
-                }
+                // No advance here: a timeout means a tick has passed, so the
+                // heartbeat at the top of the next pass holds the picture forward.
             }
 
             Err(RecvTimeoutError::Disconnected) => break,
@@ -1271,9 +1397,9 @@ fn run<W: Write>(
 
 /// Writes the trailer and reports what the recording cost.
 ///
-/// Runs even when the loop broke on an error: a file whose moov atom was never
-/// written is unplayable, and a partial recording is worth more to the user than
-/// none.
+/// Runs even when the loop broke on an error: a file whose trailer was never
+/// written loses its last fragment, and a partial recording is worth more to the
+/// user than none.
 fn finish_capture<W: Write>(
     emitter: &mut Emitter<W>,
     capture: Capture,
@@ -1349,6 +1475,11 @@ fn finish_capture<W: Write>(
 /// only rectangle the file shows. Before then, and for a cursor-only session
 /// that opens no encoder at all, the whole negotiated stream, which is what the
 /// consumer of a cursor-only recording is compositing over.
+/// Whether a tick has passed since the capture clock last advanced.
+fn heartbeat_due(last_advance: Instant, now: Instant, tick: Duration) -> bool {
+    now.saturating_duration_since(last_advance) >= tick
+}
+
 fn content_rect(capture: &Option<Capture>, size: Option<(i32, i32)>) -> Option<shim::CropRect> {
     match capture {
         Some(capture) if capture.started() => Some(capture.content_rect()),
@@ -1563,6 +1694,28 @@ mod cursor_sample_tests {
         assert!(buffer.is_empty(), "emitted {}", String::from_utf8_lossy(&buffer));
     }
 
+    /// #936: messages arriving faster than the tick must not hold the heartbeat
+    /// off. The loop checks it on every pass, so what matters is that it comes
+    /// due once a tick has passed, however many passes happened in between.
+    #[test]
+    fn the_heartbeat_comes_due_every_tick_whatever_else_arrives() {
+        let tick = Duration::from_millis(16);
+        let start = Instant::now();
+        let mut last_advance = start;
+        let mut advances = 0;
+        // A cursor message every 7 ms (144 Hz) for one second of loop passes.
+        for pass in 0..=(1000 / 7) {
+            let now = start + Duration::from_millis(pass * 7);
+            if heartbeat_due(last_advance, now, tick) {
+                last_advance = now;
+                advances += 1;
+            }
+        }
+        // Every 21 ms at worst (three 7 ms passes): about 47 a second, never zero.
+        assert!(advances >= 1000 / 21, "{advances} advances in a second of cursor traffic");
+        assert!(!heartbeat_due(start, start + Duration::from_millis(15), tick));
+    }
+
     /// A cursor-only session opens no encoder, so it falls back to the whole
     /// stream; once pixels are flowing the encoder's rectangle wins.
     #[test]
@@ -1678,5 +1831,67 @@ mod microphone_resolution_tests {
             Some("alsa_input.pci-0000_03_00.6.HiFi__hw_Generic_1__source"),
             "the longer description should win, deterministically"
         );
+    }
+}
+
+#[cfg(test)]
+mod capture_fallback_tests {
+    use super::{should_retry_shared_memory, stream_error_is_fatal};
+
+    #[test]
+    fn a_stream_error_is_fatal_only_before_capture_starts() {
+        // Video: started means a staged frame.
+        assert!(stream_error_is_fatal("error", true, false, true));
+        assert!(!stream_error_is_fatal("error", true, true, true));
+        // Cursor-only: started means the stream reached `streaming`.
+        assert!(stream_error_is_fatal("error", false, false, false));
+        assert!(!stream_error_is_fatal("error", false, false, true));
+        assert!(!stream_error_is_fatal("paused", true, false, false));
+    }
+
+    #[test]
+    fn retries_only_for_pre_recording_pipewire_buffer_allocation_errors() {
+        assert!(should_retry_shared_memory(
+            "error",
+            Some("error alloc buffers: Invalid argument"),
+            false,
+            true,
+        ));
+    }
+
+    #[test]
+    fn does_not_retry_after_capture_has_started() {
+        assert!(!should_retry_shared_memory(
+            "error",
+            Some("error alloc buffers: Invalid argument"),
+            true,
+            true,
+        ));
+    }
+
+    #[test]
+    fn does_not_retry_without_a_retained_portal_grant() {
+        assert!(!should_retry_shared_memory(
+            "error",
+            Some("error alloc buffers: Invalid argument"),
+            false,
+            false,
+        ));
+    }
+
+    #[test]
+    fn does_not_retry_unrelated_pipewire_errors_or_non_error_states() {
+        assert!(!should_retry_shared_memory(
+            "error",
+            Some("target not found"),
+            false,
+            true,
+        ));
+        assert!(!should_retry_shared_memory(
+            "paused",
+            Some("error alloc buffers: Invalid argument"),
+            false,
+            true,
+        ));
     }
 }

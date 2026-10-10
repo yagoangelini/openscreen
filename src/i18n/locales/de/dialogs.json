@@ -88,7 +88,8 @@
 		"audioFiles": "Audiodateien",
 		"openscreenProject": "OpenScreen-Projekt",
 		"allFiles": "Alle Dateien",
-		"chooseRecordingsFolder": "Ordner für neue Aufnahmen wählen"
+		"chooseRecordingsFolder": "Ordner für neue Aufnahmen wählen",
+		"selectRecordingsFolder": "Ordner für Aufnahmen auswählen"
 	},
 	"recovery": {
 		"title": "Aufnahme wiederherstellen",
@@ -105,5 +106,9 @@
 		"detail": "Wenn du den Editor schließt, wird er abgebrochen und das Video nicht gespeichert.",
 		"keep": "Weiter exportieren",
 		"cancelAndClose": "Export abbrechen und schließen"
+	},
+	"recording": {
+		"lowDiskSpace": "Nicht genügend Speicherplatz, um die Aufnahme zu starten (nur {{availableMb}} MB frei). Gib Speicherplatz frei oder wähle einen anderen Ordner für Aufnahmen und versuche es erneut.",
+		"folderUnavailable": "Der Ordner für Aufnahmen {{path}} ist nicht erreichbar. Schließe sein Laufwerk wieder an oder wähle im Modus „Aufnahme“ einen anderen Ordner."
 	}
 }

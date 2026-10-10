@@ -163,7 +163,7 @@ O que fazer a seguir e como fazer está em [`HANDOFF.md`](HANDOFF.md).
 - **Faixas separadas.** As faixas de voz e de computador **não** estão dentro do MP4. São dois arquivos `.m4a` ao lado da gravação (`<take>.voice.m4a` e `<take>.system.m4a`), e o MP4 continua com a faixa mixada. O resultado para o usuário é o pedido: dois volumes no editor, e o export mixa com eles.
 - **Início armado durante a contagem.** Foi feito e depois **revertido** (commit c956ea4e): o Kaspersky põe em quarentena um gravador que fica esperando no stdin. Volta quando o usuário criar a exclusão.
 - **Modelo padrão da transcrição.** O large-v3-turbo **não** virou o padrão; o padrão continua `ggml-small-q8_0.bin`. Falta espaço em disco e a decisão de quando baixar.
-- **Spotlight.** Só existe no Windows (Direct3D 11). Os shaders Metal e wgpu não têm o modo 19.
+- **Spotlight.** Só existe no Windows (Direct3D 11). Os shaders Metal e wgpu não têm o modo do spotlight (20 desde o merge do 2.0; o 19 é o Glass Lens do upstream).
 - **Preset "Tutorial".** Não há um seletor de preset com esse nome. O próprio padrão é o preset: 1,5x, transição de 1,1 s e no mínimo 2,5 s parado. Os sliders ajustam esses valores, e "restaurar padrão" volta a eles.
 - **Não incomodar.** É uma linha fixa no modo Record, com um botão que abre as notificações do Windows. Não aparece como aviso antes de cada gravação.
 
@@ -277,8 +277,8 @@ O que fazer a seguir e como fazer está em [`HANDOFF.md`](HANDOFF.md).
 Tomadas a partir de [`ANALISE-MELHORIAS.md`](ANALISE-MELHORIAS.md).
 
 - **Ordem de trabalho:**
-  1. **1.19.1:** correções dos defeitos confirmados nos recursos do fork (§2 da análise).
-  2. **2.1.0:** merge do OpenScreen 2.0 (upstream), mantendo as decisões do fork (16:9, NVENC na RTX, transcrição automática desligada e as demais).
+  1. **1.19.1:** correções dos defeitos confirmados nos recursos do fork (§2 da análise). **Feito.**
+  2. **2.1.0:** merge do OpenScreen 2.0 (upstream), mantendo as decisões do fork (16:9, NVENC na RTX, transcrição automática desligada e as demais). **Feito.**
   3. **2.2.0:** câmera e vinheta.
   4. Depois: os extras aprovados.
 - **Câmera durante a gravação:** botão no HUD "Rosto / Tela + câmera" e um atalho global. Tela e câmera são sempre gravadas; o botão só marca os trechos, que chegam ao editor como regiões editáveis.

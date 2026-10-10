@@ -5,8 +5,8 @@
 use crate::audio::{AacEncoder, PlanarPcm};
 use crate::audio_stream::ProgrammeAudio;
 use crate::compositor::{Compositor, OUT_H, OUT_W};
-pub use crate::gif_export_control::{ExportControl, ExportProgress};
-use crate::gif_export_control::with_staged_output;
+pub use crate::export_control::{ExportControl, ExportProgress};
+use crate::export_control::with_staged_path_output;
 use crate::config::Cfg;
 use crate::cpu_frames::CpuFrames;
 use crate::cursor::CursorTrack;
@@ -211,6 +211,31 @@ struct PacketGuard(*mut AVPacket);
 impl Drop for PacketGuard {
     fn drop(&mut self) {
         unsafe { av_packet_free(&mut self.0) };
+    }
+}
+
+/// Garde RAII sur le conteneur de sortie : ferme son fichier puis le libère au Drop, `?` compris.
+/// Une annulation est une sortie ordinaire, et Windows refuse de supprimer le MP4 partiel tant
+/// que ffmpeg le tient ouvert.
+struct OutputGuard(*mut AVFormatContext);
+impl Drop for OutputGuard {
+    fn drop(&mut self) {
+        unsafe {
+            let mut pb = sn_fmt_get_pb(self.0);
+            if !pb.is_null() {
+                avio_closep(&mut pb);
+                sn_fmt_set_pb(self.0, ptr::null_mut());
+            }
+            avformat_free_context(self.0);
+        }
+    }
+}
+
+/// Garde RAII sur un `AVBufferRef` (le désréférence au Drop ; nul accepté).
+struct BufferGuard(*mut AVBufferRef);
+impl Drop for BufferGuard {
+    fn drop(&mut self) {
+        unsafe { av_buffer_unref(&mut self.0) };
     }
 }
 
@@ -985,6 +1010,25 @@ impl Decoder {
         }
     }
 
+    /// `seek_to`, mais une cible au-delà de la dernière image se pose sur cette dernière image au
+    /// lieu de ne rien rendre. L'audio d'un enregistrement dure souvent un peu plus que sa vidéo
+    /// (de 12 ms à près d'une demi-seconde mesurés) : son clip finit alors après la dernière
+    /// image, et y entrer par la fin, en scrubant de droite à gauche, demandait une image qui
+    /// n'existe pas. Le changement de clip échouait sans bruit, et la vue gardait la scène du
+    /// clip qu'on quittait.
+    pub(crate) unsafe fn seek_to_or_last(&mut self, seconds: f64) -> Result<*mut AVFrame> {
+        let frame = self.seek_to(seconds)?;
+        if !frame.is_null() {
+            return Ok(frame);
+        }
+        // Le seek a décodé jusqu'à l'EOF : `cur_pts` est celui de la dernière image. L'EOF a vidé
+        // la frame courante, donc il faut le seek complet : `take` écarte le chemin rapide.
+        match self.cur_pts.take() {
+            Some(last) => self.seek_to(last as f64 * self.tb_sec()),
+            None => Ok(frame),
+        }
+    }
+
     /// Déroule le décodeur en avant jusqu'à la première frame à `seconds` ou après, SANS
     /// jeter son état. Critère d'arrêt identique à celui du seek complet — c'est ce qui
     /// garantit que les deux chemins rendent exactement la même frame.
@@ -1379,7 +1423,7 @@ pub fn run_composited_multi_controlled(
     progress: &mut dyn FnMut(ExportProgress),
     control: &ExportControl,
 ) -> Result<Stats> {
-    with_staged_output(Path::new(out), control, "mp4", |staging| {
+    with_staged_path_output(Path::new(out), control, "mp4", |staging| {
         let staging = staging
             .to_str()
             .ok_or_else(|| anyhow!("export path is not valid Unicode: {}", staging.display()))?;
@@ -1821,6 +1865,11 @@ unsafe fn run_multi_inner(
         .as_ref()
         .map(|scene| scene.audio_tracks.clone())
         .unwrap_or_default();
+    // Click hits (the "mouse clicks" toggle), laid on the programme by the app.
+    let click_sound = scene
+        .as_ref()
+        .map(|scene| scene.click_sound.clone())
+        .unwrap_or_default();
 
     // ---- encodeur (choisi à l'exécution, cf. ExportCodec::candidates) + mux ----
     // Backend CPU : pas de pool D3D11 du tout. `av_hwdevice_ctx_init(D3D11VA)` échoue sur
@@ -1872,12 +1921,10 @@ unsafe fn run_multi_inner(
     }
     let opkt = packet.0;
 
-    let audio = std::cell::RefCell::new(ProgrammeAudio::for_export(
-        clips.len(),
-        out_fps as f64,
-        audio_settings,
-        &audio_tracks,
-    ));
+    let audio = std::cell::RefCell::new(
+        ProgrammeAudio::for_export(clips.len(), out_fps as f64, audio_settings, &audio_tracks)
+            .with_click_hits(&click_sound),
+    );
     let audio_stems: Vec<crate::scene::SceneAudioStems> =
         scene.as_ref().map(|s| s.audio_stems.clone()).unwrap_or_default();
     let stems_for = |screen: &str| audio_stems.iter().find(|s| s.screen_path == screen);
@@ -2383,12 +2430,21 @@ mod tests {
         filename: &str,
         duration_sec: &str,
     ) -> std::path::PathBuf {
+        encode_named_color(codec_args, filename, "red", duration_sec)
+    }
+
+    fn encode_named_color(
+        codec_args: &[&str],
+        filename: &str,
+        color: &str,
+        duration_sec: &str,
+    ) -> std::path::PathBuf {
         let dir = std::env::temp_dir().join(format!("openscreen-554-{}", std::process::id()));
         std::fs::create_dir_all(&dir).expect("temp dir");
         let out = dir.join(filename);
         let ff = ffmpeg_exe();
         let mut cmd = std::process::Command::new(&ff);
-        let input = format!("color=c=red:s=64x64:d={duration_sec}");
+        let input = format!("color=c={color}:s=64x64:d={duration_sec}");
         cmd.args(["-y", "-f", "lavfi", "-i", input.as_str()]);
         cmd.args(codec_args);
         cmd.arg(&out);
@@ -3119,6 +3175,180 @@ mod tests {
         println!(
             "CORE_ASSERTIONS_COMPLETED:current_frame_requires_pixels_and_recovers_after_eof_seek"
         );
+    }
+
+    #[test]
+    fn a_seek_past_the_last_frame_can_land_on_it() {
+        let Some(gpu) = strict_hardware_gpu("a_seek_past_the_last_frame_can_land_on_it") else {
+            return;
+        };
+        let path = encode_color(&["-c:v", "libopenh264", "-b:v", "200k"], "last-frame.mp4");
+        let mut dec = unsafe { Decoder::open(path.to_str().expect("utf8 path"), &gpu) }
+            .unwrap_or_else(|e| panic!("H.264 Decoder::open: {e:#}"));
+
+        let frame = unsafe { dec.seek_to_or_last(10.0) }.expect("seek past the end");
+        assert!(!frame.is_null(), "a target past the end must land on the last frame");
+        assert!(!dec.cur_frame().is_null(), "the last frame must be presentable");
+        assert!(
+            unsafe { dec.next() }.expect("decode after the last frame").is_null(),
+            "the frame it landed on must be the last one"
+        );
+        assert!(
+            unsafe { dec.seek_to(10.0) }.expect("plain seek past the end").is_null(),
+            "seek_to itself still reports no frame past the end"
+        );
+        println!("CORE_ASSERTIONS_COMPLETED:a_seek_past_the_last_frame_can_land_on_it");
+    }
+
+    /// #990: a clip switch to a time past the webcam's last frame showed the webcam's FIRST
+    /// frame. Lives here for this module's ffmpeg fixtures and strict hardware GPU.
+    #[test]
+    fn a_clip_switch_past_the_webcam_end_holds_its_last_frame() {
+        let name = "a_clip_switch_past_the_webcam_end_holds_its_last_frame";
+        let Some(gpu) = strict_hardware_gpu(name) else {
+            return;
+        };
+        let h264 = ["-c:v", "libopenh264", "-b:v", "200k"];
+        let screen = encode_color_for_duration(&h264, "990-screen.mp4", "1.0");
+        let webcam = encode_color_for_duration(&h264, "990-webcam.mp4", "0.4");
+        let (screen, webcam) = (screen.to_str().expect("utf8"), webcam.to_str().expect("utf8"));
+        // Past the webcam's last frame (0.36 s), before the screen's (0.96 s).
+        let target = 0.8;
+
+        unsafe {
+            let mut probe = Decoder::open(webcam, &gpu).expect("open the webcam");
+            let mut last_webcam_sec = None;
+            while !probe.next().expect("decode the webcam").is_null() {
+                last_webcam_sec = Some(probe.cur_time_sec());
+            }
+            let last_webcam_sec = last_webcam_sec.expect("the webcam has frames");
+
+            let mut player = crate::live::Player::open(screen, webcam, &gpu).expect("player");
+            assert!(player.webcam_decoder_is_real());
+
+            // Same files: `seek_active`, the path of the issue's repro.
+            assert!(player.seek_active(target).expect("seek_active"));
+            assert_eq!(
+                player.webcam_time_sec(),
+                last_webcam_sec,
+                "seek_active must land the webcam on its last frame"
+            );
+
+            // Files reopened: `set_active_clip`.
+            player.set_active_clip(screen, webcam, 0.0, target).expect("set_active_clip");
+            assert_eq!(
+                player.webcam_time_sec(),
+                last_webcam_sec,
+                "set_active_clip must land the webcam on its last frame"
+            );
+        }
+        println!("CORE_ASSERTIONS_COMPLETED:{name}");
+    }
+
+    /// #997: playback that ran off the end of the programme left the view on the FIRST clip,
+    /// while the app's playhead stayed on the last. The app's next seeks carry a source time and
+    /// no clip, so they searched the first clip's file. Drives the real render loop, on clips laid
+    /// out as in the report: a first clip from its own (red) file, the last two from one (blue).
+    #[test]
+    fn playback_off_the_end_of_the_programme_stays_on_the_last_clip() {
+        let name = "playback_off_the_end_of_the_programme_stays_on_the_last_clip";
+        if strict_hardware_gpu(name).is_none() {
+            return;
+        }
+        let h264 = ["-c:v", "libopenh264", "-b:v", "200k"];
+        // Long enough that a view which wrapped onto it is still there when the test looks.
+        let first = encode_named_color(&h264, "997-first.mp4", "red", "3.0");
+        let last = encode_named_color(&h264, "997-last.mp4", "blue", "0.6");
+        // The paths travel in JSON, and the view matches them against its requests as strings.
+        let first = first.to_str().expect("utf8").replace('\\', "/");
+        let last = last.to_str().expect("utf8").replace('\\', "/");
+        let clip = |path: &str, end_sec: f64| {
+            format!(r#"{{"screenPath":"{path}","webcamPath":"","sourceStartSec":0,"sourceEndSec":{end_sec},"webcamOffsetSec":0,"hasAudio":false}}"#)
+        };
+
+        // The last clip ends on its file's last frame (0.56 s, short of the declared 0.6 s) as in
+        // the report, then on a cut.
+        for last_end_sec in [0.6, 0.4] {
+            let scene = format!(
+                r##"{{"clips":[{},{},{}],
+                "layout":{{"preset":"no-webcam","webcamSize":1,"webcamShape":"rectangle","webcamMirror":false,"webcamPosition":null,"webcamReactiveZoom":false}},
+                "effects":{{"padding":0,"blur":false,"shadow":0,"roundnessFrac":0,"motionBlur":0}},
+                "background":{{"kind":"color","color":"#000000"}},
+                "zoomRegions":[],
+                "cursor":{{"show":false,"size":1,"smoothing":0,"motionBlur":0,"clickBounce":0,"clipToBounds":false,"theme":"default"}},
+                "cropByClip":[null,null,null],
+                "output":{{"width":64,"height":64,"fps":25}}}}"##,
+                clip(&first, 3.0),
+                clip(&last, 0.6),
+                clip(&last, last_end_sec),
+            );
+            let view = crate::live::LiveView::create(64, 64, &first, "", "").expect("view");
+            view.set_playing(false);
+            view.set_scene(&scene);
+            view.set_active_clip(&last, "", 0.0, 2, 0.1);
+            let first_frame = wait_for_frame(&view, 0, |p| p.clip_index == 2);
+            let mut gen = first_frame.0;
+            let mut held = first_frame.5;
+
+            // Play to the end of the last clip, then about as long again.
+            view.set_playing(true);
+            std::thread::sleep(std::time::Duration::from_millis(1000));
+            view.set_playing(false);
+            std::thread::sleep(std::time::Duration::from_millis(150));
+            while let Some(frame) = view.latest_frame_since(gen) {
+                gen = frame.0;
+                held = frame.5;
+            }
+            // The frame held at the end is the clip's own last frame, not the first one its cut
+            // removed (the 25 fps file has a frame at exactly 0.4 s).
+            assert!(
+                held.source_time_sec < last_end_sec,
+                "end {last_end_sec}: held a frame past the clip's end, at {:.3} s",
+                held.source_time_sec
+            );
+            // And it did play up to there: a view stalled at its start would pass the bound above.
+            assert!(
+                held.source_time_sec > last_end_sec - 0.1,
+                "end {last_end_sec}: playback did not reach the clip's end, held at {:.3} s",
+                held.source_time_sec
+            );
+
+            // A seek inside the last clip, as the app sends it while paused.
+            view.set_time(0.2);
+            let (_, w, h, rgba, _, position) =
+                wait_for_frame(&view, gen, |p| (p.source_time_sec - 0.2).abs() < 0.03);
+            let center = (((h / 2) * w + w / 2) * 4) as usize;
+            let rgb = &rgba[center..center + 3];
+            assert!(
+                i32::from(rgb[2]) - i32::from(rgb[0]) > 100,
+                "end {last_end_sec}: expected the last clip's blue, got rgb {rgb:?}"
+            );
+            assert_eq!(position.clip_index, 2, "end {last_end_sec}: the view left the last clip");
+        }
+        println!("CORE_ASSERTIONS_COMPLETED:{name}");
+    }
+
+    /// The first frame the view publishes after generation `since` whose position is `wanted`.
+    fn wait_for_frame(
+        view: &crate::live::LiveView,
+        mut since: u64,
+        wanted: impl Fn(&crate::live::FramePosition) -> bool,
+    ) -> crate::live::LatestFrame {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        loop {
+            if let Some(frame) = view.latest_frame_since(since) {
+                if wanted(&frame.5) {
+                    return frame;
+                }
+                since = frame.0;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "no such frame within 5 s (last gen {since}, fatal: {:?})",
+                view.fatal_error()
+            );
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
     }
 
     /// Playhead crossing clips is `Decoder::open` of the next source on the

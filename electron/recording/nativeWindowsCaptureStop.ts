@@ -161,6 +161,20 @@ export function readAudioDeviceDrops(output: string): AudioDeviceDrop[] {
 }
 
 /**
+ * Did the helper draw menus and popups into a window recording?
+ *
+ * `true` on Windows 11 24H2+, `false` where the runtime cannot (the recording is
+ * the window alone, as before), `null` when the helper never said: a monitor
+ * source, the kill switch, or an older helper (getopenscreen/openscreen#894).
+ */
+export function readSecondaryWindowsApplied(output: string) {
+	if (output.includes('"event":"secondary-windows","applied":true')) {
+		return true;
+	}
+	return output.includes('"event":"secondary-windows","applied":false') ? false : null;
+}
+
+/**
  * Did the macOS helper record without the microphone it was asked for?
  *
  * It captures the mic through ScreenCaptureKit's `captureMicrophone`, macOS 15
@@ -185,6 +199,16 @@ export function readMicrophoneUnavailable(output: string) {
 export function readCaptureFailureStage(output: string) {
 	const match = output.match(/"code":"capture-failed","stage":"([^"]+)"/);
 	return match?.[1] ?? null;
+}
+
+/**
+ * Did the macOS helper record without the microphone because no audio input exists?
+ *
+ * Asked for one anyway, ScreenCaptureKit starts that take and never starts the next one
+ * in the same picker session: the take after a Restart was lost (getopenscreen/openscreen#995).
+ */
+export function readMicrophoneNotFound(output: string) {
+	return output.includes('"code":"microphone-not-found"');
 }
 
 /**

@@ -27,8 +27,9 @@ buildNpmPackage {
   pname = "openscreen";
   # Read, not restated. A hand-copied version is one more thing to remember at
   # release time and it had already drifted two minors behind the app it names.
-  # (`npmDepsHash` below still has to be updated by hand — that is Nix, not a
-  # choice — but it fails loudly, where a stale version number never does.)
+  # (`npmDepsHash` below still has to follow the lockfile — that is Nix, not a
+  # choice — but it fails loudly, where a stale version number never does.
+  # nix-check.yml prints it for a lockfile PR; releases refresh it themselves.)
   version = (lib.importJSON ../package.json).version;
 
   src =
@@ -51,7 +52,7 @@ buildNpmPackage {
       );
     };
 
-  npmDepsHash = "sha256-Rso0fFqexyhMTe3V/gtLWJzRQI8LrUWEPwEdRb2TYTY=";
+  npmDepsHash = "sha256-qSDxX9ReTPNfFPdLIwr3vl3RiQjj2QR2hScAwperOWE=";
 
   env.ELECTRON_SKIP_BINARY_DOWNLOAD = "1";
 
@@ -85,14 +86,12 @@ buildNpmPackage {
     npm prune --omit=dev --no-save
     cp -r node_modules "$out/lib/openscreen/"
 
-    # Asset resolution: when app.isPackaged is false, the main process resolves
-    # assets at <appPath>/public/. Place wallpapers at that root to match the
-    # packaged layout (electron-builder extraResources -> resources/wallpapers).
-    mkdir -p "$out/lib/openscreen/public"
-    cp -r public/wallpapers "$out/lib/openscreen/public/wallpapers"
-    # Same for the caption/annotation fonts: the renderer's picker loads them from
-    # there. The compositor itself finds the copy Vite put in dist/fonts.
-    cp -r public/fonts "$out/lib/openscreen/public/fonts"
+    # Asset resolution: run as `electron <dir>`, the app resolves the renderer's
+    # assets (wallpapers, cursors, fonts) at <appPath>/public/ (ASSET_BASE_DIR in
+    # electron/windows.ts). Vite already copied all of public/ into dist/, so point
+    # public/ at it rather than copying trees one by one: a hand-kept list missed
+    # cursors (#1085). The compositor reads the same files through dist/.
+    ln -s dist "$out/lib/openscreen/public"
 
     # Wrap system electron with the app directory.
     #

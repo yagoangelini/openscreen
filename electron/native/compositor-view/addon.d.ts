@@ -34,6 +34,33 @@ export interface NativeFramePacket {
 	width: number;
 	height: number;
 	data: Buffer;
+	/** The footage in this frame: its TL, TR, BR, BL corners (x, y as fractions of the frame,
+	 *  eight numbers), where a privacy blur's gimbal goes. Absent before anything is composed. */
+	footage?: number[] | null;
+	/** The footage maps from those corners by their homography (real camera), not bilinearly. */
+	footageProjective?: boolean;
+	/** Where the view was when it composed this frame: the active clip in `scene.clips` and the
+	 *  screen frame's time in its source file. Absent from an older `.node`. */
+	clipIndex?: number;
+	sourceTimeSec?: number;
+}
+
+/** A preview frame left in a shared GPU texture instead of copied into RAM (Windows, hardware
+ *  backend — see `setSharedFrames`). `handle` is the texture's NT handle the way Electron's
+ *  `sharedTexture.importSharedTexture` takes it: 8 bytes, little-endian, valid in this process
+ *  only. Its `slot` stays reserved until `releaseSharedFrame(id, slot, gen)`. */
+export interface NativeSharedFramePacket {
+	gen: number;
+	slot: number;
+	handle: Buffer;
+	width: number;
+	height: number;
+	footage?: number[] | null;
+	footageProjective?: boolean;
+	/** Where the view was when it composed this frame: the active clip in `scene.clips` and the
+	 *  screen frame's time in its source file. Absent from an older `.node`. */
+	clipIndex?: number;
+	sourceTimeSec?: number;
 }
 
 export interface ExportStats {
@@ -176,6 +203,17 @@ export interface CompositorViewAddon {
 	 *  still frame): `null` comes back WITHOUT cloning the buffer or crossing IPC.
 	 *  Pass `sinceGen = 0` to force delivery of the current frame. */
 	readFrame(id: number, sinceGen: number): NativeFramePacket | null;
+	/** Deliver this view's frames as shared GPU textures (`readSharedFrame`) rather than RAM
+	 *  pixels (`readFrame`). Returns `false` where that cannot work (not Windows, software
+	 *  backend): the view keeps reading back. Optional: an older `.node` predates it. */
+	setSharedFrames?(id: number, enabled: boolean): boolean;
+	/** The latest frame left in the view's shared texture ring, if newer than `sinceGen`.
+	 *  `null` too while the view reads back to RAM. Throws the render thread's fatal error,
+	 *  like `readFrame`. */
+	readSharedFrame?(id: number, sinceGen: number): NativeSharedFramePacket | null;
+	/** Chromium let go of frame `gen` in `slot`, in every process: the render thread may write
+	 *  that slot again. A no-op for a destroyed view. */
+	releaseSharedFrame?(id: number, slot: number, gen: number): void;
 	setParam(id: number, key: string, value: CompositorParamValue): void;
 	setPlaying(id: number, playing: boolean): void;
 	/** Seeks the view to source-media `seconds` for the active clip. */

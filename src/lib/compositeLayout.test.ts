@@ -81,7 +81,7 @@ describe("computeCompositeLayout", () => {
 		});
 
 		const refDim = Math.sqrt(1280 * 720);
-		const defaultFraction = 25 / 100; // DEFAULT_WEBCAM_SIZE_PRESET = 25
+		const defaultFraction = 40 / 100; // DEFAULT_WEBCAM_SIZE_PRESET = 40
 		expect(layout).not.toBeNull();
 		expect(layout!.webcamRect).not.toBeNull();
 		expect(layout!.webcamRect!.width).toBeLessThanOrEqual(Math.round(refDim * defaultFraction) + 1);
@@ -580,7 +580,7 @@ describe("computeCompositeLayout", () => {
 
 	// A fraction of half the short side: the same value is the same shape at any size.
 	it("rounds by the roundness, and a fully round square is a circle", () => {
-		const circle = pipAt({ webcamMaskShape: "square", webcamRoundness: 1 });
+		const circle = pipAt({ webcamMaskShape: "square", webcamRoundness: 1, webcamSizePreset: 25 });
 		expect(circle.width).toBe(circle.height);
 		expect(circle.borderRadius).toBe(circle.width / 2);
 		expect(pipAt({ webcamRoundness: 0 }).borderRadius).toBe(0);
@@ -612,10 +612,10 @@ describe("computeCompositeLayout", () => {
 		}
 	});
 
-	// The size is the camera's long side: a 16:9 camera at the 50% cap is 540 x 304 in 1080p.
-	it("caps the camera at 50% of the short side", () => {
-		expect(pipAt({ webcamSizePreset: WEBCAM_SIZE_MAX })).toMatchObject({ width: 540, height: 304 });
-		expect(pipAt({ webcamSizePreset: 80 }).height).toBe(304);
+	// The size is the camera's long side: a 16:9 camera at the 60% cap is 648 x 365 in 1080p.
+	it("caps the camera at 60% of the short side", () => {
+		expect(pipAt({ webcamSizePreset: WEBCAM_SIZE_MAX })).toMatchObject({ width: 648, height: 365 });
+		expect(pipAt({ webcamSizePreset: 80 }).height).toBe(365);
 	});
 });
 

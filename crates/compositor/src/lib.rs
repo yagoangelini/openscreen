@@ -34,16 +34,17 @@ pub mod camera;
 pub mod config;
 pub mod cursor;
 pub mod cursor_sdf;
+pub mod export_control;
 pub mod export_probe;
 pub mod ffi;
 pub mod frame_geometry;
 pub mod gif_export;
-pub mod gif_export_control;
 pub mod regions;
 // Multiplateforme à dessein : n'utilise que libavformat (liée sur les trois
 // cibles) et le shim C. Seul Linux l'appelle aujourd'hui, parce que c'est la
 // seule plateforme dont la capture passe par `MediaRecorder`, mais rien dedans
 // n'est spécifique à Linux.
+pub mod prism_mesh;
 pub mod remux;
 pub mod scene;
 pub mod sculpt;
@@ -51,6 +52,8 @@ pub mod sculpt;
 // `segmentation` ses deux entrées échouent proprement, ce qui garde le reste du crate
 // indépendant du choix de packaging d'ONNX Runtime.
 pub mod segmentation;
+// Livraison de la preview par textures partagées (Windows) ; la tenue des cases est portable.
+pub mod shared_frames;
 pub mod text_anim;
 pub mod text_fonts;
 pub mod text_plate;

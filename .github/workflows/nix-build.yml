@@ -18,10 +18,6 @@ name: Nix build
 # Hence two steps rather than one: build, then run the headless CLI against the
 # artefact. The build catches drift in what installPhase copies; the smoke test
 # catches the gap between "compiles" and "runs".
-#
-# Deliberately not on every pull request yet. Nobody has measured what this
-# costs on a runner, and a check whose duration is unknown is not one to put in
-# front of every merge. Promote it once the schedule has reported a few times.
 on:
   workflow_dispatch:
   # The job that actually builds the derivation now runs on the pull requests that
@@ -31,8 +27,9 @@ on:
   # building it, and the first real signal arrived on main half an hour after the
   # merge. #371 shipped a change to `nix/compositor-view.nix` that way.
   #
-  # Path-filtered rather than universal: this takes about half an hour, and a PR
-  # that touches none of these files cannot change what it produces.
+  # Path-filtered rather than universal: this takes about half an hour. The list
+  # is what the derivations read beyond the app's own sources, which the push to
+  # main still covers.
   pull_request:
     paths:
       - flake.nix
@@ -40,6 +37,14 @@ on:
       - nix/**
       - crates/**
       - package-lock.json
+      # The src of nix/pipewire-helper.nix and nix/whisper-stt.nix. No other
+      # workflow compiles the PipeWire crate, and #386 and #514 both changed it
+      # and merged with no nix build on the PR.
+      - electron/native/pipewire-capture/**
+      - electron/native/whisper-stt/**
+      # buildPhase is `npx vite build` alone, and public/ reaches the package
+      # only through the copy Vite makes of it in dist/.
+      - vite.config.ts
       # Including itself, or a PR that only edits this file gets no validation of
       # the change it is making -- the same rule nix-check.yml already follows.
       - .github/workflows/nix-build.yml
@@ -170,6 +175,22 @@ jobs:
           echo "closure: $(nix path-info --closure-size --human-readable ./result | tail -1)"
           ls -la result/bin/
 
+      # The renderer loads wallpapers, cursors and fonts from <app>/public/, and
+      # a tree missing there degrades the editor without failing anything: the
+      # cursor style picker rendered empty (#1085). Every entry of the source
+      # public/ must be there.
+      - name: Check the renderer's public assets
+        run: |
+          set -euo pipefail
+          missing=0
+          for entry in public/*; do
+            if [ ! -e "result/lib/openscreen/$entry" ]; then
+              echo "::error::$entry is missing from the package"
+              missing=$((missing + 1))
+            fi
+          done
+          [ "$missing" -eq 0 ]
+
       # The native components are resolved at runtime behind existence checks, so
       # a wrapper pointing at a path that is not there degrades the app instead of
       # failing it -- silently, which is the failure mode this whole workflow was
@@ -268,6 +289,10 @@ jobs:
 
           check_dlopen_rpath "PipeWire helper" \
             "$(wrapper_value OPENSCREEN_LINUX_CURSOR_HELPER_EXE)" libpipewire-0.3.so.0
+          # Same construction for csrc/dmabuf_modifiers.c's dlopen("libEGL.so.1"),
+          # and ubuntu-latest's system libEGL would hide its loss just as well.
+          check_dlopen_rpath "PipeWire helper" \
+            "$(wrapper_value OPENSCREEN_LINUX_CURSOR_HELPER_EXE)" libEGL.so.1
           check_dlopen_rpath "compositor addon" \
             "$(wrapper_value OPENSCREEN_COMPOSITOR_VIEW_NODE)" libvulkan.so.1
 
@@ -426,6 +451,14 @@ jobs:
               # xvfb-run folds the command's stderr into stdout, so the stderr
               # capture is empty and every milestone lands in the other file.
               grep -a milestone "/tmp/sources.$i.out" || echo "  (none at all)"
+            elif [ "$RC" -eq 0 ] && ! python3 -c "import json,sys; sys.exit(0 if json.load(open(sys.argv[1]))['displays'] else 1)" "/tmp/sources.$i.json"; then
+              # Exit 0 is not an answer on its own. Electron 43 settles the
+              # combined screen+window call after its 3s ready timer with the
+              # screen dropped, so `displays: []` is #462's other face, and
+              # Xvfb always has one screen to report.
+              FAILED=$((FAILED + 1))
+              echo "returned no display (#462). Last milestone:"
+              grep -a milestone "/tmp/sources.$i.out" | tail -1 || echo "  (none)"
             elif [ "$RC" -eq 0 ]; then
               OK=$((OK + 1))
               LAST_OK="/tmp/sources.$i.json"
@@ -460,10 +493,8 @@ jobs:
           PY
           fi
 
-          # Noted, not acted on. Enumeration is flaky here and the export
-          # assertion below is the more
-          # important question; a flaky attempt costs an annotation rather than
-          # the answer. Verdict at the end, once both have had their say.
+          # Annotated here, decided at the end: export runs either way, so a
+          # failed enumeration cannot hide whether the addon works.
           if [ "$HUNG" -gt 0 ]; then
             echo "::warning::openscreen sources had to be killed on $HUNG of $ATTEMPTS attempts. Check the milestones above for how far it got before the outer bound fired."
           fi
@@ -590,21 +621,18 @@ jobs:
           # flaky must not hide whether export works, which is the whole point of
           # having packaged the compositor addon.
           #
-          # The gate is "did enumeration ever answer" and "does export work", not
-          # "did all five attempts pass". Requiring FAILED -eq 0 made the job red
-          # by construction: the standing numbers on this runner are 1/5, 3/5 and
-          # 4/5 ok, so a run where export is perfect and four enumerations succeed
-          # still failed. A post-merge check that is red by design is one that gets
-          # muted, which costs more than the flakiness it was reporting. The
-          # per-attempt warnings above keep that flakiness visible without letting
-          # it decide the build; tighten this to $ATTEMPTS once the capture failure
-          # is understood and fixed.
+          # Every enumeration must answer with a display, and export must work.
+          # The gate used to be "did enumeration ever answer", because the call
+          # failed on 1 to 4 attempts in 5 for a reason nobody had found. #462
+          # found it: asking for screens and windows in one getSources call is
+          # what fails under X11, and the get-sources handler now asks one type
+          # at a time (under Xvfb: 0 failures in 32 runs, against 7 in 16
+          # combined). A flake left after that is a regression, not runner luck.
           #
-          # Export, on the other hand, is a hard gate on every trigger again. It no
-          # longer depends on a capability this host does not have, so there is
-          # nothing left to excuse: if it fails now, the package is broken.
+          # Export is a hard gate on every trigger. It does not depend on a
+          # capability this host lacks, so if it fails, the package is broken.
           echo "=== verdict: enumeration $OK/$ATTEMPTS ok, export $EXPORT_OK, $RUN_CLI_N run_cli invocations ==="
-          if [ "$EXPORT_OK" -ne 1 ] || [ "$OK" -eq 0 ]; then
+          if [ "$EXPORT_OK" -ne 1 ] || [ "$OK" -ne "$ATTEMPTS" ]; then
             exit 1
           fi
 

@@ -20,9 +20,9 @@
 // that is already never repeated.
 
 import { spawn } from "node:child_process";
-import { resolveFfmpeg } from "../media/audioPeaks";
+import { mediaClockAudioArgs, resolveFfmpeg } from "../media/audioPeaks";
 import { createInactivityTimer } from "../media/inactivityTimer";
-import { STT_NATIVE_EXTRACTION_UNAVAILABLE } from "./transcriptionContract";
+import { STT_MEDIA_UNREADABLE, STT_NATIVE_EXTRACTION_UNAVAILABLE } from "./transcriptionContract";
 
 /** What whisper.cpp wants, and what `decodePeaks` already asks ffmpeg for. */
 const SAMPLE_RATE = 16_000;
@@ -53,6 +53,22 @@ export class NoAudioTrackError extends Error {
 }
 
 /**
+ * The media file could not be read at all: the OS refused it, or ffmpeg hung
+ * opening it. Unlike `NoAudioTrackError` this is NOT permanent: it clears once
+ * the user grants access, so it carries `STT_MEDIA_UNREADABLE` for the renderer
+ * to explain rather than remember.
+ */
+export class MediaUnreadableError extends Error {
+	constructor(filePath: string, detail: string) {
+		super(`${STT_MEDIA_UNREADABLE}: cannot read ${filePath}: ${detail}`);
+		this.name = "MediaUnreadableError";
+	}
+}
+
+/** What ffmpeg's stderr says when the OS refused to open the input. */
+const ACCESS_DENIED = /operation not permitted|permission denied/i;
+
+/**
  * Decode `filePath` to mono 16 kHz float samples.
  *
  * Streams `f32le` straight off ffmpeg's stdout, so the only full-size allocation is
@@ -68,6 +84,9 @@ export async function extractMono16kPcm(
 	const ffmpeg = resolveFfmpeg();
 	if (!ffmpeg) throw new FfmpegUnavailableError();
 	if (options.signal?.aborted) throw new DOMException("Aborted", "AbortError");
+	const audioArgs = await mediaClockAudioArgs(ffmpeg, filePath, options.signal);
+	// Again: an abort during the probe (which it kills) fired before the listener below.
+	if (options.signal?.aborted) throw new DOMException("Aborted", "AbortError");
 
 	const child = spawn(
 		ffmpeg,
@@ -77,7 +96,7 @@ export async function extractMono16kPcm(
 			"error",
 			"-i",
 			filePath,
-			"-vn",
+			...audioArgs,
 			"-ac",
 			"1",
 			"-ar",
@@ -107,8 +126,16 @@ export async function extractMono16kPcm(
 
 		const timer = createInactivityTimer(EXTRACT_TIMEOUT_MS, () => {
 			child.kill("SIGKILL");
+			// Only a hang before the first byte says the file could not be opened (a
+			// pending macOS folder-access prompt produces exactly that, issue #968). Once
+			// audio has come out the media was readable, and the stall is ffmpeg's.
+			const nothingRead = total === 0 && carry === null;
 			finish(() =>
-				reject(new Error(`ffmpeg produced no output for ${EXTRACT_TIMEOUT_MS}ms on ${filePath}`)),
+				reject(
+					nothingRead
+						? new MediaUnreadableError(filePath, `ffmpeg timed out after ${EXTRACT_TIMEOUT_MS}ms`)
+						: new Error(`ffmpeg timed out after ${EXTRACT_TIMEOUT_MS}ms on ${filePath}`),
+				),
 			);
 		});
 
@@ -140,7 +167,13 @@ export async function extractMono16kPcm(
 			// caller treats both the same way — this asset will not transcribe — so they
 			// share an error type; `stderr` carries which it was.
 			if (code !== 0 && total === 0) {
-				finish(() => reject(new NoAudioTrackError(filePath, stderr.trim())));
+				// Except a read the OS refused: that also exits non-zero with nothing
+				// decoded, but remembering it as "no audio" would never retry the file
+				// once access is granted.
+				const error = ACCESS_DENIED.test(stderr)
+					? new MediaUnreadableError(filePath, stderr.trim())
+					: new NoAudioTrackError(filePath, stderr.trim());
+				finish(() => reject(error));
 				return;
 			}
 			const out = new Float32Array(total);

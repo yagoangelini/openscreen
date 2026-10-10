@@ -25,7 +25,9 @@ import type { AxcutDocument } from "../../../src/lib/ai-edition/schema";
 // (`depth/2 + 0.5`) that was purged from two rendering sites and survived here,
 // wrong at both ends of a table that actually runs 1.25× to 5.0×.
 import { ZOOM_DEPTH_LEGEND } from "../../../src/lib/ai-edition/timeline/zoom-scale";
+import { ZOOM_TRANSITION_LEGEND } from "../../../src/lib/ai-edition/timeline/zoom-transitions";
 import {
+	type AgentToolExecution,
 	addAnnotationArgs,
 	addAudioArgs,
 	addCameraFullscreenArgs,
@@ -44,6 +46,7 @@ import {
 	removeClipArgs,
 	removeModifierArgs,
 	removeTrimArgs,
+	removeWordsArgs,
 	replaceTimelineArgs,
 	resolveCursorAssetId,
 	setAnnotationArgs,
@@ -93,7 +96,7 @@ const CONSENT_PROMPT_BLOCK = [
 	"",
 	"PROJECT EDITS ARE CURRENTLY DISABLED by the user, who asked to be consulted before the timeline changes.",
 	"- Read freely: getCurrentDocument and getTranscript work as usual.",
-	"- Do NOT call any tool that writes (addTrim, setTrim, setClipRange, moveClip, replaceTimeline, add*/set* effects, remove*). Every one of them will be refused, so calling them wastes the turn and tells the user nothing.",
+	"- Do NOT call any tool that writes (removeWords, addTrim, setTrim, setClipRange, moveClip, replaceTimeline, add*/set* effects, remove*). Every one of them will be refused, so calling them wastes the turn and tells the user nothing.",
 	"- Instead: say precisely what you would change — which tool, which times, which ids — and ask the user to confirm. Be specific enough that they can say yes to it.",
 	"- Never state or imply that an edit was applied. If the user confirms and you are still refused, tell them the 'Project edits' setting in Settings → AI has to be re-enabled first.",
 ].join("\n");
@@ -117,8 +120,10 @@ const BASE_SYSTEM_PROMPT = [
 	// other than English. Say what the tool does; let the model do the matching.
 	"How the tools map to intent — pick the most specific one, and prefer the smallest edit that satisfies the request:",
 	"- Silences, pauses and dead stretches are removed as trims INSIDE the placed clip. Send them together with addTrims once you know the ranges; addTrim is for a single cut or a correction. The placed clip stays the canonical cut; it is not rebuilt to drop them.",
+	"- Cutting specific spoken words (fillers, a repeated or flubbed phrase, a false start, a duplicate take) is removeWords: read getTranscriptWords, choose the occurrences from their surrounding speech, then pass that assetId and ONLY those word IDs. Word IDs restart for each asset, so keep the read's assetId. Consecutive words become one cut. Do not cut every occurrence of a word just because its text matches one you were asked to remove.",
 	"- Changing where a clip starts or ends within its source is setClipRange — the clip's in/out, distinct from a trim.",
 	`- addZoom takes a virtual-timeline span (depth is an ordinal 1–6 selecting from a fixed table — ${ZOOM_DEPTH_LEGEND} — never a multiplier; focus in 0–1 frame fractions). addSpeed changes pacing over a span. addAnnotation puts text on screen. addCameraFullscreen enlarges the webcam, and only does something where assets[].hasCameraTrack is true.`,
+	"- A zoom animates in just before its span and out just after it (zoomInFromSec, zoomOutUntilSec in getCurrentDocument). Leave those windows untrimmed, or the export jumps at the cut.",
 	"- addAudio lays an imported voiceover or music file over a span. It plays an asset the project already has (kind 'audio'); importing or recording one is the editor's job, not a tool you have — so when the project has none, say so rather than naming an id that does not exist.",
 	"- moveClip changes the order of placed clips, one call per clip that moves, preserving ids, source ranges, trims and anchored effects. replaceTimeline rebuilds the timeline from kept intervals and sorts them, so it cannot reorder anything.",
 	"- Deleting is a first-class action, not a workaround: removeTrim, removeModifier, removeClip. Never fake a deletion by re-adding an element or zeroing it out (span 0, speed 1×) — that leaves it in the document and misreports what you did.",
@@ -141,32 +146,36 @@ export function buildSystemPrompt(options: { editsAllowed: boolean }): string {
  *  case, and the string the surface tests measure the wire against. */
 export const SYSTEM_PROMPT = buildSystemPrompt({ editsAllowed: true });
 
+// #1028: a zoom's camera moves sit OUTSIDE its span, where nothing on the ruler shows them.
+const ZOOM_TRANSITIONS_NOTE = `A zoom HOLDS over its span: it animates in during the window just before startSec and out during the window just after endSec. Each move lasts 0.6 s + 0.55 s × ln(renderedScale) of SCREEN time (${ZOOM_TRANSITION_LEGEND}), so a speed region scales the timeline it covers by its speed: longer above 1×, shorter below. getCurrentDocument gives each zoom's zoomInFromSec and zoomOutUntilSec, in virtual seconds like the zoom. A trim inside either window cuts that move and the export jumps at the cut: leave the windows untrimmed. Two zooms at most 1.5 s apart on screen, on the same clip with no trim between them, are chained: the camera pans from one to the next over 1 s of screen time from the first one's end (panUntilSec), with no zoom-out or zoom-in between them.`;
+const CUT_TRANSITIONS_RESULT = `When the result cuts a zoom's move in or out, it carries \`cutTransitions\`: which zoom, which side, cutSec, the timeline seconds of the move lost, and by: trim, or junction when the move runs past its clip's edge into the next clip. It is a warning, nothing is refused: move the cut or the zoom unless a hard cut is what you want.`;
+
 export const TOOL_DESCRIPTIONS: Record<string, string> = {
 	getCurrentDocument:
 		"Read a compact snapshot of the current project: assets (with durations), timeline clips and trim ranges (source-time), and the zoom / speed / annotation effects (virtual, edited-timeline time). Call this before editing if the snapshot in the system prompt may be stale. The AxcutDocument is the single source of truth — your edits should preserve the user's placed clips and any timeline state they have already set up.",
 	getTranscript:
 		"Read the transcript segments (speech and silence, with start/end seconds and text) for an asset. Omit assetId to read the primary asset's transcript.",
 	getCursorTrack:
-		"Read the recorded pointer track for an asset: where the cursor was over time, downsampled to a readable rate. Each point carries atSec (the asset's own source clock), virtualSec (the same instant on the edited timeline — the coordinate addZoom takes, null when no clip carries it), cx/cy as 0–1 fractions of the frame, and `shape`, an index into the pointer bitmaps the recording used (equal values are the same pointer; a change means the pointer changed, e.g. arrow to text caret). Points that are not plain moves carry `kind`; points a trim cuts out of playback carry `trimmed`. These are real samples, not a summary — reading what the pointer was doing is yours. Omit assetId for the primary asset. It answers `available:false` in two DIFFERENT ways you must not confuse: reason 'no-sidecar' means this asset was checked and genuinely has no telemetry, while reason 'unavailable' means it could not be read from here.",
+		"Read the recorded pointer track for an asset: where the cursor was over time, downsampled to a readable rate. Each point carries atSec (the asset's own source clock), virtualSec (the same instant on the edited timeline — the coordinate addZoom takes, null when no clip carries it), cx/cy as 0–1 fractions of the frame, and `shape`, an index into the pointer bitmaps the recording used (equal values are the same pointer; a change means the pointer changed, e.g. arrow to text caret). Points that are not plain moves carry `kind`; points a trim cuts out of playback carry `trimmed`; points where the pointer was hidden carry `visible:false`. These are real samples, not a summary — reading what the pointer was doing is yours. Omit assetId for the primary asset. It answers `available:false` in two DIFFERENT ways you must not confuse: reason 'no-sidecar' means this asset was checked and genuinely has no telemetry, while reason 'unavailable' means it could not be read from here.",
 	getTranscriptWords:
-		'Read the transcript one WORD at a time for an asset: each word\'s id, text, start/end seconds, and — only when it is not plain transcription — `source` ("user" for a word the user corrected, "synth" for one they typed in) and `originalText` (what the transcriber had heard before the correction). This is the ONLY read that gives you the ids setWordText takes; getTranscript answers in segments, whose ids belong to a different namespace and are not accepted there. A whole transcript is large, so pass startSec/endSec to read just the passage you mean to fix. Omit assetId for the primary asset.',
+		'Read the transcript one WORD at a time for an asset: each word\'s id, text, start/end seconds, and — only when it is not plain transcription — `source` ("user" for a word the user corrected, "synth" for one they typed in) and `originalText` (what the transcriber had heard before the correction). This is the ONLY read that gives you the ids setWordText and removeWords take; getTranscript answers in segments, whose ids belong to a different namespace and are not accepted there. A whole transcript is large, so pass startSec/endSec to read just the passage you mean to fix. Omit assetId for the primary asset.',
 	setWordText:
-		"Correct ONE word's text, by the id getTranscriptWords returns. This changes the TRANSCRIPT and nothing else: the captions follow it, the film is untouched and no audio is cut. Use it when the transcriber misheard something — a name, a technical term — and the user asks for it to read correctly. Passing an empty string BLANKS the word: it keeps its place in the media but leaves the captions, which is how a junk token like \"(inaudible)\" is removed without cutting the speech around it. Writing the transcriber's own text back clears the correction. This is NOT how you make a spoken word go away — that removes only the label and leaves the film saying it; use addTrim, which cuts the audio with it.",
-	addTrim:
-		"Add ONE trim range: a cut of a span inside a clip (this source-time span will not be played or exported) that does NOT split the clip. Times are in seconds of the asset's source time. This is the preferred (and for 'remove silences' requests, the only) way to handle silences; it preserves the user's placed clips and only adds a cut. When you have several cuts to make, use addTrims and send them together — this one is for a single cut or a later correction. A cut belongs to ONE clip: `clipId` is inferred when a single clip covers the range, but when several clips draw on the same asset over it the call FAILS and lists them — pass the `clipId` you mean (ids come from getCurrentDocument).",
-	addTrims:
-		"Add MANY trim ranges in one call: `ranges` is a list, each entry taking exactly the fields addTrim takes. Use this whenever you have more than one cut to make — 'remove the silences' on a half-hour recording is hundreds of cuts, and sending them one at a time costs one round trip each. Each range stands or falls ALONE: one that cannot be placed is refused by itself and listed in `refused` with its index and the reason, while every other range is still applied. Nothing is rolled back, so a single bad bound never costs you the rest. The result leads with requested / appliedCount / refusedCount so you can see a partial outcome without re-reading the document — report what was refused rather than claiming the whole list landed.",
-	setTrim:
-		"Move or resize an existing trim range by id. Times are source-time seconds. The cut follows to whichever clip the new range lands in, when that clip is unambiguous.",
+		"Correct ONE word's text, by the id getTranscriptWords returns. This changes the TRANSCRIPT and nothing else: the captions follow it, the film is untouched and no audio is cut. Use it when the transcriber misheard something — a name, a technical term — and the user asks for it to read correctly. Passing an empty string BLANKS the word: it keeps its place in the media but leaves the captions, which is how a junk token like \"(inaudible)\" is removed without cutting the speech around it. Writing the transcriber's own text back clears the correction. This is NOT how you make a spoken word go away — that removes only the label and leaves the film saying it; use removeWords, which cuts the audio with it.",
+	removeWords:
+		"Cut the spoken words selected by `wordIds` from getTranscriptWords out of the film: fillers, a repeated or flubbed phrase, a false start, a duplicate take. Pass the same `assetId` as that read: word IDs are numbered independently in each asset. Omit assetId only when the IDs are unique across all transcripts. Read words in context and choose the IDs yourself; the executor does not classify speech or remove every matching text. It resolves each ID to one recorded asset, valid source timestamps, and exactly one fully covering clip, then adds non-destructive trims; words that follow one another in the transcript become ONE trim, so a phrase goes out whole, gaps included. If any ID is missing, invalid, duplicated, already cut or ambiguous, nothing changes. The transcript is untouched. The result lists each word and the ACTUAL trim span (which addTrim may shape), asset, clip and trim ID; report only those results. " +
+		CUT_TRANSITIONS_RESULT,
+	addTrim: `Add ONE trim range: a cut of a span inside a clip (this source-time span will not be played or exported) that does NOT split the clip. Times are in seconds of the asset's source time. This is the preferred (and for 'remove silences' requests, the only) way to handle silences; it preserves the user's placed clips and only adds a cut. When you have several cuts to make, use addTrims and send them together — this one is for a single cut or a later correction. A cut belongs to ONE clip: \`clipId\` is inferred when a single clip covers the range, but when several clips draw on the same asset over it the call FAILS and lists them — pass the \`clipId\` you mean (ids come from getCurrentDocument). ${ZOOM_TRANSITIONS_NOTE} ${CUT_TRANSITIONS_RESULT}`,
+	addTrims: `Add MANY trim ranges in one call: \`ranges\` is a list, each entry taking exactly the fields addTrim takes. Use this whenever you have more than one cut to make — 'remove the silences' on a half-hour recording is hundreds of cuts, and sending them one at a time costs one round trip each. Each range stands or falls ALONE: one that cannot be placed is refused by itself and listed in \`refused\` with its index and the reason, while every other range is still applied. Nothing is rolled back, so a single bad bound never costs you the rest. The result leads with requested / appliedCount / refusedCount so you can see a partial outcome without re-reading the document — report what was refused rather than claiming the whole list landed. ${ZOOM_TRANSITIONS_NOTE} Each applied entry carries the same \`cutTransitions\` warning addTrim reports.`,
+	setTrim: `Move or resize an existing trim range by id. Times are source-time seconds. The cut follows to whichever clip the new range lands in, when that clip is unambiguous. ${ZOOM_TRANSITIONS_NOTE} ${CUT_TRANSITIONS_RESULT}`,
 	setClipRange:
 		"Set a clip's in/out points (source-time seconds) to shorten its head or tail — distinct from a trim (which cuts a span inside the clip). All clips are re-laid back-to-back afterwards, so downstream clips shift automatically. Use this ONLY when the user explicitly asks to shorten or extend a user-placed clip. Do NOT use this for 'remove silences' or 'cut pauses' — for those, use addTrim.",
 	moveClip:
 		"Reorder a placed clip: move `clipId` so it plays just before `beforeClipId` (pass null, or omit it, to move it last). Ids come from getCurrentDocument, where each clip carries its `index` and its label in `reason`. This preserves every clip id, every source range, every trim, and the zooms / speed regions / annotations anchored to each clip. This is the tool for 'swap these clips', 'put X first' and 'change the clip order' — replaceTimeline cannot reorder anything.",
 	replaceTimeline:
 		"Replace the whole timeline with the given kept intervals of the primary asset's source time. Everything outside the intervals becomes a trim. The intervals are SORTED, so this can never reorder clips — use moveClip for that. DO NOT use this for 'cut silences' or 'remove pauses' — the user has likely placed clips on the timeline that you'd be discarding. Use this ONLY when the user explicitly asks you to rebuild the timeline from scratch (e.g. 'start over with the kept intervals from the transcript'). It is refused when it would merge away, shorten or drop an existing clip; the refusal names them and the tool to use instead.",
-	addZoom: `Add a zoom-in over a span of the edited timeline (virtual seconds). depth is an ORDINAL 1–6, not a factor: it selects a magnification from a fixed table (${ZOOM_DEPTH_LEGEND}), so the default depth 3 renders at 1.80×. The result reports renderedScale — quote that, never the depth, when telling the user how strong the zoom is. focus is the zoom centre in 0–1 fractions of the frame (default centre). When the recording's pointer telemetry can be read for the footage under the span, the result also carries \`cursorAnchor\`: \`focus\` echoes the value this call used (including the default, if you left it out), \`cursor\` is where the pointer ACTUALLY was over the span the zoom landed on — the median of the recorded samples, \`spread\` being how far the farthest one strays from it — and \`offset\` is the distance between the two, in frame fractions. It is a measurement, not a correction: nothing is moved and no call is refused over it, and a zoom framing a slide, a face, or a region the pointer never enters is a legitimate choice. \`available:false\` names what it found instead (\`no-samples\`, \`trimmed-out\`). Its ABSENCE means no telemetry was read for that footage — never that the recording has none; assets[].hasCursorTelemetry and getCursorTrack are what answer that. Use for 'zoom in on …' and the smart-zoom pass.`,
-	addZooms: `Add MANY zooms in one call: \`regions\` is a list, each entry taking exactly the fields addZoom takes (same depth table, ${ZOOM_DEPTH_LEGEND}). Use this for the smart-zoom pass, where you have decided every zoom before emitting the first one — sending them one at a time costs one round trip each. Each region stands or falls ALONE: one that covers no clip is refused by itself and listed in \`refused\` with its index and the reason, while the others are still applied. The result leads with requested / appliedCount / refusedCount, and each applied entry carries its renderedScale — quote that, never the depth — plus the same \`cursorAnchor\` addZoom reports, whenever the footage under that region has readable pointer telemetry.`,
-	setZoom: `Move, resize, or restyle an existing zoom by id (virtual-timeline seconds). Only the fields you pass are changed. depth selects from the same table (${ZOOM_DEPTH_LEGEND}); if the zoom carries a customScale (getCurrentDocument shows it as depthIsOverridden), that custom value is what renders, and passing depth clears it so the depth takes effect — the result says so. The result reports the resulting renderedScale, and — when the footage under the span has readable pointer telemetry — the same \`cursorAnchor\` addZoom reports, measured against the zoom's EFFECTIVE focus, so a call that moved only the span still learns what its unchanged focus is now looking at.`,
+	addZoom: `Add a zoom-in over a span of the edited timeline (virtual seconds). depth is an ORDINAL 1–6, not a factor: it selects a magnification from a fixed table (${ZOOM_DEPTH_LEGEND}), so the default depth 3 renders at 1.80×. The result reports renderedScale — quote that, never the depth, when telling the user how strong the zoom is. focus is the zoom centre in 0–1 fractions of the frame (default centre). When the recording's pointer telemetry can be read for the footage under the span, the result also carries \`cursorAnchor\`: \`focus\` echoes the value this call used (including the default, if you left it out), \`cursor\` is where the pointer ACTUALLY was over the span the zoom landed on — the median of the recorded samples, \`spread\` being how far the farthest one strays from it — and \`offset\` is the distance between the two, in frame fractions. It is a measurement, not a correction: nothing is moved and no call is refused over it, and a zoom framing a slide, a face, or a region the pointer never enters is a legitimate choice. \`available:false\` names what it found instead (\`no-samples\`, \`trimmed-out\`). Its ABSENCE means no telemetry was read for that footage — never that the recording has none; assets[].hasCursorTelemetry and getCursorTrack are what answer that. Use for 'zoom in on …' and the smart-zoom pass. ${ZOOM_TRANSITIONS_NOTE} ${CUT_TRANSITIONS_RESULT}`,
+	addZooms: `Add MANY zooms in one call: \`regions\` is a list, each entry taking exactly the fields addZoom takes (same depth table, ${ZOOM_DEPTH_LEGEND}). Use this for the smart-zoom pass, where you have decided every zoom before emitting the first one — sending them one at a time costs one round trip each. Each region stands or falls ALONE: one that covers no clip is refused by itself and listed in \`refused\` with its index and the reason, while the others are still applied. The result leads with requested / appliedCount / refusedCount, and each applied entry carries its renderedScale — quote that, never the depth — plus the same \`cursorAnchor\` addZoom reports, whenever the footage under that region has readable pointer telemetry, and the same \`cutTransitions\` warning. ${ZOOM_TRANSITIONS_NOTE}`,
+	setZoom: `Move, resize, or restyle an existing zoom by id (virtual-timeline seconds). Only the fields you pass are changed. depth selects from the same table (${ZOOM_DEPTH_LEGEND}); if the zoom carries a customScale (getCurrentDocument shows it as depthIsOverridden), that custom value is what renders, and passing depth clears it so the depth takes effect — the result says so. The result reports the resulting renderedScale, and — when the footage under the span has readable pointer telemetry — the same \`cursorAnchor\` addZoom reports, measured against the zoom's EFFECTIVE focus, so a call that moved only the span still learns what its unchanged focus is now looking at. ${ZOOM_TRANSITIONS_NOTE} ${CUT_TRANSITIONS_RESULT}`,
 	addSpeed:
 		"Add a speed-change region over a span of the edited timeline (virtual seconds). speed > 1 fast-forwards, < 1 slows down, from 0.25× to 16× (default 1.5×). Use to speed through slow stretches without cutting them.",
 	setSpeed:
@@ -218,7 +227,7 @@ export interface CursorTelemetryReader {
 	probe?(input: { assetId: string; originalPath: string | null }): Promise<boolean>;
 }
 
-interface ToolRuntime {
+export interface ToolRuntime {
 	cursor?: CursorTelemetryReader;
 	availableByAssetId?: Record<string, boolean>;
 }
@@ -268,24 +277,40 @@ function documentTool<S extends z.ZodType>(
 	return tool(
 		async (args: z.infer<S>) => {
 			sink.toolStart(name, args);
-			// ponytail: the ONE async step the pure executor cannot take. Reading a
-			// sidecar is IO; `executeAgentTool` is synchronous by design (it is the
-			// gate every mutation passes through, and it has to stay testable
-			// without a filesystem). So the load happens here and its verdict —
-			// including "I could not look" — goes in as data.
-			const load = TOOLS_READING_CURSOR.has(name)
-				? await loadCursorTelemetry(holder.current, args, runtime)
-				: undefined;
-			const execution = executeAgentTool(holder.current, name, JSON.stringify(args), {
-				editsAllowed,
-				cursorTelemetry: { availableByAssetId: runtime.availableByAssetId, load },
-			});
+			const execution = await runDocumentTool(holder.current, name, args, editsAllowed, runtime);
 			if (execution.document) holder.current = execution.document;
 			sink.toolEnd(name, execution.ok, execution.summary);
 			return execution.resultJson;
 		},
 		{ name, description: TOOL_DESCRIPTIONS[name], schema },
 	);
+}
+
+/**
+ * Run one tool against a document: the cursor read it may need, then the shared
+ * executor. The in-app agent (`documentTool`) and the MCP server both call this,
+ * so a tool behaves the same whichever agent is driving it.
+ *
+ * ponytail: the ONE async step the pure executor cannot take. Reading a sidecar
+ * is IO; `executeAgentTool` is synchronous by design (it is the gate every
+ * mutation passes through, and it has to stay testable without a filesystem).
+ * So the load happens here and its verdict — including "I could not look" — goes
+ * in as data.
+ */
+export async function runDocumentTool(
+	document: AxcutDocument,
+	name: string,
+	args: unknown,
+	editsAllowed: boolean,
+	runtime: ToolRuntime,
+): Promise<AgentToolExecution> {
+	const load = TOOLS_READING_CURSOR.has(name)
+		? await loadCursorTelemetry(document, args, runtime)
+		: undefined;
+	return executeAgentTool(document, name, JSON.stringify(args ?? {}), {
+		editsAllowed,
+		cursorTelemetry: { availableByAssetId: runtime.availableByAssetId, load },
+	});
 }
 
 /** Reads the sidecar for whichever asset the call names, defaulting to the
@@ -331,36 +356,44 @@ export function buildTools(
 	editsAllowed = true,
 	runtime: ToolRuntime = {},
 ) {
-	const build = <S extends z.ZodType>(name: string, schema: S) =>
-		documentTool(holder, sink, name, schema, editsAllowed, runtime);
-	return [
-		build("getCurrentDocument", z.object({})),
-		build("getTranscript", getTranscriptArgs),
-		build("getTranscriptWords", getTranscriptWordsArgs),
-		build("getCursorTrack", getCursorTrackArgs),
-		build("setWordText", setWordTextArgs),
-		build("addTrim", addTrimArgs),
-		build("addTrims", addTrimsArgs),
-		build("setTrim", setTrimArgs),
-		build("setClipRange", setClipRangeArgs),
-		build("moveClip", moveClipArgs),
-		build("replaceTimeline", replaceTimelineArgs),
-		build("addZoom", addZoomArgs),
-		build("addZooms", addZoomsArgs),
-		build("setZoom", setZoomArgs),
-		build("addSpeed", addSpeedArgs),
-		build("setSpeed", setSpeedArgs),
-		build("addAnnotation", addAnnotationArgs),
-		build("setAnnotation", setAnnotationArgs),
-		build("addCameraFullscreen", addCameraFullscreenArgs),
-		build("setCameraFullscreen", setCameraFullscreenArgs),
-		build("addAudio", addAudioArgs),
-		build("setAudio", setAudioArgs),
-		build("removeTrim", removeTrimArgs),
-		build("removeModifier", removeModifierArgs),
-		build("removeClip", removeClipArgs),
-	];
+	return TOOL_ARG_SCHEMAS.map(([name, schema]) =>
+		documentTool(holder, sink, name, schema, editsAllowed, runtime),
+	);
 }
+
+/**
+ * Every tool's name and argument schema, in the order the model is handed them.
+ * `buildTools` wraps these for the in-app agent and `electron/mcp/` exposes the
+ * same list over MCP, so the two surfaces cannot drift apart.
+ */
+export const TOOL_ARG_SCHEMAS: ReadonlyArray<readonly [string, z.ZodObject]> = [
+	["getCurrentDocument", z.object({})],
+	["getTranscript", getTranscriptArgs],
+	["getTranscriptWords", getTranscriptWordsArgs],
+	["getCursorTrack", getCursorTrackArgs],
+	["setWordText", setWordTextArgs],
+	["removeWords", removeWordsArgs],
+	["addTrim", addTrimArgs],
+	["addTrims", addTrimsArgs],
+	["setTrim", setTrimArgs],
+	["setClipRange", setClipRangeArgs],
+	["moveClip", moveClipArgs],
+	["replaceTimeline", replaceTimelineArgs],
+	["addZoom", addZoomArgs],
+	["addZooms", addZoomsArgs],
+	["setZoom", setZoomArgs],
+	["addSpeed", addSpeedArgs],
+	["setSpeed", setSpeedArgs],
+	["addAnnotation", addAnnotationArgs],
+	["setAnnotation", setAnnotationArgs],
+	["addCameraFullscreen", addCameraFullscreenArgs],
+	["setCameraFullscreen", setCameraFullscreenArgs],
+	["addAudio", addAudioArgs],
+	["setAudio", setAudioArgs],
+	["removeTrim", removeTrimArgs],
+	["removeModifier", removeModifierArgs],
+	["removeClip", removeClipArgs],
+];
 
 /**
  * Prompt caching for the Anthropic-wire providers, which `createDeepAgent`
@@ -401,7 +434,7 @@ export interface InvokeArgs {
 
 /** One cheap probe per asset, run before the tools are built so the very first
  *  `getCurrentDocument` can already say whether telemetry exists. */
-async function probeCursorTelemetry(
+export async function probeCursorTelemetry(
 	document: AxcutDocument,
 	cursor: CursorTelemetryReader | undefined,
 ): Promise<Record<string, boolean> | undefined> {

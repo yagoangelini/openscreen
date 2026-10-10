@@ -49,11 +49,18 @@
   // (unknown scene fields are #[serde(default)]) rather than erroring. See the script header
   // and technical-documentation/engineering/build-and-packaging.md.
   "beforePack": "scripts/before-pack.cjs",
+  // Standard AppImage updates need .upd_info and a .zsync alongside electron-updater's blockmap.
+  "artifactBuildCompleted": "scripts/appimage-updates.cjs",
+  "afterAllArtifactBuild": "scripts/appimage-updates.cjs",
   "npmRebuild": true,
   // sharp ships ABI-stable (napi) prebuilt binaries with bundled libvips. Building it from source
   // needs a system libvips we don't provide and breaks on CI/local ("vips-cpp.42 not found"), so we
   // let electron-builder use the prebuilt instead of recompiling.
   "buildDependenciesFromSource": false,
+  // The static AppImage runtime does not require libfuse2 on the host.
+  "toolsets": {
+    "appimage": "1.0.3"
+  },
   "compression": "normal",
   // Strip unused Chromium locale pak files (saves ~20 MB). Only package locales supported by OpenScreen.
   // Note: macOS uses underscore variants (e.g. pt_BR.lproj, zh_CN.lproj, zh_TW.lproj), while Windows
@@ -127,6 +134,14 @@
     {
       "from": "THIRD-PARTY-NOTICES.md",
       "to": "THIRD-PARTY-NOTICES.md"
+    },
+    // The full licence texts of the npm packages Vite bundles and of the crates compiled into
+    // the compositor addon. Generated, not committed: every build:* script and build.yml's
+    // macOS job run `npm run licenses:generate` first. electron-builder only warns about a
+    // missing source here, so scripts/before-pack.cjs is what refuses to package without it.
+    {
+      "from": "build-licenses/THIRD-PARTY-LICENSES.txt",
+      "to": "THIRD-PARTY-LICENSES.txt"
     },
     {
       "from": "LICENSE",
@@ -397,7 +412,7 @@
       "nsis"
     ],
     "icon": "icons/icons/win/icon.ico",
-    "artifactName": "${productName}.Setup.${version}.${ext}",
+    "artifactName": "${productName}.Setup.${version}-${arch}.${ext}",
     "extraResources": [
       {
         "from": "electron/native/bin",

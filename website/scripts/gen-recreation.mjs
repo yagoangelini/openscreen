@@ -113,6 +113,12 @@ const { buildClipSection, isSilenceWord, SILENCE_THRESHOLD_SEC } = await appModu
 const { CURSOR_THEMES, DEFAULT_CURSOR_THEME_ID, resolveCursorSprites } = await appModule(
 	"src/lib/cursor/cursorThemes.ts",
 );
+// The empty-lane hints take their key through {{key}} since the app learned to
+// show the bound shortcut (358c3383). The recreation shows a fresh install, so
+// the default bindings, formatted the way the app formats them. No import of
+// its own, so it loads as-is like cursorThemes.ts.
+const { DEFAULT_SHORTCUTS, formatBinding } = await appModule("src/lib/shortcuts.ts");
+const shortcutKey = (action) => ({ key: formatBinding(DEFAULT_SHORTCUTS[action], true) });
 
 // ── locale access that fails loudly ─────────────────────────────────────
 const locale = (ns) =>
@@ -406,11 +412,36 @@ const trimPills = trims.map((r) => ({
 }));
 
 const LANE_ORDER = [
-	{ id: "annotation", hintKey: "timeline:hints.pressAnnotation", pills: [] },
-	{ id: "speed", hintKey: "timeline:hints.pressSpeed", pills: [] },
-	{ id: "trim", hintKey: "timeline:hints.pressTrim", pills: trimPills },
-	{ id: "zoom", hintKey: "timeline:hints.pressZoom", pills: zoomPills },
-	{ id: "cameraFullscreen", hintKey: "timeline:hints.pressCameraFullscreen", pills: [] },
+	{
+		id: "annotation",
+		hintKey: "timeline:hints.pressAnnotation",
+		hintVars: shortcutKey("addAnnotation"),
+		pills: [],
+	},
+	{
+		id: "speed",
+		hintKey: "timeline:hints.pressSpeed",
+		hintVars: shortcutKey("addSpeed"),
+		pills: [],
+	},
+	{
+		id: "trim",
+		hintKey: "timeline:hints.pressTrim",
+		hintVars: shortcutKey("addTrim"),
+		pills: trimPills,
+	},
+	{
+		id: "zoom",
+		hintKey: "timeline:hints.pressZoom",
+		hintVars: shortcutKey("addZoom"),
+		pills: zoomPills,
+	},
+	{
+		id: "cameraFullscreen",
+		hintKey: "timeline:hints.pressCameraFullscreen",
+		hintVars: shortcutKey("addCameraFullscreen"),
+		pills: [],
+	},
 ];
 
 // Cross-check against the document rather than trusting the table above: a lane
@@ -433,7 +464,7 @@ for (const lane of LANE_ORDER) {
 
 const LANES = LANE_ORDER.map((lane) => ({
 	id: lane.id,
-	hint: lane.pills.length === 0 ? t(lane.hintKey) : null,
+	hint: lane.pills.length === 0 ? t(lane.hintKey, lane.hintVars) : null,
 	pills: lane.pills,
 }));
 const PILLS = LANES.flatMap((lane) => lane.pills);
@@ -1054,7 +1085,7 @@ const PROVENANCE = [
 	})),
 	...LANES.filter((l) => l.hint).map((l) => ({
 		shown: l.hint,
-		source: `timeline.json hints.press${l.id[0].toUpperCase()}${l.id.slice(1)} — rendered because the document holds no ${l.id} regions`,
+		source: `computed: timeline.json hints.press${l.id[0].toUpperCase()}${l.id.slice(1)} with {{key}} = the default binding (shortcuts.ts DEFAULT_SHORTCUTS, formatBinding) — rendered because the document holds no ${l.id} regions`,
 	})),
 	{
 		shown: RULER.variants[0].labels.map((l) => l.text).join(" "),

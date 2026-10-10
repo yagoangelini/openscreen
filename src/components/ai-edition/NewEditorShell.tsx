@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import type { EditorProjectData } from "@/components/video-editor/projectPersistence";
 import { toFileUrl } from "@/components/video-editor/projectPersistence";
 import { useEditorDialogActions } from "@/contexts/EditorDialogsContext";
 import { useScopedT } from "@/contexts/I18nContext";
@@ -13,10 +12,6 @@ import {
 } from "@/lib/ai-edition/document/audioTracks";
 import { createId } from "@/lib/ai-edition/document/ids";
 import {
-	migrateProjectDataToAxcutDocument,
-	migrateRawDocumentToCurrent,
-} from "@/lib/ai-edition/document/migrate";
-import {
 	documentAfterProbedDuration,
 	PLACEHOLDER_DURATION_SEC,
 } from "@/lib/ai-edition/document/timeline";
@@ -27,12 +22,8 @@ import {
 	setDocumentWordText,
 } from "@/lib/ai-edition/document/transcript";
 import { isModalOpen } from "@/lib/ai-edition/modalGuard";
-import {
-	type AxcutAudioTrack,
-	type AxcutClip,
-	type AxcutDocument,
-	documentSchema,
-} from "@/lib/ai-edition/schema";
+import type { AxcutAudioTrack, AxcutClip, AxcutDocument } from "@/lib/ai-edition/schema";
+import { useMcpDocumentHost } from "@/lib/ai-edition/store/mcpDocumentHost";
 import { saveWithDeadline, useProjectStore } from "@/lib/ai-edition/store/projectStore";
 import {
 	useAssetTranscriptions,
@@ -60,6 +51,7 @@ import type { AiEditionProjectSummary } from "@/native/contracts";
 import { resolveVisibleClips } from "@/native/sceneDescription";
 import { useNativePlaybackSync } from "@/native/useNativePlaybackSync";
 import { ExportDialog } from "./ExportDialog";
+import { importProjectFile } from "./importProjectFile";
 import { insertionsEnabled } from "./insertionsEnabled";
 import { ChatStripPanel } from "./LeftPanel";
 import {
@@ -197,6 +189,7 @@ export async function runLoadedMetadataWrite(
 
 export function NewEditorShell() {
 	const te = useScopedT("editor");
+	useMcpDocumentHost();
 	const document = useProjectStore((s) => s.document);
 	const projectId = useProjectStore((s) => s.projectId);
 	const dirty = useProjectStore((s) => s.dirty);
@@ -704,24 +697,9 @@ export function NewEditorShell() {
 		try {
 			const result = await window.electronAPI?.loadProjectFile();
 			if (!result?.success || !result.project) return;
-			const raw = result.project as unknown;
-			// A current project file already carries its own `schemaVersion` (v3/v4
-			// AxcutDocument); an older legacy export is EditorProjectData and must be
-			// migrated. Discriminate on the version field so a current document is
-			// never fed to the legacy migrator (which reads `.media`/`.editor` and
-			// would yield an empty doc).
-			const isAxcutDocument =
-				typeof raw === "object" && raw !== null && "schemaVersion" in raw && "timeline" in raw;
-			const doc = isAxcutDocument
-				? documentSchema.parse(migrateRawDocumentToCurrent(raw)) // disk-load: upgrade v3/v4 → v5, then validate
-				: migrateProjectDataToAxcutDocument(raw as EditorProjectData);
-			const saved = await nativeBridgeClient.aiEdition.save(doc);
-			if (saved.success && saved.document) {
-				await loadProject(doc.project.id);
-				toast.success(isAxcutDocument ? "Project opened" : "Legacy project migrated and loaded");
-			} else {
-				toast.error(saved.error ?? "Failed to open project");
-			}
+			const { projectId, legacy } = await importProjectFile(result.project, result.storedProjectId);
+			await loadProject(projectId);
+			toast.success(legacy ? "Legacy project migrated and loaded" : "Project opened");
 		} catch (err) {
 			toast.error(toastText("editor", "shellToasts.loadProjectFailed"), {
 				description: err instanceof Error ? err.message : String(err),

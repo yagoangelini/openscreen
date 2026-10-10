@@ -24,15 +24,18 @@
 use anyhow::{bail, Result};
 use std::collections::HashMap;
 use std::ffi::CString;
+use std::path::Path;
 use std::ptr;
 
 use crate::audio::{
-    assemble_concatenated_pcm, build_audio_concat_plan, finish_audio, mix_external_tracks,
+    assemble_concatenated_pcm, build_audio_concat_plan, finish_audio, mix_click_hits,
+    mix_external_tracks,
     AacEncoder, PlanarPcm,
 };
 use crate::audio_jobs::{decode_and_stretch_clip_audio, ClipAudioJobs};
 use crate::config::Cfg;
 use crate::d3d::Gpu;
+use crate::export_control::{with_staged_output, ExportControl};
 use crate::ffi::AVFrame;
 use crate::linux_decode::SwDecoder;
 use crate::timeline_walk::NextFrameTime;
@@ -125,6 +128,12 @@ impl Decoder {
     pub unsafe fn seek_to(&mut self, seconds: f64) -> Result<*mut AVFrame> {
         let idx = (seconds.max(0.0) * self.fps).round() as u32;
         self.decode_present(idx)
+    }
+
+    /// Contrat de `pipeline_windows::Decoder::seek_to_or_last`, que `seek_to` remplit déjà ici :
+    /// au-delà de la fin, `pump_to_target` tient la dernière image décodée.
+    pub unsafe fn seek_to_or_last(&mut self, seconds: f64) -> Result<*mut AVFrame> {
+        self.seek_to(seconds)
     }
 
     /// Decode la frame SEQUENTIELLE suivante — pompage `next_frame`, PAS de seek.
@@ -845,6 +854,39 @@ pub fn run_composited_multi(
     params: &ExportParams,
     progress: &mut dyn FnMut(u64),
 ) -> Result<Stats> {
+    run_composited_multi_cancellable(clips, out, gpu, comp, cfg, params, progress, &ExportControl::default())
+}
+
+/// `run_composited_multi`, arretable entre deux frames par `control` (erreur `ExportCancelled`).
+/// Symetrique de `pipeline_windows::run_composited_multi_cancellable` : le MP4 s'ecrit a cote de
+/// `out` et n'est renomme par-dessus qu'une fois complet. Le `Drop` de `Muxer` ferme le fichier
+/// sur toutes les sorties, annulation comprise.
+pub fn run_composited_multi_cancellable(
+    clips: &[ClipSource],
+    out: &str,
+    gpu: &Gpu,
+    comp: &crate::compositor::Compositor,
+    cfg: &Cfg,
+    params: &ExportParams,
+    progress: &mut dyn FnMut(u64),
+    control: &ExportControl,
+) -> Result<Stats> {
+    with_staged_output(Path::new(out), control, |file, staged| {
+        drop(file); // ffmpeg le rouvre par son nom
+        run_multi_inner(clips, &staged.to_string_lossy(), gpu, comp, cfg, params, progress, control)
+    })
+}
+
+fn run_multi_inner(
+    clips: &[ClipSource],
+    out: &str,
+    gpu: &Gpu,
+    comp: &crate::compositor::Compositor,
+    cfg: &Cfg,
+    params: &ExportParams,
+    progress: &mut dyn FnMut(u64),
+    control: &ExportControl,
+) -> Result<Stats> {
     if clips.is_empty() {
         bail!("run_composited_multi: aucun clip a exporter");
     }
@@ -1013,6 +1055,11 @@ pub fn run_composited_multi(
         .as_ref()
         .map(|scene| scene.audio_tracks.clone())
         .unwrap_or_default();
+    // Click hits (the "mouse clicks" toggle), laid on the programme by the app.
+    let click_sound = scene
+        .as_ref()
+        .map(|scene| scene.click_sound.clone())
+        .unwrap_or_default();
     // Ring de staging a 2 : l'export ne veut que du debit, une frame de latence
     // ne se voit pas dans un fichier. Voir `Compositor::set_readback_depth` pour
     // la raison pour laquelle la preview, elle, reste a 1.
@@ -1033,6 +1080,7 @@ pub fn run_composited_multi(
             &mut screen_decs,
             &mut webcam_decs,
             &mut |n| {
+                control.check()?;
                 // Soumet la copie de la frame n SANS l'attendre et recolte la
                 // precedente : c'est tout le pipelining GPU. L'encodage, lui,
                 // n'est plus ici du tout — il tourne sur `worker` pendant que
@@ -1203,7 +1251,10 @@ pub fn run_composited_multi(
         let octx = mux.octx;
         mux.aac.encode(
             &finish_audio(
-                mix_external_tracks(assemble_concatenated_pcm(&clip_pcm, &plan), &audio_tracks),
+                mix_click_hits(
+                    mix_external_tracks(assemble_concatenated_pcm(&clip_pcm, &plan), &audio_tracks),
+                    &click_sound,
+                ),
                 audio_settings,
             ),
             octx,

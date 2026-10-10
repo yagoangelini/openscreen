@@ -16,11 +16,15 @@ import {
 	Sun,
 	Undo2,
 } from "lucide-react";
-import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import logoMark from "@/assets/openscreen-mark.png";
+import { Tooltip } from "@/components/ui/tooltip";
 import { useI18n, useScopedT } from "@/contexts/I18nContext";
+import { useShortcuts } from "@/contexts/ShortcutsContext";
 import { useTheme } from "@/hooks/useTheme";
 import { getAvailableLocales, getLocaleName } from "@/i18n/loader";
+import { moveMenuFocus } from "@/lib/menuKeyboard";
+import { formatFirstFixedBinding } from "@/lib/shortcuts";
 import { StylePresetsMenu } from "../StylePresetsMenu";
 import styles from "./EditorShellV4.module.css";
 
@@ -72,6 +76,7 @@ export function EditorTopBar({
 }: EditorTopBarProps) {
 	const t = useScopedT("editor");
 	const tShortcuts = useScopedT("shortcuts");
+	const { isMac } = useShortcuts();
 	const savedLabel = dirty ? t("topbar.unsaved") : t("topbar.saved");
 
 	// ponytail: the left side panel only renders in "edit" mode (see
@@ -85,16 +90,17 @@ export function EditorTopBar({
 			<span className={styles.topbarLead}>
 				{showChatToggle ? (
 					<>
-						<button
-							type="button"
-							className={`${styles.iconBtn}${chatOpen ? ` ${styles.on}` : ""}`}
-							title={t("topbar.toggleChatPanel")}
-							aria-label={t("topbar.toggleChatPanel")}
-							aria-pressed={chatOpen}
-							onClick={actions.toggleChat}
-						>
-							<PanelLeft size={17} />
-						</button>
+						<Tooltip content={t("topbar.toggleChatPanel")}>
+							<button
+								type="button"
+								className={`${styles.iconBtn}${chatOpen ? ` ${styles.on}` : ""}`}
+								aria-label={t("topbar.toggleChatPanel")}
+								aria-pressed={chatOpen}
+								onClick={actions.toggleChat}
+							>
+								<PanelLeft size={17} />
+							</button>
+						</Tooltip>
 						<span className={styles.sep} aria-hidden />
 					</>
 				) : null}
@@ -123,7 +129,6 @@ export function EditorTopBar({
 						type="button"
 						role="tab"
 						aria-selected={mode === m.id}
-						title={t(m.labelKey)}
 						// Feeds the hidden bold copy that reserves the selected width — see
 						// .modeSwitch button::before.
 						data-label={t(m.labelKey)}
@@ -139,31 +144,40 @@ export function EditorTopBar({
 			    rather than in any one pane's header. */}
 			{/* Always mounted, disabled when there is nothing to step to: the bar keeps its width
 			    and the pair reads as the history it is. Same handlers as Ctrl+Z / Ctrl+Shift+Z. */}
-			<button
-				type="button"
-				className={styles.iconBtn}
-				title={tShortcuts("fixedActions.undo")}
-				aria-label={tShortcuts("fixedActions.undo")}
-				onClick={actions.undo}
-				disabled={!canUndo}
+			{/* `aria-disabled`, not `disabled`: a natively disabled button takes no pointer events,
+			    so the tooltip could never open on it. The click does nothing while it is set. */}
+			<Tooltip
+				content={tShortcuts("fixedActions.undo")}
+				shortcut={formatFirstFixedBinding("undo", isMac)}
 			>
-				<Undo2 size={16} />
-			</button>
-			<button
-				type="button"
-				className={styles.iconBtn}
-				title={tShortcuts("fixedActions.redo")}
-				aria-label={tShortcuts("fixedActions.redo")}
-				onClick={actions.redo}
-				disabled={!canRedo}
+				<button
+					type="button"
+					className={styles.iconBtn}
+					aria-label={tShortcuts("fixedActions.undo")}
+					aria-disabled={!canUndo || undefined}
+					onClick={canUndo ? actions.undo : undefined}
+				>
+					<Undo2 size={16} />
+				</button>
+			</Tooltip>
+			<Tooltip
+				content={tShortcuts("fixedActions.redo")}
+				shortcut={formatFirstFixedBinding("redo", isMac)}
 			>
-				<Redo2 size={16} />
-			</button>
+				<button
+					type="button"
+					className={styles.iconBtn}
+					aria-label={tShortcuts("fixedActions.redo")}
+					aria-disabled={!canRedo || undefined}
+					onClick={canRedo ? actions.redo : undefined}
+				>
+					<Redo2 size={16} />
+				</button>
+			</Tooltip>
 			<StylePresetsMenu />
 			<button
 				type="button"
 				className={styles.exportBtn}
-				title={t("topbar.export")}
 				aria-label={t("topbar.export")}
 				onClick={actions.export}
 				disabled={!canExport}
@@ -322,8 +336,23 @@ function AppMenu({ actions }: { actions: TopBarActions }) {
 		const onDocMouseDown = (e: MouseEvent) => {
 			if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
 		};
+		// On the document, as the dialogs do (Modals.tsx), not on the menu: a press on the menu's
+		// padding or a separator drops focus to <body>, where a listener on the menu never hears
+		// the key (#1015). Escape hands focus back to the trigger, and goes no further, so nothing
+		// else bound to it acts on the same press.
+		const onDocKeyDown = (e: KeyboardEvent) => {
+			if (e.key !== "Escape") return;
+			e.preventDefault();
+			e.stopPropagation();
+			setOpen(false);
+			triggerRef.current?.focus();
+		};
 		document.addEventListener("mousedown", onDocMouseDown);
-		return () => document.removeEventListener("mousedown", onDocMouseDown);
+		document.addEventListener("keydown", onDocKeyDown);
+		return () => {
+			document.removeEventListener("mousedown", onDocMouseDown);
+			document.removeEventListener("keydown", onDocKeyDown);
+		};
 	}, [open]);
 
 	// Focus the first item as the menu appears, so it is operable from the keyboard without a
@@ -333,36 +362,10 @@ function AppMenu({ actions }: { actions: TopBarActions }) {
 		menuRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus();
 	}, [open]);
 
-	const close = (restoreFocus: boolean) => {
-		setOpen(false);
-		// Escape and Tab-out hand focus back to the trigger; a click does not, because the
-		// pointer user did not come from there and a focus ring appearing under the cursor
-		// reads as a bug.
-		if (restoreFocus) triggerRef.current?.focus();
-	};
-
-	const onMenuKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => {
-		if (e.key === "Escape") {
-			e.preventDefault();
-			close(true);
-			return;
-		}
-		if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
-		e.preventDefault();
-		const items = Array.from(
-			menuRef.current?.querySelectorAll<HTMLButtonElement>(
-				'[role="menuitem"], [role="menuitemradio"]',
-			) ?? [],
-		);
-		if (items.length === 0) return;
-		const at = items.indexOf(document.activeElement as HTMLButtonElement);
-		const next = e.key === "ArrowDown" ? at + 1 : at - 1;
-		// Wraps both ways; `at` is -1 when focus escaped the list, and ArrowDown then lands on 0.
-		items[(next + items.length) % items.length]?.focus();
-	};
-
 	const run = (action: () => void) => () => {
-		close(false);
+		// Unlike Escape, a click does not hand focus back to the trigger: the pointer user did not
+		// come from there, and a focus ring appearing under the cursor reads as a bug.
+		setOpen(false);
 		action();
 	};
 
@@ -375,7 +378,6 @@ function AppMenu({ actions }: { actions: TopBarActions }) {
 				aria-haspopup="menu"
 				aria-expanded={open}
 				aria-label="OpenScreen"
-				title="OpenScreen"
 				onClick={() => setOpen((v) => !v)}
 			>
 				{/* Decorative: the wordmark beside it already names the app — and, being the
@@ -385,7 +387,7 @@ function AppMenu({ actions }: { actions: TopBarActions }) {
 				<ChevronDown size={13} className={styles.brandChevron} aria-hidden />
 			</button>
 			{open ? (
-				<div ref={menuRef} className={styles.appMenu} role="menu" onKeyDown={onMenuKeyDown}>
+				<div ref={menuRef} className={styles.appMenu} role="menu" onKeyDown={moveMenuFocus}>
 					{/* The file actions that used to be three icons in the bar. Their labels are the
 					    keys those icons carried as tooltips; Ctrl+N / Ctrl+O / Ctrl+S still reach them
 					    through the native menu's accelerators. */}

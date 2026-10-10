@@ -24,8 +24,9 @@ use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::ffi::c_void;
 use windows::core::Interface;
+use windows::Win32::Foundation::RECT;
 use windows::Win32::Graphics::Direct3D::{
-    D3D11_SRV_DIMENSION_TEXTURE2DARRAY, D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP,
+    D3D11_SRV_DIMENSION_TEXTURE2D, D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP,
 };
 use windows::Win32::Graphics::Direct3D11::*;
 use windows::Win32::Graphics::Dxgi::Common::*;
@@ -78,6 +79,12 @@ struct WebcamMask {
 /// demi-résolution de la texture DÉCODEUR, avec sa chaîne de mips. Dimensionnée sur la texture
 /// décodeur et remplie en UV plein (0..1) : ses UV sont ceux de t0/t1, et le calcul d'UV du
 /// mode 8 ne change pas.
+/// Le fond tel que la passe de fond (et son flou) l'a laissé dans le RT, et la clé qui le décrit.
+struct BgCache {
+    key: crate::frame_geometry::BackgroundKey,
+    tex: ID3D11Texture2D,
+}
+
 struct DofPyramid {
     rtv: ID3D11RenderTargetView,
     srv: ID3D11ShaderResourceView,
@@ -93,7 +100,10 @@ pub struct Compositor {
     rt_srv: ID3D11ShaderResourceView,
     staging: ID3D11Texture2D,
     vs: ID3D11VertexShader,
+    /// Le pixel shader des calques, SANS les modèles 3D (modes 15 à 17) : ils passent par
+    /// `ps_models`, et `draw_layer` choisit d'après le mode (le haut de `shaders.hlsl`).
     ps: ID3D11PixelShader,
+    ps_models: ID3D11PixelShader,
     vs_fs: ID3D11VertexShader,
     ps_y: ID3D11PixelShader,
     ps_uv: ID3D11PixelShader,
@@ -129,11 +139,16 @@ pub struct Compositor {
     accum_rtv: ID3D11RenderTargetView,
     accum_srv: ID3D11ShaderResourceView,
     blend_add: ID3D11BlendState,
+    /// Rastérisation avec scissor, pour la seule recopie de la traînée du curseur.
+    rs_scissor: ID3D11RasterizerState,
     /// Rendu isolé de l'écran cadré (ombre, cadre, métrage, appareil), transparent autour, que le
     /// mode 18 recompose le long de sa trajectoire (`FrameGeometry::screen_trail`). Distinct de
     /// `accum`, que le curseur et `compose_frame_mb` remplissent dans la même frame.
     trail_rtv: ID3D11RenderTargetView,
     trail_srv: ID3D11ShaderResourceView,
+    /// Le dernier fond fixe composé et sa clé (`BackgroundKey`) : recopié dans le RT tant
+    /// que la clé tient, au lieu d'être redessiné.
+    bg_cache: RefCell<Option<BgCache>>,
     /// RefCell (pas un simple champ) pour que `set_cursor` reste `&self`, comme `set_scene` /
     /// `set_live_params` — nécessaire pour le rebrancher par clip dans l'export multiclip, qui
     /// n'a qu'une référence partagée au `Compositor`.
@@ -142,6 +157,8 @@ pub struct Compositor {
     /// (`frame / FPS`). L'export multiclip et le live le positionnent au PTS écran courant,
     /// c'est-à-dire au temps source absolu du clip actif.
     cursor_t_override: RefCell<Option<f32>>,
+    /// Le métrage dans la dernière image composée, que l'éditeur lit avec elle (`live.rs`).
+    footage: std::cell::Cell<Option<crate::frame_geometry::FootageQuad>>,
     /// Override du temps des zoom/full-camera regions (secondes source du clip actif). Le nom
     /// `timeline_t_override` est conservé pour l'API existante, mais ce temps n'est plus cumulé
     /// entre clips : les régions projetées par l'app portent elles aussi des temps source.
@@ -149,9 +166,11 @@ pub struct Compositor {
     timeline_t_override: RefCell<Option<f32>>,
     /// Temps programme (secondes de sortie) — cf. `FrameGeometryInput::programme_time`.
     programme_time: RefCell<Option<f32>>,
-    // cache des SRV décodeur par (texture array, slice) : le pool réutilise ~32 textures,
-    // donc après warmup plus aucune création de SRV par frame (overhead CPU supprimé).
-    srv_cache: RefCell<HashMap<(usize, u32), (ID3D11ShaderResourceView, ID3D11ShaderResourceView)>>,
+    /// A private copy of a decoder surface, with its two plane views (Y, UV).
+    /// Keyed by the decoder texture's pointer, which pins nothing: `nv12_srvs` re-checks
+    /// the copy's size and format on every hit, so a new texture landing on an old address
+    /// is never handed a copy sized for the old one. `clear_srv_cache` frees stale entries.
+    srv_cache: RefCell<HashMap<usize, (ID3D11Texture2D, ID3D11ShaderResourceView, ID3D11ShaderResourceView)>>,
     live_params: RefCell<LiveParams>,
     /// Scène pilotée par l'app (contrat) : quand présente, remplace le layout fixture de
     /// `timeline()`. Voir `scene.rs` / `SceneDescription` (TS).
@@ -408,6 +427,7 @@ impl Compositor {
             render_size: Cell::new((w, h)),
             // Caches dimensionnés à l'ancienne taille : recréés à la demande.
             resize_target: RefCell::new(None),
+            bg_cache: RefCell::new(None),
             live_readback_staging: RefCell::new(None),
             nv12_readback_staging: RefCell::new(None),
             ..self
@@ -604,6 +624,8 @@ impl Compositor {
         dev.CreateVertexShader(shader!("vs_main"), None, Some(&mut vs))?;
         let mut ps: Option<ID3D11PixelShader> = None;
         dev.CreatePixelShader(shader!("ps_main"), None, Some(&mut ps))?;
+        let mut ps_models: Option<ID3D11PixelShader> = None;
+        dev.CreatePixelShader(shader!("ps_main_models"), None, Some(&mut ps_models))?;
 
         // shaders RGB->NV12
         let mut vs_fs: Option<ID3D11VertexShader> = None;
@@ -684,6 +706,17 @@ impl Compositor {
         };
         let mut blend_add: Option<ID3D11BlendState> = None;
         dev.CreateBlendState(&bla, Some(&mut blend_add))?;
+        // L'état par défaut (aucun lié), plus le scissor. Sans culling : le triangle plein écran
+        // n'a pas à dépendre de son sens de parcours.
+        let rsd = D3D11_RASTERIZER_DESC {
+            FillMode: D3D11_FILL_SOLID,
+            CullMode: D3D11_CULL_NONE,
+            ScissorEnable: true.into(),
+            DepthClipEnable: true.into(),
+            ..Default::default()
+        };
+        let mut rs_scissor: Option<ID3D11RasterizerState> = None;
+        dev.CreateRasterizerState(&rsd, Some(&mut rs_scissor))?;
 
         Ok(Compositor {
             dev,
@@ -694,6 +727,7 @@ impl Compositor {
             staging,
             vs: vs.unwrap(),
             ps: ps.unwrap(),
+            ps_models: ps_models.unwrap(),
             vs_fs: vs_fs.unwrap(),
             ps_y: ps_y.unwrap(),
             ps_uv: ps_uv.unwrap(),
@@ -722,10 +756,13 @@ impl Compositor {
             accum_rtv,
             accum_srv,
             blend_add: blend_add.unwrap(),
+            rs_scissor: rs_scissor.unwrap(),
             trail_rtv,
             trail_srv,
+            bg_cache: RefCell::new(None),
             cursor: RefCell::new(None),
             cursor_t_override: RefCell::new(None),
+            footage: std::cell::Cell::new(None),
             timeline_t_override: RefCell::new(None),
             programme_time: RefCell::new(None),
             srv_cache: RefCell::new(HashMap::new()),
@@ -810,41 +847,101 @@ impl Compositor {
         *self.scene.borrow_mut() = s;
     }
 
-    /// Crée les SRV Y (R8) et UV (R8G8) sur la tranche d'array de la frame décodeur.
+    /// The Y (R8) and UV (R8G8) views of the decoder frame — over a private COPY, never
+    /// over the decoder surface itself.
+    ///
+    /// Two documented D3D11 rules rule out the direct path. The first is explicit, on
+    /// `D3D11_BIND_DECODER`: "you cannot use texture arrays that are created with this
+    /// flag in calls to ID3D11Device::CreateShaderResourceView". The ffmpeg pool IS such
+    /// an array (`initial_pool_size` = 32, see `get_hw_format`). The second explains what
+    /// we were seeing: between the video engine and the 3D pipeline "there is no automatic
+    /// hazard tracking" — the surface stays the decoder's reference frame, so it may be
+    /// rewritten WHILE the shader samples it. ffmpeg's `ID3D11VideoContext` is in fact the
+    /// SAME object as our immediate context (it comes out of a QueryInterface on it), and
+    /// `SetMultithreadProtected(TRUE)` only makes an individual call atomic, never a
+    /// sequence.
+    ///
+    /// Measured on a Snapdragon X Elite (Adreno X1-85), same build, same recording, the
+    /// path picked by an environment variable: 768 black frames out of 792 when sampling
+    /// the decoder surface, 2 out of 545 through the copy. The black was OPAQUE and total,
+    /// so not "one frame late" but no frame at all.
+    ///
+    /// `CopySubresourceRegion` is issued on the immediate context, so it IS ordered against
+    /// the draws that follow; the destination texture is `ArraySize = 1` and carries only
+    /// `BIND_SHADER_RESOURCE`, which also takes it out of the restriction above. The cost
+    /// is one GPU→GPU copy per frame and per source, with nothing going back to system
+    /// memory.
+    ///
+    /// What hid the cause for so long: exporting the SAME scene never produced a black
+    /// frame (28 342 verified), because the export drains the GPU every frame through the
+    /// encoder. Everything that slowed the live loop — one more readback, a lock, a pause —
+    /// cut the black proportionally without ever removing it.
     pub unsafe fn nv12_srvs(
         &self,
         frame: *const AVFrame,
     ) -> Result<(ID3D11ShaderResourceView, ID3D11ShaderResourceView)> {
         let tex_ptr = (*frame).data[0] as *mut c_void;
         let slice = (*frame).data[1] as u32;
-        // cache hit : le pool réutilise les mêmes textures -> zéro création après warmup
-        let key = (tex_ptr as usize, slice);
-        if let Some((y, uv)) = self.srv_cache.borrow().get(&key) {
-            return Ok((y.clone(), uv.clone()));
-        }
-        let tex = ID3D11Texture2D::from_raw_borrowed(&tex_ptr)
-            .ok_or_else(|| anyhow::anyhow!("frame sans texture D3D11"))?
+        let src = ID3D11Texture2D::from_raw_borrowed(&tex_ptr)
+            .ok_or_else(|| anyhow::anyhow!("frame has no D3D11 texture"))?
             .clone();
 
-        let mk = |fmt: DXGI_FORMAT| -> Result<ID3D11ShaderResourceView> {
-            let mut d = D3D11_SHADER_RESOURCE_VIEW_DESC {
-                Format: fmt,
-                ViewDimension: D3D11_SRV_DIMENSION_TEXTURE2DARRAY,
-                ..Default::default()
-            };
-            d.Anonymous.Texture2DArray = D3D11_TEX2D_ARRAY_SRV {
-                MostDetailedMip: 0,
-                MipLevels: 1,
-                FirstArraySlice: slice,
-                ArraySize: 1,
-            };
-            let mut srv: Option<ID3D11ShaderResourceView> = None;
-            self.dev.CreateShaderResourceView(&tex, Some(&d), Some(&mut srv))?;
-            Ok(srv.unwrap())
+        // Cache hit: the pool reuses the same textures, so this allocates once per decoder
+        // after warmup. The COPY itself happens on EVERY frame — that is what freezes the
+        // slice's contents before the decoder takes it back.
+        //
+        // The key is a bare address and pins nothing. A decoder replaced without
+        // `clear_srv_cache` (a mid-stream resolution change, `CpuFrames::ensure_tex`) can
+        // hand a NEW texture the address of an old one, and a copy into a smaller destination
+        // is dropped without an error: the picture freezes. So a hit only counts while the
+        // destination still has the source's size and format.
+        let mut sd = D3D11_TEXTURE2D_DESC::default();
+        src.GetDesc(&mut sd);
+        let key = tex_ptr as usize;
+        let cached = self.srv_cache.borrow().get(&key).cloned().filter(|(dst, ..)| {
+            let mut dd = D3D11_TEXTURE2D_DESC::default();
+            dst.GetDesc(&mut dd);
+            (dd.Width, dd.Height, dd.Format) == (sd.Width, sd.Height, sd.Format)
+        });
+        let (dst, y, uv) = match cached {
+            Some(v) => v,
+            None => {
+                let dd = D3D11_TEXTURE2D_DESC {
+                    Width: sd.Width,
+                    Height: sd.Height,
+                    MipLevels: 1,
+                    ArraySize: 1,
+                    Format: sd.Format,
+                    SampleDesc: DXGI_SAMPLE_DESC { Count: 1, Quality: 0 },
+                    Usage: D3D11_USAGE_DEFAULT,
+                    BindFlags: D3D11_BIND_SHADER_RESOURCE.0 as u32,
+                    CPUAccessFlags: 0,
+                    MiscFlags: 0,
+                };
+                let mut dst: Option<ID3D11Texture2D> = None;
+                self.dev.CreateTexture2D(&dd, None, Some(&mut dst))?;
+                let dst = dst.unwrap();
+                let mk = |fmt: DXGI_FORMAT| -> Result<ID3D11ShaderResourceView> {
+                    let mut d = D3D11_SHADER_RESOURCE_VIEW_DESC {
+                        Format: fmt,
+                        ViewDimension: D3D11_SRV_DIMENSION_TEXTURE2D,
+                        ..Default::default()
+                    };
+                    d.Anonymous.Texture2D = D3D11_TEX2D_SRV { MostDetailedMip: 0, MipLevels: 1 };
+                    let mut srv: Option<ID3D11ShaderResourceView> = None;
+                    self.dev.CreateShaderResourceView(&dst, Some(&d), Some(&mut srv))?;
+                    Ok(srv.unwrap())
+                };
+                let y = mk(DXGI_FORMAT_R8_UNORM)?;
+                let uv = mk(DXGI_FORMAT_R8G8_UNORM)?;
+                self.srv_cache
+                    .borrow_mut()
+                    .insert(key, (dst.clone(), y.clone(), uv.clone()));
+                (dst, y, uv)
+            }
         };
-        let y = mk(DXGI_FORMAT_R8_UNORM)?;
-        let uv = mk(DXGI_FORMAT_R8G8_UNORM)?;
-        self.srv_cache.borrow_mut().insert(key, (y.clone(), uv.clone()));
+
+        self.ctx.CopySubresourceRegion(&dst, 0, 0, 0, 0, &src, slice, None);
         Ok((y, uv))
     }
 
@@ -881,6 +978,26 @@ impl Compositor {
     pub unsafe fn begin(&self, clear: [f32; 4]) {
         self.bind_compose_state();
         self.ctx.ClearRenderTargetView(&self.rtv, &clear);
+    }
+
+    /// Garde le fond que le RT porte à cet instant (`bg_cache`), sous `key`.
+    unsafe fn keep_background(&self, key: crate::frame_geometry::BackgroundKey) -> Result<()> {
+        // L'ancienne texture est reprise : `resized` vide le cache, sa taille est la bonne.
+        let old = self.bg_cache.borrow_mut().take().map(|c| c.tex);
+        let tex = match old {
+            Some(tex) => tex,
+            None => {
+                let mut d = D3D11_TEXTURE2D_DESC::default();
+                self.rt.GetDesc(&mut d);
+                d.BindFlags = 0;
+                let mut tex: Option<ID3D11Texture2D> = None;
+                self.dev.CreateTexture2D(&d, None, Some(&mut tex))?;
+                tex.ok_or_else(|| anyhow::anyhow!("CreateTexture2D (fond gardé)"))?
+            }
+        };
+        self.ctx.CopyResource(&tex, &self.rt);
+        *self.bg_cache.borrow_mut() = Some(BgCache { key, tex });
+        Ok(())
     }
 
     /// Passe plein écran générique (triangle unique) : `srv` -> `rtv` via `ps`, avec `fx`.
@@ -1110,6 +1227,15 @@ impl Compositor {
         self.checked(result)
     }
 
+    /// Dessine le quad d'un calque, ses ressources déjà liées. Le pixel shader suit son mode :
+    /// `ps_models` pour un modèle 3D (`LayerCB::needs_models`), `ps` pour tout le reste, qui ne
+    /// paie pas ainsi les registres de ces modèles.
+    unsafe fn draw_layer(&self, cb: &LayerCB) {
+        self.upload_cb(cb);
+        self.ctx.PSSetShader(if cb.needs_models() { &self.ps_models } else { &self.ps }, None);
+        self.ctx.Draw(4, 0);
+    }
+
     /// Calque vidéo NV12.
     pub unsafe fn draw_video(
         &self,
@@ -1117,16 +1243,14 @@ impl Compositor {
         srv_y: &ID3D11ShaderResourceView,
         srv_uv: &ID3D11ShaderResourceView,
     ) {
-        self.upload_cb(cb);
         self.ctx
             .PSSetShaderResources(0, Some(&[Some(srv_y.clone()), Some(srv_uv.clone())]));
-        self.ctx.Draw(4, 0);
+        self.draw_layer(cb);
     }
 
     /// Calque couleur pleine (fond).
     pub unsafe fn draw_solid(&self, cb: &LayerCB) {
-        self.upload_cb(cb);
-        self.ctx.Draw(4, 0);
+        self.draw_layer(cb);
     }
 
     /// Fond wallpaper image (cover-fit). `path` = chemin absolu (résolu côté app). Décodé et
@@ -1220,7 +1344,8 @@ impl Compositor {
             (0.0, (1.0 - vis) * 0.5, 1.0, 1.0 - (1.0 - vis) * 0.5)
         };
         let (anim, mb) = crate::frame_geometry::wallpaper_motion_slots(motion, programme_t, ao);
-        self.upload_cb(&LayerCB {
+        self.ctx.PSSetShaderResources(2, Some(&[Some(srv)]));
+        self.draw_layer(&LayerCB {
             dst,
             src: [u0, v0, u1, v1],
             quad_px,
@@ -1230,8 +1355,6 @@ impl Compositor {
             mb,
             ..Default::default()
         });
-        self.ctx.PSSetShaderResources(2, Some(&[Some(srv)]));
-        self.ctx.Draw(4, 0);
         Ok(())
     }
 
@@ -1746,7 +1869,7 @@ impl Compositor {
     /// Curseur custom (dot+ring) centré en `center` (0..1 sortie), taille `size_px`, opacité `a`.
     /// `clip` = rect "Clip to canvas" en espace sortie [x,y,w,h] ; passer un rect englobant tout
     /// (ex. [-1,-1,3,3]) pour désactiver l'effet.
-    unsafe fn draw_cursor(&self, center: [f32; 2], size_px: f32, a: f32, clip: [f32; 4]) {
+    unsafe fn draw_cursor(&self, center: [f32; 2], size_px: f32, a: f32, clip: [f32; 4]) -> [f32; 4] {
         let w = size_px / self.rw();
         let h = size_px / self.rh();
         let dst = [center[0] - w * 0.5, center[1] - h * 0.5, w, h];
@@ -1758,6 +1881,7 @@ impl Compositor {
             fx: clip,
             ..Default::default()
         });
+        dst
     }
 
     /// Curseur thème (sprite PNG, ex. arrow.png) dont le PIVOT `hotspot` (fraction 0..1 de
@@ -1775,7 +1899,7 @@ impl Compositor {
         sprite: &SceneCursorSprite,
         clip: [f32; 4],
         model: Option<crate::frame_geometry::CursorPose>,
-    ) -> Result<()> {
+    ) -> Result<Option<[f32; 4]>> {
         let path = sprite.path.as_str();
         let (srv, iw, ih) = self.cached_image(path)?;
         // Sans champ de distance, repli sur le sprite plat plutôt que sur le curseur math.
@@ -1784,18 +1908,29 @@ impl Compositor {
             match self.cursor_sdf(path) {
                 Ok((sdf, shape)) => {
                     let shape = crate::frame_geometry::model_shape(sprite, shape);
-                    if let Some(cb) = crate::frame_geometry::cursor_model_cb(
+                    let Some(cb) = crate::frame_geometry::cursor_model_cb(
                         placement, size_px, pose, shape, a, clip,
-                    ) {
-                        self.upload_cb(&cb);
-                        self.ctx.PSSetShaderResources(2, Some(&[Some(srv)]));
-                        self.ctx.PSSetShaderResources(4, Some(&[Some(sdf)]));
-                        self.ctx.Draw(4, 0);
-                        self.ctx.PSSetShaderResources(4, Some(&[None]));
-                    }
-                    return Ok(());
+                    ) else {
+                        return Ok(None);
+                    };
+                    self.ctx.PSSetShaderResources(2, Some(&[Some(srv)]));
+                    self.ctx.PSSetShaderResources(4, Some(&[Some(sdf)]));
+                    self.draw_layer(&cb);
+                    self.ctx.PSSetShaderResources(4, Some(&[None]));
+                    return Ok(Some(cb.dst));
                 }
                 Err(e) => eprintln!("[curseur] champ de \"{path}\" : {e:#}"),
+            }
+        }
+        // Le verre à plat de Glass Lens (mode 19) : la copie qu'il réfracte est déjà en t5
+        // (`CursorPlan::glass`).
+        if model.is_none() {
+            let glass = sprite.glass.as_deref().and_then(|name| {
+                crate::frame_geometry::cursor_glass_cb(placement, size_px, name, a, clip, [self.rw(), self.rh()])
+            });
+            if let Some(cb) = glass {
+                self.draw_layer(&cb);
+                return Ok(Some(cb.dst));
             }
         }
         let ar = iw as f32 / ih as f32;
@@ -1808,10 +1943,9 @@ impl Compositor {
             clip,
             [self.rw(), self.rh()],
         );
-        self.upload_cb(&cb);
         self.ctx.PSSetShaderResources(2, Some(&[Some(srv)]));
-        self.ctx.Draw(4, 0);
-        Ok(())
+        self.draw_layer(&cb);
+        Ok(Some(cb.dst))
     }
 
     /// Sprite de l'état courant (`cursor_type`, ex. `"text"`), à défaut celui de la flèche,
@@ -1831,17 +1965,17 @@ impl Compositor {
         a: f32,
         clip: [f32; 4],
         model: Option<crate::frame_geometry::CursorPose>,
-    ) {
+    ) -> Option<[f32; 4]> {
         let sprite = cursor_type.and_then(|t| sprites.get(t)).or_else(|| sprites.get("arrow"));
         if let Some(sprite) = sprite {
-            if self.draw_cursor_sprite(placement, size_px, a, sprite, clip, model).is_ok() {
-                return;
+            if let Ok(dst) = self.draw_cursor_sprite(placement, size_px, a, sprite, clip, model) {
+                return dst;
             }
         }
         // Le repli math reste droit même sur un plan incliné : il ne devrait plus apparaître
         // maintenant que l'art par défaut existe, et lui donner sa propre passe de warp pour
         // un cas de secours ne se justifie pas.
-        self.draw_cursor(placement.upright_center(), size_px, a, clip);
+        Some(self.draw_cursor(placement.upright_center(), size_px, a, clip))
     }
 
     /// Ombre portée (§7 E4) sous un quad `dst` (normalisé) de taille `size_px`.
@@ -1935,6 +2069,11 @@ impl Compositor {
         });
     }
 
+    /// Le métrage dans la dernière image composée : ses coins et son warp (`FootageQuad`).
+    pub fn footage_quad(&self) -> Option<crate::frame_geometry::FootageQuad> {
+        self.footage.get()
+    }
+
     /// Compose une frame animée (§6/§8) : fond flouté + screen zoomé (padding, coins, ombre)
     /// + webcam crop carré (coins, ombre), placements interpolés A↔B par la timeline.
     unsafe fn compose_frame_unchecked(
@@ -1978,6 +2117,7 @@ impl Compositor {
             timeline_t_override: *self.timeline_t_override.borrow(),
             programme_time: *self.programme_time.borrow(),
         });
+        self.footage.set(Some(g.footage_quad([self.rw(), self.rh()])));
         let scene_preset = g.scene_preset.clone();
         let mb_taps = g.mb_taps;
         let mb_amount = g.mb_amount;
@@ -2000,8 +2140,6 @@ impl Compositor {
         let dof = g.depth_of_field_on(self.cpu_backend);
         let dof_srv = if dof { Some(self.fill_dof_pyramid(&sy, &suv, stw, sth)?) } else { None };
 
-        self.begin([0.0, 0.0, 0.0, 1.0]);
-
         // --- fond ---
         // Parité web (frameRenderer.blurredBackgroundLayer) : le fond est le WALLPAPER sélectionné
         // (image/couleur/gradient) et « Blur BG » floute CE wallpaper, PAS la vidéo. Le natif
@@ -2010,86 +2148,120 @@ impl Compositor {
         // ensuite ; pour une couleur plate le flou est un no-op visuel). Côté fixture/bench
         // (pas de scène) on garde le fond screen-flouté, dont le coût est mesuré (C4).
         let scene_bg = self.scene.borrow().as_ref().map(|s| (s.background.clone(), s.effects.blur));
-        if let Some((bg, blur_wallpaper)) = scene_bg {
-            match bg {
-                SceneBackground::Color { color } => {
-                    let c = parse_hex(&color).unwrap_or(lp.bg_color);
-                    self.draw_solid(&LayerCB {
-                        dst: [0.0, 0.0, 1.0, 1.0],
-                        mode: 1.0,
-                        color: c,
-                        ..Default::default()
-                    });
-                }
-                SceneBackground::Gradient { angle_deg, stops, offsets, motion } => {
-                    // angle CSS → direction unitaire (espace sortie, y vers le bas) :
-                    // 0° = vers le haut, 90° = vers la droite.
-                    let a = angle_deg.to_radians();
-                    let dir = [a.sin(), -a.cos()];
-                    let (anim, mb) = crate::frame_geometry::wallpaper_motion_slots(
-                        motion,
-                        g.programme_t,
-                        self.rw() / self.rh(),
-                    );
-                    self.draw_solid(&LayerCB {
-                        dst: [0.0, 0.0, 1.0, 1.0],
-                        fx: [dir[0], dir[1], anim[0], anim[1]],
-                        mb,
-                        ..crate::frame_geometry::gradient_layer(&stops, &offsets, lp.bg_color)
-                    });
-                }
-                SceneBackground::Image { path, motion } => {
-                    // image bg (cover-fit, mise en cache) ; fallback couleur si chargement échoue
-                    // (loggé — un fallback silencieux masquerait un chemin cassé, cf. le panic
-                    // borrow qu'on a déjà eu : toute panne doit être visible/traçable).
-                    let aspect = self.rw() / self.rh();
-                    if let Err(e) = self.draw_image_bg(&path, aspect, motion, g.programme_t) {
-                        eprintln!("[compositor] wallpaper image \"{}\" : {:#}", path, e);
+        // Le fond de la frame d'avant, s'il est celui qu'on demande (`BackgroundKey`), est recopié
+        // au lieu d'être redessiné. Côté scène seulement : sans scène, le fond est la vidéo floutée.
+        let bg_size = [self.rw(), self.rh()];
+        let bg_cached = scene_ref.as_ref().is_some_and(|s| {
+            self.bg_cache
+                .borrow()
+                .as_ref()
+                .is_some_and(|c| {
+                    c.key.matches(Some(&s.background), s.effects.blur, lp.bg_color, bg_size)
+                })
+        });
+        if bg_cached {
+            self.bind_compose_state();
+            if let Some(c) = self.bg_cache.borrow().as_ref() {
+                self.ctx.CopyResource(&self.rt, &c.tex);
+            }
+        } else {
+            self.begin([0.0, 0.0, 0.0, 1.0]);
+            // Faux si l'image du fond n'a pas pu se charger : son repli n'est pas gardé.
+            let mut bg_drawn = true;
+            if let Some((bg, blur_wallpaper)) = scene_bg {
+                match bg {
+                    SceneBackground::Color { color } => {
+                        let c = parse_hex(&color).unwrap_or(lp.bg_color);
                         self.draw_solid(&LayerCB {
                             dst: [0.0, 0.0, 1.0, 1.0],
                             mode: 1.0,
-                            color: lp.bg_color,
+                            color: c,
                             ..Default::default()
                         });
                     }
+                    SceneBackground::Gradient { angle_deg, stops, offsets, motion } => {
+                        // angle CSS → direction unitaire (espace sortie, y vers le bas) :
+                        // 0° = vers le haut, 90° = vers la droite.
+                        let a = angle_deg.to_radians();
+                        let dir = [a.sin(), -a.cos()];
+                        let (anim, mb) = crate::frame_geometry::wallpaper_motion_slots(
+                            motion,
+                            g.programme_t,
+                            self.rw() / self.rh(),
+                        );
+                        self.draw_solid(&LayerCB {
+                            dst: [0.0, 0.0, 1.0, 1.0],
+                            fx: [dir[0], dir[1], anim[0], anim[1]],
+                            mb,
+                            ..crate::frame_geometry::gradient_layer(&stops, &offsets, lp.bg_color)
+                        });
+                    }
+                    SceneBackground::Image { path, motion } => {
+                        // image bg (cover-fit, mise en cache) ; fallback couleur si chargement échoue
+                        // (loggé — un fallback silencieux masquerait un chemin cassé, cf. le panic
+                        // borrow qu'on a déjà eu : toute panne doit être visible/traçable).
+                        let aspect = self.rw() / self.rh();
+                        if let Err(e) = self.draw_image_bg(&path, aspect, motion, g.programme_t) {
+                            eprintln!("[compositor] wallpaper image \"{}\" : {:#}", path, e);
+                            bg_drawn = false;
+                            self.draw_solid(&LayerCB {
+                                dst: [0.0, 0.0, 1.0, 1.0],
+                                mode: 1.0,
+                                color: lp.bg_color,
+                                ..Default::default()
+                            });
+                        }
+                    }
                 }
-            }
-            // « Blur BG » (parité web blurredBackgroundLayer) : floute CE wallpaper qu'on vient
-            // de dessiner (dual-Kawase, déjà utilisé pour le fond fixture ci-dessous). No-op
-            // visuel sur une couleur plate, effet réel sur gradient/image.
-            if blur_wallpaper > 0.0 {
-                self.blur_bg(blur_wallpaper);
+                // « Blur BG » (parité web blurredBackgroundLayer) : floute CE wallpaper qu'on vient
+                // de dessiner (dual-Kawase, déjà utilisé pour le fond fixture ci-dessous). No-op
+                // visuel sur une couleur plate, effet réel sur gradient/image.
+                if blur_wallpaper > 0.0 {
+                    self.blur_bg(blur_wallpaper);
+                    self.bind_compose_state();
+                }
+            } else if cfg.bg_blur > 0.0 {
+                let over = 0.06;
+                self.draw_video(
+                    &LayerCB {
+                        dst: [-over, -over, 1.0 + 2.0 * over, 1.0 + 2.0 * over],
+                        src: [0.0, 0.0, u_max, v_max],
+                        quad_px: [self.rw(), self.rh()],
+                        mode: 0.0,
+                        color: [1.0, 1.0, 1.0, 1.0],
+                        ..Default::default()
+                    },
+                    &sy,
+                    &suv,
+                );
+                self.blur_bg(cfg.bg_blur);
                 self.bind_compose_state();
-            }
-        } else if cfg.bg_blur > 0.0 {
-            let over = 0.06;
-            self.draw_video(
-                &LayerCB {
-                    dst: [-over, -over, 1.0 + 2.0 * over, 1.0 + 2.0 * over],
-                    src: [0.0, 0.0, u_max, v_max],
-                    quad_px: [self.rw(), self.rh()],
-                    mode: 0.0,
-                    color: [1.0, 1.0, 1.0, 1.0],
+                self.draw_solid(&LayerCB {
+                    dst: [0.0, 0.0, 1.0, 1.0],
+                    mode: 1.0,
+                    color: [0.0, 0.0, 0.0, 0.35],
                     ..Default::default()
-                },
-                &sy,
-                &suv,
-            );
-            self.blur_bg(cfg.bg_blur);
-            self.bind_compose_state();
-            self.draw_solid(&LayerCB {
-                dst: [0.0, 0.0, 1.0, 1.0],
-                mode: 1.0,
-                color: [0.0, 0.0, 0.0, 0.35],
-                ..Default::default()
+                });
+            } else {
+                self.draw_solid(&LayerCB {
+                    dst: [0.0, 0.0, 1.0, 1.0],
+                    mode: 1.0,
+                    color: lp.bg_color,
+                    ..Default::default()
+                });
+            }
+            // Pas de cache pour un fond animé (`of` rend `None`).
+            let key = scene_ref.as_ref().filter(|_| bg_drawn).and_then(|s| {
+                crate::frame_geometry::BackgroundKey::of(
+                    Some(&s.background),
+                    s.effects.blur,
+                    lp.bg_color,
+                    bg_size,
+                )
             });
-        } else {
-            self.draw_solid(&LayerCB {
-                dst: [0.0, 0.0, 1.0, 1.0],
-                mode: 1.0,
-                color: lp.bg_color,
-                ..Default::default()
-            });
+            if let Some(key) = key {
+                self.keep_background(key)?;
+            }
         }
 
         // --- screen : crop du clip actif, puis zoom appliqué dans ce rect source (§8) ---
@@ -2223,6 +2395,11 @@ impl Compositor {
             self.ctx.PSSetShaderResources(5, Some(&[None]));
         }
 
+        // --- flous de confidentialité : sur le métrage, AVANT le curseur. Le curseur reste net
+        // par-dessus, et le cristal de Prism Glow, qui réfracte l'image composée, n'y voit que des
+        // pixels déjà floutés. Les autres annotations restent le calque le plus haut (plus bas).
+        self.draw_annotations(scene_ref.as_ref(), source_t, s_ann, &g, true);
+
         // --- curseur custom : suit le mapping src/dst (zoom+layout), click bounce,
         // et flou de mouvement (parité `compositor_macos.rs` et `compositor_linux.rs`) ---
         if let Some(track) = cursor_ref.as_ref() {
@@ -2246,6 +2423,13 @@ impl Compositor {
                     .map(|s| s.cursor.cursor_sprites.clone())
                     .unwrap_or_default();
                 let cursor_type = plan.cursor_type.as_deref();
+                // Le cristal de Prism Glow réfracte l'image telle qu'elle est composée à cet
+                // instant, flous compris : sa copie en t5, une fois pour toutes les copies de la
+                // traînée (`ann_copy` est libre, les flous l'ont déjà lue).
+                if plan.glass {
+                    self.ctx.CopySubresourceRegion(&self.ann_copy, 0, 0, 0, 0, &self.rt, 0, None);
+                    self.ctx.PSSetShaderResources(5, Some(&[Some(self.ann_copy_srv.clone())]));
+                }
                 // L'impact des clics (mode 16, sans texture), posé sur l'écran SOUS le curseur.
                 for cb in &plan.impacts {
                     self.draw_solid(cb);
@@ -2265,11 +2449,14 @@ impl Compositor {
                     // buffer ISOLÉ (transparent), pas directement sur la scène déjà composée.
                     self.ctx.ClearRenderTargetView(&self.accum_rtv, &[0.0, 0.0, 0.0, 0.0]);
                     self.ctx.OMSetRenderTargets(Some(&[Some(self.accum_rtv.clone())]), None);
+                    // L'union des quads peints dans `accum` (x0, y0, x1, y1 en fractions de la
+                    // sortie) : la seule région que la recopie doit relire.
+                    let mut bounds = [f32::MAX, f32::MAX, f32::MIN, f32::MIN];
                     for k in 0..plan.taps {
                         let f = k as f32 / (plan.taps - 1) as f32;
                         let w = crate::frame_geometry::cursor_tap_weight(k, plan.taps);
                         self.ctx.OMSetBlendState(&self.blend_add, Some(&[w, w, w, w]), 0xffffffff);
-                        self.draw_cur_themed(
+                        let drawn = self.draw_cur_themed(
                             &cursor_sprites,
                             cursor_type,
                             plan.prev_placement.lerp(plan.placement, f),
@@ -2278,6 +2465,14 @@ impl Compositor {
                             plan.clip,
                             plan.model,
                         );
+                        if let Some(d) = drawn {
+                            bounds = [
+                                bounds[0].min(d[0]),
+                                bounds[1].min(d[1]),
+                                bounds[2].max(d[0] + d[2]),
+                                bounds[3].max(d[1] + d[3]),
+                            ];
+                        }
                     }
                     // composite le buffer accumulé sur la scène (blend "over" normal, prémultiplié).
                     self.ctx.OMSetRenderTargets(Some(&[Some(self.rtv.clone())]), None);
@@ -2295,11 +2490,29 @@ impl Compositor {
                     };
                     self.ctx.RSSetViewports(Some(&[vp]));
                     self.ctx.OMSetBlendState(&self.blend, None, 0xffffffff);
-                    self.ctx.Draw(3, 0);
+                    // Rien n'a été peint dans `accum` hors des quads de la traînée : la recopie
+                    // s'y borne au lieu de repasser sur toute la sortie (0,5 ms par frame 1080p
+                    // mesurée sur Linux, Radeon 610M).
+                    let (rw, rh) = (self.rw(), self.rh());
+                    let rect = RECT {
+                        left: (bounds[0] * rw).floor().clamp(0.0, rw) as i32,
+                        top: (bounds[1] * rh).floor().clamp(0.0, rh) as i32,
+                        right: (bounds[2] * rw).ceil().clamp(0.0, rw) as i32,
+                        bottom: (bounds[3] * rh).ceil().clamp(0.0, rh) as i32,
+                    };
+                    if rect.right > rect.left && rect.bottom > rect.top {
+                        self.ctx.RSSetState(&self.rs_scissor);
+                        self.ctx.RSSetScissorRects(Some(&[rect]));
+                        self.ctx.Draw(3, 0);
+                        self.ctx.RSSetState(None);
+                    }
                     self.ctx.PSSetShaderResources(0, Some(&[None]));
                     // restaure l'état de composition standard (VS/PS/topologie quad-strip) pour
                     // le dessin de la webcam qui suit juste après.
                     self.bind_compose_state();
+                }
+                if plan.glass {
+                    self.ctx.PSSetShaderResources(5, Some(&[None]));
                 }
             }
         }
@@ -2419,12 +2632,13 @@ impl Compositor {
         // la transform, donc les annotations restent en place pendant que le contenu zoome dessous.
         // Ce fut `s_dst` tant que le zoom vivait dans la coupe source ; depuis l'issue #179 il vit
         // dans la BOÎTE, et `s_dst` emmenait annotations et sous-titres avec lui.
-        // Exception : le flou de confidentialité suit le contenu (`FrameGeometry::privacy_mask`),
-        // d'où la géométrie entière passée en plus de `s_ann`.
+        // Les flous de confidentialité, eux, sont passés avant le curseur (plus haut) : ils suivent
+        // le contenu (`FrameGeometry::privacy_mask`), d'où la géométrie entière passée en plus de
+        // `s_ann`.
         // `source_t`, la même base de temps que les zoom/speed regions : le temps SOURCE du clip,
         // pas le compteur de frames. C'est ce qui garde une annotation alignée sur l'image quand
         // une speed region répète ou saute des frames.
-        self.draw_annotations(scene_ref.as_ref(), source_t, s_ann, &g);
+        self.draw_annotations(scene_ref.as_ref(), source_t, s_ann, &g, false);
         Ok(())
     }
 
@@ -2436,19 +2650,23 @@ impl Compositor {
     /// sous-titres sous un zoom (issue #179, puis #397 sur Linux). L'arithmétique elle-même vit
     /// dans `frame_geometry::annotation_dst_in`, partagée par les trois backends. Le flou, lui,
     /// se place par `g.privacy_mask` : un masque doit rester sur ce qu'il cache.
+    ///
+    /// `privacy` : les flous de confidentialité seuls, dessinés sur le métrage avant le curseur ;
+    /// sinon toutes les autres annotations, le calque le plus haut.
     unsafe fn draw_annotations(
         &self,
         scene: Option<&Scene>,
         t: f32,
         s_ann: [f32; 4],
         g: &crate::frame_geometry::FrameGeometry,
+        privacy: bool,
     ) {
         let Some(scene) = scene else { return };
         if scene.annotations.is_empty() {
             return;
         }
         let visible = |a: &crate::scene::SceneAnnotation| {
-            t >= a.start_sec as f32 && t < a.end_sec as f32
+            t >= a.start_sec as f32 && t < a.end_sec as f32 && (a.kind == "blur") == privacy
         };
         // Une seule recopie du render target pour TOUTES les annotations flou de la frame — leur
         // lecture doit voir l'image composée sans les flous eux-mêmes, sinon deux zones qui se
@@ -3004,6 +3222,12 @@ impl Compositor {
         Ok((rw, rh, out))
     }
 
+    /// Le RT de la dernière composition, à `render_size()`, pour qui le copie ailleurs sans
+    /// passer par la RAM : l'anneau de textures partagées de la preview (`shared_frames`).
+    pub fn render_target(&self) -> &ID3D11Texture2D {
+        &self.rt
+    }
+
     /// Comme `rgb_to_nv12`, mais vers `target_w`×`target_h` : si la cible diffère de la taille
     /// de rendu, le RT composé est d'abord redimensionné (bilinéaire, `ps_tex`/`sampler` déjà
     /// utilisés partout ailleurs dans le fichier, cf. `blit_resized`). Le RT suivant la sortie,
@@ -3366,6 +3590,62 @@ mod tests {
             "sans éviction le total ({} Mo) doit dépasser le budget, sinon le test ne prouve rien",
             cumule / 1048576
         );
+    }
+
+    /// Un NV12 sans données, à la taille voulue : tout ce que `nv12_srvs` lit d'une frame.
+    fn nv12_frame(gpu: &crate::d3d::Gpu, w: u32, h: u32) -> (Box<AVFrame>, ID3D11Texture2D) {
+        let desc = D3D11_TEXTURE2D_DESC {
+            Width: w,
+            Height: h,
+            MipLevels: 1,
+            ArraySize: 1,
+            Format: DXGI_FORMAT_NV12,
+            SampleDesc: DXGI_SAMPLE_DESC { Count: 1, Quality: 0 },
+            Usage: D3D11_USAGE_DEFAULT,
+            BindFlags: D3D11_BIND_SHADER_RESOURCE.0 as u32,
+            CPUAccessFlags: 0,
+            MiscFlags: 0,
+        };
+        unsafe {
+            let mut tex: Option<ID3D11Texture2D> = None;
+            gpu.device.CreateTexture2D(&desc, None, Some(&mut tex)).expect("texture NV12");
+            let tex = tex.expect("texture NV12");
+            let mut frame: Box<AVFrame> = Box::new(std::mem::zeroed());
+            frame.data[0] = tex.as_raw() as *mut u8;
+            frame.data[1] = std::ptr::null_mut();
+            (frame, tex)
+        }
+    }
+
+    /// Un décodeur remplacé sans `clear_srv_cache` (changement de résolution en cours de flux,
+    /// `CpuFrames::ensure_tex`) peut donner à une texture NEUVE l'adresse d'une ancienne. La
+    /// copie privée gardée pour l'ancienne est alors trop petite, `CopySubresourceRegion` la
+    /// saute sans erreur et l'image gèle. On ne peut pas choisir l'adresse d'une texture ;
+    /// l'entrée de la petite est donc replacée sous la clé de la grande, l'état exact où le
+    /// cache se retrouve après un tel recyclage.
+    #[test]
+    fn a_larger_source_at_a_cached_address_gets_a_copy_of_its_own_size() {
+        let Ok(gpu) = crate::d3d::Gpu::create_auto(false) else {
+            eprintln!("pas de device D3D11 — test sauté");
+            return;
+        };
+        let comp = Compositor::new_sized(&gpu, 320, 180).expect("compositeur");
+        let (small, _small_tex) = nv12_frame(&gpu, 64, 64);
+        let (large, _large_tex) = nv12_frame(&gpu, 128, 96);
+        let (small_key, large_key) = (small.data[0] as usize, large.data[0] as usize);
+
+        unsafe { comp.nv12_srvs(&*small) }.expect("source de 64x64");
+        {
+            let mut cache = comp.srv_cache.borrow_mut();
+            let stale = cache.remove(&small_key).expect("entrée de la petite source");
+            cache.insert(large_key, stale);
+        }
+        unsafe { comp.nv12_srvs(&*large) }.expect("source de 128x96");
+
+        let (dst, ..) = comp.srv_cache.borrow().get(&large_key).cloned().expect("entrée remplacée");
+        let mut dd = D3D11_TEXTURE2D_DESC::default();
+        unsafe { dst.GetDesc(&mut dd) };
+        assert_eq!((dd.Width, dd.Height), (128, 96), "la copie a gardé la taille de l'ancienne texture");
     }
 
     /// Un cran de padding en format Auto change la taille de rendu de la preview. `resized`

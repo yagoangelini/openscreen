@@ -88,7 +88,8 @@
 		"audioFiles": "Arquivos de áudio",
 		"openscreenProject": "Projeto OpenScreen",
 		"allFiles": "Todos os Arquivos",
-		"chooseRecordingsFolder": "Escolha a pasta das novas gravações"
+		"chooseRecordingsFolder": "Escolha a pasta das novas gravações",
+		"selectRecordingsFolder": "Selecionar pasta de gravações"
 	},
 	"recovery": {
 		"title": "Recuperar gravação",
@@ -105,5 +106,9 @@
 		"detail": "Fechar o editor cancela a exportação, e o vídeo não será salvo.",
 		"keep": "Continuar exportando",
 		"cancelAndClose": "Cancelar exportação e fechar"
+	},
+	"recording": {
+		"lowDiskSpace": "Espaço em disco insuficiente para iniciar a gravação (apenas {{availableMb}} MB livres). Libere espaço ou escolha outra pasta de gravações e tente novamente.",
+		"folderUnavailable": "Não é possível acessar a pasta de gravações {{path}}. Reconecte a unidade dela ou escolha outra pasta no modo Gravar."
 	}
 }

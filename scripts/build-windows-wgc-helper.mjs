@@ -4,12 +4,26 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { findVcVarsAll, run as spawnStep } from "./msvcEnv.mjs";
 
+import {
+	parseArchFlag,
+	resolveTargetArch,
+	resolveVcvarsArch,
+	winBinDirName,
+} from "./windows-helper-arch.mjs";
+
+const TARGET_ARCH = resolveTargetArch({
+	cliArch: parseArchFlag(process.argv.slice(2)),
+	envArch: process.env.OPENSCREEN_WIN_HELPER_ARCH,
+	hostArch: process.arch,
+});
+const VCVARS_ARCH = resolveVcvarsArch(process.arch, TARGET_ARCH);
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, "..");
 const SOURCE_DIR = path.join(ROOT, "electron", "native", "wgc-capture");
 const BUILD_DIR = path.join(SOURCE_DIR, "build");
 const COMPAT_LIB_DIR = path.join(BUILD_DIR, "compat-libs");
-const BIN_DIR = path.join(ROOT, "electron", "native", "bin", "win32-x64");
+const BIN_DIR = path.join(ROOT, "electron", "native", "bin", winBinDirName(TARGET_ARCH));
 const CMAKE = process.env.CMAKE_EXE ?? "cmake";
 
 function findWindowsSdkUmLibDir() {
@@ -21,7 +35,7 @@ function findWindowsSdkUmLibDir() {
 	return fs
 		.readdirSync(sdkLibRoot, { withFileTypes: true })
 		.filter((entry) => entry.isDirectory())
-		.map((entry) => path.join(sdkLibRoot, entry.name, "um", "x64"))
+		.map((entry) => path.join(sdkLibRoot, entry.name, "um", TARGET_ARCH))
 		.filter((candidate) => fs.existsSync(path.join(candidate, "kernel32.lib")))
 		.sort()
 		.at(-1);
@@ -44,10 +58,10 @@ async function runInVsEnv(command) {
 		cmdPath,
 		[
 			"@echo off",
-			`call "${vcvarsAll}" x64`,
+			`call "${vcvarsAll}" ${VCVARS_ARCH}`,
 			"if errorlevel 1 exit /b %errorlevel%",
 			`if not exist "${COMPAT_LIB_DIR}" mkdir "${COMPAT_LIB_DIR}"`,
-			`for %%L in (gdi32.lib gdiplus.lib winspool.lib shell32.lib oleaut32.lib uuid.lib comdlg32.lib advapi32.lib) do if not exist "%WindowsSdkDir%Lib\\%WindowsSDKLibVersion%um\\x64\\%%L" copy /Y "%WindowsSdkDir%Lib\\%WindowsSDKLibVersion%um\\x64\\kernel32.Lib" "${COMPAT_LIB_DIR}\\%%L" >nul`,
+			`for %%L in (gdi32.lib gdiplus.lib winspool.lib shell32.lib oleaut32.lib uuid.lib comdlg32.lib advapi32.lib) do if not exist "%WindowsSdkDir%Lib\\%WindowsSDKLibVersion%um\\${TARGET_ARCH}\\%%L" copy /Y "%WindowsSdkDir%Lib\\%WindowsSDKLibVersion%um\\${TARGET_ARCH}\\kernel32.Lib" "${COMPAT_LIB_DIR}\\%%L" >nul`,
 			"if errorlevel 1 exit /b %errorlevel%",
 			`set "LIB=${sdkUmLibDir ? `${sdkUmLibDir};` : ""}%LIB%;${COMPAT_LIB_DIR}"`,
 			command,
@@ -67,7 +81,21 @@ if (process.platform !== "win32") {
 	process.exit(0);
 }
 
+console.log(`Building Windows WGC helper for target arch: ${TARGET_ARCH} (vcvars: ${VCVARS_ARCH})`);
+
+// CMake caches the detected compiler in the build directory. Reusing a build
+// dir that was configured for a different target arch silently produces
+// wrong-arch binaries (the cached compiler wins over the new vcvars env). Wipe
+// the build dir when the target arch changes; same-arch reruns stay incremental.
+const ARCH_STAMP = path.join(BUILD_DIR, ".target-arch");
+if (fs.existsSync(BUILD_DIR)) {
+	const previousArch = fs.existsSync(ARCH_STAMP) ? fs.readFileSync(ARCH_STAMP, "utf8").trim() : "";
+	if (previousArch !== TARGET_ARCH) {
+		fs.rmSync(BUILD_DIR, { recursive: true, force: true });
+	}
+}
 fs.mkdirSync(BUILD_DIR, { recursive: true });
+fs.writeFileSync(ARCH_STAMP, TARGET_ARCH);
 
 await runInVsEnv(
 	`"${CMAKE}" -S "${SOURCE_DIR}" -B "${BUILD_DIR}" -G Ninja -DCMAKE_BUILD_TYPE=Release`,
@@ -120,3 +148,53 @@ if (!fs.existsSync(inputSignalsTestPath)) {
 }
 await run(inputSignalsTestPath, [], { cwd: BUILD_DIR });
 console.log(`Passed ${inputSignalsTestPath}`);
+
+const webcamFormatTestPath = path.join(BUILD_DIR, "webcam_format_test.exe");
+if (!fs.existsSync(webcamFormatTestPath)) {
+	throw new Error(`WGC helper build completed but ${webcamFormatTestPath} was not found.`);
+}
+// Guards the capture resolution the camera is driven at. Left unpinned, both
+// backends fall back to the device default -- 640x480 on hardware that offers
+// far more -- and the overlay upscales it.
+await run(webcamFormatTestPath, [], { cwd: BUILD_DIR });
+console.log(`Passed ${webcamFormatTestPath}`);
+
+const frameVisibilityTestPath = path.join(BUILD_DIR, "frame_visibility_test.exe");
+if (!fs.existsSync(frameVisibilityTestPath)) {
+	throw new Error(`WGC helper build completed but ${frameVisibilityTestPath} was not found.`);
+}
+// Guards the warm-up probe that decides whether the camera has produced a
+// picture yet. Studio-range black is 16, not 0, so an unnormalised average
+// reads every black frame as content.
+await run(frameVisibilityTestPath, [], { cwd: BUILD_DIR });
+console.log(`Passed ${frameVisibilityTestPath}`);
+
+const frameSlotClockTestPath = path.join(BUILD_DIR, "frame_slot_clock_test.exe");
+if (!fs.existsSync(frameSlotClockTestPath)) {
+	throw new Error(`WGC helper build completed but ${frameSlotClockTestPath} was not found.`);
+}
+// Guards the writer's cadence. The encoder numbers frames at the nominal rate,
+// so a tick the writer misses must still be written or the video runs ahead
+// of the audio for the rest of the take (#945).
+await run(frameSlotClockTestPath, [], { cwd: BUILD_DIR });
+console.log(`Passed ${frameSlotClockTestPath}`);
+
+const webcamSnapshotTestPath = path.join(BUILD_DIR, "webcam_snapshot_test.exe");
+if (!fs.existsSync(webcamSnapshotTestPath)) {
+	throw new Error(`WGC helper build completed but ${webcamSnapshotTestPath} was not found.`);
+}
+// Guards the per-tick webcam poll. The writer asks at the screen's rate, twice
+// the camera's, so a frame it already holds must not be copied again.
+await run(webcamSnapshotTestPath, [], { cwd: BUILD_DIR });
+console.log(`Passed ${webcamSnapshotTestPath}`);
+
+const encoderColorTestPath = path.join(BUILD_DIR, "mf_encoder_color_test.exe");
+if (!fs.existsSync(encoderColorTestPath)) {
+	throw new Error(`WGC helper build completed but ${encoderColorTestPath} was not found.`);
+}
+// Guards what the H.264 track is and says: High profile, BT.709 studio range
+// in the samples and in the tags, which is what the compositor decodes. Media
+// Foundation's own colour converter wrote BT.601. Skips its file checks when
+// ffprobe/ffmpeg are not on PATH.
+await run(encoderColorTestPath, [], { cwd: BUILD_DIR });
+console.log(`Passed ${encoderColorTestPath}`);

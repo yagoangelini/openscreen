@@ -88,7 +88,8 @@
 		"audioFiles": "Ses dosyaları",
 		"openscreenProject": "OpenScreen Projesi",
 		"allFiles": "Tüm Dosyalar",
-		"chooseRecordingsFolder": "Yeni kayıtlar için klasör seçin"
+		"chooseRecordingsFolder": "Yeni kayıtlar için klasör seçin",
+		"selectRecordingsFolder": "Kayıt klasörünü seç"
 	},
 	"recovery": {
 		"title": "Kaydı kurtar",
@@ -105,5 +106,9 @@
 		"detail": "Düzenleyiciyi kapatmak onu iptal eder ve video kaydedilmez.",
 		"keep": "Dışa aktarmaya devam et",
 		"cancelAndClose": "Dışa aktarmayı iptal et ve kapat"
+	},
+	"recording": {
+		"lowDiskSpace": "Kaydı başlatmak için yeterli disk alanı yok (yalnızca {{availableMb}} MB boş). Alan boşaltın veya farklı bir kayıt klasörü seçip tekrar deneyin.",
+		"folderUnavailable": "{{path}} kayıt klasörüne erişilemiyor. Sürücüsünü yeniden bağlayın veya Kayıt modunda başka bir klasör seçin."
 	}
 }

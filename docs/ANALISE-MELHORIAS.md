@@ -16,6 +16,15 @@ Tudo o que aparece como **confirmado** eu mesmo verifiquei no código. O que vei
 
 ## 1. O upstream andou 408 commits desde que o fork nasceu
 
+> **Feito na 2.1.0** (PR yagoangelini/openscreen#7). As decisões tomadas no merge estão em [`HANDOFF.md`](HANDOFF.md#sincronizar-com-o-upstream).
+>
+> **Conferido numa gravação real:**
+>
+> - H.264 High em BT.709 no caminho de CPU;
+> - áudio do tamanho do vídeo, com diferença de 0,3 ms, onde antes sobrava meio segundo;
+> - NVENC/DXGI na RTX intacto;
+> - stems, plates de atalho e export funcionando.
+
 O fork partiu do `main` do upstream em 28/09 (merge base `2416e44c`). Desde então:
 
 - o upstream lançou a **v2.0.0** em 03/10 e continuou;

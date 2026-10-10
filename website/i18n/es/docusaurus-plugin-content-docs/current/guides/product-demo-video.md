@@ -35,7 +35,7 @@ En Windows, OpenScreen deja el HUD y la ventana de notas fuera de la captura. En
 
 1. En Windows y macOS, abre el selector de fuente y elige una pantalla en **Pantallas** o una sola ventana en **Ventanas**. En macOS 15.2 y posteriores, en su lugar eliges la pantalla o la ventana en el selector del sistema de Apple. En Linux no hay selector dentro de la app: el portal del sistema pide la fuente en cada toma. OpenScreen no tiene captura de región, así que graba la ventana o la pantalla y luego encuadra el clip en el editor.
 2. Activa el micrófono y revisa su medidor de nivel. Activa el audio del sistema si el producto emite sonido, y la cámara web si quieres aparecer en pantalla.
-3. Mantén el modo de cursor editable, el predeterminado: el puntero se graba como datos, así que puedes cambiar su estilo después. En Windows se graban los clics. En macOS, los clics necesitan el permiso de Accesibilidad. En Linux, tu usuario debe estar en el grupo `input`, y la función de tocar para hacer clic del touchpad no se captura ([detalles](../installation.md#mouse-clicks-on-wayland)).
+3. Mantén el modo de cursor editable, el predeterminado: el puntero se graba como datos, así que puedes cambiar su estilo después. En Windows se graban los clics. En macOS, los clics necesitan el permiso de Accesibilidad. En Linux, tu usuario necesita acceso de lectura al mouse, mediante una regla de udev (recomendada) o el grupo `input`, y la función de tocar para hacer clic del touchpad no se captura ([detalles](../installation.md#mouse-clicks-on-wayland)).
 4. Presiona grabar. Primero aparece una cuenta regresiva 3-2-1, que no se puede desactivar.
 
 OpenScreen captura con un objetivo de 60 fps, hasta 3840×2160 en Windows y macOS. En Linux, el tamaño es el que entregue el compositor. Mientras grabas puedes pausar, reiniciar la toma, cancelarla o detener la grabación.
@@ -52,7 +52,7 @@ La cámara web se graba en su propio archivo, así que su ubicación es una deci
 
 - **Imagen en imagen**, **Apilado vertical**, **Marco dual** o **Sin cámara**.
 - En todas las disposiciones: reflejo y un encuadre de la imagen de la cámara.
-- Solo en **Imagen en imagen**: **Forma de cámara** (Rectángulo o Cuadrado), **Redondez** (al 100 % una cámara cuadrada es un círculo), un tamaño del 15 al 50 % (25 % por defecto), **Posición** (una esquina o el centro de un borde, abajo a la derecha por defecto) y **Reducir al ampliar**, activado por defecto, que hace más pequeña la cámara mientras se reproduce un zoom para que no tape el detalle. Arrastra la cámara sobre el lienzo y se ajusta a la posición más cercana.
+- Solo en **Imagen en imagen**: **Forma de cámara** (Cuadrado por defecto, u Original, que conserva las proporciones propias de la cámara), **Redondez** (70 % para Cuadrado y 40 % para Original por defecto; al 100 % una cámara cuadrada es un círculo), un tamaño del 15 al 60 % (40 % por defecto), **Posición** (una esquina o el centro de un borde, abajo a la derecha por defecto) y **Reducir al ampliar**, activado por defecto, que hace más pequeña la cámara mientras se reproduce un zoom para que no tape el detalle. Arrastra la cámara sobre el lienzo y se ajusta a la posición más cercana.
 - **Fondo de la cámara**: Original, Desenfocado, Recortado o Personalizado. Recortado quita el fondo sin pantalla verde, con un modelo de segmentación que se ejecuta en tu CPU. Esta sección solo aparece cuando el entorno de ejecución de segmentación se carga en tu equipo.
 
 Para una introducción o un cierre, presiona `C` para agregar un segmento de **Cámara a pantalla completa**: la cámara llena todo el cuadro durante ese tramo.
@@ -106,7 +106,7 @@ Los subtítulos se incrustan en el video. OpenScreen no escribe ningún archivo 
 
 **Exporta.** Haz clic en **Exportar** en la barra superior:
 
-- **MP4**: 720p, 1080p o Source; 24, 30 o 60 fps; H.264 o H.265. El cuadro de diálogo marca H.264 como la opción de mejor compatibilidad. La tasa de bits del video no se puede ajustar: ronda los 8 Mbit/s en 1080p.
+- **MP4**: 720p, 1080p o Source; 24, 30 o 60 fps; H.264. La tasa de bits del video no se puede ajustar: ronda los 8 Mbit/s en 1080p.
 - **GIF**: 15, 20, 25 o 30 fps; tamaño Medium, Large u Original; bucle activado o desactivado. Los GIF usan 256 colores sin tramado, así que funcionan bien para clips cortos de interfaces planas.
 
 No hay marca de agua. Para exportar en otra proporción, cambia el formato y vuelve a exportar.

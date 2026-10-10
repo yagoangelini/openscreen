@@ -48,7 +48,10 @@ import {
 	replacePillSpan,
 	resolvePillIds,
 } from "../../src/lib/ai-edition/timeline/timelineMap";
-import { trimAppliesToClip } from "../../src/lib/ai-edition/timeline/trim-mapping";
+import {
+	trimAppliesToClip,
+	trimToTimelineSpan,
+} from "../../src/lib/ai-edition/timeline/trim-mapping";
 // ponytail: relative, and it has to stay that way — `electron/` never resolves
 // the `@/` alias (the main-process build does not declare it), which is why the
 // scale table was moved out of `components/video-editor/types.ts` to be
@@ -57,6 +60,11 @@ import {
 	effectiveZoomScale,
 	ZOOM_DEPTH_LEGEND,
 } from "../../src/lib/ai-edition/timeline/zoom-scale";
+import {
+	chainedPans,
+	transitionCutsMs,
+	zoomTransitions,
+} from "../../src/lib/ai-edition/timeline/zoom-transitions";
 import { SETTING_BOUNDS } from "../../src/lib/projectDefaults";
 
 export interface AgentToolExecution {
@@ -417,6 +425,11 @@ export const addTrimsArgs = z.object({
 	ranges: z.array(z.union([addTrimArgs, z.unknown()])).min(1),
 });
 
+export const removeWordsArgs = z.object({
+	assetId: z.string().min(1).optional(),
+	wordIds: z.array(z.string().min(1)).min(1),
+});
+
 export const setTrimArgs = z.object({
 	trimRangeId: z.string().min(1),
 	startSec: secondsSchema,
@@ -612,6 +625,7 @@ export const OPENSCREEN_TOOL_NAMES = [
 	"getTranscriptWords",
 	"getCursorTrack",
 	"setWordText",
+	"removeWords",
 	"addTrim",
 	"addTrims",
 	"setTrim",
@@ -683,6 +697,7 @@ export const MUTATING_TOOL_NAMES: ReadonlySet<string> = new Set([
 	// Writes the transcript, not the timeline — but it writes the document, so it is a
 	// consented edit like any other.
 	"setWordText",
+	"removeWords",
 	"addTrim",
 	"addTrims",
 	"addZooms",
@@ -711,6 +726,84 @@ export function isMutatingTool(name: string): boolean {
 
 function roundSec(ms: number): number {
 	return Math.round(ms) / 1000;
+}
+
+// Each zoom pill's camera moves in virtual ms, and how much of each a cut takes off (#1028).
+// The pill shows the hold only: the move in runs before it, the move out after it, and a
+// trim or a clip junction over either makes the export jump at the cut.
+function zoomTransitionsForAgent(document: AxcutDocument) {
+	const legacy = document.legacyEditor as Record<string, unknown> | null;
+	const speedRegions =
+		(legacy?.speedRegions as
+			| Array<{ id: string; startMs: number; endMs: number; speed: number }>
+			| undefined) ?? [];
+	// A trim with no clipId cuts every clip of its asset in playback, while the ruler maps it
+	// through one: measured per clip, so a zoom on any of them learns of the cut.
+	const trims = document.timeline.trimRanges.flatMap((trim) => {
+		const clips =
+			trim.clipId !== undefined
+				? [trim]
+				: document.timeline.clips
+						.filter((clip) => clip.assetId === trim.assetId)
+						.map((clip) => ({ ...trim, clipId: clip.id }));
+		return clips.flatMap((anchored) => {
+			const span = trimToTimelineSpan(anchored, document.timeline.clips);
+			return span ? [{ startMs: span.start * 1000, endMs: span.end * 1000 }] : [];
+		});
+	});
+	// Chained zooms pan from one to the next instead: no zoom-out, no zoom-in, nothing to cut
+	// (a trim or a junction between them would have broken the chain). A junction is where a
+	// clip starts after another: the timeline's own end has nothing after it to jump to.
+	const zooms = coalesceForAgent(document.zoomRanges);
+	const junctions = document.timeline.clips
+		.filter((clip) => clip.timelineStartSec > 0)
+		.map((clip) => ({
+			startMs: clip.timelineStartSec * 1000,
+			endMs: clip.timelineStartSec * 1000,
+		}));
+	const pans = chainedPans(zooms, speedRegions, [...trims, ...junctions]);
+	return zooms.map((zoom, i) => {
+		const transitions = zoomTransitions({ ...zoom, scale: effectiveZoomScale(zoom) }, speedRegions);
+		const panOut = pans.find((p) => p.from === i);
+		const panIn = pans.find((p) => p.to === i);
+		const cut = transitionCutsMs(zoom, transitions, trims, junctions);
+		return {
+			zoom,
+			transitions,
+			cut: { ...cut, inMs: panIn ? 0 : cut.inMs, outMs: panOut ? 0 : cut.outMs },
+			panTo: panOut && { zoomId: zooms[panOut.to].id, untilMs: panOut.untilMs },
+			panFromZoomId: panIn && zooms[panIn.from].id,
+		};
+	});
+}
+
+/** The transitions this edit cut that were not cut, or not this way, before it: the warning a
+ * zoom or trim write carries, like `cursorAnchor`: reported, never refused. */
+function cutTransitionsReport(before: AxcutDocument, after: AxcutDocument) {
+	const cutsOf = (document: AxcutDocument) =>
+		zoomTransitionsForAgent(document).flatMap(({ zoom, cut }) =>
+			(["in", "out"] as const)
+				.map((side) => ({
+					zoomId: zoom.id,
+					side,
+					cutSec: roundSec(side === "in" ? cut.inMs : cut.outMs),
+					by: (side === "in" ? cut.inByJunction : cut.outByJunction) ? "junction" : "trim",
+					key: `${zoom.id}:${side}:${zoom.startMs}:${zoom.endMs}`,
+				}))
+				.filter((c) => c.cutSec > 0),
+		);
+	const known = new Set(cutsOf(before).map((c) => `${c.key}:${c.cutSec}`));
+	const cuts = cutsOf(after)
+		.filter((c) => !known.has(`${c.key}:${c.cutSec}`))
+		.map(({ key: _key, ...c }) => c);
+	return cuts.length ? { cutTransitions: cuts } : {};
+}
+
+/** The moves a trim (or, with `byJunction`, a clip junction) cuts: in, out, both or none. */
+function cutSides(cut: ReturnType<typeof transitionCutsMs>, byJunction: boolean) {
+	const cutIn = cut.inMs > 0 && cut.inByJunction === byJunction;
+	const cutOut = cut.outMs > 0 && cut.outByJunction === byJunction;
+	return cutIn ? (cutOut ? "both" : "in") : cutOut ? "out" : undefined;
 }
 
 // Compact projection of the document for the model: everything it needs to
@@ -764,7 +857,13 @@ export function documentSnapshotForModel(
 		zoomNote:
 			`renderedScale is what the viewer sees (depth is an ordinal, not a factor: ${ZOOM_DEPTH_LEGEND}). ` +
 			"When a zoom carries customScale it wins over depth and depthIsOverridden is true — " +
-			"a setZoom that only changes depth on such a zoom clears customScale so the depth takes effect.",
+			"a setZoom that only changes depth on such a zoom clears customScale so the depth takes effect. " +
+			"startSec–endSec is where the zoom HOLDS: it animates in over zoomInFromSec–startSec and out over " +
+			"endSec–zoomOutUntilSec (transitionSec of screen time each; a speed region scales that on the " +
+			"timeline, longer above 1x and shorter below, so read the bounds rather than adding transitionSec). cutByTrim names the move a trim cuts into (in, out or both), cutByJunction the move a clip junction cuts (the clip ends before the move does): the export jumps at that cut. " +
+			"Two zooms at most 1.5 s apart on screen, with no trim or clip junction between them, are CHAINED: " +
+			"no zoom-out and back in, the camera pans from the first (panToZoomId, panUntilSec: 1 s of screen " +
+			"time from its endSec, which can run into the next span) to the second (panFromZoomId).",
 		project: { id: document.project.id, title: document.project.title },
 		primaryAssetId: document.project.primaryAssetId ?? document.assets[0]?.id ?? null,
 		autoFocusAll,
@@ -821,21 +920,30 @@ export function documentSnapshotForModel(
 			endSec: s.endSec,
 			reason: s.reason,
 		})),
-		zoomRanges: coalesceForAgent(document.zoomRanges).map((z) => ({
-			id: z.id,
-			startSec: roundSec(z.startMs),
-			endSec: roundSec(z.endMs),
-			depth: z.depth,
-			renderedScale: effectiveZoomScale(z),
-			// Emitted only when set: an unconditional `customScale: null` on every
-			// zoom of every snapshot is noise the reader learns to skip, which is
-			// how the field would go unnoticed again.
-			...(z.customScale != null ? { customScale: z.customScale, depthIsOverridden: true } : {}),
-			...(z.rotationPreset ? { rotationPreset: z.rotationPreset } : {}),
-			focus: z.focus,
-			focusMode: autoFocusAll ? "auto" : (z.focusMode ?? "manual"),
-			source: z.source ?? "manual",
-		})),
+		zoomRanges: zoomTransitionsForAgent(document).map(
+			({ zoom: z, transitions, cut, panTo, panFromZoomId }) => ({
+				id: z.id,
+				startSec: roundSec(z.startMs),
+				endSec: roundSec(z.endMs),
+				...(panFromZoomId ? { panFromZoomId } : { zoomInFromSec: roundSec(transitions.inFromMs) }),
+				...(panTo
+					? { panToZoomId: panTo.zoomId, panUntilSec: roundSec(panTo.untilMs) }
+					: { zoomOutUntilSec: roundSec(transitions.outUntilMs) }),
+				transitionSec: roundSec(transitions.durationMs),
+				...(cutSides(cut, false) ? { cutByTrim: cutSides(cut, false) } : {}),
+				...(cutSides(cut, true) ? { cutByJunction: cutSides(cut, true) } : {}),
+				depth: z.depth,
+				renderedScale: effectiveZoomScale(z),
+				// Emitted only when set: an unconditional `customScale: null` on every
+				// zoom of every snapshot is noise the reader learns to skip, which is
+				// how the field would go unnoticed again.
+				...(z.customScale != null ? { customScale: z.customScale, depthIsOverridden: true } : {}),
+				...(z.rotationPreset ? { rotationPreset: z.rotationPreset } : {}),
+				focus: z.focus,
+				focusMode: autoFocusAll ? "auto" : (z.focusMode ?? "manual"),
+				source: z.source ?? "manual",
+			}),
+		),
 		speedRegions: coalesceForAgent(speedRegions).map((s) => ({
 			id: s.id,
 			startSec: roundSec(s.startMs),
@@ -1419,6 +1527,185 @@ export function executeAgentTool(
 			};
 		}
 
+		case "removeWords": {
+			const parsed = removeWordsArgs.safeParse(args);
+			if (!parsed.success) return failure(parsed.error.message);
+			const { assetId: selectedAssetId, wordIds } = parsed.data;
+			if (new Set(wordIds).size !== wordIds.length) {
+				return failure("Duplicate word IDs in one request. Nothing was modified.");
+			}
+
+			// Resolve every ID before writing anything. Word IDs, rather than guessed
+			// timestamps, designate which occurrence of a repeated word is speech to cut.
+			const transcripts = [...document.transcripts];
+			if (
+				document.transcript &&
+				!transcripts.some((transcript) => transcript.assetId === document.transcript?.assetId)
+			) {
+				transcripts.push(document.transcript);
+			}
+			const selected: Array<{
+				wordId: string;
+				text: string;
+				assetId: string;
+				clipId: string;
+				index: number;
+				startSec: number;
+				endSec: number;
+			}> = [];
+			for (const wordId of wordIds) {
+				const matches = transcripts
+					.filter(
+						(transcript) => selectedAssetId === undefined || transcript.assetId === selectedAssetId,
+					)
+					.flatMap((transcript) =>
+						transcript.words.flatMap((word, index) =>
+							word.id === wordId ? [{ assetId: transcript.assetId, word, index }] : [],
+						),
+					);
+				if (matches.length !== 1) {
+					return failure(
+						matches.length === 0
+							? `Unknown transcript word ID: ${wordId}. Call getTranscriptWords to read the IDs. Nothing was modified.`
+							: `Word ID ${wordId} appears more than once in the transcripts. Pass the assetId used for getTranscriptWords. Nothing was modified.`,
+					);
+				}
+				const { assetId, word, index } = matches[0];
+				const asset = document.assets.find((candidate) => candidate.id === assetId);
+				if (!asset || isGeneratedAssetId(assetId) || word.source === "synth") {
+					return failure(`Word ${wordId} has no recorded source asset. Nothing was modified.`);
+				}
+				const { startSec, endSec } = word;
+				if (
+					!Number.isFinite(startSec) ||
+					!Number.isFinite(endSec) ||
+					startSec < 0 ||
+					endSec <= startSec ||
+					(asset.durationSec !== undefined &&
+						(!Number.isFinite(asset.durationSec) || endSec > asset.durationSec))
+				) {
+					return failure(`Word ${wordId} has invalid source timestamps. Nothing was modified.`);
+				}
+				const clips = document.timeline.clips.filter((clip) => {
+					const clipEnd = clip.sourceEndSec ?? asset.durationSec;
+					return (
+						clip.assetId === assetId &&
+						clipEnd !== undefined &&
+						Number.isFinite(clipEnd) &&
+						startSec >= clip.sourceStartSec &&
+						endSec <= clipEnd
+					);
+				});
+				if (clips.length !== 1) {
+					return failure(
+						`Word ${wordId} must be fully contained in exactly one clip; found ${clips.length}. Nothing was modified.`,
+					);
+				}
+				const clip = clips[0];
+				if (
+					document.timeline.trimRanges.some(
+						(trim) =>
+							trimAppliesToClip(trim, clip) && startSec < trim.endSec && endSec > trim.startSec,
+					)
+				) {
+					return failure(`Word ${wordId} is already cut by a trim. Nothing was modified.`);
+				}
+				selected.push({
+					wordId,
+					text: word.text,
+					assetId,
+					clipId: clip.id,
+					index,
+					startSec,
+					endSec,
+				});
+			}
+
+			// Words that follow one another in the transcript go out as ONE cut: a phrase or a
+			// flubbed take cut word by word would leave the gaps between its words playing.
+			selected.sort((a, b) => a.assetId.localeCompare(b.assetId) || a.index - b.index);
+			const runs: Array<typeof selected> = [];
+			for (const word of selected) {
+				const last = runs.at(-1)?.at(-1);
+				if (
+					last?.assetId === word.assetId &&
+					last.clipId === word.clipId &&
+					last.index + 1 === word.index
+				) {
+					runs.at(-1)?.push(word);
+				} else {
+					runs.push([word]);
+				}
+			}
+
+			let current = document;
+			const removed: Array<Record<string, unknown>> = [];
+			for (const run of runs) {
+				const first = run[0];
+				const ids = run.map((word) => word.wordId).join(", ");
+				const execution = executeAgentTool(
+					current,
+					"addTrim",
+					JSON.stringify({
+						assetId: first.assetId,
+						clipId: first.clipId,
+						startSec: first.startSec,
+						endSec: run[run.length - 1].endSec,
+						reason: "removed words",
+					}),
+					options,
+				);
+				if (!execution.ok || !execution.document) {
+					return failure(`Could not cut ${ids}: ${execution.resultJson}. Nothing was modified.`);
+				}
+				const { trimRangeId } = JSON.parse(execution.resultJson) as { trimRangeId: string };
+				const trim = execution.document.timeline.trimRanges.find(
+					(range) => range.id === trimRangeId,
+				);
+				const clip = current.timeline.clips.find((candidate) => candidate.id === first.clipId);
+				const asset = current.assets.find((candidate) => candidate.id === first.assetId);
+				const clipEnd = clip?.sourceEndSec ?? asset?.durationSec;
+				if (
+					!trim ||
+					!clip ||
+					clipEnd === undefined ||
+					trim.clipId !== first.clipId ||
+					!Number.isFinite(trim.startSec) ||
+					!Number.isFinite(trim.endSec) ||
+					trim.startSec < clip.sourceStartSec ||
+					trim.endSec > clipEnd ||
+					trim.endSec <= trim.startSec
+				) {
+					return failure(`Cut for ${ids} left its clip. Nothing was modified.`);
+				}
+				current = execution.document;
+				for (const word of run) {
+					removed.push({
+						wordId: word.wordId,
+						text: word.text,
+						assetId: word.assetId,
+						clipId: word.clipId,
+						wordStartSec: word.startSec,
+						wordEndSec: word.endSec,
+						trimRangeId,
+						startSec: trim.startSec,
+						endSec: trim.endSec,
+					});
+				}
+			}
+			return {
+				ok: true,
+				document: current,
+				resultJson: JSON.stringify({
+					requested: wordIds.length,
+					removedCount: removed.length,
+					removed,
+					...cutTransitionsReport(document, current),
+				}),
+				summary: `removed ${removed.length} word${removed.length === 1 ? "" : "s"}`,
+			};
+		}
+
 		case "addTrim": {
 			const parsed = addTrimArgs.safeParse(args);
 			if (!parsed.success) return failure(parsed.error.message);
@@ -1501,7 +1788,12 @@ export function executeAgentTool(
 			return {
 				ok: true,
 				document: next,
-				resultJson: JSON.stringify({ trimRangeId: trim.id, startSec, endSec }),
+				resultJson: JSON.stringify({
+					trimRangeId: trim.id,
+					startSec,
+					endSec,
+					...cutTransitionsReport(document, next),
+				}),
 				summary: `added trim ${formatSec(startSec)} – ${formatSec(endSec)}`,
 			};
 		}
@@ -1548,7 +1840,12 @@ export function executeAgentTool(
 			return {
 				ok: true,
 				document: next,
-				resultJson: JSON.stringify({ trimRangeId, startSec, endSec }),
+				resultJson: JSON.stringify({
+					trimRangeId,
+					startSec,
+					endSec,
+					...cutTransitionsReport(document, next),
+				}),
 				summary: `moved trim to ${formatSec(startSec)} – ${formatSec(endSec)}`,
 			};
 		}
@@ -1744,6 +2041,7 @@ export function executeAgentTool(
 					renderedScale: effectiveZoomScale(zoom),
 					...landingReport(landing, startMs / 1000, endMs / 1000),
 					...(anchor ? { cursorAnchor: anchor } : {}),
+					...cutTransitionsReport(document, next),
 				}),
 				summary:
 					`added zoom ${formatSec(landing.startSec)} – ${formatSec(landing.endSec)} ` +
@@ -1828,6 +2126,7 @@ export function executeAgentTool(
 					...(clearsCustomScale ? { clearedCustomScale: true } : {}),
 					...landingReport(landing, startMs / 1000, endMs / 1000),
 					...(anchor ? { cursorAnchor: anchor } : {}),
+					...cutTransitionsReport(document, next),
 				}),
 				summary:
 					`updated zoom ${formatSec(landing.startSec)} – ${formatSec(landing.endSec)}` +

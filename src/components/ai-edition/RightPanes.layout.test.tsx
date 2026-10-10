@@ -237,14 +237,30 @@ describe("LayoutPane picture-in-picture camera", () => {
 		const shapes = within(screen.getByRole("group", { name: "Camera shape" })).getAllByRole(
 			"button",
 		);
-		expect(shapes.map((b) => b.textContent)).toEqual(["Rectangle", "Square"]);
-		fireEvent.click(screen.getByRole("button", { name: "Square" }));
+		expect(shapes.map((b) => b.textContent)).toEqual(["Square", "Original"]);
+		fireEvent.click(within(shapes[1]).getByText("Original"));
+		expect(stored()).toMatchObject({ webcamMaskShape: "rectangle" });
+		fireEvent.click(within(shapes[0]).getByText("Square"));
 		expect(stored()).toMatchObject({ webcamMaskShape: "square" });
 		fireEvent.change(screen.getByRole("slider", { name: "Roundness" }), {
 			target: { value: "100" },
 		});
 		// Each control moves its own axis only: full roundness leaves the shape a square.
 		expect(stored()).toMatchObject({ webcamMaskShape: "square", webcamRoundness: 1 });
+	});
+
+	it("moves an untouched roundness to each shape's own default, and keeps a tuned one", () => {
+		renderLayout(seedProject(true));
+		const shapes = within(screen.getByRole("group", { name: "Camera shape" })).getAllByRole(
+			"button",
+		);
+		const roundness = () => screen.getByRole("slider", { name: "Roundness" });
+		expect(roundness()).toHaveValue("70");
+		fireEvent.click(shapes[1]);
+		expect(stored()).toMatchObject({ webcamMaskShape: "rectangle", webcamRoundness: 0.4 });
+		fireEvent.change(roundness(), { target: { value: "55" } });
+		fireEvent.click(shapes[0]);
+		expect(stored()).toMatchObject({ webcamMaskShape: "square", webcamRoundness: 0.55 });
 	});
 
 	it("places the camera on one of eight anchors, bottom right by default", () => {
@@ -270,11 +286,11 @@ describe("LayoutPane picture-in-picture camera", () => {
 		expect(stored()).toMatchObject({ webcamAnchor: "right" });
 	});
 
-	it("offers a camera from 15% to 50% of the frame", () => {
+	it("offers a camera from 15% to 60% of the frame", () => {
 		renderLayout(seedProject(true));
 		const slider = screen.getByRole("slider", { name: "Webcam size" });
 		expect(slider).toHaveAttribute("min", "15");
-		expect(slider).toHaveAttribute("max", "50");
+		expect(slider).toHaveAttribute("max", "60");
 	});
 });
 

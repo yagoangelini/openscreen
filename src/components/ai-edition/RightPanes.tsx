@@ -48,6 +48,7 @@ import {
 	useState,
 } from "react";
 import { toast } from "sonner";
+import { Tooltip, TooltipProvider } from "@/components/ui/tooltip";
 import { toFileUrl } from "@/components/video-editor/projectPersistence";
 import {
 	WALLPAPER_MOTIONS,
@@ -118,6 +119,7 @@ import {
 } from "@/lib/cursor/cursorThemes";
 import { gradientSeedColor, oneColorGradient } from "@/lib/gradientBuilder";
 import {
+	DEFAULT_WEBCAM_ROUNDNESS,
 	FRAME_THEMES,
 	type FrameTheme,
 	RECORDING_FRAMES,
@@ -146,6 +148,7 @@ import {
 import { ROUNDNESS_SLIDER_MAX_PX } from "@/native/paramUnits";
 import { wallpaperAcceptsMotion } from "@/native/sceneDescription";
 import { ASPECT_RATIO_PRESETS, type AspectRatio } from "@/utils/aspectRatioUtils";
+import { useClickSound } from "../../hooks/useClickSound";
 import { useCanSegmentCamera } from "../../native/hooks/useSegmentationSupport";
 import { CaptionsPane } from "./CaptionsPane";
 import { ColorField } from "./ColorField";
@@ -172,70 +175,78 @@ function Pane({ title, icon, helpText, actions, onClose, children }: PaneProps) 
 	const tc = useScopedT("common");
 	const helpLabel = ts("panes.help");
 	const [helpOpen, setHelpOpen] = useState(false);
+	// Its own provider, like `Toggle`: a pane renders without the app's root one in the tests,
+	// and every icon-only control inside it has a tooltip.
 	return (
-		<div className={`${styles.pane} ${styles.isActive}`}>
-			<header
-				className={styles.paneHead}
-				style={{
-					position: "relative",
-					...(onClose ? { paddingRight: "var(--sp-4)" } : {}),
-				}}
-			>
-				{icon ? (
-					<span style={{ display: "inline-flex", alignItems: "center", color: "var(--muted)" }}>
-						{icon}
-					</span>
-				) : null}
-				<h2>{title}</h2>
-				<span style={{ marginLeft: "auto", display: "inline-flex", gap: 4, alignItems: "center" }}>
-					{actions}
-					<button
-						type="button"
-						className={styles.iconBtn}
-						title={helpLabel}
-						aria-label={helpLabel}
-						aria-expanded={helpOpen}
-						onClick={() => setHelpOpen((v) => !v)}
-					>
-						<HelpCircle size={16} />
-					</button>
-					{onClose ? (
-						<button
-							type="button"
-							className={styles.iconBtn}
-							title={tc("actions.close")}
-							aria-label={tc("actions.close")}
-							onClick={onClose}
-						>
-							<X size={16} />
-						</button>
+		<TooltipProvider>
+			<div className={`${styles.pane} ${styles.isActive}`}>
+				<header
+					className={styles.paneHead}
+					style={{
+						position: "relative",
+						...(onClose ? { paddingRight: "var(--sp-4)" } : {}),
+					}}
+				>
+					{icon ? (
+						<span style={{ display: "inline-flex", alignItems: "center", color: "var(--muted)" }}>
+							{icon}
+						</span>
 					) : null}
-				</span>
-				{helpOpen ? (
-					<div
-						role="note"
-						style={{
-							position: "absolute",
-							top: "calc(100% + 4px)",
-							right: 8,
-							zIndex: 60,
-							maxWidth: 240,
-							padding: "10px 12px",
-							background: "var(--surface)",
-							border: "1px solid var(--border)",
-							borderRadius: "var(--r-md)",
-							boxShadow: "var(--elev-pop)",
-							color: "var(--fg-2)",
-							font: "400 12px/1.5 var(--font-body)",
-						}}
-						onClick={() => setHelpOpen(false)}
+					<h2>{title}</h2>
+					<span
+						style={{ marginLeft: "auto", display: "inline-flex", gap: 4, alignItems: "center" }}
 					>
-						{helpText}
-					</div>
-				) : null}
-			</header>
-			<div className={styles.paneBody}>{children}</div>
-		</div>
+						{actions}
+						<Tooltip content={helpLabel}>
+							<button
+								type="button"
+								className={styles.iconBtn}
+								aria-label={helpLabel}
+								aria-expanded={helpOpen}
+								onClick={() => setHelpOpen((v) => !v)}
+							>
+								<HelpCircle size={16} />
+							</button>
+						</Tooltip>
+						{onClose ? (
+							<Tooltip content={tc("actions.close")}>
+								<button
+									type="button"
+									className={styles.iconBtn}
+									aria-label={tc("actions.close")}
+									onClick={onClose}
+								>
+									<X size={16} />
+								</button>
+							</Tooltip>
+						) : null}
+					</span>
+					{helpOpen ? (
+						<div
+							role="note"
+							style={{
+								position: "absolute",
+								top: "calc(100% + 4px)",
+								right: 8,
+								zIndex: 60,
+								maxWidth: 240,
+								padding: "10px 12px",
+								background: "var(--surface)",
+								border: "1px solid var(--border)",
+								borderRadius: "var(--r-md)",
+								boxShadow: "var(--elev-pop)",
+								color: "var(--fg-2)",
+								font: "400 12px/1.5 var(--font-body)",
+							}}
+							onClick={() => setHelpOpen(false)}
+						>
+							{helpText}
+						</div>
+					) : null}
+				</header>
+				<div className={styles.paneBody}>{children}</div>
+			</div>
+		</TooltipProvider>
 	);
 }
 
@@ -631,16 +642,17 @@ export function WallpaperPicker({
 			{tab === "image" ? (
 				<div className={styles.bgGrid}>
 					{/* First, so it is found without scrolling past the bundled set. */}
-					<button
-						type="button"
-						className={`${styles.bgThumb} ${styles.bgAdd}`}
-						aria-label={ts("background.uploadCustom")}
-						title={ts("background.uploadCustom")}
-						disabled={!hasDocument}
-						onClick={onPickFile}
-					>
-						<ImagePlus size={15} />
-					</button>
+					<Tooltip content={ts("background.uploadCustom")}>
+						<button
+							type="button"
+							className={`${styles.bgThumb} ${styles.bgAdd}`}
+							aria-label={ts("background.uploadCustom")}
+							disabled={!hasDocument}
+							onClick={onPickFile}
+						>
+							<ImagePlus size={15} />
+						</button>
+					</Tooltip>
 					{customUrls.map((url) => (
 						<button
 							type="button"
@@ -1310,8 +1322,14 @@ const TranscriptClipBlock = memo(function TranscriptClipBlock({
 			// their own typing bubbles here natively — React's `stopPropagation` only ever
 			// stopped the synthetic tree. Their text is theirs.
 			if (event.target instanceof HTMLInputElement) return;
+			// Default-deny: the block is contentEditable only to carry a caret, so no native
+			// edit may land in it. Not only the two families handled below: Ctrl/Cmd+B, I and U
+			// reach here as `formatBold`, `formatItalic` and `formatUnderline`, and let through
+			// they styled the DOM behind `words`' back (#1038). Undo loses nothing: Ctrl/Cmd+Z
+			// goes to the document undo (keydown, or the Edit menu on macOS), never to the
+			// browser's text history, which has nothing of this block's edits in it anyway.
+			event.preventDefault();
 			if (event.inputType.startsWith("delete")) {
-				event.preventDefault();
 				cutNativeSelection(event.inputType === "deleteContentForward" ? "forward" : "backward");
 				return;
 			}
@@ -1320,10 +1338,7 @@ const TranscriptClipBlock = memo(function TranscriptClipBlock({
 			// instead is a field beside the word the caret was on, whose commit creates a real
 			// word to hold them. So the gesture is the document one — put the caret somewhere
 			// and type — without the DOM ever getting ahead of `words`.
-			if (event.inputType.startsWith("insert")) {
-				event.preventDefault();
-				openInsertion(event.data ?? "");
-			}
+			if (event.inputType.startsWith("insert")) openInsertion(event.data ?? "");
 		};
 		editor.addEventListener("beforeinput", onBeforeInput);
 		return () => editor.removeEventListener("beforeinput", onBeforeInput);
@@ -1475,6 +1490,9 @@ const TranscriptClipBlock = memo(function TranscriptClipBlock({
 					role="textbox"
 					tabIndex={0}
 					contentEditable={!busy}
+					// Ctrl/Cmd+Z here undoes the document: the browser's text history never sees
+					// a transcript edit (see `undo.ts`).
+					data-document-undo="true"
 					aria-busy={busy}
 					aria-readonly={busy}
 					suppressContentEditableWarning
@@ -1766,7 +1784,11 @@ const TranscriptWord = memo(function TranscriptWord({
 				data-end-sec={cw.word.endSec}
 				data-inserted="true"
 				data-skip-id={cw.trimIds[0] ?? undefined}
-				style={{ display: "inline", opacity: removed ? 0.6 : 1 }}
+				style={{
+					display: "inline",
+					position: hover ? "relative" : undefined,
+					opacity: removed ? 0.6 : 1,
+				}}
 				onMouseEnter={() => setHover(true)}
 				onMouseLeave={() => setHover(false)}
 				onDoubleClick={(e) => {
@@ -1816,7 +1838,7 @@ const TranscriptWord = memo(function TranscriptWord({
 				data-start-sec={cw.word.startSec}
 				data-end-sec={cw.word.endSec}
 				data-blanked="true"
-				style={{ display: "inline" }}
+				style={{ display: "inline", position: hover ? "relative" : undefined }}
 				onMouseEnter={() => setHover(true)}
 				onMouseLeave={() => setHover(false)}
 				onDoubleClick={(e) => {
@@ -1861,6 +1883,9 @@ const TranscriptWord = memo(function TranscriptWord({
 			title={corrected ? ts("transcript.correctedWord", { original }) : undefined}
 			style={{
 				display: "inline",
+				// Anchors the hover chip (`WordChipButton`). Only while hovered: a long transcript
+				// would otherwise be thousands of positioned spans.
+				position: hover ? "relative" : undefined,
 				// A cut word stays the loudest thing about itself: when a word is both cut and
 				// corrected, the strike-through wins and the correction mark steps aside.
 				color: removed ? "var(--danger)" : corrected ? "var(--accent)" : "var(--fg)",
@@ -1889,13 +1914,10 @@ const TranscriptWord = memo(function TranscriptWord({
 			    filler_or_hesitation reason when generating suggestions). */}
 			{cw.word.text}{" "}
 			{removed && hover && cw.trimIds.length > 0 ? (
-				<button
-					type="button"
-					contentEditable={false}
-					title={ts("transcript.restoreWord", { word: cw.word.text })}
-					aria-label={ts("transcript.restoreWord", { word: cw.word.text })}
-					onClick={(e) => {
-						e.stopPropagation();
+				<WordChipButton
+					label={ts("transcript.restoreWord", { word: cw.word.text })}
+					tone="var(--danger)"
+					onPress={() =>
 						// build a minimal TrimRun stub — only the ids are
 						// read by onRestore.
 						onRestore({
@@ -1904,26 +1926,11 @@ const TranscriptWord = memo(function TranscriptWord({
 							startWordIndex: 0,
 							endWordIndex: 0,
 							durationSec: 0,
-						});
-					}}
-					style={{
-						display: "inline-flex",
-						alignItems: "center",
-						justifyContent: "center",
-						width: 18,
-						height: 18,
-						marginLeft: 4,
-						padding: 0,
-						border: 0,
-						borderRadius: 4,
-						background: "var(--danger)",
-						color: "white",
-						cursor: "pointer",
-						verticalAlign: "middle",
-					}}
+						})
+					}
 				>
 					<Trash2 size={12} strokeWidth={1.9} aria-hidden="true" />
-				</button>
+				</WordChipButton>
 			) : null}
 			{/* A cut word's bin already restores it — showing the revert beside it would put
 			    two undos for two different things one pixel apart. */}
@@ -1947,7 +1954,14 @@ function RevertWordButton({ label, onRevert }: { label: string; onRevert: () => 
 
 /** The one hover control shape the word stream uses, in whichever colour says what it does.
  *  `contentEditable={false}` keeps it out of the enclosing editable block, and the click is
- *  stopped so it never reaches the seek handler underneath. */
+ *  stopped so it never reaches the seek handler underneath.
+ *
+ *  Laid over the stream, just past the word, rather than in it (#1012). In the flow it
+ *  reflowed the paragraph on every hover, and after a word ending its line it wrapped to
+ *  the start of the next one: reaching it meant leaving the word, which took it away. So
+ *  the host word must be `position: relative` while it shows one. The gap before the chip
+ *  is the button's own padding, not a margin: a margin is a strip that belongs to neither,
+ *  and crossing it un-hovers the word. */
 function WordChipButton({
 	label,
 	tone,
@@ -1960,33 +1974,43 @@ function WordChipButton({
 	children: ReactNode;
 }) {
 	return (
-		<button
-			type="button"
-			contentEditable={false}
-			title={label}
-			aria-label={label}
-			onClick={(e) => {
-				e.stopPropagation();
-				onPress();
-			}}
-			style={{
-				display: "inline-flex",
-				alignItems: "center",
-				justifyContent: "center",
-				width: 18,
-				height: 18,
-				marginLeft: 4,
-				padding: 0,
-				border: 0,
-				borderRadius: 4,
-				background: tone,
-				color: "white",
-				cursor: "pointer",
-				verticalAlign: "middle",
-			}}
-		>
-			{children}
-		</button>
+		<Tooltip content={label}>
+			<button
+				type="button"
+				contentEditable={false}
+				aria-label={label}
+				onClick={(e) => {
+					e.stopPropagation();
+					onPress();
+				}}
+				style={{
+					position: "absolute",
+					left: "100%",
+					top: "50%",
+					transform: "translateY(-50%)",
+					display: "flex",
+					padding: "0 0 0 4px",
+					border: 0,
+					background: "transparent",
+					cursor: "pointer",
+				}}
+			>
+				<span
+					style={{
+						display: "inline-flex",
+						alignItems: "center",
+						justifyContent: "center",
+						width: 18,
+						height: 18,
+						borderRadius: 4,
+						background: tone,
+						color: "white",
+					}}
+				>
+					{children}
+				</span>
+			</button>
+		</Tooltip>
 	);
 }
 
@@ -2494,7 +2518,7 @@ export function VideoEffectsPane() {
 			    they name. */}
 			<div className={`${styles.field} ${styles.fieldStack}`}>
 				{/* The tiles only draw their frame, so the label names the current one. */}
-				<span className={styles.fieldLabel} title={ts("effects.windowHelp")}>
+				<span className={styles.fieldLabel}>
 					{ts("effects.frameStyle")}
 					<span className={styles.sectionLabelValue}>
 						{ts(RECORDING_FRAME_LABEL_KEYS[settings.frame])}
@@ -2520,9 +2544,7 @@ export function VideoEffectsPane() {
 			    appears next to the frame it recolours rather than sitting there inert. */}
 			{settings.frame !== "none" ? (
 				<div className={`${styles.field} ${styles.fieldStack}`}>
-					<span className={styles.fieldLabel} title={ts("effects.frameThemeHelp")}>
-						{ts("effects.frameTheme")}
-					</span>
+					<span className={styles.fieldLabel}>{ts("effects.frameTheme")}</span>
 					<ChoiceRow<FrameTheme>
 						label={ts("effects.frameTheme")}
 						options={FRAME_THEMES.map((frameTheme) => ({
@@ -2628,6 +2650,7 @@ export function VideoEffectsPane() {
 					<Toggle
 						checked={settings.depthOfField}
 						ariaLabel={ts("effects.depthOfField")}
+						tooltip={ts("effects.depthOfFieldTip")}
 						disabled={!hasDocument}
 						onChange={(v) => void set({ depthOfField: v })}
 					/>
@@ -2685,8 +2708,8 @@ const NATIVE_WEBCAM_BASE_PCT = 16.7;
 
 // The camera's two proportions. Its rounding is the slider under them, and each icon draws it.
 const CAMERA_SHAPES = [
-	{ value: "rectangle", labelKey: "layout.shapes.rectangle", x: 3, y: 6, w: 18, h: 12 },
 	{ value: "square", labelKey: "layout.shapes.square", x: 4, y: 4, w: 16, h: 16 },
+	{ value: "rectangle", labelKey: "layout.shapes.original", x: 3, y: 6, w: 18, h: 12 },
 ] as const satisfies ReadonlyArray<{ value: WebcamMask } & Record<string, unknown>>;
 
 const ANCHOR_KEYS: Record<WebcamAnchor, string> = {
@@ -2904,6 +2927,8 @@ export function LayoutPane() {
 					<span className={styles.label}>{ts("layout.reactiveWebcam")}</span>
 					<Toggle
 						checked={settings.webcamReactiveZoom}
+						ariaLabel={ts("layout.reactiveWebcam")}
+						tooltip={ts("layout.reactiveWebcamTip")}
 						disabled={layoutControlsDisabled}
 						onChange={(v) => void set({ webcamReactiveZoom: v })}
 					/>
@@ -2943,7 +2968,13 @@ export function LayoutPane() {
 							value={settings.webcamMaskShape}
 							disabled={layoutControlsDisabled}
 							onChange={(shape) => {
-								void set({ webcamMaskShape: shape });
+								// An untouched roundness follows the shape to its own default; a tuned one stays.
+								const untouched =
+									settings.webcamRoundness === DEFAULT_WEBCAM_ROUNDNESS[settings.webcamMaskShape];
+								void set({
+									webcamMaskShape: shape,
+									...(untouched ? { webcamRoundness: DEFAULT_WEBCAM_ROUNDNESS[shape] } : {}),
+								});
 								if (isNativeCompositorActive()) {
 									setNativeParam("webcamShape", shape);
 								}
@@ -2957,7 +2988,7 @@ export function LayoutPane() {
 							value={Math.round(settings.webcamRoundness * 100)}
 							min={0}
 							max={100}
-							defaultValue={Math.round(DEFAULT_EDITOR_SETTINGS.webcamRoundness * 100)}
+							defaultValue={Math.round(DEFAULT_WEBCAM_ROUNDNESS[settings.webcamMaskShape] * 100)}
 							suffix="%"
 							disabled={layoutControlsDisabled}
 							onChange={(next) => setLive({ webcamRoundness: next / 100 })}
@@ -3046,9 +3077,7 @@ export function LayoutPane() {
 									>
 										{mode.icon}
 									</svg>
-									<span title={ts(mode.labelKey)} style={{ font: "500 12px/1 var(--font-body)" }}>
-										{ts(mode.labelKey)}
-									</span>
+									<span style={{ font: "500 12px/1 var(--font-body)" }}>{ts(mode.labelKey)}</span>
 								</button>
 							);
 						})}
@@ -3087,7 +3116,6 @@ export function LayoutPane() {
 			<div className={styles.sectionLabel}>{ts("layout.webcamFraming")}</div>
 			<WebcamFraming
 				label={ts("layout.webcamFraming")}
-				zoomLabel={ts("layout.webcamCropZoom")}
 				src={cameraSrc}
 				crop={webcamCrop}
 				pan={cropPan}
@@ -3154,7 +3182,6 @@ async function cutOutSubject(
  *  écrivent en direct et enregistrent au relâchement, comme un curseur. */
 function WebcamFraming({
 	label,
-	zoomLabel,
 	src,
 	crop,
 	pan,
@@ -3165,7 +3192,6 @@ function WebcamFraming({
 	onCommit,
 }: {
 	label: string;
-	zoomLabel: string;
 	src: string | null;
 	crop: { x: number; y: number; width: number; height: number };
 	pan: { x: number; y: number };
@@ -3404,9 +3430,7 @@ function WebcamFraming({
 								/>
 							))}
 				</div>
-				<span className={styles.framingZoom} title={zoomLabel}>
-					{Math.round(100 / size)}%
-				</span>
+				<span className={styles.framingZoom}>{Math.round(100 / size)}%</span>
 			</div>
 			<p className={styles.framingHint}>{hint}</p>
 		</div>
@@ -3711,6 +3735,7 @@ export function CursorPane() {
 		[settings.cursorTheme],
 	);
 	const recordedTypes = useRecordedCursorTypes();
+	const clickSound = useClickSound();
 	// Each kind the video shows, pictured by the first of its states it shows.
 	const recordedKinds = CURSOR_KIND_IDS.flatMap((kind) => {
 		const type = CURSOR_KINDS[kind].find((state) => recordedTypes?.has(state));
@@ -3752,6 +3777,7 @@ export function CursorPane() {
 				<span className={styles.label}>{ts("cursor.autoHide")}</span>
 				<Toggle
 					ariaLabel={ts("cursor.autoHide")}
+					tooltip={ts("cursor.autoHideTip")}
 					checked={settings.cursorAutoHide}
 					disabled={!hasDocument || !settings.cursorShow}
 					onChange={(v) => {
@@ -3771,23 +3797,23 @@ export function CursorPane() {
 						{cursorThemeOptions.map((option) => {
 							const isActive = settings.cursorTheme === option.id;
 							return (
-								<button
-									type="button"
-									key={option.id}
-									className={`${styles.cursorCell} ${isActive ? styles.isActive : ""}`}
-									title={option.name}
-									aria-label={option.name}
-									aria-pressed={isActive}
-									disabled={!hasDocument}
-									onClick={() => void set({ cursor: { theme: option.id } })}
-								>
-									<img
-										src={option.previewUrl}
-										alt=""
-										className={styles.cursorSprite}
-										draggable={false}
-									/>
-								</button>
+								<Tooltip key={option.id} content={option.name}>
+									<button
+										type="button"
+										className={`${styles.cursorCell} ${isActive ? styles.isActive : ""}`}
+										aria-label={option.name}
+										aria-pressed={isActive}
+										disabled={!hasDocument}
+										onClick={() => void set({ cursor: { theme: option.id } })}
+									>
+										<img
+											src={option.previewUrl}
+											alt=""
+											className={styles.cursorSprite}
+											draggable={false}
+										/>
+									</button>
+								</Tooltip>
 							);
 						})}
 					</div>
@@ -3800,6 +3826,7 @@ export function CursorPane() {
 						<span className={styles.label}>{ts("cursor.model3d")}</span>
 						<Toggle
 							ariaLabel={ts("cursor.model3d")}
+							tooltip={ts("cursor.model3dTip")}
 							checked={settings.cursor.model3d}
 							disabled={!hasDocument}
 							onChange={(v) => {
@@ -3842,31 +3869,34 @@ export function CursorPane() {
 									const shown = !settings.cursor.asArrow.includes(kind);
 									const label = cursorKindLabels[kind];
 									return (
-										<button
-											type="button"
+										<Tooltip
 											key={kind}
-											className={`${styles.cursorCell} ${shown ? styles.isActive : styles.cursorCellOff}`}
-											title={shown ? label : ts("cursor.typeAsArrow", { type: label })}
-											aria-label={label}
-											aria-pressed={shown}
-											disabled={!hasDocument}
-											onClick={() =>
-												void set({
-													cursor: {
-														asArrow: CURSOR_KIND_IDS.filter((k) =>
-															k === kind ? shown : settings.cursor.asArrow.includes(k),
-														),
-													},
-												})
-											}
+											content={shown ? label : ts("cursor.typeAsArrow", { type: label })}
 										>
-											<img
-												src={safeAssetUrl(cursorSprites[type].assetPath)}
-												alt=""
-												className={styles.cursorSprite}
-												draggable={false}
-											/>
-										</button>
+											<button
+												type="button"
+												className={`${styles.cursorCell} ${shown ? styles.isActive : styles.cursorCellOff}`}
+												aria-label={label}
+												aria-pressed={shown}
+												disabled={!hasDocument}
+												onClick={() =>
+													void set({
+														cursor: {
+															asArrow: CURSOR_KIND_IDS.filter((k) =>
+																k === kind ? shown : settings.cursor.asArrow.includes(k),
+															),
+														},
+													})
+												}
+											>
+												<img
+													src={safeAssetUrl(cursorSprites[type].assetPath)}
+													alt=""
+													className={styles.cursorSprite}
+													draggable={false}
+												/>
+											</button>
+										</Tooltip>
 									);
 								})}
 							</div>
@@ -3941,6 +3971,7 @@ export function CursorPane() {
 					<span className={styles.label}>{ts("cursor.clickImpact")}</span>
 					<Toggle
 						ariaLabel={ts("cursor.clickImpact")}
+						tooltip={ts("cursor.clickImpactTip")}
 						checked={settings.cursor.clickImpact}
 						disabled={!hasDocument}
 						onChange={(v) => void set({ cursor: { clickImpact: v } })}
@@ -3979,6 +4010,48 @@ export function CursorPane() {
 					onChange={(v) => void set({ cursor: { showKeystrokes: v } })}
 				/>
 			</div>
+			{/* The same clicks, heard. Offered only once the take is known to contain some. It is a
+			    setting rather than a track on the timeline: the hits are placed by the same
+			    projection the click zoom uses, so they follow every edit instead of going stale. */}
+			{settings.cursorShow && clickSound.hasClicks ? (
+				<>
+					<div className={styles.paneRow}>
+						<span className={styles.label}>{ts("cursor.clickSound")}</span>
+						<Toggle
+							ariaLabel={ts("cursor.clickSound")}
+							tooltip={ts("cursor.clickSoundTip")}
+							checked={settings.cursor.clickSound}
+							disabled={!hasDocument}
+							onChange={(v) => {
+								void set({ cursor: { clickSound: v } });
+								// Read the cues and stage the samples on the way in, so the first
+								// export asked for after this is not a race with a background read.
+								if (v) void clickSound.prepare();
+							}}
+						/>
+					</div>
+					{/* How loud. Offered only once there is a sound to turn down, and bounded by the
+					    same table the mixer reads, so the slider cannot ask for a level the export
+					    would flatten. */}
+					{settings.cursor.clickSound ? (
+						<div className={styles.sliderGrid}>
+							<SliderCell
+								label={ts("cursor.clickSoundVolume")}
+								value={settings.cursor.clickSoundGainDb}
+								min={SETTING_BOUNDS.cursorClickSoundGainDb[0]}
+								max={SETTING_BOUNDS.cursorClickSoundGainDb[1]}
+								step={0.5}
+								decimals={1}
+								suffix=" dB"
+								defaultValue={DEFAULT_EDITOR_SETTINGS.cursor.clickSoundGainDb}
+								disabled={!hasDocument}
+								onChange={(clickSoundGainDb) => setLive({ cursor: { clickSoundGainDb } })}
+								onCommit={() => void commit()}
+							/>
+						</div>
+					) : null}
+				</>
+			) : null}
 		</Pane>
 	);
 }
@@ -3993,6 +4066,7 @@ export function Toggle({
 	checked,
 	disabled,
 	ariaLabel,
+	tooltip,
 	onChange,
 }: {
 	checked: boolean;
@@ -4000,9 +4074,12 @@ export function Toggle({
 	/** The switch renders no text of its own, so a screen reader has nothing to announce
 	 *  unless a caller names it. Optional only because the existing call sites predate it. */
 	ariaLabel?: string;
+	/** What the switch does, for a label that is jargon ("Click impact"). The trigger is the
+	 *  switch itself, so a keyboard user reaches it too. A label that is clear gets none. */
+	tooltip?: string;
 	onChange: (next: boolean) => void;
 }) {
-	return (
+	const button = (
 		<button
 			type="button"
 			className={`${styles.toggle} ${checked ? styles.isOn : ""}`}
@@ -4011,6 +4088,15 @@ export function Toggle({
 			disabled={disabled}
 			onClick={() => onChange(!checked)}
 		/>
+	);
+	// Its own provider, like the timeline toolbar: a pane renders without the app's root one in
+	// the tests, and a Radix tooltip throws without any.
+	return tooltip ? (
+		<TooltipProvider>
+			<Tooltip content={tooltip}>{button}</Tooltip>
+		</TooltipProvider>
+	) : (
+		button
 	);
 }
 
@@ -4034,14 +4120,17 @@ export function ChoiceRow<T extends string | number>({
 }: {
 	label: string;
 	/** `null` leaves a hole in the grid: the middle of the camera's position grid. An option
-	 *  can be `disabled` on its own: a disabled button takes no focus, so its `title` is only a
-	 *  mouse hint, and the reason must also be visible text the row points at (`describedBy`). */
+	 *  can be `disabled` on its own: a disabled button takes no focus and opens no tooltip, so
+	 *  the reason must be visible text the row points at (`describedBy`).
+	 *  `title` is a tooltip that adds to the label (a clip count). An icon-only option gets its
+	 *  label as its tooltip; one whose label is visible gets none. `null` is for an icon that
+	 *  already spells the label, a font drawn in its own face. */
 	options: ReadonlyArray<{
 		value: T;
 		label: string;
 		icon?: ReactNode;
 		disabled?: boolean;
-		title?: string;
+		title?: string | null;
 	} | null>;
 	value: T;
 	onChange: (next: T) => void;
@@ -4058,74 +4147,87 @@ export function ChoiceRow<T extends string | number>({
 }) {
 	const buttonsRef = useRef<Array<HTMLButtonElement | null>>([]);
 	const mode = display ?? (options.some((o) => o?.icon) ? "icon" : "text");
+	// Its own provider, like `Toggle`: the row is also drawn outside a pane (the selection
+	// panes, the dialogs), and a Radix tooltip throws without any.
 	return (
-		<div
-			role="group"
-			aria-label={label}
-			aria-describedby={describedBy}
-			className={`${styles.choiceRow} ${tiles ? styles.choiceRowTiles : ""}`}
-			style={{ gridTemplateColumns: `repeat(${columns ?? options.length}, minmax(0, 1fr))` }}
-			onKeyDown={(e) => {
-				if (e.key === "Enter" || e.key === " ") {
+		<TooltipProvider>
+			<div
+				role="group"
+				aria-label={label}
+				aria-describedby={describedBy}
+				className={`${styles.choiceRow} ${tiles ? styles.choiceRowTiles : ""}`}
+				style={{ gridTemplateColumns: `repeat(${columns ?? options.length}, minmax(0, 1fr))` }}
+				onKeyDown={(e) => {
+					if (e.key === "Enter" || e.key === " ") {
+						e.nativeEvent.stopPropagation();
+						return;
+					}
+					const step =
+						e.key === "ArrowRight" || e.key === "ArrowDown"
+							? 1
+							: e.key === "ArrowLeft" || e.key === "ArrowUp"
+								? -1
+								: 0;
+					if (step === 0) return;
+					e.preventDefault();
 					e.nativeEvent.stopPropagation();
-					return;
-				}
-				const step =
-					e.key === "ArrowRight" || e.key === "ArrowDown"
-						? 1
-						: e.key === "ArrowLeft" || e.key === "ArrowUp"
-							? -1
-							: 0;
-				if (step === 0) return;
-				e.preventDefault();
-				e.nativeEvent.stopPropagation();
-				const focused = buttonsRef.current.findIndex((b) => b === document.activeElement);
-				const from = focused >= 0 ? focused : options.findIndex((o) => o?.value === value);
-				// Holes and disabled options are stepped over, not landed on.
-				let to = from + step;
-				while (to >= 0 && to < options.length && (options[to] ?? { disabled: true }).disabled) {
-					to += step;
-				}
-				const next = options[to];
-				if (!next) return;
-				buttonsRef.current[to]?.focus();
-				if (next.value !== value) onChange(next.value);
-			}}
-		>
-			{options.map((option, i) => {
-				if (option === null) return <span key={`hole-${i}`} aria-hidden="true" />;
-				const pressed = option.value === value;
-				return (
-					<button
-						key={String(option.value)}
-						ref={(el) => {
-							buttonsRef.current[i] = el;
-						}}
-						type="button"
-						className={`${styles.choiceBtn} ${pressed ? styles.isActive : ""}`}
-						aria-pressed={pressed}
-						aria-label={mode === "icon" ? option.label : undefined}
-						// Always: a label cut short by a narrow pane still reads in full on hover.
-						title={option.title ?? option.label}
-						disabled={disabled || option.disabled}
-						// Re-choisir la valeur en place n'est pas une modification : ni sauvegarde ni
-						// entrée d'annulation.
-						onClick={() => {
-							if (!pressed) onChange(option.value);
-						}}
-					>
-						{mode === "text" ? option.label : null}
-						{mode === "icon" ? option.icon : null}
-						{mode === "both" ? (
-							<>
-								{option.icon}
-								<span className={styles.choiceBtnLabel}>{option.label}</span>
-							</>
-						) : null}
-					</button>
-				);
-			})}
-		</div>
+					const focused = buttonsRef.current.findIndex((b) => b === document.activeElement);
+					const from = focused >= 0 ? focused : options.findIndex((o) => o?.value === value);
+					// Holes and disabled options are stepped over, not landed on.
+					let to = from + step;
+					while (to >= 0 && to < options.length && (options[to] ?? { disabled: true }).disabled) {
+						to += step;
+					}
+					const next = options[to];
+					if (!next) return;
+					buttonsRef.current[to]?.focus();
+					if (next.value !== value) onChange(next.value);
+				}}
+			>
+				{options.map((option, i) => {
+					if (option === null) return <span key={`hole-${i}`} aria-hidden="true" />;
+					const pressed = option.value === value;
+					// A tooltip only where it tells something the button does not: the name of an
+					// icon-only option, or the text a caller passes. A visible label is never repeated
+					// (technical-documentation/engineering/tooltips.md, rule 3).
+					const tip = option.title === undefined && mode === "icon" ? option.label : option.title;
+					const button = (
+						<button
+							key={String(option.value)}
+							ref={(el) => {
+								buttonsRef.current[i] = el;
+							}}
+							type="button"
+							className={`${styles.choiceBtn} ${pressed ? styles.isActive : ""}`}
+							aria-pressed={pressed}
+							aria-label={mode === "icon" ? option.label : undefined}
+							disabled={disabled || option.disabled}
+							// Re-choisir la valeur en place n'est pas une modification : ni sauvegarde ni
+							// entrée d'annulation.
+							onClick={() => {
+								if (!pressed) onChange(option.value);
+							}}
+						>
+							{mode === "text" ? option.label : null}
+							{mode === "icon" ? option.icon : null}
+							{mode === "both" ? (
+								<>
+									{option.icon}
+									<span className={styles.choiceBtnLabel}>{option.label}</span>
+								</>
+							) : null}
+						</button>
+					);
+					return tip ? (
+						<Tooltip key={String(option.value)} content={tip}>
+							{button}
+						</Tooltip>
+					) : (
+						button
+					);
+				})}
+			</div>
+		</TooltipProvider>
 	);
 }
 
@@ -4234,17 +4336,21 @@ export function SliderCell({
 					</span>
 				) : null}
 				{/* Only once the value has moved: at the default there is nothing to go back to. */}
+				{/* Its own provider, like `Toggle`: the slider is also drawn outside a pane. */}
 				{modified ? (
-					<button
-						type="button"
-						className={styles.sliderReset}
-						aria-label={`${tc("actions.resetToDefault")}: ${label}`}
-						title={tc("actions.resetToDefault")}
-						disabled={disabled}
-						onClick={reset}
-					>
-						<RotateCcw size={12} aria-hidden="true" />
-					</button>
+					<TooltipProvider>
+						<Tooltip content={tc("actions.resetToDefault")}>
+							<button
+								type="button"
+								className={styles.sliderReset}
+								aria-label={`${tc("actions.resetToDefault")}: ${label}`}
+								disabled={disabled}
+								onClick={reset}
+							>
+								<RotateCcw size={12} aria-hidden="true" />
+							</button>
+						</Tooltip>
+					</TooltipProvider>
 				) : null}
 			</div>
 			{/* The visible label is a <span>, not a <label htmlFor>, so without this the

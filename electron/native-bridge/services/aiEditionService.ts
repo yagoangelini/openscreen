@@ -14,6 +14,7 @@ import type {
 	AiEditionLlmConfig,
 	AiEditionLlmDisconnectResult,
 	AiEditionLlmSnapshot,
+	AiEditionMcpStatus,
 	AiEditionProjectSummary,
 } from "../../../src/native/contracts";
 import {
@@ -33,9 +34,11 @@ import {
 	probeMiniMaxModels,
 } from "../../ai-edition/llm-provider-auth";
 import { PROVIDER_DEFINITIONS } from "../../ai-edition/provider-registry";
+import type { McpController } from "../../mcp/mcp-controller";
 
 export interface AiEditionServiceOptions {
 	documents: DocumentService;
+	deleteChatHistory?: (projectId: string) => Promise<void>;
 	/**
 	 * A factory, not an instance: building `LlmConfigStore` does two sync
 	 * readFileSync plus a `safeStorage` decrypt, and on macOS that decrypt is
@@ -82,6 +85,8 @@ export interface AiEditionServiceOptions {
 		title: string,
 	) => AiEditionChatSessionSummary | null;
 	deleteSession: (projectId: string, sessionId: string) => boolean;
+	/** The local MCP server. Absent where no server is wired (tests, headless CLI). */
+	mcp?: McpController;
 }
 
 export class AiEditionService {
@@ -144,13 +149,20 @@ export class AiEditionService {
 	async deleteProject(projectId: string): Promise<AiEditionDocumentResult> {
 		try {
 			await this.options.documents.deleteProject(projectId);
-			return { success: true };
 		} catch (error) {
 			return {
 				success: false,
 				error: error instanceof Error ? error.message : String(error),
 			};
 		}
+		try {
+			await this.options.deleteChatHistory?.(projectId);
+		} catch (error) {
+			// The project is already gone: a chat file left behind is orphaned data,
+			// not a failed delete.
+			console.warn(`[ai-edition] could not remove chat history for ${projectId}:`, error);
+		}
+		return { success: true };
 	}
 
 	async addAsset(
@@ -271,6 +283,31 @@ export class AiEditionService {
 		} catch (error) {
 			return { models: [], error: error instanceof Error ? error.message : String(error) };
 		}
+	}
+
+	private get mcp(): McpController {
+		if (!this.options.mcp) throw new Error("The MCP server is not available in this build.");
+		return this.options.mcp;
+	}
+
+	mcpGetStatus(): Promise<AiEditionMcpStatus> {
+		return this.mcp.getStatus();
+	}
+
+	mcpSetEnabled(enabled: boolean): Promise<AiEditionMcpStatus> {
+		return this.mcp.setEnabled(enabled);
+	}
+
+	mcpSetPort(port: number): Promise<AiEditionMcpStatus> {
+		return this.mcp.setPort(port);
+	}
+
+	mcpSetAllowEdits(allowEdits: boolean): Promise<AiEditionMcpStatus> {
+		return this.mcp.setAllowEdits(allowEdits);
+	}
+
+	mcpRegenerateToken(): Promise<AiEditionMcpStatus> {
+		return this.mcp.regenerateToken();
 	}
 
 	async chatRun(

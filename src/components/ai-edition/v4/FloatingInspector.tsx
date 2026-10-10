@@ -28,6 +28,8 @@ import {
 import type { ComponentProps } from "react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { TOOLTIP_GAP_PX, Tooltip } from "@/components/ui/tooltip";
 import { parseCustomPlaybackSpeedInput } from "@/components/video-editor/customPlaybackSpeed";
 import {
 	effectiveZoomScale,
@@ -73,6 +75,7 @@ import {
 	TranscriptPane,
 	VideoEffectsPane,
 } from "../RightPanes";
+import { useHasRecordedCursor } from "../recordedCursorTypes";
 import { TextColorField } from "../TextColorField";
 import { AutoZoomSettings } from "./AutoZoomSettings";
 import styles from "./EditorShellV4.module.css";
@@ -94,6 +97,11 @@ const FACETS: Array<{ id: Facet; labelKey: string; icon: typeof SlidersHorizonta
 	{ id: "cursor", labelKey: "cursor.title", icon: MousePointer2 },
 	{ id: "transcript", labelKey: "facets.transcript", icon: FileText },
 ];
+
+// The rail is a column against the right edge, so its tooltips open to the left: above or below
+// they would cover the next button. The rail's own padding and border (6px + 1px) come on top of
+// the usual gap, so the gap is measured from the rail's edge, not from the button's.
+const RAIL_TOOLTIP = { side: "left", sideOffset: TOOLTIP_GAP_PX + 7 } as const;
 
 type TranscriptProps = ComponentProps<typeof TranscriptPane>;
 
@@ -117,7 +125,7 @@ interface FloatingInspectorProps {
 }
 
 export function FloatingInspector({
-	facet,
+	facet: chosenFacet,
 	open,
 	onFacetChange,
 	onToggleOpen,
@@ -128,18 +136,22 @@ export function FloatingInspector({
 }: FloatingInspectorProps) {
 	const ts = useScopedT("settings");
 	const te = useScopedT("editor");
+	// A take with no cursor data (recorded with the system cursor, or imported) has nothing for
+	// the cursor settings to act on, so that facet is not offered: never shown while the answer is
+	// unknown, and a choice of it that lost its footing falls back to the first facet.
+	const hasCursor = useHasRecordedCursor() === true;
+	const facets = hasCursor ? FACETS : FACETS.filter(({ id }) => id !== "cursor");
+	// Literal keys, one call each, so `npm run i18n:check` resolves them (a key held in FACETS
+	// would not be checked).
+	const railTips: Record<Facet, string> = {
+		effects: ts("facets.tips.effects"),
+		layout: ts("facets.tips.layout"),
+		audio: ts("facets.tips.audio"),
+		cursor: ts("facets.tips.cursor"),
+		transcript: ts("facets.tips.transcript"),
+	};
+	const facet = facets.some(({ id }) => id === chosenFacet) ? chosenFacet : facets[0].id;
 	const [clipPickerOpen, setClipPickerOpen] = useState(false);
-	const clipPickerRef = useRef<HTMLDivElement | null>(null);
-	useEffect(() => {
-		if (!clipPickerOpen) return;
-		const onDocMouseDown = (e: MouseEvent) => {
-			if (clipPickerRef.current && !clipPickerRef.current.contains(e.target as Node)) {
-				setClipPickerOpen(false);
-			}
-		};
-		document.addEventListener("mousedown", onDocMouseDown);
-		return () => document.removeEventListener("mousedown", onDocMouseDown);
-	}, [clipPickerOpen]);
 	const selection = tl.selection;
 	// An imported audio track is selected (issue #350) — like a region selection it
 	// takes over the inspector body with its own pane (see AudioTrackPane).
@@ -159,54 +171,68 @@ export function FloatingInspector({
 				</div>
 			) : null}
 			<div className={styles.facetRail}>
-				{FACETS.map(({ id, labelKey, icon: Icon }) => (
-					<button
-						key={id}
-						type="button"
-						title={ts(labelKey)}
-						aria-label={ts(labelKey)}
-						aria-pressed={!selection && !audioTrackSelected && open && facet === id}
-						onClick={() => {
-							// Switching facets while an element is selected should show
-							// the facet, not leave the selection pane on top of it.
-							if (selection || audioTrackSelected) tl.clearSelection();
-							if (facet === id && open) {
-								onToggleOpen();
-							} else {
-								onFacetChange(id);
-							}
-						}}
-					>
-						<Icon size={17} />
-					</button>
+				{facets.map(({ id, labelKey, icon: Icon }) => (
+					// The name is the pane's title; the tip says what the pane holds. They are two keys
+					// because the title is also the pane's heading and cannot carry the list.
+					<Tooltip key={id} content={railTips[id]} {...RAIL_TOOLTIP}>
+						<button
+							type="button"
+							aria-label={ts(labelKey)}
+							aria-pressed={!selection && !audioTrackSelected && open && facet === id}
+							onClick={() => {
+								// Switching facets while an element is selected should show
+								// the facet, not leave the selection pane on top of it.
+								if (selection || audioTrackSelected) tl.clearSelection();
+								if (facet === id && open) {
+									onToggleOpen();
+								} else {
+									onFacetChange(id);
+								}
+							}}
+						>
+							<Icon size={17} />
+						</button>
+					</Tooltip>
 				))}
-				<div ref={clipPickerRef} style={{ position: "relative" }}>
-					<button
-						type="button"
-						title={te("editClipDialog.title")}
-						aria-label={te("editClipDialog.title")}
-						aria-haspopup={clips.length > 1 ? "menu" : undefined}
-						aria-expanded={clips.length > 1 ? clipPickerOpen : undefined}
-						onClick={() => {
-							if (selection) tl.clearSelection();
-							if (clips.length === 0) return;
-							if (clips.length === 1) {
-								onEditClip(clips[0]);
-								return;
-							}
-							setClipPickerOpen((v) => !v);
+				{/* A portal, like the timeline's menus: drawn inside the stage, the list was clipped by
+				    the stage's edge, and the rows past it sat under the timeline, out of reach. */}
+				<Popover open={clipPickerOpen && clips.length > 1} onOpenChange={setClipPickerOpen}>
+					<Tooltip content={te("inspector.editClipTip")} {...RAIL_TOOLTIP}>
+						<PopoverTrigger asChild>
+							<button
+								type="button"
+								aria-label={te("editClipDialog.title")}
+								aria-haspopup={clips.length > 1 ? "menu" : undefined}
+								aria-expanded={clips.length > 1 ? clipPickerOpen : undefined}
+								onClick={(event) => {
+									if (selection) tl.clearSelection();
+									if (clips.length > 1) return;
+									// One clip or none: no menu to open (Radix skips a prevented click).
+									event.preventDefault();
+									if (clips.length === 1) onEditClip(clips[0]);
+								}}
+							>
+								<Pencil size={17} />
+							</button>
+						</PopoverTrigger>
+					</Tooltip>
+					<PopoverContent
+						side="left"
+						align="start"
+						sideOffset={RAIL_TOOLTIP.sideOffset}
+						collisionPadding={12}
+						animated={false}
+						className="w-auto border-0 bg-transparent p-0 shadow-none"
+						onCloseAutoFocus={(event) => {
+							// The clip's dialog has the focus by then: handing it back to this button would
+							// leave it behind the dialog.
+							if (document.activeElement !== document.body) event.preventDefault();
 						}}
 					>
-						<Pencil size={17} />
-					</button>
-					{clipPickerOpen && clips.length > 1 ? (
 						<div
 							role="menu"
 							aria-label={te("editClipDialog.pickClipTitle")}
 							style={{
-								position: "absolute",
-								top: 0,
-								right: "calc(100% + 8px)",
 								minWidth: 200,
 								maxHeight: 320,
 								overflowY: "auto",
@@ -216,7 +242,6 @@ export function FloatingInspector({
 								boxShadow: "var(--elev-pop)",
 								backdropFilter: "blur(18px)",
 								padding: 6,
-								zIndex: 30,
 							}}
 						>
 							<p
@@ -266,8 +291,8 @@ export function FloatingInspector({
 								</button>
 							))}
 						</div>
-					) : null}
-				</div>
+					</PopoverContent>
+				</Popover>
 			</div>
 		</div>
 	);
@@ -299,19 +324,20 @@ function paneHeader(icon: React.ReactNode, title: string, onClose: () => void, c
 			>
 				{title}
 			</h2>
-			<button
-				type="button"
-				className={styles.iconBtn}
-				title={closeLabel}
-				aria-label={closeLabel}
-				onClick={onClose}
-				style={{
-					width: 30,
-					height: 30,
-				}}
-			>
-				<X size={16} />
-			</button>
+			<Tooltip content={closeLabel}>
+				<button
+					type="button"
+					className={styles.iconBtn}
+					aria-label={closeLabel}
+					onClick={onClose}
+					style={{
+						width: 30,
+						height: 30,
+					}}
+				>
+					<X size={16} />
+				</button>
+			</Tooltip>
 		</header>
 	);
 }
@@ -498,6 +524,7 @@ export function ZoomLevelControl({
 	};
 
 	const presets = ZOOM_PRESETS.filter((preset) => preset.value <= maxScale);
+	const hasSelectedPreset = presets.some((preset) => preset.value === requested);
 
 	return (
 		<>
@@ -520,7 +547,7 @@ export function ZoomLevelControl({
 						type="text"
 						inputMode="decimal"
 						aria-label={ts("zoom.customScale")}
-						placeholder={`${requested}×`}
+						placeholder={hasSelectedPreset ? "" : `${requested}×`}
 						value={draft}
 						onChange={(e) => setDraft(e.target.value)}
 						onBlur={commitDraft}
@@ -1312,29 +1339,30 @@ function FacetBody({
 	const te = useScopedT("editor");
 	// A small collapse affordance floated over the reused pane header.
 	const collapse = (
-		<button
-			type="button"
-			title={te("inspector.collapseInspector")}
-			aria-label={te("inspector.collapseInspector")}
-			onClick={onCollapse}
-			style={{
-				position: "absolute",
-				top: 12,
-				right: 12,
-				width: 30,
-				height: 30,
-				display: "grid",
-				placeItems: "center",
-				borderRadius: 10,
-				color: "var(--muted)",
-				background: "var(--surface-1)",
-				border: 0,
-				cursor: "pointer",
-				zIndex: 5,
-			}}
-		>
-			<ChevronRight size={16} />
-		</button>
+		<Tooltip content={te("inspector.collapseInspector")}>
+			<button
+				type="button"
+				aria-label={te("inspector.collapseInspector")}
+				onClick={onCollapse}
+				style={{
+					position: "absolute",
+					top: 12,
+					right: 12,
+					width: 30,
+					height: 30,
+					display: "grid",
+					placeItems: "center",
+					borderRadius: 10,
+					color: "var(--muted)",
+					background: "var(--surface-1)",
+					border: 0,
+					cursor: "pointer",
+					zIndex: 5,
+				}}
+			>
+				<ChevronRight size={16} />
+			</button>
+		</Tooltip>
 	);
 
 	if (facet === "layout") return wrap(collapse, <LayoutPane />);

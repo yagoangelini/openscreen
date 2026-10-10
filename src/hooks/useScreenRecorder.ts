@@ -3,6 +3,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useScopedT } from "@/contexts/I18nContext";
 import { mixAudioTracks, nativeMicrophoneGain } from "@/lib/audioMix";
+import { canTurnCameraOn } from "@/lib/cameraAvailability";
+import { shouldRecordMicrophone } from "@/lib/microphoneAvailability";
 import {
 	type NativeLinuxRecordingRequest,
 	portalOwnsSourceSelection,
@@ -17,10 +19,18 @@ import {
 	parseWindowHandleFromSourceId,
 } from "@/lib/nativeWindowsRecording";
 import type { CursorCaptureMode, RecordedVideoAssetInput } from "@/lib/recordingSession";
-import { requestCameraAccess } from "@/lib/requestCameraAccess";
 import { loadUserPreferences, saveUserPreferences } from "@/lib/userPreferences";
 import { canRecordMicrophone } from "@/utils/platformUtils";
 import { createRecorderHandle, type RecorderHandle } from "./recorderHandle";
+import {
+	DEFAULT_WEBCAM_QUALITY,
+	WEBCAM_TARGET_FRAME_RATE,
+	type WebcamQualityId,
+	webcamBitrateForStream,
+	webcamPresetFor,
+	webcamQualityFrom,
+	webcamVideoConstraints,
+} from "./webcamCaptureTarget";
 import { webcamDeviceIdentityFrom } from "./webcamDeviceIdentity";
 
 const TARGET_FRAME_RATE = 60;
@@ -77,8 +87,6 @@ function effectiveBrowserCursorMode(
 const AUDIO_BITRATE_VOICE = 128_000;
 const AUDIO_BITRATE_SYSTEM = 192_000;
 
-const WEBCAM_TARGET_FRAME_RATE = 30;
-
 type UseScreenRecorderReturn = {
 	recording: boolean;
 	paused: boolean;
@@ -99,6 +107,8 @@ type UseScreenRecorderReturn = {
 	setMicrophoneDeviceName: (deviceName: string | undefined) => void;
 	webcamDeviceId: string | undefined;
 	setWebcamDeviceId: (deviceId: string | undefined) => void;
+	webcamQuality: WebcamQualityId;
+	setWebcamQuality: (quality: WebcamQualityId) => void;
 	webcamDeviceName: string | undefined;
 	setWebcamDeviceName: (deviceName: string | undefined) => void;
 	systemAudioEnabled: boolean;
@@ -226,6 +236,7 @@ export async function finalizeWebcamAsset(
 
 export function useScreenRecorder(): UseScreenRecorderReturn {
 	const t = useScopedT("editor");
+	const tLaunch = useScopedT("launch");
 	/**
 	 * `t` through a ref, for the callbacks that must not be rebuilt when it
 	 * changes identity.
@@ -243,6 +254,11 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 	useEffect(() => {
 		tRef.current = t;
 	}, [t]);
+	useEffect(() => {
+		return window.electronAPI?.onNativeMacSystemAudioUnavailable?.(() => {
+			toast.warning(tRef.current("recording.systemAudioUnavailable"));
+		});
+	}, []);
 	const [recording, setRecording] = useState(false);
 	const [paused, setPaused] = useState(false);
 	const [saving, setSaving] = useState(false);
@@ -251,6 +267,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 	const [microphoneDeviceId, setMicrophoneDeviceId] = useState<string | undefined>(undefined);
 	const [microphoneDeviceName, setMicrophoneDeviceName] = useState<string | undefined>(undefined);
 	const [webcamDeviceId, setWebcamDeviceId] = useState<string | undefined>(undefined);
+	const [webcamQuality, setWebcamQuality] = useState<WebcamQualityId>(DEFAULT_WEBCAM_QUALITY);
 	const [webcamDeviceName, setWebcamDeviceName] = useState<string | undefined>(undefined);
 	const [systemAudioEnabled, setSystemAudioEnabled] = useState(false);
 	const [webcamEnabled, setWebcamEnabledState] = useState(false);
@@ -275,6 +292,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			camEnabled: boolean;
 			camDeviceId?: string | null;
 			camDeviceName?: string | null;
+			camQuality?: WebcamQualityId | null;
 			systemAudioEnabled: boolean;
 			cursorCaptureMode: CursorCaptureMode;
 			countdownSeconds?: number;
@@ -293,6 +311,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				setWebcamDeviceId(prefs.camDeviceId ?? undefined);
 				setWebcamDeviceName(prefs.camDeviceName ?? undefined);
 			}
+			setWebcamQuality(webcamQualityFrom(prefs.camQuality));
 			setSystemAudioEnabled(prefs.systemAudioEnabled);
 			setCursorCaptureMode(prefs.cursorCaptureMode);
 			countdownSecondsRef.current =
@@ -344,6 +363,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 	const discardRecordingId = useRef<number | null>(null);
 	const restarting = useRef(false);
 	const countdownRunId = useRef(0);
+	const cursorAccessibilityWarningShown = useRef(false);
 	const [countdownActive, setCountdownActive] = useState(false);
 	const webcamReady = useRef(false);
 	const webcamAcquireId = useRef(0);
@@ -365,6 +385,19 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			segmentStartedAt.current === null ? 0 : Date.now() - segmentStartedAt.current;
 		return accumulatedDurationMs.current + segmentDuration;
 	}, []);
+
+	/**
+	 * Recorder options for a webcam sidecar.
+	 *
+	 * The bitrate comes from the camera's own frame, never from the screen
+	 * recording. Repeated inline at each call site, that rule held in two of the
+	 * three and left the browser pipeline encoding a 2160p camera at the
+	 * monitor's rate, capped well below what the frame needs.
+	 */
+	const webcamRecorderOptions = (stream: MediaStream | null): MediaRecorderOptions => ({
+		mimeType: selectMimeType(),
+		videoBitsPerSecond: webcamBitrateForStream(stream),
+	});
 
 	const selectMimeType = () => {
 		// H.264 first: hardware-accelerated, so sharp real-time output. AV1/VP9 are
@@ -451,14 +484,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				return true;
 			}
 
-			const accessResult = await requestCameraAccess();
-			if (!accessResult.success) {
-				toast.error(t("recording.failedCameraAccess"));
-				return false;
-			}
-
-			if (!accessResult.granted) {
-				toast.error(t("recording.cameraBlocked"));
+			if (!(await canTurnCameraOn(t))) {
 				return false;
 			}
 
@@ -491,14 +517,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			try {
 				const stream = await navigator.mediaDevices.getUserMedia({
 					audio: false,
-					video: webcamDeviceId
-						? {
-								deviceId: { exact: webcamDeviceId },
-								frameRate: { ideal: WEBCAM_TARGET_FRAME_RATE, max: WEBCAM_TARGET_FRAME_RATE },
-							}
-						: {
-								frameRate: { ideal: WEBCAM_TARGET_FRAME_RATE, max: WEBCAM_TARGET_FRAME_RATE },
-							},
+					video: webcamVideoConstraints(webcamDeviceId, webcamQuality),
 				});
 
 				if (cancelled || thisAcquireId !== webcamAcquireId.current) {
@@ -529,6 +548,11 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				if (!cancelled) {
 					console.warn("Failed to get webcam access:", cameraError);
 					setWebcamEnabledState(false);
+					// The stored preference has to follow, or the editor's Record mode
+					// keeps reading "On" from it while the HUD shows the camera off (#967).
+					void window.electronAPI?.setRecordingPrefs?.({ camEnabled: false }).catch((error) => {
+						console.warn("Failed to persist the camera preference:", error);
+					});
 					const isDeviceError =
 						cameraError instanceof DOMException &&
 						[
@@ -556,7 +580,15 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				webcamStream.current = null;
 			}
 		};
-	}, [webcamEnabled, webcamDeviceId, webcamDeviceName, t, deferWebcamToCountdown, webcamArmed]);
+	}, [
+		webcamEnabled,
+		webcamDeviceId,
+		webcamDeviceName,
+		webcamQuality,
+		t,
+		deferWebcamToCountdown,
+		webcamArmed,
+	]);
 
 	const finalizeRecording = useCallback(
 		(
@@ -1212,6 +1244,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 
 	const startNativeWindowsRecordingIfAvailable = async (
 		selectedSource: ProcessedDesktopSource,
+		recordMicrophone: boolean,
 		countdownRunToken?: number,
 	) => {
 		try {
@@ -1279,7 +1312,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 						enabled: systemAudioEnabled,
 					},
 					microphone: {
-						enabled: microphoneEnabled,
+						enabled: recordMicrophone,
 						deviceId: microphoneDeviceId,
 						deviceName: microphoneDeviceName,
 						// Boosted only when the mic has to sit over system audio.
@@ -1290,8 +1323,8 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 					enabled: webcamEnabled,
 					deviceId: webcamIdentity.deviceId,
 					deviceName: webcamIdentity.deviceName,
-					width: 0,
-					height: 0,
+					width: webcamPresetFor(webcamQuality).width,
+					height: webcamPresetFor(webcamQuality).height,
 					fps: WEBCAM_TARGET_FRAME_RATE,
 				},
 				cursor: {
@@ -1354,6 +1387,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 
 	const startNativeMacRecordingIfAvailable = async (
 		selectedSource: ProcessedDesktopSource,
+		recordMicrophone: boolean,
 		countdownRunToken?: number,
 	) => {
 		try {
@@ -1418,10 +1452,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 					// recordingId we send here, so this name is the one finalize rebuilds.
 					nativeWebcamRecorder = createRecorderHandle(
 						webcamStream.current,
-						{
-							mimeType: selectMimeType(),
-							videoBitsPerSecond: BITRATE_BASE,
-						},
+						webcamRecorderOptions(webcamStream.current),
 						`${RECORDING_FILE_PREFIX}${activeRecordingId}${WEBCAM_FILE_SUFFIX}${VIDEO_FILE_EXTENSION}`,
 					);
 				} else {
@@ -1445,7 +1476,9 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 					fps: TARGET_FRAME_RATE,
 					width: TARGET_WIDTH,
 					height: TARGET_HEIGHT,
-					bitrate: computeBitrate(TARGET_WIDTH, TARGET_HEIGHT),
+					// No bitrate, as on Linux: TARGET_WIDTH/HEIGHT are the 4K ceiling,
+					// not the capture size, and the ceiling's 76.5 Mbit/s went out for a
+					// 1080p take too (#924). The helper derives it from the size it got.
 					hideSystemCursor: cursorCaptureMode === "editable-overlay",
 				},
 				audio: {
@@ -1453,7 +1486,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 						enabled: systemAudioEnabled,
 					},
 					microphone: {
-						enabled: microphoneEnabled,
+						enabled: recordMicrophone,
 						deviceId: microphoneDeviceId,
 						deviceName: microphoneDeviceName,
 						// Boosted only over system audio, like the Windows request above.
@@ -1465,8 +1498,8 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 					// Same pairing rule as the Windows path; here the stream is still
 					// open, so the identity can be read at the point of use.
 					...readWebcamDeviceIdentity(),
-					width: 0,
-					height: 0,
+					width: webcamPresetFor(webcamQuality).width,
+					height: webcamPresetFor(webcamQuality).height,
 					fps: WEBCAM_TARGET_FRAME_RATE,
 				},
 				cursor: {
@@ -1490,6 +1523,9 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			if (result.microphoneUnavailable) {
 				toast.error(t("recording.microphoneUnavailable"));
 			}
+			if (result.microphoneNotFound) {
+				toast.error(t("rec.noMicrophoneFound"));
+			}
 
 			// The IPC call above only resolves once the helper's stdout confirms its
 			// screen capture has truly started (see waitForNativeMacCaptureStart in
@@ -1509,7 +1545,9 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			};
 			webcamRecorder.current = nativeWebcamRecorder;
 			accumulatedDurationMs.current = 0;
-			segmentStartedAt.current = Date.now();
+			// From the file's first frame, not from this reply, so the timer reads what the
+			// file holds however late the reply arrives (#901).
+			segmentStartedAt.current = result.startedAtMs ?? Date.now();
 			allowAutoFinalize.current = true;
 			setRecording(true);
 			setPaused(false);
@@ -1541,7 +1579,10 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 	 * is the one negotiated at the start, so a divergence in audio or cursor
 	 * settings would record something the second call never asked for.
 	 */
-	const buildNativeLinuxRequest = (recordingId?: number): NativeLinuxRecordingRequest => ({
+	const buildNativeLinuxRequest = (
+		recordMicrophone: boolean,
+		recordingId?: number,
+	): NativeLinuxRecordingRequest => ({
 		...(recordingId === undefined ? {} : { recordingId }),
 		video: {
 			// No bitrate on purpose. TARGET_WIDTH/HEIGHT are the app's 4K ceiling,
@@ -1554,7 +1595,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 		audio: {
 			system: { enabled: systemAudioEnabled },
 			microphone: {
-				enabled: microphoneEnabled,
+				enabled: recordMicrophone,
 				// The device LABEL, not the id. Chromium's deviceId is an opaque
 				// per-origin hash that means nothing to PipeWire, whereas on a
 				// PipeWire system the label IS the node's `node.description` — which
@@ -1571,6 +1612,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 	});
 
 	const startNativeLinuxRecordingIfAvailable = async (
+		recordMicrophone: boolean,
 		countdownRunToken?: number,
 		preparedRecordingId?: number | null,
 	) => {
@@ -1617,10 +1659,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 					// take is never flattened into one ArrayBuffer at finalize (#253).
 					nativeWebcamRecorder = createRecorderHandle(
 						webcamStream.current,
-						{
-							mimeType: selectMimeType(),
-							videoBitsPerSecond: BITRATE_BASE,
-						},
+						webcamRecorderOptions(webcamStream.current),
 						`${RECORDING_FILE_PREFIX}${activeRecordingId}${WEBCAM_FILE_SUFFIX}${VIDEO_FILE_EXTENSION}`,
 					);
 				} else {
@@ -1630,7 +1669,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			}
 
 			const result = await window.electronAPI.startNativeLinuxRecording(
-				buildNativeLinuxRequest(activeRecordingId),
+				buildNativeLinuxRequest(recordMicrophone, activeRecordingId),
 			);
 			if (!result.success || !result.recordingId) {
 				throw new Error(result.error ?? "Native Linux capture failed.");
@@ -1711,25 +1750,25 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 		try {
 			const platform = window.electronAPI.getPlatform();
 			if (platform === "darwin" && cursorCaptureMode === "editable-overlay") {
-				// Stop before the countdown ONLY when the user genuinely denied
-				// Accessibility — the main process is showing them a dialog that
-				// deep-links to the settings pane, so pressing record again after
-				// granting it will work.
-				//
-				// When the helper simply could not run (missing from the build, killed
-				// by the loader, crashed, hung) there is nothing for the user to grant,
-				// and blocking here is what left macOS 12 unable to record at all
-				// (#515). Recording degrades on its own: the session falls back to
-				// position-only cursor telemetry and the editor draws the cursor from
-				// its bundled sprites, so only the pointer/text shape hints are lost.
+				// Accessibility only improves cursor shape hints. Keep recording when
+				// the grant is pending or the helper is unavailable; the cursor session
+				// falls back to position-only telemetry when needed.
 				const access = await window.electronAPI.requestNativeMacCursorAccess();
-				if (!access.granted && access.status === "not-determined") {
-					return;
-				}
-				if (!access.granted) {
-					console.warn(
-						`Editable cursor unavailable (${access.status}); recording with position-only cursor telemetry.`,
-					);
+				if (
+					!access.granted &&
+					access.status === "not-determined" &&
+					!cursorAccessibilityWarningShown.current
+				) {
+					cursorAccessibilityWarningShown.current = true;
+					toast.warning(t("recording.cursorAccessibilityUnavailable"), {
+						duration: 10_000,
+						action: {
+							label: tLaunch("permissions.actions.openSettings"),
+							onClick: () => {
+								void window.electronAPI?.permissions.openSettings("accessibility");
+							},
+						},
+					});
 				}
 			}
 		} catch (error) {
@@ -1750,7 +1789,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 		if (portalOwnsSource) {
 			try {
 				const prepared = await window.electronAPI.prepareNativeLinuxRecording(
-					buildNativeLinuxRequest(),
+					buildNativeLinuxRequest(await shouldRecordMicrophone(microphoneEnabled)),
 				);
 				if (prepared.success && typeof prepared.recordingId === "number") {
 					preparedRecordingId = prepared.recordingId;
@@ -1846,6 +1885,17 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				teardownMedia();
 				return;
 			}
+			// Every path below records into the same folder, so one check covers them all. A
+			// take that fills the disk is otherwise lost only when it is saved.
+			const storage = await window.electronAPI.checkRecordingStorage?.();
+			if (storage && !storage.success) {
+				throw new Error(storage.error);
+			}
+			// Resolved once, for whichever path records the take (#995).
+			const recordMicrophone = await shouldRecordMicrophone(microphoneEnabled);
+			if (microphoneEnabled && !recordMicrophone) {
+				toast.error(t("rec.noMicrophoneFound"));
+			}
 
 			// BEFORE THE SOURCE GATE, on purpose. On Wayland the portal raises its
 			// own picker and is the only thing that can choose a source, so there
@@ -1854,7 +1904,13 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			// question this platform never asks the app. It returns false when the
 			// native helper is missing, and the browser fallback below does need a
 			// source, so the gate still guards the path that uses one.
-			if (await startNativeLinuxRecordingIfAvailable(countdownRunToken, preparedRecordingId)) {
+			if (
+				await startNativeLinuxRecordingIfAvailable(
+					recordMicrophone,
+					countdownRunToken,
+					preparedRecordingId,
+				)
+			) {
 				return;
 			}
 
@@ -1864,10 +1920,22 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				return;
 			}
 
-			if (await startNativeWindowsRecordingIfAvailable(selectedSource, countdownRunToken)) {
+			if (
+				await startNativeWindowsRecordingIfAvailable(
+					selectedSource,
+					recordMicrophone,
+					countdownRunToken,
+				)
+			) {
 				return;
 			}
-			if (await startNativeMacRecordingIfAvailable(selectedSource, countdownRunToken)) {
+			if (
+				await startNativeMacRecordingIfAvailable(
+					selectedSource,
+					recordMicrophone,
+					countdownRunToken,
+				)
+			) {
 				return;
 			}
 
@@ -1928,7 +1996,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				} as unknown as MediaStreamConstraints);
 			})();
 
-			const micCapture: Promise<MediaStream | null> = microphoneEnabled
+			const micCapture: Promise<MediaStream | null> = recordMicrophone
 				? (async () => {
 						try {
 							return await navigator.mediaDevices.getUserMedia({
@@ -2087,6 +2155,9 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				"error",
 				() => {
 					setRecording(false);
+					// The main process was told a take started (below), so it has to hear
+					// that it ended too, or the tray and the display-sleep blocker stay on.
+					window.electronAPI?.setRecordingState(false);
 				},
 				{ once: true },
 			);
@@ -2094,7 +2165,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			if (webcamStream.current) {
 				webcamRecorder.current = createRecorderHandle(
 					webcamStream.current,
-					{ mimeType, videoBitsPerSecond: Math.min(videoBitsPerSecond, BITRATE_BASE) },
+					webcamRecorderOptions(webcamStream.current),
 					`${RECORDING_FILE_PREFIX}${activeRecordingId}${WEBCAM_FILE_SUFFIX}${VIDEO_FILE_EXTENSION}`,
 				);
 			}
@@ -2321,6 +2392,24 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 		void startRecordCountdown();
 	};
 
+	/**
+	 * The second half of Restart. The previous take is already gone by now: every
+	 * capture path holds one take at a time, so it is discarded before this one is
+	 * asked for. A start that did not begin has to say so, or the take is lost
+	 * without a word (#995).
+	 */
+	const startRecordingAfterRestart = async () => {
+		await startRecording();
+		if (
+			!nativeWindowsRecording.current &&
+			!nativeMacRecording.current &&
+			!nativeLinuxRecording.current &&
+			!screenRecorder.current
+		) {
+			toast.error(t("recording.restartFailed"));
+		}
+	};
+
 	const restartRecording = async () => {
 		if (restarting.current) return;
 
@@ -2330,7 +2419,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			discardRecordingId.current = activeRecordingId;
 			try {
 				await finalizeNativeWindowsRecording(true);
-				await startRecording();
+				await startRecordingAfterRestart();
 			} finally {
 				restarting.current = false;
 			}
@@ -2342,7 +2431,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			discardRecordingId.current = activeRecordingId;
 			try {
 				await finalizeNativeMacRecording(true);
-				await startRecording();
+				await startRecordingAfterRestart();
 			} finally {
 				restarting.current = false;
 			}
@@ -2354,7 +2443,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			discardRecordingId.current = activeRecordingId;
 			try {
 				await finalizeNativeLinuxRecording(true);
-				await startRecording();
+				await startRecordingAfterRestart();
 			} finally {
 				restarting.current = false;
 			}
@@ -2393,7 +2482,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 		await Promise.all(stopPromises);
 
 		try {
-			await startRecording();
+			await startRecordingAfterRestart();
 		} finally {
 			restarting.current = false;
 		}
@@ -2485,6 +2574,8 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 		setMicrophoneDeviceName,
 		webcamDeviceId,
 		setWebcamDeviceId,
+		webcamQuality,
+		setWebcamQuality,
 		webcamDeviceName,
 		setWebcamDeviceName,
 		systemAudioEnabled,

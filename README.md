@@ -7,7 +7,7 @@
 <p align="center"><strong>A free, open-source desktop app for recording your screen and turning the result into polished product demos and walkthroughs.</strong></p>
 
 <p align="center">
-  <img src="docs/assets/demo.gif" alt="Editing a recording in OpenScreen: wallpaper and video effects, an AI-assisted cut driven from the chat, then export" width="100%" />
+  <img src="docs/assets/demo.gif" alt="Editing a recording in OpenScreen: one click restyles the whole video, deleting a sentence in the transcript cuts it from the video, and the editor's agent adds a zoom on every click" width="100%" />
 </p>
 
 <p align="center">
@@ -102,7 +102,7 @@ Microsoft signs the Store package during certification, so it installs with no s
 
 **Alternative — standalone installer**
 
-Download the `.exe` from the [Releases page](https://github.com/getopenscreen/openscreen/releases). Use this if you can't reach the Store — Windows LTSC, a locked-down work machine, an offline install, or if you want a specific older version.
+Download the `.exe` from the [Releases page](https://github.com/getopenscreen/openscreen/releases). Installers are provided for both x64 (`Openscreen.Setup.<version>-x64.exe`) and ARM64 (`Openscreen.Setup.<version>-arm64.exe`) — on an ARM64 device the x64 build runs under emulation and records poorly, so take the ARM64 one. Use this if you can't reach the Store — Windows LTSC, a locked-down work machine, an offline install, or if you want a specific older version.
 
 > [!NOTE]
 > The `.exe` is not code-signed, so Windows SmartScreen shows **"Windows protected your PC"** and reports an unknown publisher. Choose **More info** → **Run anyway** to continue.
@@ -176,7 +176,7 @@ You may need to grant screen recording permissions depending on your desktop env
 Everything in the editor and export is the same on macOS, Windows, and Linux: zooms, backgrounds, motion blur, crop/trim/speed, blur regions, annotations, auto-captions, AI editing, projects, export, and all languages. All three now record through a native capture pipeline; the remaining differences are narrower than they used to be:
 
 - **Native recording**: macOS (ScreenCaptureKit), Windows (Windows Graphics Capture), and Linux (PipeWire via the ScreenCast portal) all record through a native pipeline for higher quality and clean window-level capture. On Linux the browser pipeline stays as an automatic fallback if the helper isn't available.
-- **Custom cursors**: on macOS and Windows the real cursor is captured with shape, type, and clicks. Linux captures position and cursor shape through the portal, so the editable cursor overlay works there too. Click effects work on Linux as well, but not through the portal — Wayland exposes no portal for mouse buttons, so the capture helper reads the left button from evdev, which needs your user in the `input` group. Without that, recording is unaffected and every cursor sample is simply a move.
+- **Custom cursors**: on macOS and Windows the real cursor is captured with shape, type, and clicks. Linux captures position and cursor shape through the portal, so the editable cursor overlay works there too. Click effects work on Linux as well, but not through the portal — Wayland exposes no portal for mouse buttons, so the capture helper reads the left button from evdev, which needs read access to your mouse: a udev rule for pointer devices (recommended) or the `input` group, set up as [Mouse clicks on Wayland](https://getopenscreen.com/docs/installation#mouse-clicks-on-wayland) shows. Without that, recording is unaffected and every cursor sample is simply a move.
 - **Webcam**: every platform saves the webcam as a separate file next to the screen recording. Windows captures it natively in the recording helper; macOS and Linux record it in the app. It works as a picture-in-picture overlay on all three.
 - **System audio** support varies by OS:
   - **macOS**: works on every supported version. On macOS 14.2+ you'll be prompted to grant audio capture permission.

@@ -35,7 +35,7 @@ No Windows, o OpenScreen mantém o HUD e a janela de notas fora da captura. No m
 
 1. No Windows e no macOS, abra o seletor de fonte e escolha uma tela em **Telas** ou uma única janela em **Janelas**. No macOS 15.2 e posterior, em vez disso, você escolhe a tela ou a janela no seletor do sistema da Apple. No Linux não há seletor no app: o portal do sistema pede a fonte a cada tomada. O OpenScreen não tem captura de região, então grave a janela ou a tela e depois corte a imagem do clipe no editor.
 2. Ative o microfone e confira o medidor de nível. Ative o áudio do sistema se o produto emitir som, e a webcam se você quiser aparecer na tela.
-3. Mantenha o modo de cursor editável, que é o padrão: o ponteiro é gravado como dados, então você pode mudar o estilo dele depois. Os cliques são gravados no Windows. No macOS, eles exigem a permissão de Acessibilidade. No Linux, seu usuário precisa estar no grupo `input`, e o toque para clicar do touchpad não é capturado ([detalhes](../installation.md#mouse-clicks-on-wayland)).
+3. Mantenha o modo de cursor editável, que é o padrão: o ponteiro é gravado como dados, então você pode mudar o estilo dele depois. Os cliques são gravados no Windows. No macOS, eles exigem a permissão de Acessibilidade. No Linux, seu usuário precisa de acesso de leitura ao mouse, por uma regra do udev (recomendada) ou pelo grupo `input`, e o toque para clicar do touchpad não é capturado ([detalhes](../installation.md#mouse-clicks-on-wayland)).
 4. Aperte gravar. Uma contagem regressiva 3-2-1 roda antes e não pode ser desativada.
 
 O OpenScreen captura com uma meta de 60 fps, até 3840×2160 no Windows e no macOS. No Linux, o tamanho é o que o compositor entregar. Durante a gravação, você pode pausar, reiniciar a tomada, cancelá-la ou parar.
@@ -52,7 +52,7 @@ A webcam é gravada em um arquivo próprio, então a posição dela é uma decis
 
 - **Picture in Picture**, **Empilhamento Vertical**, **Quadro Duplo** ou **Sem Webcam**.
 - Em todos os layouts: espelhamento e um enquadramento da imagem da câmera.
-- Só em **Picture in Picture**: **Formato da Câmera** (Retângulo ou Quadrado), **Arredondamento** (a 100% uma câmera quadrada vira um círculo), um tamanho de 15 a 50% (25% por padrão), **Posição** (um canto ou o meio de uma borda, embaixo à direita por padrão) e **Encolher ao ampliar**, ativado por padrão, que deixa a câmera menor enquanto um zoom é exibido, para que ela não cubra o detalhe. Arraste a câmera no canvas e ela se encaixa na posição mais próxima.
+- Só em **Picture in Picture**: **Formato da Câmera** (Quadrado por padrão, ou Original, que mantém as proporções da própria câmera), **Arredondamento** (70% para Quadrado e 40% para Original por padrão; a 100% uma câmera quadrada vira um círculo), um tamanho de 15 a 60% (40% por padrão), **Posição** (um canto ou o meio de uma borda, embaixo à direita por padrão) e **Encolher ao ampliar**, ativado por padrão, que deixa a câmera menor enquanto um zoom é exibido, para que ela não cubra o detalhe. Arraste a câmera no canvas e ela se encaixa na posição mais próxima.
 - **Plano de fundo da câmera**: Original, Desfocado, Recorte ou Personalizado. Recorte remove o fundo sem tela verde, usando um modelo de segmentação que roda na sua CPU. Esta seção só aparece quando o runtime de segmentação carrega no seu computador.
 
 Para uma introdução ou um encerramento, pressione `C` para adicionar um segmento de **Câmera em Tela Cheia**: a câmera preenche o quadro inteiro nesse trecho.
@@ -106,7 +106,7 @@ As legendas são embutidas no vídeo. O OpenScreen não grava nenhum arquivo `.s
 
 **Exporte.** Clique em **Exportar** na barra superior:
 
-- **MP4**: Baixa (720p), Média (1080p) ou Alta (resolução de origem); 24, 30 ou 60 fps; H.264 ou H.265. A caixa de diálogo marca o H.264 como a opção de **Melhor compatibilidade**. O bitrate do vídeo não é ajustável: cerca de 8 Mbit/s em 1080p.
+- **MP4**: Baixa (720p), Média (1080p) ou Alta (resolução de origem); 24, 30 ou 60 fps; H.264. O bitrate do vídeo não é ajustável: cerca de 8 Mbit/s em 1080p.
 - **GIF**: 15, 20, 25 ou 30 fps; tamanho Medium, Large ou Original; repetição ativada ou desativada. Os GIFs usam 256 cores, sem dithering, então servem para clipes curtos de interfaces com cores chapadas.
 
 Não há marca d'água. Para exportar em outro formato, mude o formato e exporte de novo.

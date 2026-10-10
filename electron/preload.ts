@@ -1,11 +1,22 @@
-import { contextBridge, ipcRenderer, webUtils } from "electron";
+import { contextBridge, ipcRenderer, sharedTexture, webUtils } from "electron";
 import type { NativeLinuxRecordingRequest } from "../src/lib/nativeLinuxRecording";
 import type { NativeMacRecordingRequest } from "../src/lib/nativeMacRecording";
 import type { NativeWindowsRecordingRequest } from "../src/lib/nativeWindowsRecording";
 import type { RecordingSession, StoreRecordedSessionInput } from "../src/lib/recordingSession";
 import type { GlobalShortcutsConfig } from "../src/lib/shortcuts";
-import type { AiEditionChatEvent } from "../src/native/contracts";
-import { NATIVE_BRIDGE_CHANNEL, type NativeBridgeRequest } from "../src/native/contracts";
+import type {
+	AiEditionChatEvent,
+	AiEditionMcpHostRequest,
+	AiEditionMcpHostResponse,
+	CompositorSharedFrameMeta,
+} from "../src/native/contracts";
+import {
+	AI_EDITION_MCP_HOST_CHANNEL,
+	AI_EDITION_MCP_REQUEST_CHANNEL,
+	AI_EDITION_MCP_RESPONSE_CHANNEL,
+	NATIVE_BRIDGE_CHANNEL,
+	type NativeBridgeRequest,
+} from "../src/native/contracts";
 import type { RecordingPrefs } from "./ipc/handlers";
 import type {
 	SttStatusEvent,
@@ -23,6 +34,23 @@ const assetBaseUrl = assetBaseUrlArg ? assetBaseUrlArg.slice(ASSET_BASE_URL_ARG_
 // Renderer side: process.platform is the same Node global as in the main process,
 // so a synchronous read here saves the renderer's every-call IPC round-trip.
 const PLATFORM = process.platform;
+
+// Preview frames the main process hands over as shared GPU textures (see
+// `compositorViewService`). Electron gives up on a send after 1 s without a receiver, so it is
+// registered here, at load, and forwards to whichever listener the page has set.
+type CompositorFrameListener = (frame: VideoFrame, meta: CompositorSharedFrameMeta) => void;
+let compositorFrameListener: CompositorFrameListener | null = null;
+sharedTexture?.setSharedTextureReceiver(async ({ importedSharedTexture }, meta) => {
+	const frame = importedSharedTexture.getVideoFrame();
+	try {
+		compositorFrameListener?.(frame, meta as CompositorSharedFrameMeta);
+	} finally {
+		// The page drew from its own copy (contextBridge clones the frame) and closed it. Closing
+		// ours and releasing the import is what lets the native ring write the slot again.
+		frame.close();
+		importedSharedTexture.release();
+	}
+});
 
 contextBridge.exposeInMainWorld("electronAPI", {
 	assetBaseUrl,
@@ -79,6 +107,14 @@ contextBridge.exposeInMainWorld("electronAPI", {
 		ipcRenderer.on("export:native-progress", handler);
 		return () => ipcRenderer.off("export:native-progress", handler);
 	},
+	onCompositorFrame: (listener: CompositorFrameListener) => {
+		compositorFrameListener = listener;
+		return () => {
+			if (compositorFrameListener === listener) {
+				compositorFrameListener = null;
+			}
+		};
+	},
 	invokeNativeBridge: <TData>(request: NativeBridgeRequest) => {
 		return ipcRenderer.invoke(NATIVE_BRIDGE_CHANNEL, request) as Promise<TData>;
 	},
@@ -132,6 +168,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	},
 	usesSystemSourcePicker: (): Promise<boolean> => {
 		return ipcRenderer.invoke("uses-system-source-picker");
+	},
+	getLastPickedSource: (): Promise<string | null> => {
+		return ipcRenderer.invoke("get-last-picked-source");
 	},
 	openNotes: () => {
 		return ipcRenderer.invoke("open-notes");
@@ -278,6 +317,11 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	startNativeMacRecording: (request: NativeMacRecordingRequest) => {
 		return ipcRenderer.invoke("start-native-mac-recording", request);
 	},
+	onNativeMacSystemAudioUnavailable: (callback: () => void) => {
+		const listener = () => callback();
+		ipcRenderer.on("native-mac-system-audio-unavailable", listener);
+		return () => ipcRenderer.removeListener("native-mac-system-audio-unavailable", listener);
+	},
 	pauseNativeMacRecording: () => {
 		return ipcRenderer.invoke("pause-native-mac-recording");
 	},
@@ -352,6 +396,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	},
 	saveRecordedVoiceover: (data: ArrayBuffer) => {
 		return ipcRenderer.invoke("save-recorded-voiceover", data);
+	},
+	stageClickSoundHit: (name: string, data: ArrayBuffer) => {
+		return ipcRenderer.invoke("stage-click-sound-hit", name, data);
 	},
 	setCurrentVideoPath: (path: string) => {
 		return ipcRenderer.invoke("set-current-video-path", path);
@@ -481,6 +528,27 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	revealInFolder: (filePath: string) => {
 		return ipcRenderer.invoke("reveal-in-folder", filePath);
 	},
+	checkRecordingStorage: () => {
+		return ipcRenderer.invoke("check-recording-storage") as Promise<
+			{ success: true } | { success: false; error: string }
+		>;
+	},
+	getRecordingsDir: () => {
+		return ipcRenderer.invoke("get-recordings-dir") as Promise<{
+			path: string;
+			isDefault: boolean;
+		}>;
+	},
+	chooseRecordingsDir: () => {
+		return ipcRenderer.invoke("choose-recordings-dir") as Promise<
+			{ success: true; path: string } | { success: false; canceled?: boolean; message?: string }
+		>;
+	},
+	resetRecordingsDir: () => {
+		return ipcRenderer.invoke("reset-recordings-dir") as Promise<
+			{ success: true; path: string } | { success: false; message?: string }
+		>;
+	},
 	getShortcuts: () => {
 		return ipcRenderer.invoke("get-shortcuts");
 	},
@@ -551,6 +619,33 @@ contextBridge.exposeInMainWorld("electronAPI", {
 		const listener = (_e: unknown, payload: AiEditionChatEvent) => callback(payload);
 		ipcRenderer.on("ai-edition.chat-event", listener);
 		return () => ipcRenderer.removeListener("ai-edition.chat-event", listener);
+	},
+	// The editor answers the MCP server's reads and writes of the live document.
+	// Subscribing is what makes this window the one the server asks; the
+	// returned unsubscribe withdraws it. See electron/mcp/editor-document-host.ts.
+	onAiEditionMcpRequest: (
+		callback: (request: AiEditionMcpHostRequest) => Promise<AiEditionMcpHostResponse["result"]>,
+	) => {
+		const listener = (_e: unknown, request: AiEditionMcpHostRequest) => {
+			void callback(request).then(
+				(result) =>
+					ipcRenderer.send(AI_EDITION_MCP_RESPONSE_CHANNEL, {
+						requestId: request.requestId,
+						result,
+					}),
+				() =>
+					ipcRenderer.send(AI_EDITION_MCP_RESPONSE_CHANNEL, {
+						requestId: request.requestId,
+						result: null,
+					}),
+			);
+		};
+		ipcRenderer.on(AI_EDITION_MCP_REQUEST_CHANNEL, listener);
+		ipcRenderer.send(AI_EDITION_MCP_HOST_CHANNEL, true);
+		return () => {
+			ipcRenderer.removeListener(AI_EDITION_MCP_REQUEST_CHANNEL, listener);
+			ipcRenderer.send(AI_EDITION_MCP_HOST_CHANNEL, false);
+		};
 	},
 	stt: {
 		transcribe: (request: SttTranscribeRequest): Promise<SttTranscribeResponse> => {

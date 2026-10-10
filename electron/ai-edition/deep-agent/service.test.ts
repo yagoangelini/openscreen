@@ -60,6 +60,7 @@ const ARGS: Record<string, unknown> = {
 	getTranscriptWords: {},
 	getCursorTrack: {},
 	setWordText: { wordId: "word_1", text: "Hullo" },
+	removeWords: { wordIds: ["word_1"] },
 	addTrim: { startSec: 1, endSec: 2 },
 	addTrims: { ranges: [{ startSec: 1, endSec: 2 }] },
 	setTrim: { trimRangeId: "trim_1", startSec: 1, endSec: 2 },
@@ -389,6 +390,14 @@ describe("what the descriptions say about zoom strength", () => {
 	it("tells the model a full-camera region needs a linked webcam", () => {
 		expect(TOOL_DESCRIPTIONS.addCameraFullscreen).toMatch(/hasCameraTrack/);
 		expect(SYSTEM_PROMPT).toMatch(/hasCameraTrack/);
+	});
+
+	it("tells every zoom and trim write where a zoom's moves are (#1028)", () => {
+		for (const name of ["addZoom", "addZooms", "setZoom", "addTrim", "addTrims", "setTrim"]) {
+			expect(TOOL_DESCRIPTIONS[name]).toContain("zoomOutUntilSec");
+			expect(TOOL_DESCRIPTIONS[name]).toContain("cutTransitions");
+		}
+		expect(SYSTEM_PROMPT).toMatch(/zoomInFromSec.*untrimmed/);
 	});
 });
 

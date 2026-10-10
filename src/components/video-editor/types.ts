@@ -13,16 +13,16 @@ import { clamp01 } from "@/utils/math";
 export type { ZoomDepth, ZoomScaleInput };
 export type ZoomFocusMode = "manual" | "auto";
 export type { WebcamLayoutPreset };
-/** Webcam size as a percentage of the canvas reference dimension (15-50). */
+/** Webcam size as a percentage of the canvas reference dimension (15-60). */
 export type WebcamSizePreset = number;
 
-export const DEFAULT_WEBCAM_SIZE_PRESET: WebcamSizePreset = 25;
+export const DEFAULT_WEBCAM_SIZE_PRESET: WebcamSizePreset = 40;
 
 export const DEFAULT_WEBCAM_LAYOUT_PRESET: WebcamLayoutPreset = "picture-in-picture";
 
 export type WebcamMaskShape = "rectangle" | "circle" | "square" | "rounded";
 
-export const DEFAULT_WEBCAM_MASK_SHAPE: WebcamMaskShape = "rectangle";
+export const DEFAULT_WEBCAM_MASK_SHAPE: WebcamMaskShape = "square";
 
 export const DEFAULT_WEBCAM_MIRRORED = false;
 
@@ -303,6 +303,10 @@ export interface CursorVisualSettings {
 	 * back (`frame_geometry::plan_frame`).
 	 */
 	clickImpact: boolean;
+	/** The same clicks, heard: each recorded click plays a short bundled hit. */
+	clickSound: boolean;
+	/** The click sound's level in dB, on the same scale as an imported audio track's gain. */
+	clickSoundGainDb: number;
 	autoHide?: boolean;
 	/** The shortcuts pressed while recording, shown as plates (`lib/ai-edition/keystrokes.ts`). */
 	showKeystrokes?: boolean;
