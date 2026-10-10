@@ -242,6 +242,7 @@ function sendToHudWhenLoaded(hudWindow: BrowserWindow, channel: string, ...args:
 const globalShortcutHandlers: Record<GlobalShortcutAction, () => void> = {
 	openApp: () => showMainWindow(),
 	recordToggle: () => {
+		console.info("[shortcut] recordToggle", { at: Date.now(), isRecording });
 		if (isRecording) {
 			const hudWindow = liveHudWindow();
 			if (hudWindow) {
@@ -263,12 +264,14 @@ const globalShortcutHandlers: Record<GlobalShortcutAction, () => void> = {
 	},
 	pauseToggle: () => {
 		const hudWindow = liveHudWindow();
+		console.info("[shortcut] pauseToggle", { isRecording, hud: Boolean(hudWindow) });
 		if (isRecording && hudWindow) {
 			hudWindow.webContents.send("hud-toggle-pause");
 		}
 	},
 	addMarker: () => {
 		const count = recordingControls?.addRecordingMarker() ?? null;
+		console.info("[shortcut] addMarker", { at: Date.now(), count });
 		const hudWindow = liveHudWindow();
 		if (count !== null && hudWindow) {
 			hudWindow.webContents.send("hud-marker-added", count);

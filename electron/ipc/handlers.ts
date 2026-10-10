@@ -205,7 +205,16 @@ function approveFilePath(filePath: string): void {
  * bookkeeping (media-link registry, take journal) and every take made before this
  * was configurable, so both are trusted for reads and clean-ups.
  */
-let captureOutputDir = RECORDINGS_DIR;
+// Not initialised from RECORDINGS_DIR here: this module and ../main import each
+// other, so at the moment this line runs RECORDINGS_DIR is still in its temporal
+// dead zone ("Cannot access 'RECORDINGS_DIR' before initialization" -- the app
+// died at load). Empty until registerIpcHandlers applies the setting; read through
+// currentCaptureOutputDir(), which never answers an empty path.
+let captureOutputDir = "";
+
+function currentCaptureOutputDir(): string {
+	return captureOutputDir || RECORDINGS_DIR;
+}
 
 export function defaultCaptureOutputDir(): string {
 	return path.join(app.getPath("videos"), "OpenScreen");
@@ -216,11 +225,14 @@ function applyCaptureOutputDir(folder: string | null | undefined) {
 }
 
 function isInRecordingDirs(filePath: string): boolean {
-	return isPathWithinDir(filePath, RECORDINGS_DIR) || isPathWithinDir(filePath, captureOutputDir);
+	return (
+		isPathWithinDir(filePath, RECORDINGS_DIR) ||
+		isPathWithinDir(filePath, currentCaptureOutputDir())
+	);
 }
 
 function getAllowedReadDirs(): string[] {
-	return [RECORDINGS_DIR, captureOutputDir];
+	return [RECORDINGS_DIR, currentCaptureOutputDir()];
 }
 
 function isPathWithinDir(filePath: string, dirPath: string): boolean {
@@ -495,7 +507,7 @@ function resolveRecordingOutputPath(fileName: string): string {
 		throw new Error("Recording file name must not contain path segments");
 	}
 
-	return path.join(captureOutputDir, parsedPath.base);
+	return path.join(currentCaptureOutputDir(), parsedPath.base);
 }
 
 function isValidDurationMs(value: number | undefined): value is number {
@@ -574,7 +586,7 @@ async function getApprovedProjectSession(
 
 	// Only auto-approve media within the project's dir or RECORDINGS_DIR, so a crafted
 	// project file can't approve reads to arbitrary locations.
-	const trustedDirs = [RECORDINGS_DIR, captureOutputDir];
+	const trustedDirs = [RECORDINGS_DIR, currentCaptureOutputDir()];
 	if (projectFilePath) {
 		trustedDirs.push(path.dirname(path.resolve(projectFilePath)));
 	}
@@ -1876,7 +1888,7 @@ async function loadRecordedSessionForVideoPath(
 			const approvedScreen = await approveReadableVideoPath(session.screenVideoPath, [
 				path.dirname(manifestPath),
 				RECORDINGS_DIR,
-				captureOutputDir,
+				currentCaptureOutputDir(),
 			]);
 			if (!approvedScreen) {
 				return null;
@@ -1888,7 +1900,7 @@ async function loadRecordedSessionForVideoPath(
 			const approvedWebcam = await approveReadableVideoPath(session.webcamVideoPath, [
 				path.dirname(manifestPath),
 				RECORDINGS_DIR,
-				captureOutputDir,
+				currentCaptureOutputDir(),
 			]);
 			if (!approvedWebcam) {
 				session.webcamVideoPath = undefined;
@@ -1959,8 +1971,10 @@ async function resolveMediaLinksForVideo(videoPath: string): Promise<{
 			let webcamVideoPath = links.webcamVideoPath;
 			if (webcamVideoPath && !isPathAllowed(webcamVideoPath)) {
 				webcamVideoPath =
-					(await approveReadableVideoPath(webcamVideoPath, [RECORDINGS_DIR, captureOutputDir])) ??
-					undefined;
+					(await approveReadableVideoPath(webcamVideoPath, [
+						RECORDINGS_DIR,
+						currentCaptureOutputDir(),
+					])) ?? undefined;
 			}
 			return {
 				...(webcamVideoPath ? { webcamVideoPath, webcamOffsetMs: links.webcamOffsetMs ?? 0 } : {}),
@@ -2606,13 +2620,13 @@ export function registerIpcHandlers(
 						? request.recordingId
 						: Date.now();
 				const outputPath = path.join(
-					captureOutputDir,
+					currentCaptureOutputDir(),
 					`${RECORDING_FILE_PREFIX}${recordingId}.mp4`,
 				);
 				const cursorCaptureMode =
 					normalizeCursorCaptureMode(request?.cursor?.mode) ?? "editable-overlay";
 
-				await fs.mkdir(captureOutputDir, { recursive: true });
+				await fs.mkdir(currentCaptureOutputDir(), { recursive: true });
 
 				const session = new LinuxNativeCaptureSession({
 					outputPath,
@@ -2685,13 +2699,13 @@ export function registerIpcHandlers(
 						? request.recordingId
 						: Date.now();
 				const outputPath = path.join(
-					captureOutputDir,
+					currentCaptureOutputDir(),
 					`${RECORDING_FILE_PREFIX}${recordingId}.mp4`,
 				);
 				const cursorCaptureMode =
 					normalizeCursorCaptureMode(request?.cursor?.mode) ?? "editable-overlay";
 
-				await fs.mkdir(captureOutputDir, { recursive: true });
+				await fs.mkdir(currentCaptureOutputDir(), { recursive: true });
 
 				// A session prepared before the countdown, if there was one. Taking
 				// it here rather than requiring it is what keeps every caller
@@ -2789,7 +2803,10 @@ export function registerIpcHandlers(
 		try {
 			if (discard) {
 				session.discard();
-				const discarded = path.join(captureOutputDir, `${RECORDING_FILE_PREFIX}${recordingId}.mp4`);
+				const discarded = path.join(
+					currentCaptureOutputDir(),
+					`${RECORDING_FILE_PREFIX}${recordingId}.mp4`,
+				);
 				await Promise.all([
 					fs.rm(discarded, { force: true }),
 					fs.rm(`${discarded}.cursor.json`, { force: true }),
@@ -2877,8 +2894,8 @@ export function registerIpcHandlers(
 				// A take started on a nearly full disk ends wherever the disk does.
 				// Refused outright below a floor; under about half an hour of room
 				// it starts, and the HUD says how long it can run.
-				await fs.mkdir(captureOutputDir, { recursive: true }).catch(() => undefined);
-				const freeBytes = await readFreeBytes(captureOutputDir);
+				await fs.mkdir(currentCaptureOutputDir(), { recursive: true }).catch(() => undefined);
+				const freeBytes = await readFreeBytes(currentCaptureOutputDir());
 				const freeSpace = freeBytes === null ? null : assessFreeSpace(freeBytes);
 				if (freeSpace?.level === "critical") {
 					return {
@@ -2900,11 +2917,11 @@ export function registerIpcHandlers(
 						? request.recordingId
 						: Date.now();
 				const outputPath = path.join(
-					captureOutputDir,
+					currentCaptureOutputDir(),
 					`${RECORDING_FILE_PREFIX}${recordingId}.mp4`,
 				);
 				const webcamOutputPath = path.join(
-					captureOutputDir,
+					currentCaptureOutputDir(),
 					`${RECORDING_FILE_PREFIX}${recordingId}-webcam.mp4`,
 				);
 				const sourceDisplay =
@@ -3003,7 +3020,7 @@ export function registerIpcHandlers(
 					outputPath,
 				});
 
-				await fs.mkdir(captureOutputDir, { recursive: true });
+				await fs.mkdir(currentCaptureOutputDir(), { recursive: true });
 				nativeWindowsCaptureOutput = "";
 				nativeWindowsCaptureTargetPath = outputPath;
 				nativeWindowsCaptureWebcamTargetPath = request.webcam.enabled ? webcamOutputPath : null;
@@ -3112,7 +3129,7 @@ export function registerIpcHandlers(
 				// nothing about another program filling the disk an hour in. Stopped
 				// with room to spare, so the helper can still finalize the file.
 				nativeWindowsDiskWatch = setInterval(() => {
-					void readFreeBytes(captureOutputDir).then((free) => {
+					void readFreeBytes(currentCaptureOutputDir()).then((free) => {
 						if (
 							free === null ||
 							free >= STOP_RECORDING_FREE_BYTES ||
@@ -3176,7 +3193,10 @@ export function registerIpcHandlers(
 				typeof request.recordingId === "number" && Number.isFinite(request.recordingId)
 					? request.recordingId
 					: Date.now();
-			const outputPath = path.join(captureOutputDir, `${RECORDING_FILE_PREFIX}${recordingId}.mp4`);
+			const outputPath = path.join(
+				currentCaptureOutputDir(),
+				`${RECORDING_FILE_PREFIX}${recordingId}.mp4`,
+			);
 			const cursorCaptureMode =
 				normalizeCursorCaptureMode(request.cursor?.mode) ?? "editable-overlay";
 			// A source from Apple's picker records through the session that holds the pick,
@@ -3254,7 +3274,7 @@ export function registerIpcHandlers(
 				outputs: {
 					screenPath: outputPath,
 					manifestPath: path.join(
-						captureOutputDir,
+						currentCaptureOutputDir(),
 						`${RECORDING_FILE_PREFIX}${recordingId}${RECORDING_SESSION_SUFFIX}`,
 					),
 				},
@@ -3270,7 +3290,7 @@ export function registerIpcHandlers(
 				outputPath,
 			});
 
-			await fs.mkdir(captureOutputDir, { recursive: true });
+			await fs.mkdir(currentCaptureOutputDir(), { recursive: true });
 			nativeMacCaptureOutput = "";
 			nativeMacCaptureTargetPath = outputPath;
 			nativeMacCaptureRecordingId = recordingId;
@@ -3433,6 +3453,7 @@ export function registerIpcHandlers(
 			proc.stdin.write("pause\n");
 			nativeWindowsIsPaused = true;
 			nativeWindowsPauseStartedAtMs = Date.now();
+			console.info("[native-wgc] paused", { at: nativeWindowsPauseStartedAtMs });
 			nativeWindowsPausedSinceMs = nativeWindowsPauseStartedAtMs;
 			return { success: true };
 		} catch (error) {
@@ -3460,6 +3481,10 @@ export function registerIpcHandlers(
 				nativeWindowsPausedSinceMs = null;
 			}
 			nativeWindowsIsPaused = false;
+			console.info("[native-wgc] resumed", {
+				at: Date.now(),
+				pausedTotalMs: nativeWindowsPausedTotalMs,
+			});
 			return { success: true };
 		} catch (error) {
 			return { success: false, error: error instanceof Error ? error.message : String(error) };
@@ -4474,14 +4499,14 @@ export function registerIpcHandlers(
 	// The folder new takes go to, resolved (the default when none was chosen), and a
 	// picker to change it. The choice itself is saved through set-recording-prefs.
 	ipcMain.handle("get-recordings-folder", () => ({
-		folder: captureOutputDir,
-		isDefault: captureOutputDir === defaultCaptureOutputDir(),
+		folder: currentCaptureOutputDir(),
+		isDefault: currentCaptureOutputDir() === defaultCaptureOutputDir(),
 	}));
 	ipcMain.handle("choose-recordings-folder", async (event) => {
 		const parent = BrowserWindow.fromWebContents(event.sender) ?? undefined;
 		const options: Electron.OpenDialogOptions = {
 			title: mainT("dialogs", "fileDialogs.chooseRecordingsFolder"),
-			defaultPath: captureOutputDir,
+			defaultPath: currentCaptureOutputDir(),
 			properties: ["openDirectory", "createDirectory"],
 		};
 		const result = parent
@@ -4493,8 +4518,8 @@ export function registerIpcHandlers(
 		return { canceled: false as const, folder: result.filePaths[0] };
 	});
 	ipcMain.handle("open-recordings-folder", async () => {
-		await fs.mkdir(captureOutputDir, { recursive: true }).catch(() => undefined);
-		const error = await shell.openPath(captureOutputDir);
+		await fs.mkdir(currentCaptureOutputDir(), { recursive: true }).catch(() => undefined);
+		const error = await shell.openPath(currentCaptureOutputDir());
 		return { success: error === "" };
 	});
 
@@ -4607,9 +4632,9 @@ export function registerIpcHandlers(
 			if (data.byteLength > MAX_RECORDED_VOICEOVER_BYTES) {
 				return { success: false, message: "Recording too large" };
 			}
-			await fs.mkdir(captureOutputDir, { recursive: true });
+			await fs.mkdir(currentCaptureOutputDir(), { recursive: true });
 			const fileName = `voiceover-${new Date().toISOString().replace(/[:.]/g, "-")}.webm`;
-			const target = path.join(captureOutputDir, fileName);
+			const target = path.join(currentCaptureOutputDir(), fileName);
 			await fs.writeFile(target, Buffer.from(data));
 			return { success: true, path: target };
 		} catch (error) {
@@ -5010,7 +5035,7 @@ export function registerIpcHandlers(
 				try {
 					approveDocumentMedia(parseDocumentFile(project), [
 						RECORDINGS_DIR,
-						captureOutputDir,
+						currentCaptureOutputDir(),
 						path.dirname(path.resolve(filePath)),
 					]);
 				} catch {
