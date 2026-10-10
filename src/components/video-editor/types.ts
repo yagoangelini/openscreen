@@ -1,3 +1,4 @@
+import type { ZoomMotion } from "@/lib/ai-edition/timeline/zoom-motion";
 import {
 	effectiveZoomScale,
 	type ZoomDepth,
@@ -163,6 +164,9 @@ export interface ZoomRegion {
 	source?: ZoomRegionSource;
 	/** When true, cursor is hidden during this zoom region. */
 	hideCursor?: boolean;
+	/** How an automatic zoom moves (`zoom-motion.ts`), resolved from the project's auto-zoom
+	 *  settings at render time. Absent: the classic motion. Never stored. */
+	motion?: ZoomMotion;
 }
 
 export function getRotation3D(region: Pick<ZoomRegion, "rotationPreset">): Rotation3D {

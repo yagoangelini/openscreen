@@ -1,4 +1,5 @@
 import type { ZoomFocus } from "@/components/video-editor/types";
+import { motionTransitionSec, type ZoomMotion } from "@/lib/ai-edition/timeline/zoom-motion";
 
 export const DEFAULT_FOCUS: ZoomFocus = { cx: 0.5, cy: 0.5 };
 export const TRANSITION_WINDOW_MS = 1015.05;
@@ -9,6 +10,11 @@ export const ZOOM_TRANSITION_PER_LN_MS = 550;
 
 export function zoomTransitionMs(scale: number): number {
 	return ZOOM_TRANSITION_BASE_MS + ZOOM_TRANSITION_PER_LN_MS * Math.log(Math.max(1, scale));
+}
+
+/** A zoom's ramp length on screen: its motion's when it carries one (`ramp_s`, Rust). */
+export function zoomTransitionMsFor(scale: number, motion?: ZoomMotion): number {
+	return motion ? motionTransitionSec(motion, scale) * 1000 : zoomTransitionMs(scale);
 }
 export const SMOOTHING_FACTOR = 0.12;
 export const ZOOM_TRANSLATION_DEADZONE_PX = 1.25;

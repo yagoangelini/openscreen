@@ -18,6 +18,7 @@ import type {
 	AxcutZoomRegion,
 } from "@/lib/ai-edition/schema";
 import { axcutSchemaVersion } from "@/lib/ai-edition/schema";
+import { autoZoomMotion, DEFAULT_AUTO_ZOOM_SETTINGS } from "@/lib/ai-edition/timeline/zoom-motion";
 import { CURSOR_KIND_IDS, DEFAULT_CURSOR_THEME_ID } from "@/lib/cursor/cursorThemes";
 import { DEVICE_FRAMES } from "@/lib/projectDefaults";
 import { getFocusBoundsForScale } from "@/lib/zoomMath/focusUtils";
@@ -559,6 +560,58 @@ describe("buildSceneDescription.clips", () => {
 });
 
 // --- zoomRegions -----------------------------------------------------------
+
+describe("buildSceneDescription.zoomRegions — automatic zooms", () => {
+	const auto = makeZoom({
+		id: "a",
+		startMs: 0,
+		endMs: 1000,
+		depth: 2,
+		focus: { cx: 0.4, cy: 0.5 },
+		source: "auto",
+	});
+	const hand = makeZoom({
+		id: "h",
+		startMs: 2000,
+		endMs: 3000,
+		depth: 2,
+		focus: { cx: 0.5, cy: 0.5 },
+	});
+
+	it("gives every automatic zoom the project's motion and fixed camera, and no other zoom", () => {
+		const { zoomRegions } = buildSceneDescription(makeDoc({ zoomRanges: [auto, hand] }));
+		expect(zoomRegions[0].focusMode).toBe("manual");
+		expect(zoomRegions[0].motion).toEqual(autoZoomMotion(DEFAULT_AUTO_ZOOM_SETTINGS));
+		expect(zoomRegions[0].motion?.easing).toBe("smooth");
+		expect(zoomRegions[1].motion).toBeUndefined();
+		expect(zoomRegions[1].focusMode).toBeNull();
+	});
+
+	it("switches every automatic zoom at once with the camera mode", () => {
+		for (const [cameraMode, focusMode, deadZone] of [
+			["hybrid", "auto", 0.7],
+			["follow", "auto", 0.2],
+		] as const) {
+			const doc = makeDoc({
+				zoomRanges: [auto, { ...auto, id: "b", startMs: 5000, endMs: 6000 }, hand],
+				legacyEditor: { autoZoom: { cameraMode } },
+			});
+			const { zoomRegions } = buildSceneDescription(doc);
+			expect(zoomRegions.slice(0, 2).map((z) => z.focusMode)).toEqual([focusMode, focusMode]);
+			expect(zoomRegions[0].motion?.followDeadZone).toBe(deadZone);
+			expect(zoomRegions[2].motion).toBeUndefined();
+		}
+	});
+
+	it("times the ramps by the transition setting", () => {
+		const doc = makeDoc({ zoomRanges: [auto], legacyEditor: { autoZoom: { transitionSec: 1.6 } } });
+		const motion = buildSceneDescription(doc).zoomRegions[0].motion;
+		expect(motion?.panDurationSec).toBe(1.6);
+		const ramp =
+			(motion?.transitionBaseSec ?? 0) + (motion?.transitionPerLnSec ?? 0) * Math.log(1.5);
+		expect(ramp).toBeCloseTo(1.6, 6);
+	});
+});
 
 describe("buildSceneDescription.zoomRegions", () => {
 	// Ces deux tests attendaient `depth / 2 + 0.5` — la formule qui vivait dans

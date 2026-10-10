@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { AxcutZoomRegion } from "../schema";
 import { screenTimeMs } from "./speed";
+import { DEFAULT_AUTO_ZOOM_SETTINGS } from "./zoom-motion";
 import { computeZoomPreviewTransform } from "./zoom-preview";
 import { ZOOM_DEPTH_SCALES } from "./zoom-scale";
 
@@ -60,5 +61,28 @@ describe("computeZoomPreviewTransform under a speed region", () => {
 			expect(sped.scale).toBeCloseTo(plain.scale, 6);
 			expect(sped.translateXPercent).toBeCloseTo(plain.translateXPercent, 4);
 		}
+	});
+});
+
+describe("computeZoomPreviewTransform like the compositor", () => {
+	it("pans between two zooms close in time instead of zooming out and back in", () => {
+		const regions = [zoom(2000, 4000), { ...zoom(5000, 7000), focus: { cx: 0.3, cy: 0.6 } }];
+		const scale = ZOOM_DEPTH_SCALES[4];
+		for (let t = 4000; t <= 5000; t += 50) {
+			expect(computeZoomPreviewTransform(regions, t).scale).toBeCloseTo(scale, 6);
+		}
+	});
+
+	it("moves an automatic zoom with the project's calm motion", () => {
+		const auto: AxcutZoomRegion = { ...zoom(2000, 8000), depth: 2, source: "auto" };
+		const settings = { ...DEFAULT_AUTO_ZOOM_SETTINGS, transitionSec: 1.2 };
+		// Smootherstep is half way at mid-ramp: the log scale too.
+		const mid = computeZoomPreviewTransform([auto], 2000 - 600, undefined, undefined, {
+			autoZoom: settings,
+		});
+		expect(Math.log(mid.scale)).toBeCloseTo(Math.log(1.5) / 2, 6);
+		// A hand-drawn zoom keeps the classic spring, already well past half way there.
+		const hand = computeZoomPreviewTransform([{ ...auto, source: "manual" }], 2000 - 600);
+		expect(Math.log(hand.scale)).toBeGreaterThan(Math.log(1.5) / 2);
 	});
 });

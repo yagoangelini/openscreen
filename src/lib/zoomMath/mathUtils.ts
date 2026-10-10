@@ -63,6 +63,15 @@ export function easeSpring(t: number) {
 	return (1 - (1 + x) * Math.exp(-x)) / SPRING_END;
 }
 
+/**
+ * Smootherstep, 6t⁵ − 15t⁴ + 10t³: symmetric, still at both ends in speed and acceleration. The
+ * calm motion's ramp and pan. Mirror of `smootherstep` (Rust, regions.rs).
+ */
+export function smootherstep(t: number) {
+	const x = clamp01(t);
+	return x * x * x * (x * (x * 6 - 15) + 10);
+}
+
 /** Zoom scale between `a` and `b`, interpolated in log space — the way a zoom is perceived. */
 export function scaleLerp(a: number, b: number, t: number) {
 	const from = Math.max(a, 1e-3);

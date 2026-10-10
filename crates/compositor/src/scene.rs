@@ -512,6 +512,44 @@ pub struct SceneZoomRegion {
     /// Masque le curseur pendant cette région de zoom.
     #[serde(default)]
     pub hide_cursor: bool,
+    /// The motion of an automatic zoom, built once per scene by the app from the project's
+    /// auto-zoom settings (`zoomMotion`, `sceneDescription.ts`) and carried by each automatic
+    /// region. Absent: the classic motion (spring ramps, 1 s connected pan, fast auto-follow),
+    /// so every region written before it renders exactly as it did. `#[serde(default)]`.
+    #[serde(default)]
+    pub motion: Option<SceneZoomMotion>,
+}
+
+/// The easing of a zoom ramp and of a connected pan.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SceneZoomEasing {
+    /// Critically damped spring (`ease_spring`): front-loaded, the classic motion.
+    #[default]
+    Spring,
+    /// Smootherstep: symmetric, still at both ends in speed AND acceleration. The calm motion.
+    Smooth,
+}
+
+/// How an automatic zoom moves (`SceneZoomRegion::motion`). Every duration is on the screen
+/// clock (`ScreenClock`), like the classic constants it replaces.
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SceneZoomMotion {
+    #[serde(default)]
+    pub easing: SceneZoomEasing,
+    /// A ramp lasts `base + per_ln · ln(scale)` seconds (`zoom_transition_s` for the classic).
+    pub transition_base_sec: f32,
+    pub transition_per_ln_sec: f32,
+    /// Two zooms this close on screen are chained by a pan instead of zooming out and in.
+    pub pan_gap_sec: f32,
+    /// How long that pan lasts.
+    pub pan_duration_sec: f32,
+    /// Under a following focus mode ("auto", "hybrid"): the share of the zoomed view, per axis,
+    /// the pointer moves in without the view following it.
+    pub follow_dead_zone: f32,
+    /// And the time constant the view re-frames with once the pointer leaves that zone.
+    pub follow_tau_sec: f32,
 }
 
 /// Une zone de vitesse portée par le temps source d'un clip.
@@ -813,6 +851,26 @@ impl Scene {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_zoom_region_reads_its_motion_and_defaults_to_none() {
+        let classic: SceneZoomRegion = serde_json::from_str(
+            r#"{"startSec":1,"endSec":2,"scale":1.5,"focusX":0.5,"focusY":0.5,"rotation":null}"#,
+        )
+        .unwrap();
+        assert!(classic.motion.is_none());
+        let calm: SceneZoomRegion = serde_json::from_str(
+            r#"{"startSec":1,"endSec":2,"scale":1.5,"focusX":0.5,"focusY":0.5,"rotation":null,
+                "focusMode":"hybrid","motion":{"easing":"smooth","transitionBaseSec":0.95,
+                "transitionPerLnSec":0.35,"panGapSec":2,"panDurationSec":1.1,
+                "followDeadZone":0.7,"followTauSec":0.5}}"#,
+        )
+        .unwrap();
+        let motion = calm.motion.unwrap();
+        assert_eq!(motion.easing, SceneZoomEasing::Smooth);
+        assert_eq!(motion.pan_duration_sec, 1.1);
+        assert_eq!(calm.focus_mode.as_deref(), Some("hybrid"));
+    }
 
     /// lui. Sans ce défaut, ouvrir un projet fait par une version antérieure échouerait au
     /// parse au lieu de simplement ne rien tenir (issue #560).

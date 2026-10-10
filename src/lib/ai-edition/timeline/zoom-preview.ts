@@ -19,6 +19,11 @@ import type { AxcutZoomRegion } from "@/lib/ai-edition/schema";
 import { findDominantRegion } from "@/lib/zoomMath/zoomRegionUtils";
 import { computeZoomTransform } from "@/lib/zoomMath/zoomTransform";
 import type { SpeedRegion } from "./speed";
+import {
+	type AutoZoomSettings,
+	DEFAULT_AUTO_ZOOM_SETTINGS,
+	resolveZoomRendering,
+} from "./zoom-motion";
 
 export interface ZoomPreviewTransform {
 	scale: number;
@@ -35,18 +40,71 @@ export const IDENTITY_ZOOM_TRANSFORM: ZoomPreviewTransform = {
 const UNIT_STAGE = { width: 1, height: 1 };
 const UNIT_MASK = { x: 0, y: 0, width: 1, height: 1 };
 
-function toLegacyZoomRegion(region: AxcutZoomRegion): LegacyZoomRegion {
+export interface ZoomPreviewOptions {
+	/** Chain zooms close in time with a pan, as the compositor always does. Default true. */
+	connectZooms?: boolean;
+	/** The project's auto-zoom settings: an automatic zoom moves by them, like in the scene. */
+	autoZoom?: AutoZoomSettings;
+	/** The global Auto-Focus toggle (`resolveZoomRendering`). */
+	autoFocusAll?: boolean;
+}
+
+function toLegacyZoomRegion(
+	region: AxcutZoomRegion,
+	autoZoom: AutoZoomSettings,
+	autoFocusAll: boolean,
+): LegacyZoomRegion {
+	const rendering = resolveZoomRendering(region, autoZoom, autoFocusAll);
 	return {
 		id: region.id,
 		startMs: region.startMs,
 		endMs: region.endMs,
 		depth: region.depth,
 		focus: region.focus,
-		focusMode: region.focusMode,
+		focusMode: rendering.focusMode ?? undefined,
 		rotationPreset: region.rotationPreset,
 		customScale: region.customScale,
 		source: region.source,
+		...(rendering.motion ? { motion: rendering.motion } : {}),
 	};
+}
+
+// Regions are converted once per input array: `findDominantRegion` caches on the identity of
+// the array it is handed, and a fresh one every frame would defeat that cache.
+let legacyRegionsCache: {
+	regions: AxcutZoomRegion[];
+	autoZoom: AutoZoomSettings;
+	autoFocusAll: boolean;
+	result: LegacyZoomRegion[];
+} | null = null;
+
+/** By value: the settings are re-read into a fresh object on every render. */
+function sameAutoZoom(a: AutoZoomSettings, b: AutoZoomSettings): boolean {
+	return (
+		a.cameraMode === b.cameraMode &&
+		a.maxScale === b.maxScale &&
+		a.transitionSec === b.transitionSec &&
+		a.holdSec === b.holdSec
+	);
+}
+
+function legacyRegionsOf(
+	regions: AxcutZoomRegion[],
+	autoZoom: AutoZoomSettings,
+	autoFocusAll: boolean,
+): LegacyZoomRegion[] {
+	const cached = legacyRegionsCache;
+	if (
+		cached &&
+		cached.regions === regions &&
+		sameAutoZoom(cached.autoZoom, autoZoom) &&
+		cached.autoFocusAll === autoFocusAll
+	) {
+		return cached.result;
+	}
+	const result = regions.map((region) => toLegacyZoomRegion(region, autoZoom, autoFocusAll));
+	legacyRegionsCache = { regions, autoZoom, autoFocusAll, result };
+	return result;
 }
 
 /**
@@ -63,13 +121,21 @@ export function computeZoomPreviewTransform(
 	virtualTimeMs: number,
 	cursorTelemetry?: CursorTelemetryPoint[],
 	speedRegions?: SpeedRegion[],
+	options: ZoomPreviewOptions = {},
 ): ZoomPreviewTransform {
 	if (zoomRegions.length === 0) return IDENTITY_ZOOM_TRANSFORM;
 
-	const legacyRegions = zoomRegions.map(toLegacyZoomRegion);
+	const legacyRegions = legacyRegionsOf(
+		zoomRegions,
+		options.autoZoom ?? DEFAULT_AUTO_ZOOM_SETTINGS,
+		options.autoFocusAll ?? false,
+	);
+	// The compositor chains every pair of zooms close enough (`connected_pairs`): the preview
+	// standing in for it did not, and zoomed out and back in where the export panned.
 	const dominant = findDominantRegion(legacyRegions, virtualTimeMs, {
 		cursorTelemetry,
 		speedRegions,
+		connectZooms: options.connectZooms ?? true,
 	});
 	if (!dominant.region || dominant.strength <= 0) return IDENTITY_ZOOM_TRANSFORM;
 

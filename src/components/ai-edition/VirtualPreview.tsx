@@ -1153,9 +1153,10 @@ export function VirtualPreview({
 						virtualTimeSec * 1000,
 						undefined,
 						speedRegionsRef.current,
+						{ autoZoom: settings.autoZoom, autoFocusAll: settings.autoFocusAll },
 					);
 		frame.style.transform = `translate(${transform.translateXPercent}%, ${transform.translateYPercent}%) scale(${transform.scale})`;
-	}, [zoomRegions, virtualTimeSec]);
+	}, [zoomRegions, virtualTimeSec, settings.autoZoom, settings.autoFocusAll]);
 
 	/**
 	 * Write a source position onto the element with AT MOST ONE demuxer seek in
