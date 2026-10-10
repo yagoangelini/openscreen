@@ -77,7 +77,19 @@ and **one** encoder + muxer pair:
   the target after the corrected pass (see
   [Audio](native-compositor.md#audio)).
 
-- **The stretch runs beside the encode, not inside it.**
+- **On Windows the audio streams with the video** (`audio_stream.rs`,
+  `ProgrammeAudio`), so nothing below describes a buffer that exists there any
+  more: the clip is decoded, stretched, faded, mixed, limited and AAC-encoded a
+  window at a time as frames go out, trailing the video by about a quarter
+  second, and its packets interleave with the video's in the file. The
+  arithmetic is the whole-buffer path's — the tests hold the two against each
+  other to the bit — and what changed is what stays in memory: a few seconds per
+  stage plus one stretch chunk (a stretched segment over 30 s is rendered in
+  overlapping, crossfaded chunks). A 30-minute export measured in the notes of
+  the commit that introduced it. macOS and Linux still build the programme
+  whole, as the bullets below describe.
+
+- **The stretch runs beside the encode, not inside it** (macOS, Linux).
   `walk_composited_timeline`'s `on_clip_end` callback fires once per clip,
   after that clip's frames have been composed and submitted to the
   encoder. It used to decode and stretch that clip's audio right there,
@@ -163,6 +175,41 @@ encoder (software VP9 was measured too slow and removed — see
 the same addon (`exportGif`, `gif_export.rs`): a median-cut palette per frame,
 mapped with Floyd-Steinberg dithering by default so a gradient wallpaper does
 not break into flat bands.
+
+The encoder is picked at run time from `ExportCodec::candidates`: AMF, NVENC, QSV,
+MediaFoundation, then the LGPL software encoders. On an NVIDIA adapter NVENC goes
+first. Which adapter that is follows from the device: `Gpu::create_backend` asks
+DXGI for the high-performance adapter (`EnumAdapterByGpuPreference`), so on a
+hybrid laptop the compositor, the D3D11VA decoders and the zero-copy encoder all
+run on the dedicated GPU. `OPENSCREEN_COMPOSITOR_ADAPTER=high-performance |
+minimum-power | default | <hex LUID>` overrides it; every device logs its
+adapter, and `gpuAdapterInfo()` reports it with the last export's encoder.
+
+## Cancellation, staging and failure (Windows)
+
+`exportMulti` takes an optional control (`createExportControl` /
+`cancelExport`, the same `ExportControl` the GIF export uses). It is checked at
+every frame, at every clip boundary and between the finishing steps. The MP4 is
+written to a `.openscreen-mp4-<pid>-<n>.partial` file next to the target and
+renamed over it only after the trailer (`with_staged_output`), so a cancelled or
+failed export never truncates the file the user already had, and leaves nothing
+behind. Every ffmpeg resource of the run is owned by a guard (`MuxOutput`,
+`EncoderPool`, `PacketGuard`, encoder surfaces), so every exit closes the file —
+Windows refuses to delete or rename an open one — and gives the GPU its
+surfaces back.
+
+After the last frame the addon reports `"finalizing"` once (the encoder queue,
+the audio's tail, the container index); the dialog shows it as its writing
+phase. A timeline that renders no frame is an error, not an empty file. A read
+error after the last good frame is the end of the file, and a packet the
+decoder rejects is skipped: a recording recovered after a crash ends on a partial
+fragment. A scene JSON that does not parse fails the export. A lost device
+(driver reset, removed GPU) surfaces as `GPU_DEVICE_LOST`, and a Rust panic
+anywhere in the addon as a JS error rather than the end of the process.
+
+Decoders are closed as soon as no later clip reads their file, a clip without a
+camera samples its screen frame for the webcam slot instead of opening a second
+decoder, and each D3D11VA pool holds 24 surfaces.
 
 ## Licensing
 

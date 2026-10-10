@@ -20,6 +20,16 @@ used by text annotations), and `ID3D10Multithread::SetMultithreadProtected(TRUE)
 — ffmpeg's decoder thread and the render loop touch the device concurrently,
 and without that flag the runtime corruption is silent.
 
+The device is created on the **high-performance adapter**
+(`IDXGIFactory6::EnumAdapterByGpuPreference`, `D3D_DRIVER_TYPE_UNKNOWN`), falling back
+to the default path if that adapter refuses it. The compositor never presents to a
+display — the preview is read back and painted on a `<canvas>` — so nothing ties it to
+the GPU that drives the panel, which on a hybrid laptop is the integrated one.
+`OPENSCREEN_COMPOSITOR_ADAPTER` (`high-performance`, `minimum-power`, `default`, or a hex
+LUID) overrides the choice; each device logs its adapter. A D3D call that finds the device
+removed (`DXGI_ERROR_DEVICE_REMOVED` and kin) surfaces as `GpuDeviceLost`
+(`GPU_DEVICE_LOST: …`) from the compositor's public entry points.
+
 ## Module map
 
 | source | responsibility |
@@ -211,6 +221,14 @@ payloads parseable so the addon's `require()` never breaks a saved project
 mid-load.
 
 ## Audio
+
+On Windows the export streams this programme instead of building it
+([`audio_stream.rs`](../../crates/compositor/src/audio_stream.rs)): `ClipAudioReader`,
+`SpeedStretchStream`, `StreamingLimiter` and `ProgrammeAudio` are the functions below
+fed in order, held to them to the bit by their tests, with a bounded amount in memory
+(see [export-pipeline.md](export-pipeline.md#segment-loop)). The AAC track is 320 kb/s.
+What follows describes the arithmetic both share, and the whole-buffer form macOS and
+Linux still run.
 
 `audio.rs` ([`crates/compositor/src/audio.rs`](../../crates/compositor/src/audio.rs)) is the
 single audio path for the export. Per clip, it opens the source container,
