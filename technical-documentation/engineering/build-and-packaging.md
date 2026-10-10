@@ -11,6 +11,7 @@ OpenScreen builds its renderer, Electron main process, preload bridge, native he
 | `npm run build` | Runs TypeScript checking, Vite, then unrestricted `electron-builder`. This is the full generic packaging command, but it does not proactively build platform helpers. **On Windows, prefer `build:win`** — see [Stale native artifacts](#stale-native-artifacts). |
 | `npm run build:mac` | Builds the ScreenCaptureKit and cursor helpers, checks TypeScript, runs Vite, and packages the macOS target. |
 | `npm run build:win` | Builds WGC/cursor helpers and the D3D11 compositor addon, fetches FFmpeg, checks TypeScript, runs Vite, and packages the Windows NSIS target without npm rebuild. |
+| `npm run build:win:arm64` | The same for Windows on ARM, into `electron/native/bin/win32-arm64/`. It has to run on an ARM64 host: the FFmpeg and ONNX Runtime fetches provision for the host. |
 | `npm run build:win:store` | Performs the Windows native and renderer build, then asks electron-builder for the configured AppX Store package. |
 | `npm run build:linux` | Checks TypeScript, runs Vite, then packages AppImage, Debian, pacman, and RPM artifacts without npm rebuild. Its explicit `--linux` target list overrides `linux.target` in `electron-builder.json5`, so a target added to the config alone is never built. |
 | `npm run build:native:mac` | Uses SwiftPM to build requested single-architecture ScreenCaptureKit and macOS cursor helpers and stages them under `electron/native/bin/darwin-*`. |
@@ -22,6 +23,14 @@ OpenScreen builds its renderer, Electron main process, preload bridge, native he
 | `nix develop` | Opens the Linux Node/Electron/native-build/Playwright development shell defined by the flake. |
 
 `vite.config.ts` uses `vite-plugin-electron` to compile `electron/main.ts` and `electron/preload.ts` into `dist-electron/` while Vite emits the renderer to `dist/`. The main `tsconfig.json` is strict, covers `src` and `electron`, and has `noEmit`; TypeScript is therefore a check while Vite performs emission. `build-vite` is the renderer/Electron-bundle build used when an installer is not needed, whereas `build` continues through electron-builder.
+
+## AppImage updates
+
+Linux packaging also requires `zsync` (`sudo apt-get install zsync`), which supplies `zsyncmake`. Each AppImage ships a `.zsync` sidecar for external tools such as AppImageUpdate, alongside the embedded blockmap and `latest-linux.yml` used by electron-updater.
+
+`scripts/appimage-updates.cjs` fills the runtime's reserved `.upd_info` section without moving its appended filesystem. The `artifactBuildCompleted` hook removes the old blockmap, writes the update information, rebuilds the blockmap and replaces the artifact's update metadata **before** electron-builder schedules publication. It then generates `.zsync` from the final bytes; `afterAllArtifactBuild` includes that sidecar when publishing directly. Recheck the internal `appendBlockmap` helper and hook ordering when upgrading electron-builder from 26.15.3.
+
+Stable builds use `gh-releases-zsync` with the upstream repository's `latest` channel. RCs still produce sidecars with explicit tagged download URLs, but leave external discovery empty: AppImageUpdate's `latest-all` can select a helper-only prerelease with no AppImage asset. RC updates continue through electron-updater. CI checks both policies and uploads the sidecars as release assets.
 
 ## Native artifacts
 
@@ -91,7 +100,7 @@ The fix is to link the CRT statically, which removes the dependency instead of o
 - CMake helpers — `set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")` in `electron/native/wgc-capture/CMakeLists.txt`. These are standalone processes that share no CRT state with anything, so `/MT` costs about 100 KB each and nothing else.
 - Rust addon — `-C target-feature=+crt-static` in `crates/.cargo/config.toml`. Safe for the napi cdylib: only opaque `napi_value`s cross the boundary, and Buffers handed to Node carry a finalizer that frees, in the addon, what the addon allocated.
 
-`scripts/before-pack.cjs` reads the import table of every `.exe`/`.dll`/`.node` in `electron/native/bin/win32-x64/` and refuses to package a binary that needs a redistributable DLL **the package does not ship**. The `api-ms-win-crt-*` api-sets are deliberately not flagged: that is the UCRT, which does ship with Windows 10 and later.
+`scripts/before-pack.cjs` reads the import table of every `.exe`/`.dll`/`.node` in every shipped `electron/native/bin/win32-*/` folder and refuses to package a binary that needs a redistributable DLL **the package does not ship**, or one built for another architecture than its folder. The `api-ms-win-crt-*` api-sets are deliberately not flagged: that is the UCRT, which does ship with Windows 10 and later.
 
 #### `vcomp140.dll`: the member that got away
 
@@ -277,7 +286,7 @@ Copies of the same three files also remain at their old `public/` paths, because
 
 ### Windows
 
-The default electron-builder target is NSIS, with an assisted installer that allows users to change the installation directory. `npm run build:win:store` explicitly selects the configured `appx` target for Microsoft Store packaging. The AppX identity, publisher, capabilities, and Store languages come from `electron-builder.json5`. Release CI builds and retains both the NSIS installer and AppX package, although the GitHub release publisher currently downloads only the `openscreen-windows` NSIS artifact.
+The default electron-builder target is NSIS, with an assisted installer that allows users to change the installation directory. `npm run build:win:store` explicitly selects the configured `appx` target for Microsoft Store packaging. The AppX identity, publisher, capabilities, and Store languages come from `electron-builder.json5`. Release CI builds and retains both the NSIS installer and AppX package, although the GitHub release publisher currently downloads only the `openscreen-windows-x64` and `openscreen-windows-arm64` NSIS artifacts.
 
 #### Store tile assets
 
@@ -308,7 +317,7 @@ Electron-builder targets DMG for both `arm64` and `x64`, enables hardened runtim
 
 ### Linux and Nix
 
-Electron-builder produces AppImage, `.deb`, `.pacman`, and `.rpm` targets. Each fpm target carries its own `depends` list, which *replaces* electron-builder's default rather than extending it; all three package formats therefore repeat that default verbatim before adding the Vulkan ICD (`mesa-vulkan-drivers`, `vulkan-swrast` on Arch) the native compositor needs. The RPM list also restores `libsecret`, which electron-builder includes in its `deb` default but omits from its `rpm` one, and which `safeStorage` needs to encrypt LLM credentials. The flake separately supports `x86_64-linux` and `aarch64-linux`, offers NixOS and Home Manager modules, and builds a wrapper around nixpkgs' system Electron. `nix/package.nix` runs Vite directly, installs `dist/`, `dist-electron/`, production npm dependencies, wallpapers, icons, and a desktop entry; it does not invoke electron-builder. The release workflow later opens a PR to update the Nix package version and npm dependency hash after stable releases.
+Electron-builder produces AppImage, `.deb`, `.pacman`, and `.rpm` targets. Each fpm target carries its own `depends` list, which *replaces* electron-builder's default rather than extending it; all three package formats therefore repeat that default verbatim before adding the Vulkan ICD (`mesa-vulkan-drivers`, `vulkan-swrast` on Arch) the native compositor needs. The RPM list also restores `libsecret`, which electron-builder includes in its `deb` default but omits from its `rpm` one, and which `safeStorage` needs to encrypt LLM credentials. The flake separately supports `x86_64-linux` and `aarch64-linux`, offers NixOS and Home Manager modules, and builds a wrapper around nixpkgs' system Electron. `nix/package.nix` runs Vite directly, installs `dist/`, `dist-electron/`, production npm dependencies, wallpapers, icons, and a desktop entry; it does not invoke electron-builder. The version comes from `package.json`; the npm dependency hash is refreshed by the release workflows in the same commit that bumps the version.
 
 ## Node and toolchain versions
 

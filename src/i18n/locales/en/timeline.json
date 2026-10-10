@@ -1,27 +1,27 @@
 {
 	"buttons": {
-		"addZoom": "Add zoom (Z)",
-		"suggestZooms": "Suggest zooms from cursor",
-		"autoZoomOn": "Auto zoom suggestions on — click to remove suggested zooms",
-		"autoZoomOff": "Auto zoom suggestions off — click to suggest zooms from cursor",
-		"autoFocusAllOn": "Auto-Focus on for all zooms — click to switch all to manual",
-		"autoFocusAllOff": "Auto-Focus all zooms (camera follows the cursor)",
-		"addTrim": "Add trim (T)",
-		"addAnnotation": "Add annotation (A)",
-		"addSpeed": "Add speed (S)",
-		"addCameraFullscreen": "Add Full Camera (C)"
+		"addZoom": "Add a zoom at the current time",
+		"autoFocusAll": "Auto-Focus for all zooms",
+		"autoFocusAllTip": "All zooms follow the cursor. Off: you choose the focus of each zoom.",
+		"clearTimeline": "Remove all zooms, trims, speeds, annotations and Full Camera. Clips, audio and captions stay.",
+		"addTrim": "Add a trim: removes a section of the video at the current time",
+		"addAnnotation": "Add text, an arrow, an image or a blur at the current time",
+		"addSpeed": "Add a speed change at the current time",
+		"addCameraFullscreen": "Add Full Camera: shows the camera full screen at the current time"
 	},
 	"hints": {
-		"pressZoom": "Press Z to add zoom",
-		"pressTrim": "Press T to add trim",
-		"pressAnnotation": "Press A to add annotation",
-		"pressAudio": "Press M to add audio, V to record a voiceover",
-		"pressSpeed": "Press S to add speed",
-		"pressCameraFullscreen": "Press C to add a Full Camera segment"
+		"pressZoom": "Press {{key}} to add zoom",
+		"pressTrim": "Press {{key}} to add trim",
+		"pressAnnotation": "Press {{key}} to add annotation",
+		"pressAudio": "Press {{audioKey}} to add audio, {{voiceoverKey}} to record a voiceover",
+		"pressSpeed": "Press {{key}} to add speed",
+		"pressCameraFullscreen": "Press {{key}} to add a Full Camera segment"
 	},
 	"labels": {
 		"pan": "Pan",
+		"panTip": "Scroll the timeline",
 		"zoom": "Zoom",
+		"zoomTip": "Zoom the timeline",
 		"trim": "Trim",
 		"speed": "Speed",
 		"zoomItem": "Zoom {{index}}",
@@ -33,6 +33,15 @@
 		"cameraFullscreen": "Full Camera",
 		"cameraFullscreenItem": "Full Camera {{index}}",
 		"marker": "Marker at {{time}}"
+	},
+	"trails": {
+		"zoomIn": "Zoom-in: the view moves in until the zoom starts",
+		"zoomOut": "Zoom-out: the view moves back out after the zoom ends",
+		"zoomInCut": "A trim removes {{seconds}} s of the zoom-in. The export jumps at the cut.",
+		"zoomOutCut": "A trim removes {{seconds}} s of the zoom-out. The export jumps at the cut.",
+		"zoomInJunction": "A clip junction removes {{seconds}} s of the zoom-in. The export jumps at the junction.",
+		"zoomOutJunction": "A clip junction removes {{seconds}} s of the zoom-out. The export jumps at the junction.",
+		"pan": "Pan: the view moves straight to the next zoom"
 	},
 	"emptyState": {
 		"noVideo": "No video loaded",
@@ -71,7 +80,7 @@
 		"arrangeClips": "Arrange clips",
 		"arrangeClipsHint": "Drag clips below to reorder or drop new ones in",
 		"newAnnotation": "Annotation",
-		"dragToReorderHint": "Drag to reorder · double-click to change where it starts and ends",
+		"dragToReorderHint": "Drag to reorder. Double-click to change the start and end.",
 		"editInOutPoints": "Edit start and end",
 		"deleteClip": "Delete clip",
 		"dropToAdd": "Drop to add to timeline",

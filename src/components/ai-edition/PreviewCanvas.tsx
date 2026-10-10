@@ -23,7 +23,7 @@
 // as the user resizes the workbench.
 
 import type { PointerEvent as ReactPointerEvent } from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import {
 	type CameraFullscreenRegion,
 	type CropRegion,
@@ -48,7 +48,6 @@ import type {
 import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
 import { useEditorSettings } from "@/lib/ai-edition/store/useEditorSettings";
 import { resolveActiveCameraTrack } from "@/lib/ai-edition/timeline/camera";
-import { createPlaybackClockRef } from "@/lib/ai-edition/timeline/playback-clock";
 import type { SpeedRegion } from "@/lib/ai-edition/timeline/speed";
 import { locateVirtualPosition } from "@/lib/ai-edition/timeline/virtual-preview";
 import {
@@ -62,6 +61,12 @@ import { webcamAnchorAt } from "@/lib/projectDefaults";
 import { wallpaperStyle } from "@/lib/wallpaper";
 import { getCssClipPath } from "@/lib/webcamMaskShapes";
 import { computeCameraFullscreenProgress } from "@/lib/zoomMath/cameraFullscreenUtils";
+import { webcamBoxSourceSize } from "@/native/sceneDescription";
+import {
+	getWebcamNativeSize,
+	getWebcamNativeSizeRevision,
+	subscribeWebcamNativeSize,
+} from "@/native/webcamSizeCache";
 import { AnnotationLayer } from "./AnnotationLayer";
 import { NativeCompositorOverlay } from "./NativeCompositorOverlay";
 import styles from "./NewEditorShell.module.css";
@@ -119,11 +124,6 @@ interface PreviewCanvasProps {
 // (the <video> contain-fits its true ratio within a box sized for the wrong
 // one), on top of the intentional `settings.padding` margin.
 const SCREEN_SOURCE_SIZE = { width: 1920, height: 1080 };
-// ponytail: live preview defaults until the camera <video> reports its real
-// dimensions via loadedmetadata. 4:3 is the legacy default — typical webcams
-// capture at 1.33, and using a 16:9 default collapses vertical-stack to a
-// degenerate full-bleed camera with 0px screen height.
-const WEBCAM_SOURCE_SIZE = { width: 960, height: 720 };
 
 export function PreviewCanvas(props: PreviewCanvasProps) {
 	const te = useScopedT("editor");
@@ -134,11 +134,6 @@ export function PreviewCanvas(props: PreviewCanvasProps) {
 	const assets = document?.assets ?? [];
 	const frameRef = useRef<HTMLDivElement | null>(null);
 	const webcamSlotRef = useRef<HTMLDivElement | null>(null);
-	// One clock per mounted canvas, shared between the screen preview (writer)
-	// and the webcam overlay (reader) — see playback-clock.ts.
-	const clockRefHolder = useRef<ReturnType<typeof createPlaybackClockRef>>();
-	if (!clockRefHolder.current) clockRefHolder.current = createPlaybackClockRef();
-	const clockRef = clockRefHolder.current;
 	// Real dimensions of the active source, from the <video>'s own
 	// onLoadedMetadata (videoWidth/videoHeight) — null until the first source
 	// loads, then falls back to SCREEN_SOURCE_SIZE.
@@ -241,6 +236,23 @@ export function PreviewCanvas(props: PreviewCanvasProps) {
 		[assets, props.clips, props.currentTimeSec],
 	);
 	const activeClipHasCamera = Boolean(activeCameraTrack?.visible && activeCameraTrack.sourcePath);
+	// The drag box takes the camera's real proportions, the ones the native canvas draws
+	// (a portrait camera in "Original" is a portrait box), not a fixed 4:3.
+	const webcamSizeRevision = useSyncExternalStore(
+		subscribeWebcamNativeSize,
+		getWebcamNativeSizeRevision,
+		() => 0,
+	);
+	// biome-ignore lint/correctness/useExhaustiveDependencies: the revision re-reads the probed-size cache
+	const webcamSourceSize = useMemo(
+		() =>
+			webcamBoxSourceSize(
+				activeCameraTrack,
+				activeCameraTrack?.sourcePath ? getWebcamNativeSize(activeCameraTrack.sourcePath) : null,
+				settings.webcamCropRegion,
+			),
+		[activeCameraTrack, settings.webcamCropRegion, webcamSizeRevision],
+	);
 
 	const formatFill = useMemo(() => (document ? isFormatFillActive(document) : false), [document]);
 	const layout = useMemo(() => {
@@ -273,7 +285,7 @@ export function PreviewCanvas(props: PreviewCanvasProps) {
 			maxContentSize,
 			// Same box as the scene: a filled format gives the screen the whole padded area.
 			screenSize: formatFill ? maxContentSize : croppedScreenSize,
-			webcamSize: preset === "no-webcam" ? null : WEBCAM_SOURCE_SIZE,
+			webcamSize: preset === "no-webcam" ? null : webcamSourceSize,
 			layoutPreset: preset,
 			webcamSizePreset: settings.webcamSizePreset,
 			// Picture-in-picture only: the block layouts place and round their own camera.
@@ -287,6 +299,7 @@ export function PreviewCanvas(props: PreviewCanvasProps) {
 		screenNativeSize,
 		cropRegion,
 		activeClipHasCamera,
+		webcamSourceSize,
 		settings.webcamLayoutPreset,
 		settings.webcamMaskShape,
 		settings.webcamSizePreset,
@@ -365,7 +378,6 @@ export function PreviewCanvas(props: PreviewCanvasProps) {
 		onVideoElement: relayIsPlaying,
 		onLoadedMetadata: relayLoadedMetadata,
 		cropRegion,
-		clockRef,
 	};
 
 	const handleWebcamPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -426,8 +438,8 @@ export function PreviewCanvas(props: PreviewCanvasProps) {
 		>
 			{/* Sole pixel source: the D3D-composited frame (wallpaper + screen + webcam +
 			    cursor), streamed into a canvas. The <video> elements below are CSS-hidden
-			    (visibility only — they stay mounted for decode/playback-clock/metadata
-			    duties, since the native compositor doesn't drive playback itself), and the
+			    (visibility only — they stay mounted as the playback clock and for metadata,
+			    since the native compositor doesn't drive playback itself), and the
 			    interactive-only layers (ZoomFocusOverlay, AnnotationLayer, webcam drag
 			    hitbox) still render on top as normal DOM so they stay clickable. No more
 			    dual preview path. */}
@@ -448,7 +460,6 @@ export function PreviewCanvas(props: PreviewCanvasProps) {
 						// behind a flag with its own tests.
 						// See technical-documentation/architecture/preview.md
 						// (todo) for the failure write-up.
-						void relayProps.clockRef;
 						return (
 							<VirtualPreview
 								{...relayProps}
@@ -478,18 +489,7 @@ export function PreviewCanvas(props: PreviewCanvasProps) {
 					onPointerDown={isPipGrab ? handleWebcamPointerDown : undefined}
 					aria-label={te("preview.webcamPreview")}
 				>
-					<WebcamOverlay
-						clips={props.clips}
-						currentTimeSec={props.currentTimeSec}
-						onTimeChange={props.onTimeChange}
-						isPlaying={isPlaying}
-						clockRef={clockRef}
-						borderRadius={
-							effectiveLayout?.webcamRect?.borderRadius ?? layout.webcamRect.borderRadius
-						}
-						webcamMaskShape={effectiveLayout?.webcamRect?.maskShape ?? settings.webcamMaskShape}
-						layoutPreset={settings.webcamLayoutPreset}
-					/>
+					<WebcamOverlay clips={props.clips} currentTimeSec={props.currentTimeSec} />
 				</div>
 			) : null}
 			{/* Last, so a selected annotation over the camera takes the pointer before the

@@ -8,11 +8,15 @@ keywords:
   - zoom auto enregistrement d'écran windows
 ---
 
+import DemoLoop from "@site/src/components/DemoLoop";
+
 # Un enregistreur d'écran gratuit avec zoom auto
 
 OpenScreen est un enregistreur d'écran gratuit, sous licence MIT, avec zoom auto pour Windows, macOS et Linux. Après chaque prise, il lit les clics qu'il a enregistrés et zoome dessus, sans appel réseau ni modèle d'IA. Screen Studio, Cap et Camtasia zooment aussi automatiquement ; OpenScreen le fait gratuitement, sur les trois systèmes.
 
 Cette page est publiée par le projet OpenScreen. Les informations sur Screen Studio, Cap et Camtasia proviennent de screen.studio, cap.so et techsmith.com et ont été vérifiées en septembre 2026. Les sources sont listées à la fin.
+
+<DemoLoop name="classic-zoom" />
 
 ## En un coup d'œil {#at-a-glance}
 
@@ -50,7 +54,7 @@ Quelques détails comptent en pratique :
 - **Les résultats sont des zooms ordinaires.** Cliquez sur l'un pour changer sa profondeur, sa caméra 3D ou son focus, faites glisser ses bords pour déplacer son début et sa fin, ou supprimez-le.
 - **Il s'exécute après chaque prise.** Chaque nouvel enregistrement reçoit ses zooms à son ouverture dans l'éditeur. Pour l'éviter, désactivez **Zoom automatique après l'enregistrement** dans le mode **Enregistrement** de l'éditeur. Pour le lancer à la demande, choisissez **Zooms automatiques** dans l'éditeur, ou passez `--auto-zoom` en ligne de commande.
 - **Il vous prévient quand rien ne convient.** L'éditeur signale qu'aucun moment de zoom auto n'a été trouvé.
-- **Il fonctionne à partir des clics enregistrés.** Les clics sont enregistrés sous Windows. Sous macOS, ils nécessitent l'autorisation Accessibilité, et sous Linux, votre utilisateur doit être dans le groupe `input`.
+- **Il fonctionne à partir des clics enregistrés.** Les clics sont enregistrés sous Windows. Sous macOS, ils nécessitent l'autorisation Accessibilité, et sous Linux, votre utilisateur doit avoir accès en lecture à la souris, via une règle udev (recommandée) ou le groupe `input` ([Clics de souris sous Wayland](/docs/installation/#mouse-clicks-on-wayland)).
 - **Pointer, ce n'est pas cliquer.** Un pointeur maintenu immobile pendant que vous commentez quelque chose n'obtient pas de zoom. Ajoutez-en un à la main avec `Z`.
 
 Le même menu a un second élément, **Coupes intelligentes**, marqué *Avec l'IA*. C'est une fonction différente : elle demande à l'agent de chat facultatif de couper les temps morts. Elle attend la transcription de l'enregistrement, et ne fonctionne qu'une fois que vous avez connecté un fournisseur d'IA avec votre propre clé. Voir [Montage par IA](/docs/ai-editing/).
@@ -68,11 +72,15 @@ Les zooms automatiques sont un point de départ. Les mêmes régions de zoom peu
 
 Un zoom manuel avec un focus manuel n'a besoin d'aucune donnée de curseur, donc il fonctionne aussi sur une vidéo importée d'un autre outil. Voir [Régions de zoom](/docs/editing-timeline/#zoom-regions) pour l'inspecteur de zoom.
 
+<DemoLoop name="3d-camera" />
+
 ## Le curseur après la prise {#the-cursor-after-the-take}
 
 Le même mouvement enregistré pilote le curseur dans l'export. L'onglet Curseur l'affiche ou le masque et règle sa taille, son lissage, son flou de mouvement, son rebond au clic et son impact du clic. Le tracé du curseur est lissé de la même façon pour l'aperçu et pour l'export, donc l'aperçu correspond au fichier.
 
-Le rebond au clic a besoin de clics enregistrés. Sous macOS, cela nécessite l'autorisation Accessibilité, et sous Linux, votre utilisateur doit être dans le groupe `input`. [Enregistrement](/docs/recording/) liste ce que chaque plateforme capture.
+Le rebond au clic a besoin de clics enregistrés. Sous macOS, cela nécessite l'autorisation Accessibilité, et sous Linux, un accès en lecture à la souris, via une règle udev ou le groupe `input`. [Enregistrement](/docs/recording/) liste ce que chaque plateforme capture.
+
+<DemoLoop name="3d-cursors" />
 
 ## Depuis la ligne de commande {#from-the-command-line}
 

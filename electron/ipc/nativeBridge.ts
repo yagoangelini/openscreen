@@ -10,9 +10,10 @@ import {
 	type ProjectFileResult,
 	type ProjectPathResult,
 } from "../../src/native/contracts";
-import type { ChatEventSink } from "../ai-edition/chat-service";
+import { type ChatEventSink, deleteProjectChat } from "../ai-edition/chat-service";
 import type { DocumentService } from "../ai-edition/document-service";
 import { StylePresetError, type StylePresetService } from "../ai-edition/style-preset-service";
+import { isValidMcpPort } from "../mcp/mcp-settings-store";
 import {
 	type CursorTelemetryLoadResult,
 	TelemetryCursorAdapter,
@@ -23,7 +24,7 @@ import { CursorService } from "../native-bridge/services/cursorService";
 import { ProjectService } from "../native-bridge/services/projectService";
 import { SystemService } from "../native-bridge/services/systemService";
 import { createNativeBridgeState } from "../native-bridge/store";
-import { exportJobs, isGifExportId } from "./gifExportJobs";
+import { exportJobs, isExportId } from "./exportJobs";
 
 export interface NativeBridgeContext {
 	getPlatform: () => NodeJS.Platform;
@@ -62,6 +63,8 @@ export interface NativeBridgeContext {
 	/** The one shared style preset service — it serialises writes per instance. */
 	getStylePresets: () => StylePresetService;
 	getAiEditionLlmConfig: () => import("../ai-edition/llm-config-store").LlmConfigStore;
+	/** The local MCP server's controller. Absent in the headless CLI. */
+	getMcpController?: () => import("../mcp/mcp-controller").McpController;
 	runAiEditionChat: (
 		projectId: string,
 		sessionId: string,
@@ -231,9 +234,11 @@ export function registerNativeBridgeHandlers(context: NativeBridgeContext) {
 	const compositorViewService = new CompositorViewService();
 	const aiEditionService = new AiEditionService({
 		documents: context.getAiEditionDocuments(),
+		deleteChatHistory: deleteProjectChat,
 		// Passed uncalled on purpose — invoking it here would build the store (and
 		// hit the macOS Keychain) while wiring the bridge at startup.
 		llmConfig: context.getAiEditionLlmConfig,
+		mcp: context.getMcpController?.(),
 		runChat: context.runAiEditionChat,
 		undoLastToolBatch: context.undoAiEditionToolBatch,
 		rewindToMessage: context.rewindToMessage,
@@ -246,7 +251,6 @@ export function registerNativeBridgeHandlers(context: NativeBridgeContext) {
 		deleteSession: context.deleteAiEditionChatSession,
 	});
 
-	const gifExportJobs = exportJobs;
 	ipcMain.handle(NATIVE_BRIDGE_CHANNEL, async (event, request: unknown) => {
 		if (!isBridgeRequest(request)) {
 			return createErrorResponse(undefined, "INVALID_REQUEST", "Invalid native bridge request.");
@@ -380,18 +384,23 @@ export function registerNativeBridgeHandlers(context: NativeBridgeContext) {
 							compositorViewService.setRect(request.payload.id, request.payload.rect);
 							return createSuccessResponse(requestId, { ok: true });
 						case "readFrame": {
-							// The renderer polls this every rAF tick (~30fps). It passes the
-							// generation it last painted as `sinceGen`; native returns `null` when
-							// nothing newer exists (idle path — no buffer copy). On a new frame it
-							// returns `{ gen, width, height, data }`. The response wrapper does NOT
-							// JSON-stringify — `ipcMain.handle` round-trips via structured clone,
-							// which preserves the nested `Buffer` in `.data` as binary.
-							const frame = compositorViewService.readFrame(
+							// The renderer polls this every rAF tick. It passes the generation it
+							// last painted as `sinceGen`; native returns `null` when nothing newer
+							// exists (idle path — no buffer copy). On a new frame it returns
+							// `{ gen, width, height, data }`, or — for a view on shared textures —
+							// sends the texture to the asking frame and returns its receipt. The
+							// response wrapper does NOT JSON-stringify — `ipcMain.handle` round-trips
+							// via structured clone, which preserves the nested `Buffer` as binary.
+							const frame = await compositorViewService.readFrame(
 								request.payload.id,
 								request.payload.sinceGen,
+								event.senderFrame,
 							);
 							return createSuccessResponse(requestId, frame);
 						}
+						case "stopSharedFrames":
+							compositorViewService.stopSharedFrames(request.payload.id);
+							return createSuccessResponse(requestId, { ok: true });
 						case "setParam":
 							compositorViewService.setParam(
 								request.payload.id,
@@ -424,7 +433,7 @@ export function registerNativeBridgeHandlers(context: NativeBridgeContext) {
 						case "exportMulti": {
 							const sender = event.sender;
 							const exportId = request.payload?.exportId;
-							if (exportId !== undefined && !isGifExportId(exportId)) {
+							if (exportId !== undefined && !isExportId(exportId)) {
 								return createErrorResponse(requestId, "INVALID_REQUEST", "Invalid export ID.");
 							}
 							const onProgress = (frames: number, phase?: "finalizing") => {
@@ -435,7 +444,7 @@ export function registerNativeBridgeHandlers(context: NativeBridgeContext) {
 							// With an ID the export is cancellable (`cancelExport`); the same job table
 							// as the GIF export, so a window runs one export at a time either way.
 							const stats = exportId
-								? await gifExportJobs.run(
+								? await exportJobs.run(
 										sender,
 										exportId,
 										(progress) =>
@@ -467,14 +476,14 @@ export function registerNativeBridgeHandlers(context: NativeBridgeContext) {
 						case "exportGif": {
 							const sender = event.sender;
 							const exportId = request.payload?.exportId;
-							if (exportId !== undefined && !isGifExportId(exportId)) {
-								return createErrorResponse(requestId, "INVALID_REQUEST", "Invalid GIF export ID.");
+							if (exportId !== undefined && !isExportId(exportId)) {
+								return createErrorResponse(requestId, "INVALID_REQUEST", "Invalid export ID.");
 							}
 							const onProgress = (frames: number) => {
 								if (!sender.isDestroyed()) sender.send("export:native-progress", frames, exportId);
 							};
 							const stats = exportId
-								? await gifExportJobs.run(
+								? await exportJobs.run(
 										sender,
 										exportId,
 										(progress) =>
@@ -503,16 +512,14 @@ export function registerNativeBridgeHandlers(context: NativeBridgeContext) {
 							}
 							return createSuccessResponse(requestId, stats);
 						}
-						// One job table for both formats: `cancelExport` is the name, `cancelGifExport`
-						// the one older renderers send.
-						case "cancelExport":
-						case "cancelGifExport": {
+						// One job table for both formats.
+						case "cancelExport": {
 							const exportId = request.payload?.exportId;
-							if (!isGifExportId(exportId)) {
+							if (!isExportId(exportId)) {
 								return createErrorResponse(requestId, "INVALID_REQUEST", "Invalid export ID.");
 							}
 							return createSuccessResponse(requestId, {
-								accepted: gifExportJobs.cancel(event.sender, exportId),
+								accepted: exportJobs.cancel(event.sender, exportId),
 							});
 						}
 						default:
@@ -597,6 +604,48 @@ export function registerNativeBridgeHandlers(context: NativeBridgeContext) {
 								requestId,
 								await aiEditionService.llmListProviderModels(request.payload.providerId),
 							);
+						case "mcp.getStatus":
+							return createSuccessResponse(requestId, await aiEditionService.mcpGetStatus());
+						// Renderer input: check the types here, so a bad value is reported as
+						// the bad request it is rather than failing later as an internal error.
+						case "mcp.setEnabled":
+							if (typeof request.payload?.enabled !== "boolean") {
+								return createErrorResponse(
+									requestId,
+									"INVALID_REQUEST",
+									"Invalid MCP enabled flag.",
+								);
+							}
+							return createSuccessResponse(
+								requestId,
+								await aiEditionService.mcpSetEnabled(request.payload.enabled),
+							);
+						case "mcp.setPort":
+							if (!isValidMcpPort(request.payload?.port)) {
+								return createErrorResponse(
+									requestId,
+									"INVALID_REQUEST",
+									"MCP port must be a whole number between 1024 and 65535.",
+								);
+							}
+							return createSuccessResponse(
+								requestId,
+								await aiEditionService.mcpSetPort(request.payload.port),
+							);
+						case "mcp.setAllowEdits":
+							if (typeof request.payload?.allowEdits !== "boolean") {
+								return createErrorResponse(
+									requestId,
+									"INVALID_REQUEST",
+									"Invalid MCP edit permission.",
+								);
+							}
+							return createSuccessResponse(
+								requestId,
+								await aiEditionService.mcpSetAllowEdits(request.payload.allowEdits),
+							);
+						case "mcp.regenerateToken":
+							return createSuccessResponse(requestId, await aiEditionService.mcpRegenerateToken());
 						case "chat.run": {
 							const sessionId = request.payload.sessionId;
 							const sink = buildChatEventSink(event.sender, sessionId);
@@ -791,17 +840,9 @@ export function registerNativeBridgeHandlers(context: NativeBridgeContext) {
 		} catch (error) {
 			if (
 				request.domain === "compositor" &&
-				request.action === "exportGif" &&
 				error instanceof Error &&
-				error.message === "GIF_EXPORT_CANCELLED"
-			) {
-				return createErrorResponse(requestId, "CANCELLED", "GIF export cancelled.");
-			}
-			if (
-				request.domain === "compositor" &&
-				request.action === "exportMulti" &&
-				error instanceof Error &&
-				error.message === "EXPORT_CANCELLED"
+				((request.action === "exportGif" && error.message === "GIF_EXPORT_CANCELLED") ||
+					(request.action === "exportMulti" && error.message === "EXPORT_CANCELLED"))
 			) {
 				return createErrorResponse(requestId, "CANCELLED", "Export cancelled.");
 			}

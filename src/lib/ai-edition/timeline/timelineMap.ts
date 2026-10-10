@@ -37,6 +37,20 @@ export type ClipAnchored<T> = Omit<T, "startMs" | "endMs"> & {
 	sourceEndSec: number;
 };
 
+/** Region edges are stored in whole ms and clip boundaries are not, so an edge put on a
+ *  boundary misses it by up to half a ms. A piece past a boundary whose whole-ms span, as
+ *  `anchorRegionsWithDerivedMs` stores it, is empty is that miss, not content: stored, it was
+ *  a zero-length fragment holding the region's id (#1008). One that rounds to a millisecond
+ *  stays, or the region would come back a millisecond short. */
+function roundsToNothing(
+	clip: AxcutClip | undefined,
+	fragment: { localStartSec: number; localEndSec: number },
+): boolean {
+	if (!clip) return true;
+	const ms = (localSec: number) => Math.round((clip.timelineStartSec + localSec) * 1000);
+	return ms(fragment.localEndSec) <= ms(fragment.localStartSec);
+}
+
 /**
  * Migrate RAW-virtual-ms regions (the v4 document-level storage) to clip-anchored
  * source-time fragments (the v5 storage). Each region is ventilated across the RAW
@@ -45,8 +59,8 @@ export type ClipAnchored<T> = Omit<T, "startMs" | "endMs"> & {
  * merge rule, since they share properties — no bookkeeping). Each fragment
  * gets its own unique `id` (first keeps the original region id; extras from
  * `makeId`). A zero-length / off-timeline region covers no clip and is dropped (it
- * could never play). Pure; reused by the v4→v5 schema migration and by re-anchoring
- * after a raw edit.
+ * could never play), and so is a piece that rounds to no whole ms ({@link roundsToNothing}). Pure;
+ * reused by the v4→v5 schema migration and by re-anchoring after a raw edit.
  */
 export function anchorRawRegionsToClips<T extends { id: string; startMs: number; endMs: number }>(
 	regions: T[],
@@ -56,7 +70,11 @@ export function anchorRawRegionsToClips<T extends { id: string; startMs: number;
 	const byId = new Map(rawClips.map((c) => [c.id, c]));
 	const out: ClipAnchored<T>[] = [];
 	for (const region of regions) {
-		const frags = ventilateSpanAcrossClips(region.startMs / 1000, region.endMs / 1000, rawClips);
+		const frags = ventilateSpanAcrossClips(
+			region.startMs / 1000,
+			region.endMs / 1000,
+			rawClips,
+		).filter((f) => !roundsToNothing(byId.get(f.clipId), f));
 		frags.forEach((f, i) => {
 			const clip = byId.get(f.clipId);
 			if (!clip) return;
@@ -215,25 +233,46 @@ export function coalesceByIdentity(spans: IdentifiedSpan[], epsilonSec = 0.001):
 
 /**
  * Rule 2 — clamp an edited span so it cannot overlap a same-kind span of a DIFFERENT
- * identity. Blocking neighbours act as walls: the edited span stops at the nearest
- * blocking edge on each side and the neighbour is never modified or displaced, so an
- * edit can never cascade into regions the user did not touch. Same-identity spans are
- * not obstacles — overlapping them is harmless, they simply merge (rule 1).
+ * identity. Blocking neighbours act as walls, and `from`, the span before the edit, decides
+ * which side of a wall the span stays on: the edit backs off toward it until it clears every
+ * wall. The edge that ran into a wall stops on it, and the other edge backs off with it only
+ * if it moved the same way. So a move keeps its length and stops flush against the neighbour
+ * it ran into, while a resize, or a stretch both ways, keeps every edge that hit nothing. A
+ * drop that overlaps nothing stands, past a neighbour or not. Clamping each edge on its own,
+ * with the side guessed from the desired span, cut a moved region short or threw it past the
+ * neighbour (#1008). The neighbour is never modified or displaced, so an edit can never
+ * cascade into regions the user did not touch. Same-identity spans are not obstacles —
+ * overlapping them is harmless, they simply merge (rule 1). Neither is a neighbour that `from`
+ * already overlaps: an add does not clamp, and no point on the way back would clear it.
  */
 export function clampSpanAgainstNeighbours(
 	desired: { start: number; end: number },
 	identity: string,
 	others: IdentifiedSpan[],
+	from: { start: number; end: number },
 ): { start: number; end: number } {
 	let start = Math.min(desired.start, desired.end);
 	let end = Math.max(desired.start, desired.end);
-	for (const other of [...others].sort((a, b) => a.start - b.start)) {
-		if (other.identity === identity) continue;
-		if (other.end <= start || other.start >= end) continue; // no overlap
-		if (other.start <= start) start = Math.max(start, other.end);
-		else end = Math.min(end, other.start);
+	const walls = others.filter(
+		(o) => o.identity !== identity && (o.end <= from.start || o.start >= from.end),
+	);
+	for (;;) {
+		const wall = walls.find((o) => o.start < end && o.end > start);
+		if (!wall) return { start, end };
+		// Backing off only moves the span toward `from`, clear of every wall, so a wall is met
+		// once at most.
+		walls.splice(walls.indexOf(wall), 1);
+		if (wall.start >= from.end) {
+			// The end ran into it: `t` is how far along its way the end touches it.
+			const t = (wall.start - from.end) / (end - from.end);
+			if (start > from.start) start = from.start + t * (start - from.start);
+			end = wall.start;
+		} else {
+			const t = (from.start - wall.end) / (from.start - start);
+			if (end < from.end) end = from.end + t * (end - from.end);
+			start = wall.end;
+		}
 	}
-	return { start, end: Math.max(start, end) };
 }
 
 /** A pill as the ruler draws it: a run of same-identity regions that touch. */
@@ -281,6 +320,45 @@ export function resolvePillIds<T extends { id: string; startMs: number; endMs: n
 }
 
 /**
+ * The regions an edit of `id`'s PROPERTIES reaches: the one region it belongs to, which can
+ * be less than its pill (#1017). A pill joins two kinds of neighbours, and only one of them
+ * is the same region:
+ *  - the fragments of one region across a clip junction, one per clip. They change together,
+ *    or a single edit would split a region the user drew as one;
+ *  - a region that merely matches and touches it on the SAME clip. A region keeps at most one
+ *    fragment per clip, so that is another region: the edit leaves it alone, the identities
+ *    part, and the pill splits in two.
+ * Same-clip regions that OVERLAP stay together: changing one alone would leave two regions of
+ * different identities overlapping, which rule 2 forbids.
+ *
+ * Nothing records provenance, so two regions meeting exactly at a clip junction still edit as
+ * one: that layout cannot be told apart from one region's two fragments.
+ */
+export function resolveRegionIds<
+	T extends { id: string; startMs: number; endMs: number; clipId?: string },
+>(regions: T[], id: string, epsilonSec = 0.001): string[] {
+	const byId = new Map(regions.map((r) => [r.id, r]));
+	let run: string[] = [];
+	let runEndSec = Number.NEGATIVE_INFINITY;
+	let prev: T | undefined;
+	// Left to right; a same-clip member that only touches ends the run (whole ms: no epsilon).
+	for (const memberId of resolvePillIds(regions, id, epsilonSec)) {
+		const member = byId.get(memberId);
+		if (!member) continue;
+		const startSec = member.startMs / 1000;
+		if (prev && member.clipId === prev.clipId && startSec >= runEndSec) {
+			if (run.includes(id)) return run;
+			run = [];
+			runEndSec = Number.NEGATIVE_INFINITY;
+		}
+		run.push(memberId);
+		runEndSec = Math.max(runEndSec, member.endMs / 1000);
+		prev = member;
+	}
+	return run.includes(id) ? run : [id];
+}
+
+/**
  * Deleting a pill deletes every region under it. Which regions those are is RESOLVED from
  * the universal merge rule (same properties + touching = one pill), never from stored
  * provenance — so it stays correct however they came to be adjacent. Lives here, in the
@@ -308,10 +386,14 @@ export function dropPillsByIds<T extends { id: string; startMs: number; endMs: n
 /**
  * Move/resize the pill containing `id`, obeying both rules: the requested span is first
  * CLAMPED against pills of a different identity (rule 2 — they act as walls and never
- * move), then the pill's regions are replaced by fragments re-anchored to the clamped
+ * move), on the ruler and from where the pill sits now, so a moved pill keeps its length;
+ * then the pill's regions are replaced by fragments re-anchored to the clamped
  * span, carrying the pill's payload. Crossing a clip boundary re-splits into one fragment
  * per clip; coming back inside one clip collapses again; and neighbours of the same
  * identity simply merge on display (rule 1). No provenance is consulted anywhere.
+ *
+ * The rebuilt region keeps `id`, whichever member it names: a click selects the region
+ * under the pointer (#1017), and that selection has to outlive the move.
  */
 export function replacePillSpan<T extends { id: string; startMs: number; endMs: number }>(
 	regions: T[],
@@ -332,6 +414,7 @@ export function replacePillSpan<T extends { id: string; startMs: number; endMs: 
 		pills
 			.filter((p) => p !== pill)
 			.map((p) => ({ id: p.ids[0], start: p.start, end: p.end, identity: p.identity })),
+		pill,
 	);
 
 	const under = new Set(pill.ids);
@@ -340,7 +423,7 @@ export function replacePillSpan<T extends { id: string; startMs: number; endMs: 
 		[
 			{
 				...payload,
-				id: pill.ids[0],
+				id,
 				startMs: Math.round(clamped.start * 1000),
 				endMs: Math.round(clamped.end * 1000),
 			} as unknown as T,
@@ -516,6 +599,14 @@ function cutRegionSourceSpan<T extends { startMs: number; endMs: number } & Regi
 	return { clipId: clip.id, startSec: toSource(lo), endSec: toSource(hi) };
 }
 
+/** A region as `projectRegionsToSource` emits it. */
+type ProjectedRegion<T> = T & {
+	clipIndex?: number;
+	underTrim?: boolean;
+	continuesBefore?: boolean;
+	continuesAfter?: boolean;
+};
+
 /**
  * Resolve regions (zoom / annotation / speed / camera-fullscreen) onto the SOURCE-ms
  * ranges the native compositor matches against, plus the `clipIndex` into the
@@ -530,7 +621,10 @@ function cutRegionSourceSpan<T extends { startMs: number; endMs: number } & Regi
  *    extent, kept because migration deliberately preserves un-anchorable regions.
  *
  * In both paths a region split across two kept segments by a trim yields one entry per
- * segment (fresh id for the extra copies, original id on the first).
+ * segment (fresh id for the extra copies, original id on the first). A piece whose start or
+ * end is a segment edge rather than the region's own edge says so with `continuesBefore` /
+ * `continuesAfter` (omitted when false): Full Camera, whose ramps sit inside its span, must not
+ * ramp at a cut. Zooms need nothing, their envelopes lie outside the span and so outside the clip.
  *
  * A region overlapping no visible segment lies entirely under a trim: it is emitted ONCE,
  * marked `underTrim`, on its own source span and borrowing the `clipIndex` of the kept
@@ -562,16 +656,21 @@ export function projectRegionsToSource<
 	visibleSegments: AxcutClip[],
 	rawClips: AxcutClip[],
 	makeId: () => string,
-): (T & { clipIndex?: number; underTrim?: boolean })[] {
+): ProjectedRegion<T>[] {
 	// RAW extents + owning raw clip per visible segment. Both are only consulted by the
 	// path that needs them (raw fallback / anchor match), but resolving them once keeps
 	// the per-region loop free of repeated lookups.
 	const spans = visibleSegments.map((seg) => segmentRawSpanSec(seg, rawClips));
 	const segmentRawClipIds = visibleSegments.map((seg) => findRawClipForSegment(seg, rawClips)?.id);
-	const out: (T & { clipIndex?: number; underTrim?: boolean })[] = [];
+	const out: ProjectedRegion<T>[] = [];
 	for (const region of regions) {
 		let emitted = 0;
-		const emit = (clipIndex: number, srcStartSec: number, srcEndSec: number, underTrim = false) => {
+		const emit = (
+			clipIndex: number,
+			srcStartSec: number,
+			srcEndSec: number,
+			flags: { underTrim?: boolean; continuesBefore?: boolean; continuesAfter?: boolean } = {},
+		) => {
 			out.push({
 				...region,
 				id: emitted === 0 ? region.id : makeId(),
@@ -580,7 +679,9 @@ export function projectRegionsToSource<
 				clipIndex,
 				// Omitted rather than sent as `false`: every payload without a trim under a
 				// modifier stays byte-for-byte what it was.
-				...(underTrim ? { underTrim: true } : {}),
+				...(flags.underTrim ? { underTrim: true } : {}),
+				...(flags.continuesBefore ? { continuesBefore: true } : {}),
+				...(flags.continuesAfter ? { continuesAfter: true } : {}),
 			});
 			emitted += 1;
 		};
@@ -598,7 +699,7 @@ export function projectRegionsToSource<
 				const s = Math.max(lo, seg.sourceStartSec);
 				const e = Math.min(hi, seg.sourceEndSec ?? seg.sourceStartSec);
 				if (e <= s) return;
-				emit(clipIndex, s, e);
+				emit(clipIndex, s, e, { continuesBefore: s > lo, continuesAfter: e < hi });
 			});
 		} else {
 			// UNANCHORED — migration kept this region rather than dropping it (see
@@ -615,6 +716,7 @@ export function projectRegionsToSource<
 					clipIndex,
 					seg.sourceStartSec + (s - segRawStart),
 					seg.sourceStartSec + (e - segRawStart),
+					{ continuesBefore: s > lo, continuesAfter: e < hi },
 				);
 			});
 		}
@@ -627,7 +729,7 @@ export function projectRegionsToSource<
 				? cutAddressingSegmentIndex(visibleSegments, segmentRawClipIds, cut.clipId, cut.startSec)
 				: -1;
 			if (cut && clipIndex >= 0 && cut.endSec > cut.startSec) {
-				emit(clipIndex, cut.startSec, cut.endSec, true);
+				emit(clipIndex, cut.startSec, cut.endSec, { underTrim: true });
 			}
 		}
 		// No segments AT ALL: no layout to resolve against, so the region passes through on

@@ -381,6 +381,19 @@ function importedDlls(file) {
 	return names;
 }
 
+/** IMAGE_FILE_HEADER.Machine, as the arch tag of the `win32-<arch>` directories. */
+const PE_MACHINE = { 0x8664: "x64", 0xaa64: "arm64" };
+
+/** The architecture a PE binary is built for, or undefined for a machine we do not ship. */
+function peArch(file) {
+	const b = fs.readFileSync(file);
+	const notPe = () => new Error(`${file} is not a PE binary, or is truncated`);
+	if (b.length < 0x40 || b.readUInt16LE(0) !== 0x5a4d) throw notPe();
+	const pe = b.readUInt32LE(0x3c);
+	if (pe + 6 > b.length || b.readUInt32LE(pe) !== 0x00004550) throw notPe();
+	return PE_MACHINE[b.readUInt16LE(pe + 4)];
+}
+
 /**
  * Nothing we ship may depend on the Visual C++ Redistributable.
  *
@@ -445,28 +458,69 @@ function checkWinNoRedistDependency(dir) {
 			bad: entry.imports.filter((d) => VC_REDIST_DLL.test(d) && !shipped.has(d.toLowerCase())),
 		}))
 		.filter((entry) => entry.bad.length > 0);
-	if (offenders.length === 0) {
-		return;
+	if (offenders.length > 0) {
+		throw new Error(
+			"Refusing to package binaries that need the Visual C++ Redistributable.\n\n" +
+				`  looked in: ${path.relative(ROOT, dir)}\n\n` +
+				`${offenders.map((o) => `  - ${o.name} imports ${o.bad.join(", ")}`).join("\n")}\n\n` +
+				"Those DLLs are not part of Windows. On a clean image the loader kills the process\n" +
+				"before main() (0xC0000135) or fails require(), and the app can only report an exit\n" +
+				"code. It works on every developer machine, which is why this is checked here.\n\n" +
+				"Build against the static CRT instead:\n" +
+				"  - CMake helpers: CMAKE_MSVC_RUNTIME_LIBRARY MultiThreaded (electron/native/wgc-capture)\n" +
+				"  - Rust addon:    -C target-feature=+crt-static (crates/.cargo/config.toml)\n\n" +
+				"For a prebuilt binary that is not ours to recompile, ship the DLL it needs into this\n" +
+				"same directory and the check passes — that is what scripts/stage-vcomp-runtime.mjs\n" +
+				"does for the OpenMP runtime the whisper/ggml libraries import.",
+		);
 	}
 
-	throw new Error(
-		"Refusing to package binaries that need the Visual C++ Redistributable.\n\n" +
-			`  looked in: ${path.relative(ROOT, dir)}\n\n` +
-			`${offenders.map((o) => `  - ${o.name} imports ${o.bad.join(", ")}`).join("\n")}\n\n` +
-			"Those DLLs are not part of Windows. On a clean image the loader kills the process\n" +
-			"before main() (0xC0000135) or fails require(), and the app can only report an exit\n" +
-			"code. It works on every developer machine, which is why this is checked here.\n\n" +
-			"Build against the static CRT instead:\n" +
-			"  - CMake helpers: CMAKE_MSVC_RUNTIME_LIBRARY MultiThreaded (electron/native/wgc-capture)\n" +
-			"  - Rust addon:    -C target-feature=+crt-static (crates/.cargo/config.toml)\n\n" +
-			"For a prebuilt binary that is not ours to recompile, ship the DLL it needs into this\n" +
-			"same directory and the check passes — that is what scripts/stage-vcomp-runtime.mjs\n" +
-			"does for the OpenMP runtime the whisper/ggml libraries import.",
-	);
+	// Every binary here must be built for this directory's architecture, and none of the
+	// checks above can tell: the right name and clean imports say nothing about the
+	// machine. An x64 compositor addon in win32-arm64 fails require() on every ARM64
+	// device, and the Redist tree holds an x64 and an arm64 vcomp140.dll under the same
+	// name, so either satisfies `shipped` while the loader refuses the wrong one with
+	// the same 0xC0000135 as a missing file.
+	//
+	// The one exception is a runtime DLL that nothing here imports. The arm64 Redist
+	// folder carries a vcruntime140_1.dll whose header says x64 — it is the ARM64EC build
+	// Microsoft ships for emulated x64 code — and no ARM64 binary loads it.
+	const dirArch = path.basename(dir).match(/^win32-(.+)$/)?.[1];
+	if (!dirArch) {
+		return;
+	}
+	const imported = new Set(scanned.flatMap((entry) => entry.imports.map((d) => d.toLowerCase())));
+	const wrongArch = scanned
+		.filter(({ name }) => !VC_REDIST_DLL.test(name) || imported.has(name.toLowerCase()))
+		.map(({ name }) => ({ name, arch: peArch(path.join(dir, name)) }))
+		.filter((entry) => entry.arch !== dirArch);
+	if (wrongArch.length > 0) {
+		throw new Error(
+			"Refusing to package native binaries built for the wrong architecture.\n\n" +
+				`${wrongArch.map((e) => `  - ${e.name} in ${path.basename(dir)} is built for ${e.arch ?? "an unknown machine"}`).join("\n")}\n\n` +
+				`A ${dirArch} process cannot load them. Rebuild or re-fetch them for ${dirArch}; for the\n` +
+				`Visual C++ runtime, stage the copy from VC\\Redist\\MSVC\\<version>\\${dirArch}\\ —\n` +
+				"scripts/stage-vcomp-runtime.mjs does.",
+		);
+	}
 }
 
-function checkWinNativePayload() {
-	const dir = path.join(ROOT, "electron", "native", "bin", "win32-x64");
+/**
+ * Every `win32-*` directory, because that is what ships: the extraResources filter is
+ * `win32-*` / `*`, not the target's directory alone. The arm64 installer carries
+ * win32-x64 for the whisper helper that runs under emulation, and checking only
+ * win32-arm64 let that helper ship without the OpenMP runtime its ggml libraries import.
+ */
+function checkWinShippedRedist(binDir) {
+	for (const entry of fs.readdirSync(binDir, { withFileTypes: true })) {
+		if (entry.isDirectory() && /^win32-/.test(entry.name)) {
+			checkWinNoRedistDependency(path.join(binDir, entry.name));
+		}
+	}
+}
+
+function checkWinNativePayload(context) {
+	const dir = path.join(ROOT, "electron", "native", "bin", `win32-${archTagFor(context)}`);
 	checkNativePayload({
 		dir,
 		required: WIN_REQUIRED,
@@ -474,7 +528,7 @@ function checkWinNativePayload() {
 		bundleNoun: "the installer",
 		emptyDirFix: `${FIX}\n\nThe STT helper and the capture helper are separate builds — see\ntechnical-documentation/engineering/build-and-packaging.md.`,
 	});
-	checkWinNoRedistDependency(dir);
+	checkWinShippedRedist(path.dirname(dir));
 }
 
 function checkMacNativePayload(context) {
@@ -806,6 +860,7 @@ exports.__testing = {
 	MAC_MIN_OS_FLOOR,
 	MAC_REQUIRED,
 	checkNativePayload,
+	checkWinShippedRedist,
 };
 
 /** Every ELF under `dir`, recursively — the helper's ffmpeg sits in a subdirectory. */
@@ -1112,21 +1167,35 @@ function checkCompositorAddonFreshness(
 	);
 }
 
+// electron-builder.json5 ships this as resources/THIRD-PARTY-LICENSES.txt, but for a missing
+// extraResources source electron-builder only logs "file source doesn't exist" and packages
+// without it. A packaging path that skipped `npm run licenses:generate` would ship an installer
+// with no licence texts for the code it bundles, silently. The generator writes nothing when cargo
+// cannot list the addon's crates, and never fails over a missing licence file, so only absence is
+// refused here.
+const THIRD_PARTY_LICENSES = path.join(ROOT, "build-licenses", "THIRD-PARTY-LICENSES.txt");
+
+function checkThirdPartyLicenses() {
+	if (!fs.existsSync(THIRD_PARTY_LICENSES)) {
+		throw new Error(
+			"Refusing to package without the third-party licence texts.\n\n" +
+				`  expected: ${THIRD_PARTY_LICENSES}\n\n` +
+				"Generate them with:\n\n    npm run licenses:generate\n\n" +
+				"or use the build:<platform> script, which does that for you.",
+		);
+	}
+}
+
 exports.default = async function beforePack(context) {
+	checkThirdPartyLicenses();
 	const platform = context?.electronPlatformName ?? process.platform;
 	if (platform === "win32") {
 		// The copy that ships is the arch-tagged one under electron/native/bin/
 		// (win.extraResources), beside its ffmpeg DLLs — not the dev copy this hook
 		// used to be the sole guardian of. Same reasoning as the darwin branch below.
-		const shipped = path.join(
-			ROOT,
-			"electron",
-			"native",
-			"bin",
-			"win32-x64",
-			"compositor_view.node",
-		);
-		checkWinNativePayload();
+		const tag = `win32-${archTagFor(context)}`;
+		const shipped = path.join(ROOT, "electron", "native", "bin", tag, "compositor_view.node");
+		checkWinNativePayload(context);
 		checkCompositorAddonFreshness(shipped, FIX, "D3D11");
 		return;
 	}
@@ -1162,6 +1231,7 @@ exports.default = async function beforePack(context) {
 // Runnable on its own for debugging: `node scripts/before-pack.cjs`
 if (require.main === module) {
 	try {
+		checkThirdPartyLicenses();
 		if (process.platform === "darwin") {
 			checkMacNativePayload({ arch: undefined });
 			const tag = `darwin-${process.arch}`;

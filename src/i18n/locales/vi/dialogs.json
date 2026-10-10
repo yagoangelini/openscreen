@@ -88,7 +88,8 @@
 		"audioFiles": "Tệp âm thanh",
 		"openscreenProject": "Dự án OpenScreen",
 		"allFiles": "Tất cả các tệp",
-		"chooseRecordingsFolder": "Chọn thư mục cho bản ghi mới"
+		"chooseRecordingsFolder": "Chọn thư mục cho bản ghi mới",
+		"selectRecordingsFolder": "Chọn thư mục bản ghi"
 	},
 	"recovery": {
 		"title": "Khôi phục bản ghi",
@@ -105,5 +106,9 @@
 		"detail": "Đóng trình chỉnh sửa sẽ hủy lượt xuất và video sẽ không được lưu.",
 		"keep": "Tiếp tục xuất",
 		"cancelAndClose": "Hủy xuất và đóng"
+	},
+	"recording": {
+		"lowDiskSpace": "Không đủ dung lượng ổ đĩa để bắt đầu quay (chỉ còn {{availableMb}} MB trống). Hãy giải phóng dung lượng hoặc chọn thư mục bản ghi khác rồi thử lại.",
+		"folderUnavailable": "Không thể truy cập thư mục bản ghi {{path}}. Hãy kết nối lại ổ đĩa của thư mục, hoặc chọn thư mục khác trong chế độ Ghi hình."
 	}
 }

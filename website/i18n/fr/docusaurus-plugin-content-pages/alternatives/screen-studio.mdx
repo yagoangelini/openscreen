@@ -9,6 +9,9 @@ keywords:
   - alternative open source à screen studio
 ---
 
+import DemoLoop from "@site/src/components/DemoLoop";
+import DemoLoopPair from "@site/src/components/DemoLoop/Pair";
+
 # Une alternative gratuite et open source à Screen Studio
 
 OpenScreen est une alternative gratuite à Screen Studio, sous licence MIT, pour Windows, macOS et Linux. Comme Screen Studio, il zoome là où vous cliquez, change le style du curseur après la prise, ajoute des arrière-plans et des sous-titres locaux, et exporte en MP4 ou en GIF. Contrairement à Screen Studio, qui ne tourne que sous macOS et nécessite un abonnement payant pour exporter, il ne coûte rien et ne demande aucun compte. Screen Studio reste le meilleur choix si vous partagez vos enregistrements sous forme de liens hébergés avec commentaires, ou si vous enregistrez un iPhone ou un iPad.
@@ -29,7 +32,7 @@ Cette page est publiée par le projet OpenScreen. Les informations sur Screen St
 | Traduction des sous-titres | 15 langues, via un fournisseur d'IA que vous connectez | Aucune étape de traduction dans son guide des sous-titres |
 | Timeline multiclip | Oui | « Enregistrements multiclip » figure comme prévu sur sa feuille de route |
 | Annotations texte, flèche et image | Oui | « Annotations » figure comme en pause sur sa feuille de route |
-| Export | MP4 (H.264 ou H.265) ou GIF, jusqu'à 60 fps, sans filigrane | MP4 ou GIF, avec réglages de fréquence d'images, taille de sortie et qualité. Aucun réglage de codec documenté |
+| Export | MP4 (H.264) ou GIF, jusqu'à 60 fps, sans filigrane | MP4 ou GIF, avec réglages de fréquence d'images, taille de sortie et qualité |
 | Liens de partage hébergés | Non | Oui, jusqu'à 30 minutes par enregistrement (en septembre 2026), avec commentaires horodatés |
 | Enregistrement iPhone et iPad | Non | Oui, via USB, avec cadres d'appareil |
 | Interface en ligne de commande | Oui | Aucune dans son guide |
@@ -49,6 +52,11 @@ Les deux applications couvrent les points suivants. Rien ici n'est propre à l'u
 - **Des notes pendant l'enregistrement.** Les deux ont des notes pour l'intervenant. Sous Windows et macOS, la fenêtre de notes d'OpenScreen a aussi un mode téléprompteur.
 - **Traitement local.** Screen Studio affirme ne jamais envoyer de données sur vos enregistrements à ses serveurs. OpenScreen n'a aucun compte, aucun serveur propre et aucune statistique d'usage. La [FAQ](/docs/faq/#does-openscreen-work-offline) liste les rares connexions qu'il établit encore.
 
+<DemoLoopPair>
+  <DemoLoop name="background-picker" />
+  <DemoLoop name="sensitive-data-mask" />
+</DemoLoopPair>
+
 ## Où OpenScreen se distingue {#where-openscreen-differs}
 
 ### Prix, licence et plateformes {#price-license-and-platforms}
@@ -63,9 +71,13 @@ Les deux applications couvrent les points suivants. Rien ici n'est propre à l'u
 - **Annotations.** Du texte avec six animations, des flèches dans huit directions, des images, et des régions de flou. La feuille de route de Screen Studio classe en pause « Annotations », décrites comme des descriptions visuelles ou textuelles des clics. Voir [Montage et timeline](/docs/editing-timeline/).
 - **Arrière-plan de la webcam.** Retirez, floutez ou remplacez l'arrière-plan de la caméra sans écran vert, dans la version stable. Screen Studio liste la suppression de l'arrière-plan de la caméra comme une fonction bêta.
 
+<DemoLoopPair>
+  <DemoLoop name="every-layout" />
+  <DemoLoop name="camera-blur" />
+</DemoLoopPair>
+
 ### Export et automatisation {#export-and-automation}
 
-- **Choix du codec.** L'export MP4 se fait en H.264 ou H.265. Le guide d'export de Screen Studio ne documente aucun réglage de codec. Voir [Export](/docs/export/).
 - **Une interface en ligne de commande.** Scripts, CI et agents de codage peuvent piloter OpenScreen depuis sa [ligne de commande](/docs/cli/). Le guide de Screen Studio ne contient aucune rubrique sur la ligne de commande.
 - **Montage par chat en option, avec votre propre clé.** Connectez Claude, OpenAI, Gemini, Mistral, OpenRouter, MiniMax ou tout point de terminaison compatible OpenAI, et décrivez des coupes, des zooms, des changements de vitesse ou des annotations en langage courant. Chaque modification s'applique comme une modification ordinaire, que vous pouvez annuler. C'est désactivé tant que vous n'avez pas connecté de fournisseur, et le même fournisseur traduit les sous-titres en 15 langues. Voir [Montage par IA](/docs/ai-editing/).
 

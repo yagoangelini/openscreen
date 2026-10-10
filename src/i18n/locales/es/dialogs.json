@@ -88,7 +88,8 @@
 		"audioFiles": "Archivos de audio",
 		"openscreenProject": "Proyecto OpenScreen",
 		"allFiles": "Todos los archivos",
-		"chooseRecordingsFolder": "Elige la carpeta para las nuevas grabaciones"
+		"chooseRecordingsFolder": "Elige la carpeta para las nuevas grabaciones",
+		"selectRecordingsFolder": "Seleccionar carpeta de grabaciones"
 	},
 	"recovery": {
 		"title": "Recuperar grabación",
@@ -105,5 +106,9 @@
 		"detail": "Cerrar el editor la cancela y el vídeo no se guardará.",
 		"keep": "Seguir exportando",
 		"cancelAndClose": "Cancelar exportación y cerrar"
+	},
+	"recording": {
+		"lowDiskSpace": "No hay suficiente espacio en disco para iniciar la grabación (solo quedan {{availableMb}} MB libres). Libera espacio o elige otra carpeta de grabaciones e inténtalo de nuevo.",
+		"folderUnavailable": "No se puede acceder a la carpeta de grabaciones {{path}}. Vuelve a conectar su unidad o elige otra carpeta en el modo Grabar."
 	}
 }

@@ -60,19 +60,20 @@ Every public export of
 
 | Function | What it converts | Direction |
 |---|---|---|
-| `anchorRawRegionsToClips` (`:51`) | v4 RAW-virtual-ms region → one anchored fragment per covered clip (drops zero-length / off-timeline regions) | RAW-virtual → clip-anchored |
-| `anchorRegionsWithDerivedMs` (`:376`) | Same as above but never drops user data: emits `{…fragment, startMs, endMs}` for anchored regions and passes un-anchorable regions through with their original ms | RAW-virtual → v5 stored shape |
-| `anchoredToRawSpanSec` (`:92`) | One anchored fragment → its current RAW-virtual span on the ruler | clip-anchored → RAW-virtual |
-| `regionIdentityKey` (`:163`) | A region → canonical identity key (properties minus position/provenance); equal keys = "same kind, same look" | region → identity string |
-| `coalesceByIdentity` (`:193`) | Set of identified spans → merged runs that touch and share an identity | spans → pills |
-| `clampSpanAgainstNeighbours` (`:223`) | A desired span clamped against different-identity neighbours (no cascade) | desired → clamped span |
-| `coalesceRegionsForRuler` (`:251`) | Region array → ruler pills (one entry per merged run, payload carried by `member`) | regions → pills |
-| `resolvePillIds` (`:275`) | Region id → every region id under its pill (recomputed, not stored) | id → ids |
-| `dropPillById` / `dropPillsByIds` (`:290` / `:299`) | Delete every region under a pill (resolved from the merge rule) | regions → regions |
-| `replacePillSpan` (`:316`) | Move/resize a pill: clamp against different-identity neighbours, then re-anchor to the clamped span | pill + clip layout → re-anchored fragments |
-| `segmentRawSpanSec` (`:401`) | One kept playback segment → its RAW-virtual extent | segment → RAW span |
-| `projectRegionsToSource` (`:558`) | Region array → source-ms entries with `clipIndex` for native (anchored path uses anchor; unanchored path falls back to RAW mapping through each segment's own raw extent — never drops an un-anchorable region onto an unrelated clip). A region wholly under a trim is emitted once, marked `underTrim`, addressed by the segment the cut interrupts | RAW/anchored → source + `clipIndex` |
-| `resolveNativePosition` (`:676`) | RAW-virtual playhead → `{clip, clipIndex, sourceTimeSec}` for the active native decoder + paired camera (over a trimmed-out stretch it presents the removed frames themselves, borrowing the same segment index the modifiers under that cut borrow) | RAW-virtual → source + `clipIndex` |
+| `anchorRawRegionsToClips` (`:65`) | v4 RAW-virtual-ms region → one anchored fragment per covered clip (drops zero-length / off-timeline regions, and the sub-ms sliver a whole-ms edge leaves past a clip boundary) | RAW-virtual → clip-anchored |
+| `anchorRegionsWithDerivedMs` (`:459`) | Same as above but never drops user data: emits `{…fragment, startMs, endMs}` for anchored regions and passes un-anchorable regions through with their original ms | RAW-virtual → v5 stored shape |
+| `anchoredToRawSpanSec` (`:110`) | One anchored fragment → its current RAW-virtual span on the ruler | clip-anchored → RAW-virtual |
+| `regionIdentityKey` (`:181`) | A region → canonical identity key (properties minus position/provenance); equal keys = "same kind, same look" | region → identity string |
+| `coalesceByIdentity` (`:211`) | Set of identified spans → merged runs that touch and share an identity | spans → pills |
+| `clampSpanAgainstNeighbours` (`:248`) | A desired span clamped against different-identity neighbours, backing off toward the span before the edit (a move keeps its length; no cascade) | desired + span before the edit → clamped span |
+| `coalesceRegionsForRuler` (`:290`) | Region array → ruler pills (one entry per merged run, payload carried by `member`) | regions → pills |
+| `resolvePillIds` (`:314`) | Region id → every region id under its pill (recomputed, not stored) | id → ids |
+| `resolveRegionIds` (`:337`) | Region id → the ids of the one region it belongs to: its fragments across clip junctions, not a look-alike that touches it on the same clip (see below) | id → ids |
+| `dropPillById` / `dropPillsByIds` (`:368` / `:377`) | Delete every region under a pill (resolved from the merge rule) | regions → regions |
+| `replacePillSpan` (`:398`) | Move/resize a pill: clamp against different-identity neighbours, then re-anchor to the clamped span, keeping the id of the member it was called with | pill + clip layout → re-anchored fragments |
+| `segmentRawSpanSec` (`:484`) | One kept playback segment → its RAW-virtual extent | segment → RAW span |
+| `projectRegionsToSource` (`:641`) | Region array → source-ms entries with `clipIndex` for native (anchored path uses anchor; unanchored path falls back to RAW mapping through each segment's own raw extent — never drops an un-anchorable region onto an unrelated clip). A region wholly under a trim is emitted once, marked `underTrim`, addressed by the segment the cut interrupts. A region a cut splits marks each piece's cut edge `continuesBefore` / `continuesAfter`, so Full Camera ramps only at its own edges and stays full across the cut | RAW/anchored → source + `clipIndex` |
+| `resolveNativePosition` (`:759`) | RAW-virtual playhead → `{clip, clipIndex, sourceTimeSec}` for the active native decoder + paired camera (over a trimmed-out stretch it presents the removed frames themselves, borrowing the same segment index the modifiers under that cut borrow) | RAW-virtual → source + `clipIndex` |
 
 The two **universal region rules** every region kind obeys are expressed once in this
 file rather than re-derived per kind:
@@ -83,13 +84,27 @@ file rather than re-derived per kind:
    not where it came from.
 2. **Repel** (`clampSpanAgainstNeighbours`) — two regions of the same kind with
    different identities may not overlap. An edit clamps to the neighbour's edge; the
-   neighbour never moves (no cascade).
+   neighbour never moves (no cascade). Which edge is decided by where the region was
+   before the edit, so a moved region keeps its length and stops flush against the
+   neighbour on the side it came from.
 
 A kind with no properties (trim, full-camera) collapses to a constant identity, so its
 regions always merge — the long-standing trim behaviour, now derived from the general
 rule. `clipId` is in `NON_IDENTITY_FIELDS` and must stay there: it says *where* a region
 is, never what it is, and a trim ventilated across a clip boundary is necessarily 2+ rows
 that have to keep rendering and deleting as ONE pill.
+
+A pill is not always one region, and a **property edit** reaches only the region the user
+pointed at (`resolveRegionIds`, #1017). A click on a pill selects the region under the
+pointer; editing it changes every fragment of that region across clip junctions, so a
+region drawn over a cut stays one pill, but leaves alone a region that merely matches it
+and touches it on the same clip. A region keeps at most one fragment per clip, so a
+same-clip neighbour is necessarily another region: the identities part and the pill
+splits. Same-clip regions that overlap still edit together, since changing one alone would
+break rule 2. Delete, move and resize keep acting on the whole pill; a move rebuilds it as
+one region that keeps the id it was grabbed by, so the selection survives. Without provenance,
+two regions meeting exactly at a clip junction cannot be told apart from one region's two
+fragments, so they edit as one.
 
 ### Trims carry a clip anchor too (v7)
 
@@ -252,9 +267,25 @@ the contract a reviewer can grade against. Each is asserted in
   changed → two pills, with no memory of ever having been one. (`coalesceByIdentity`
   and `replacePillSpan` "clamps a resize at a neighbouring pill of different
   properties (magnet)".)
+- **A property edit reaches one region, not the whole pill.** Editing one of two
+  look-alikes that touch on one clip splits their pill; editing a fragment of a region
+  drawn across a junction changes all its fragments. (`resolveRegionIds` "narrows a pill
+  to one region, with every fragment of it (#1017)"; end to end through the store in
+  `useTimeline.test.ts`, "changes the region picked and its fragments, not its
+  look-alike, and the pill splits".)
 - **Repel never cascades.** A different-identity neighbour acts as a wall — the
   edited span stops at its edge and the neighbour never moves. (`clampSpanAgainst
   Neighbours` "stops at a different-identity neighbour on the right" / "left".)
+- **Repel never shortens a move.** A region dragged into a different-identity neighbour
+  keeps its length and stops against it on the side it came from, clip boundary or not;
+  it is never cut short or thrown past it (#1008). (`replacePillSpan` "stops a zoom
+  against a neighbour that ends on a clip boundary, keeping its length".)
+- **No fragment is a rounding sliver.** Region edges are whole ms and clip boundaries are
+  not, so an edge placed on a junction misses it by up to half a ms. A piece whose stored
+  whole-ms span would be empty is never stored as a fragment of its own; one that rounds to
+  a millisecond stays, so the region keeps its length. (`anchorRegionsWithDerivedMs` "stores
+  no zero-length fragment for an edge rounded onto a clip boundary", "keeps a
+  half-millisecond piece that rounds to a whole millisecond".)
 - **Identity ignores provenance.** `id`, `clipId`, `sourceStartSec`, `reason`,
   `origin`, `source`, `annotationSource`, and the legacy `groupId` are *not* part of
   the identity key. Two regions that differ only in any of those still merge when
@@ -288,9 +319,9 @@ in the same commit, or the project round-trips into an inconsistent state:
 |---|---|---|
 | **Document layer (ops)** | `src/lib/ai-edition/document/timeline.ts` | Region CRUD; calls `rederiveRegionMs` (cache-only) and `reanchorRegions` (rebuilds identities); routes every mutation through `timelineMap`. |
 | **Schema v4→v5 preprocess** | `src/lib/ai-edition/schema/index.ts` (`documentSchema` v4→v5 preprocess, `:555-595`) | Re-anchors `zoomRanges`, `annotations`, `legacyEditor.speedRegions`, `legacyEditor.cameraFullscreenRegions` on every parse. The single disk-load site. |
-| **Timeline UI** | `src/components/ai-edition/v4/V4Timeline.tsx` | Reads lanes through `coalesceRegionsForRuler` (`:321, :329, :337, :347`) and `coalescedTrimGroups` (`:363`); pill edit hits the pill resolved by `resolvePillIds` via the store. |
-| **Inspector selection pane** | `src/components/ai-edition/v4/FloatingInspector.tsx` (`SelectionPane`, `:444`) | Edits a selected region by pill id; routes through `useTimeline` and therefore through `replacePillSpan`. |
-| **Store / authoring (UI)** | `src/lib/ai-edition/store/useTimeline.ts` | Every `add*`, `update*Span`, `removeRegion` goes through `anchorRegionsWithDerivedMs` (`:134, :163, :278, :305, :329`) and `replacePillSpan` / `dropPillsByIds` / `resolvePillIds`. |
+| **Timeline UI** | `src/components/ai-edition/v4/V4Timeline.tsx` | Reads lanes through `coalesceRegionsForRuler` (`:737, :745, :753, :763`) and `coalescedTrimGroups` (`:780`); a click selects the region under the pointer, and a move/resize/delete acts on the whole pill via the store. |
+| **Inspector selection pane** | `src/components/ai-edition/v4/FloatingInspector.tsx` (`SelectionPane`, `:735`) | Edits the selected region by id through `useTimeline`, which widens a property edit to that region's fragments (`resolveRegionIds`), never to the whole pill. |
+| **Store / authoring (UI)** | `src/lib/ai-edition/store/useTimeline.ts` | Every `add*`, `update*Span`, `removeRegion` goes through `anchorRegionsWithDerivedMs` (`:344, :482, :517, :556`) and `replacePillSpan` (`:753, :930, :1012, :1042`) / `dropPillsByIds` (`:1106-1118`); every property edit (`patchRegionById`, `:92`) through `resolveRegionIds`. |
 | **Native preview scene** | `src/native/sceneDescription.ts` (`:489, :508, :517, :531`) | Calls `projectRegionsToSource` for every region kind before serialising to the native compositor. |
 | **Native playback sync** | `src/native/useNativePlaybackSync.ts` (`:22, :39`) | Resolves the RAW playhead through `resolveNativePosition` to feed `setActiveClip` / `presentTime`. |
 | **Native compositor overlay** | `src/components/ai-edition/NativeCompositorOverlay.tsx` (`:3, :70`) | Same — `resolveNativePosition(currentTimeSec, nativeClips, document.timeline.clips)` — to keep preview in sync with the timeline ruler. |

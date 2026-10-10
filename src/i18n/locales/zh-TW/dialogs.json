@@ -88,7 +88,8 @@
 		"audioFiles": "音訊檔案",
 		"openscreenProject": "OpenScreen 專案",
 		"allFiles": "所有檔案",
-		"chooseRecordingsFolder": "選擇新錄製的資料夾"
+		"chooseRecordingsFolder": "選擇新錄製的資料夾",
+		"selectRecordingsFolder": "選擇錄製資料夾"
 	},
 	"recovery": {
 		"title": "復原錄製",
@@ -105,5 +106,9 @@
 		"detail": "關閉編輯器會取消匯出，影片不會被儲存。",
 		"keep": "繼續匯出",
 		"cancelAndClose": "取消匯出並關閉"
+	},
+	"recording": {
+		"lowDiskSpace": "磁碟空間不足，無法開始錄製（僅剩 {{availableMb}} MB 可用空間）。請釋放空間或選擇其他錄製資料夾，然後再試一次。",
+		"folderUnavailable": "無法存取錄製資料夾 {{path}}。請重新連接其所在的磁碟機，或在「錄製」模式中選擇其他資料夾。"
 	}
 }

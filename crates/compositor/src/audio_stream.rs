@@ -34,7 +34,7 @@ use crate::audio::{
 use crate::ffi::*;
 use crate::ffi::{AVERROR_EAGAIN, AVERROR_EOF};
 use crate::regions::SpeedSegment;
-use crate::scene::{SceneAudio, SceneAudioTrack, SceneAudioTrackKind};
+use crate::scene::{SceneAudio, SceneAudioTrack, SceneAudioTrackKind, SceneClickHit, SceneClickSound};
 use anyhow::{bail, Result};
 use std::collections::VecDeque;
 use std::f32::consts::PI;
@@ -1027,6 +1027,62 @@ impl Overlay {
 /// looks `DUCK_ATTACK_SEC` ahead into the voice, and the limiter `LIMITER_LOOKAHEAD` samples
 /// ahead into the mix. So the audio trails the video by about a quarter of a second, and
 /// nothing larger than that and one stretch chunk is ever held.
+/// The take's click sounds (the "mouse clicks" toggle): the export's `mix_click_hits`, a
+/// window at a time. The two samples are a few hundred milliseconds and decoded once; each hit
+/// is summed where the app placed it on the programme, so a speed region cannot leave it behind.
+/// A hit that runs past the end of the programme is cut there, as in the whole-buffer mix.
+struct ClickHits {
+    down: PlanarPcm,
+    up: PlanarPcm,
+    /// Sorted by time, so a window stops looking at the first hit that starts after it.
+    hits: Vec<SceneClickHit>,
+}
+
+/// How much of a hit file is decoded: the bundled samples are short, and the bound is what
+/// keeps a wrong path from buffering an hour of "click" (`CLICK_HIT_WINDOW_SEC`, audio.rs).
+const CLICK_HIT_DECODE_SEC: f64 = 1.0;
+
+impl ClickHits {
+    fn new(sound: &SceneClickSound, decode: impl Fn(&str) -> PlanarPcm) -> Option<Self> {
+        if sound.hits.is_empty() || sound.down_path.is_empty() || sound.up_path.is_empty() {
+            return None;
+        }
+        let (down, up) = (decode(&sound.down_path), decode(&sound.up_path));
+        let audible = |pcm: &PlanarPcm| pcm.first().is_some_and(|plane| !plane.is_empty());
+        if !audible(&down) || !audible(&up) {
+            eprintln!("[audio] click hits undecodable; export keeps the picture only");
+            return None;
+        }
+        let mut hits = sound.hits.clone();
+        hits.sort_by(|a, b| a.time_sec.total_cmp(&b.time_sec));
+        Some(Self { down, up, hits })
+    }
+
+    /// Adds every hit that sounds inside `range` (programme samples) to `buf`, which holds the
+    /// programme from `base` on.
+    fn add(&self, buf: &mut PlanarPcm, base: usize, range: std::ops::Range<usize>) {
+        for hit in &self.hits {
+            let offset = (hit.time_sec.max(0.0) * AUDIO_OUTPUT_SAMPLE_RATE as f64).round() as usize;
+            if offset >= range.end {
+                break;
+            }
+            let sample = if hit.release { &self.up } else { &self.down };
+            let len = sample[0].len();
+            let (start, end) = (offset.max(range.start), (offset + len).min(range.end));
+            if start >= end {
+                continue;
+            }
+            let gain = hit.gain.clamp(0.0, 4.0);
+            for (channel, plane) in buf.iter_mut().enumerate() {
+                let source = &sample[channel.min(sample.len() - 1)];
+                for t in start..end {
+                    plane[t - base] += source[t - offset] * gain;
+                }
+            }
+        }
+    }
+}
+
 pub struct ProgrammeAudio {
     fps: f64,
     slots: Vec<Slot>,
@@ -1050,6 +1106,7 @@ pub struct ProgrammeAudio {
     loudness: LoudnessFn,
     emitted: usize,
     peak_buffered: usize,
+    clicks: Option<ClickHits>,
 }
 
 impl ProgrammeAudio {
@@ -1088,7 +1145,25 @@ impl ProgrammeAudio {
             loudness,
             emitted: 0,
             peak_buffered: 0,
+            clicks: None,
         }
+    }
+
+    /// With the take's click sounds summed in, decoded with `decode` (tests hand in samples).
+    fn with_click_hits_decoded(mut self, sound: &SceneClickSound, decode: impl Fn(&str) -> PlanarPcm) -> Self {
+        self.clicks = ClickHits::new(sound, decode);
+        self
+    }
+
+    /// With the take's click sounds summed in, after the imported tracks and before the output
+    /// trim and the limiter: the order of the whole-buffer export (`mix_click_hits`).
+    pub fn with_click_hits(self, sound: &SceneClickSound) -> Self {
+        self.with_click_hits_decoded(sound, |path| {
+            crate::audio::decode_clip_audio(path, 0.0, CLICK_HIT_DECODE_SEC)
+                .ok()
+                .flatten()
+                .unwrap_or_default()
+        })
     }
 
     /// The production configuration: imported tracks decoded with `ClipAudioReader`, voice
@@ -1438,6 +1513,9 @@ impl ProgrammeAudio {
                     &self.opener,
                     &self.loudness,
                 );
+            }
+            if let Some(clicks) = &self.clicks {
+                clicks.add(&mut self.voice, self.voice_base, range.clone());
             }
             let local = range.start - self.voice_base..range.end - self.voice_base;
             for plane in self.voice.iter_mut() {
@@ -1837,6 +1915,70 @@ mod tests {
             programme.finish(&mut sink).unwrap();
             assert_same(&streamed, &reference, &format!("programme, {step_frames} frame(s) per step"));
         }
+    }
+
+    /// The click sounds (upstream's `mix_click_hits`), streamed: each hit summed at the sample
+    /// the app placed it on, whole across the uneven windows the export asks for, and nowhere
+    /// else. A silent clip and quiet hits, so the limiter has nothing to do.
+    #[test]
+    fn click_hits_land_where_the_app_placed_them_across_windows() {
+        let fps = 60.0;
+        let frames = 120u64;
+        let len = (frames as f64 / fps * RATE).round() as usize;
+        let down: PlanarPcm =
+            (0..CHANNELS).map(|_| (0..480).map(|i| 0.25 + i as f32 * 1e-4).collect()).collect();
+        let up: PlanarPcm = (0..CHANNELS).map(|_| vec![-0.125; 240]).collect();
+        let sound = SceneClickSound {
+            down_path: "down.wav".into(),
+            up_path: "up.wav".into(),
+            // Out of order on purpose: the app's list is not promised sorted.
+            hits: vec![
+                SceneClickHit { time_sec: 1.0, gain: 1.0, release: true },
+                SceneClickHit { time_sec: 0.5, gain: 2.0, release: false },
+            ],
+        };
+        let mut programme =
+            ProgrammeAudio::new(1, fps, SceneAudio::default(), &[], no_tracks(), flat_loudness())
+                .with_click_hits_decoded(&sound, |path| {
+                    if path == "down.wav" { down.clone() } else { up.clone() }
+                });
+        let silence: PlanarPcm = (0..CHANNELS).map(|_| vec![0.0; len]).collect();
+        programme.begin_clip(0, 0, Some(Box::new(MemoryPcm::new(silence))));
+        let mut out = planes(0);
+        let mut sink = |pcm: &PlanarPcm| -> Result<()> {
+            for (plane, chunk) in out.iter_mut().zip(pcm) {
+                plane.extend_from_slice(chunk);
+            }
+            Ok(())
+        };
+        for frame in [7u64, 31, 33, 64, 90, 120] {
+            programme.produce(frame, &mut sink).unwrap();
+        }
+        programme.end_clip(0, frames);
+        programme.finish(&mut sink).unwrap();
+
+        assert_eq!(out[0].len(), len);
+        let at = |sec: f64| (sec * RATE).round() as usize;
+        for plane in &out {
+            assert_eq!(plane[at(0.5) - 1], 0.0, "nothing before the press");
+            assert!((plane[at(0.5)] - 0.5).abs() < 1e-6, "the press, at its gain");
+            assert!((plane[at(0.5) + 479] - (0.25 + 479e-4) * 2.0).abs() < 1e-5, "and whole");
+            assert_eq!(plane[at(0.5) + 480], 0.0, "and over");
+            assert!((plane[at(1.0) + 100] - (-0.125)).abs() < 1e-6, "the release sample");
+            assert_eq!(plane[at(1.0) + 240], 0.0);
+        }
+    }
+
+    #[test]
+    fn a_click_sound_with_nothing_to_play_changes_nothing() {
+        let empty = SceneClickSound::default();
+        assert!(ClickHits::new(&empty, |_| planes(0)).is_none());
+        let undecodable = SceneClickSound {
+            down_path: "down.wav".into(),
+            up_path: "up.wav".into(),
+            hits: vec![SceneClickHit { time_sec: 0.0, gain: 1.0, release: false }],
+        };
+        assert!(ClickHits::new(&undecodable, |_| planes(0)).is_none());
     }
 
     #[test]

@@ -35,7 +35,7 @@ Unter Windows hält OpenScreen das HUD und das Notizfenster aus der Aufnahme her
 
 1. Unter Windows und macOS öffnest du die Quellenauswahl und wählst unter **Bildschirme** einen Bildschirm oder unter **Fenster** ein einzelnes Fenster. Unter macOS 15.2 und neuer wählst du Bildschirm oder Fenster stattdessen in der Systemauswahl von Apple aus. Unter Linux gibt es keine Auswahl in der App: Das Systemportal fragt bei jedem Take nach der Quelle. OpenScreen hat keine Bereichsaufnahme. Nimm also das Fenster oder den Bildschirm auf und schneide den Clip dann im Editor zu.
 2. Schalte das Mikrofon ein und prüfe seine Pegelanzeige. Schalte Systemaudio ein, wenn das Produkt Töne macht, und die Webcam, wenn du im Bild sein willst.
-3. Behalte den bearbeitbaren Cursormodus, den Standard: Der Zeiger wird als Daten aufgezeichnet, du kannst ihn also später neu gestalten. Klicks werden unter Windows aufgezeichnet. Unter macOS brauchen sie die Berechtigung „Bedienungshilfen“. Unter Linux muss dein Benutzer in der Gruppe `input` sein, und Tippen zum Klicken auf dem Touchpad wird nicht erfasst ([Details](../installation.md#mouse-clicks-on-wayland)).
+3. Behalte den bearbeitbaren Cursormodus, den Standard: Der Zeiger wird als Daten aufgezeichnet, du kannst ihn also später neu gestalten. Klicks werden unter Windows aufgezeichnet. Unter macOS brauchen sie die Berechtigung „Bedienungshilfen“. Unter Linux braucht dein Benutzer Lesezugriff auf die Maus, über eine udev-Regel (empfohlen) oder die Gruppe `input`, und Tippen zum Klicken auf dem Touchpad wird nicht erfasst ([Details](../installation.md#mouse-clicks-on-wayland)).
 4. Starte die Aufnahme. Vorher läuft ein 3-2-1-Countdown, der sich nicht abschalten lässt.
 
 OpenScreen nimmt mit angestrebten 60 fps auf, unter Windows und macOS bis 3840×2160. Unter Linux entspricht die Größe dem, was der Compositor liefert. Während der Aufnahme kannst du pausieren, den Take neu starten, ihn abbrechen oder stoppen.
@@ -52,7 +52,7 @@ Die Webcam wird in eine eigene Datei aufgenommen. Ihre Platzierung ist also eine
 
 - **Picture in Picture**, **Vertical Stack**, **Dual Frame** oder **No Webcam**.
 - Für jedes Layout: Spiegeln und ein Zuschnitt des Kamerabilds.
-- Nur für **Picture in Picture**: **Camera Shape** (Rectangle oder Square), **Roundness** (bei 100 % wird eine quadratische Kamera zum Kreis), eine Größe von 15 bis 50 % (standardmäßig 25 %), **Position** (eine Ecke oder die Mitte einer Kante, standardmäßig unten rechts) und **Shrink on Zoom**, standardmäßig an: Es verkleinert die Kamera, während ein Zoom läuft, damit sie das Detail nicht verdeckt. Zieh die Kamera auf der Arbeitsfläche, und sie rastet an der nächsten Position ein.
+- Nur für **Picture in Picture**: **Camera Shape** (standardmäßig Square, oder Original, das die eigenen Proportionen der Kamera behält), **Roundness** (standardmäßig 70 % für Square und 40 % für Original; bei 100 % wird eine quadratische Kamera zum Kreis), eine Größe von 15 bis 60 % (standardmäßig 40 %), **Position** (eine Ecke oder die Mitte einer Kante, standardmäßig unten rechts) und **Shrink on Zoom**, standardmäßig an: Es verkleinert die Kamera, während ein Zoom läuft, damit sie das Detail nicht verdeckt. Zieh die Kamera auf der Arbeitsfläche, und sie rastet an der nächsten Position ein.
 - **Camera Background**: Original, Blur, Cutout oder Custom. Cutout entfernt den Hintergrund ohne Greenscreen, mit einem Segmentierungsmodell, das auf deiner CPU läuft. Dieser Abschnitt erscheint nur, wenn sich die Segmentierungs-Laufzeit auf deinem Rechner laden lässt.
 
 Für ein Intro oder Outro drückst du `C`, um ein **Full Camera**-Segment hinzuzufügen: Die Kamera füllt in diesem Abschnitt das ganze Bild.
@@ -106,7 +106,7 @@ Untertitel werden ins Video eingebrannt. OpenScreen schreibt keine `.srt`- oder 
 
 **Exportieren.** Klicke in der oberen Leiste auf **Export**:
 
-- **MP4**: 720p, 1080p oder Source; 24, 30 oder 60 fps; H.264 oder H.265. Der Dialog kennzeichnet H.264 als die Option mit der besten Kompatibilität. Die Videobitrate lässt sich nicht einstellen und liegt bei 1080p bei etwa 8 Mbit/s.
+- **MP4**: 720p, 1080p oder Source; 24, 30 oder 60 fps; H.264. Die Videobitrate lässt sich nicht einstellen und liegt bei 1080p bei etwa 8 Mbit/s.
 - **GIF**: 15, 20, 25 oder 30 fps; Größe Medium, Large oder Original; Schleife an oder aus. GIFs nutzen 256 Farben ohne Dithering und eignen sich deshalb für kurze Clips von Oberflächen im Flat Design.
 
 Es gibt kein Wasserzeichen. Für ein anderes Format änderst du die Einstellung und exportierst erneut.

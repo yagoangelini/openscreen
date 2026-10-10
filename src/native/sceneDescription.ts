@@ -31,6 +31,7 @@ import {
 	getCaptionSettings,
 	getCaptionTranslations,
 } from "@/lib/ai-edition/captions";
+import { clickSoundForDocument } from "@/lib/ai-edition/clickSound";
 import { collapseTracksToPills, trackGroupId } from "@/lib/ai-edition/document/audioTracks";
 import { createId } from "@/lib/ai-edition/document/ids";
 import { isFormatFillActive, pickOutputDims } from "@/lib/ai-edition/document/outputFormat";
@@ -135,6 +136,12 @@ export interface SceneCameraFullscreenRegion {
 	/** See `SceneZoomRegion.underTrim`. Full-Camera needs no extra gate — its envelope is
 	 *  already contained in `[startSec, endSec]` — so this only carries the intent. */
 	underTrim?: boolean;
+	/** A cut (trim or clip boundary) split the region and this piece's start is that cut, not
+	 *  the region's own start: native skips the lead-in so the camera stays full across the
+	 *  cut. Omitted when false. */
+	continuesBefore?: boolean;
+	/** Same at the end: no lead-out at the cut. Omitted when false. */
+	continuesAfter?: boolean;
 }
 
 /** A speed region projected onto each clip's source time. The native compositor matches
@@ -555,6 +562,20 @@ export interface SceneDescription {
 		kind: AxcutAudioTrack["kind"];
 	}>;
 	/**
+	 * The "mouse clicks" toggle (see `src/lib/ai-edition/clickSound.ts`): the recorded clicks as
+	 * hits placed on the OUTPUT programme, summed by `audio::mix_click_hits`. Omitted when the
+	 * sound is off, the take has no clicks, or the cues have not been read yet.
+	 *
+	 * Not entries of `audioTracks`. An imported track is placed and never stretched, so a click
+	 * bed baked into one file falls behind every click past a speed region; these hits go through
+	 * the same `projectRawTimelineSecToPlayback` imported audio tracks are laid out with.
+	 */
+	clickSound?: {
+		downPath: string;
+		upPath: string;
+		hits: Array<{ timeSec: number; gain: number; release: boolean }>;
+	};
+	/**
 	 * Per-clip screen crop (fractions of the frame), or null for the identity
 	 * (full-frame) crop. One entry per clip in the same order as `clips`, so a
 	 * clip that owns its own cropRegion is rendered with that crop and a clip
@@ -755,7 +776,39 @@ export function annotationFootageRect(
 	);
 }
 
-/** Serialize a document into a {@link SceneDescription}. Pure — no per-frame math. */
+type Size = { width: number; height: number };
+
+/**
+ * The size the camera box is laid out from: the camera's own proportions, cropped.
+ *
+ * The order matters. `camera.width/height` comes FIRST because it is the only source
+ * every caller has: it is in the document, so the export dialog and the CLI runner read
+ * it exactly as the preview does. `probed` is second, as a fresher-than-disk override for
+ * the window before the backfill has written the dimensions: it is what a mounted <video>
+ * just reported, and only the preview can ever supply it. The hardcoded 4:3 is last and
+ * is only reached for a document that predates the field, opened with no camera mounted.
+ *
+ * That ordering is the fix: the box used to depend on WHO was asking rather than on what
+ * was recorded, so a 16:9 camera was framed 16:9 in the preview and 4:3 in the export.
+ * The scene and the editor's drag box both read the same answer now.
+ */
+export function webcamBoxSourceSize(
+	camera: { width?: number; height?: number } | null | undefined,
+	probed: Size | null,
+	crop: Size,
+): Size {
+	const source =
+		camera?.width && camera?.height
+			? { width: camera.width, height: camera.height }
+			: (probed ?? { width: 960, height: 720 });
+	return {
+		width: Math.max(1, Math.round(source.width * crop.width)),
+		height: Math.max(1, Math.round(source.height * crop.height)),
+	};
+}
+
+/** Serialize a document into a {@link SceneDescription}. No per-frame math; the one side effect is
+ *  handing the click cues to the preview, which has no document of its own to read them from. */
 export function buildSceneDescription(
 	document: AxcutDocument,
 	webcamSourceSize: { width: number; height: number } | null = null,
@@ -801,6 +854,13 @@ export function buildSceneDescription(
 			.filter((pill) => pill.kind === "voiceover" && !pill.loop)
 			.map((pill) => [trackGroupId(pill), pill]),
 	);
+	// Click hits for the "mouse clicks" toggle, placed on the programme this export assembles.
+	// Synchronous: the cues were read from the take's sidecar when the sound was switched on.
+	// Its row lives under "Show cursor", like the click impact: a hidden cursor makes no sound.
+	const clickSound = clickSoundForDocument(document, {
+		clickSound: settings.cursorShow && settings.cursor.clickSound,
+		clickSoundGainDb: settings.cursor.clickSoundGainDb,
+	});
 	const audioTracks = document.audioTracks.flatMap((track) => {
 		if (track.muted) return [];
 		const asset = assetById.get(track.assetId);
@@ -1121,30 +1181,13 @@ export function buildSceneDescription(
 	 * The camera source SHAPE of a clip, resolved the same way and for the same reasons
 	 * as `screenSourceSizeOf` above: per clip, because two clips need not have been
 	 * recorded with the same camera.
-	 *
-	 * The order matters. `cameraTrack.width/height` comes FIRST because it is the only
-	 * source every caller has: it is in the document, so the export dialog and the CLI
-	 * runner read it exactly as the preview does. `webcamSourceSize` is second, as a
-	 * fresher-than-disk override for the window before the backfill has written the
-	 * dimensions — it is what a mounted <video> just reported, and only the preview can
-	 * ever supply it. The hardcoded 4:3 is last and is now only reached for a document
-	 * that predates the field, opened somewhere with no camera element mounted.
-	 *
-	 * That ordering is the fix: the box used to depend on WHO was asking rather than on
-	 * what was recorded, so a 16:9 camera was framed 16:9 in the preview and 4:3 in the
-	 * export. Everything below reads the same answer now.
 	 */
-	const webcamSourceSizeOf = (clip: AxcutClip) => {
-		const camera = assetById.get(clip.assetId)?.cameraTrack;
-		const source =
-			camera?.width && camera?.height
-				? { width: camera.width, height: camera.height }
-				: (webcamSourceSize ?? { width: 960, height: 720 });
-		return {
-			width: Math.max(1, Math.round(source.width * settings.webcamCropRegion.width)),
-			height: Math.max(1, Math.round(source.height * settings.webcamCropRegion.height)),
-		};
-	};
+	const webcamSourceSizeOf = (clip: AxcutClip) =>
+		webcamBoxSourceSize(
+			assetById.get(clip.assetId)?.cameraTrack,
+			webcamSourceSize,
+			settings.webcamCropRegion,
+		);
 	const layoutForClip = (
 		screenSize: { width: number; height: number },
 		hasCamera: boolean,
@@ -1310,6 +1353,7 @@ export function buildSceneDescription(
 				: [],
 		),
 		audioTracks,
+		...(clickSound ? { clickSound } : {}),
 		background: sceneBackground(settings.wallpaper, settings.wallpaperMotion),
 		zoomRegions: projectedZoomRegions.map((region) => {
 			const rendering = resolveZoomRendering(region, settings.autoZoom, settings.autoFocusAll);
@@ -1457,6 +1501,8 @@ export function buildSceneDescription(
 			endSec: region.endMs / 1000,
 			clipIndex: region.clipIndex,
 			...(region.underTrim ? { underTrim: true } : {}),
+			...(region.continuesBefore ? { continuesBefore: true } : {}),
+			...(region.continuesAfter ? { continuesAfter: true } : {}),
 		})),
 		// Speed is the one modifier with nothing to show for itself on a parked playhead: a
 		// still frame has no rate. So the entries under a trim are dropped here rather than

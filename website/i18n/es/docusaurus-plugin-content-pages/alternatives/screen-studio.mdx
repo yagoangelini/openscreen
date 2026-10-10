@@ -9,6 +9,9 @@ keywords:
   - alternativa de código abierto a screen studio
 ---
 
+import DemoLoop from "@site/src/components/DemoLoop";
+import DemoLoopPair from "@site/src/components/DemoLoop/Pair";
+
 # Una alternativa gratis y de código abierto a Screen Studio
 
 OpenScreen es una alternativa a Screen Studio gratis, con licencia MIT, para Windows, macOS y Linux. Igual que Screen Studio, hace zoom donde haces clic, permite cambiar el estilo del cursor después de la toma, agrega fondos y subtítulos generados en tu equipo, y exporta MP4 o GIF. A diferencia de Screen Studio, que solo funciona en macOS y necesita un plan de pago para exportar, no cuesta nada y no necesita cuenta. Screen Studio sigue siendo la mejor opción si compartes tus grabaciones como enlaces alojados con comentarios, o si grabas un iPhone o un iPad.
@@ -29,7 +32,7 @@ Esta página la publica el proyecto OpenScreen. Los datos sobre Screen Studio vi
 | Traducción de subtítulos | 15 idiomas, mediante un proveedor de IA que tú conectas | Sin paso de traducción en su guía de subtítulos |
 | Línea de tiempo multiclip | Sí | "Grabaciones multiclip" en su hoja de ruta, marcadas como planeadas |
 | Anotaciones de texto, flecha e imagen | Sí | "Anotaciones" en su hoja de ruta, marcadas como en pausa |
-| Exportación | MP4 (H.264 o H.265) o GIF, hasta 60 fps, sin marca de agua | MP4 o GIF, con ajustes de fps, tamaño de salida y calidad. Sin ajuste de códec documentado |
+| Exportación | MP4 (H.264) o GIF, hasta 60 fps, sin marca de agua | MP4 o GIF, con ajustes de fps, tamaño de salida y calidad |
 | Enlaces alojados para compartir | No | Sí, hasta 30 minutos por grabación (a septiembre de 2026), con comentarios con marca de tiempo |
 | Grabación de iPhone y iPad | No | Sí, por USB, con marcos de dispositivo |
 | Interfaz de línea de comandos | Sí | Ninguna en su guía |
@@ -49,6 +52,11 @@ Ambas apps cubren lo siguiente. Nada de esto es exclusivo de una sola.
 - **Notas mientras grabas.** Las dos tienen notas para el presentador. En Windows y macOS, la ventana de notas de OpenScreen también tiene modo teleprompter.
 - **Procesamiento local.** Screen Studio dice que nunca envía datos de tus grabaciones a sus servidores. OpenScreen no tiene cuenta, ni servidor propio, ni analíticas. Las [preguntas frecuentes](/docs/faq/#does-openscreen-work-offline) enumeran las pocas conexiones que sigue haciendo.
 
+<DemoLoopPair>
+  <DemoLoop name="background-picker" />
+  <DemoLoop name="sensitive-data-mask" />
+</DemoLoopPair>
+
 ## En qué se diferencia OpenScreen {#where-openscreen-differs}
 
 ### Precio, licencia y plataformas {#price-license-and-platforms}
@@ -63,9 +71,13 @@ Ambas apps cubren lo siguiente. Nada de esto es exclusivo de una sola.
 - **Anotaciones.** Texto con seis animaciones, flechas en ocho direcciones, imágenes y regiones de desenfoque. La hoja de ruta de Screen Studio enumera "Anotaciones", descritas como descripciones visuales o textuales de los clics, como en pausa. Consulta [Edición y línea de tiempo](/docs/editing-timeline/).
 - **Fondo de la cámara web.** Quita, desenfoca o reemplaza el fondo de la cámara sin pantalla verde, en la versión estable. Screen Studio enumera la eliminación del fondo de cámara como función beta.
 
+<DemoLoopPair>
+  <DemoLoop name="every-layout" />
+  <DemoLoop name="camera-blur" />
+</DemoLoopPair>
+
 ### Exportación y automatización {#export-and-automation}
 
-- **Elección de códec.** Las exportaciones MP4 son en H.264 o H.265. La guía de exportación de Screen Studio no documenta un ajuste de códec. Consulta [Exportación](/docs/export/).
 - **Una interfaz de línea de comandos.** Scripts, CI y agentes de código pueden manejar OpenScreen desde su [línea de comandos](/docs/cli/). La guía de Screen Studio no tiene entrada de línea de comandos.
 - **Edición por chat opcional con tu propia clave.** Conecta Claude, OpenAI, Gemini, Mistral, OpenRouter, MiniMax o cualquier endpoint compatible con OpenAI, y describe cortes, zooms, cambios de velocidad o anotaciones en lenguaje natural. Cada cambio se aplica como una edición común que se puede deshacer. Está desactivado hasta que conectas un proveedor, y ese mismo proveedor traduce los subtítulos a 15 idiomas. Consulta [Edición con IA](/docs/ai-editing/).
 

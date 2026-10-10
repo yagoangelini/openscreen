@@ -65,6 +65,8 @@ export async function transcribeAsset(
 	// so the stored transcript reflects reality, not the input option.
 	const forcedLanguage =
 		options.language && options.language !== "auto" ? options.language : undefined;
+	// The project's names and terms ride along on every run, background or manual.
+	const prompt = document.project.vocabulary;
 
 	// Forward the main process's per-chunk progress. Without this the status
 	// callback only ever fired the two coarse phases above, so a 30-minute
@@ -100,6 +102,7 @@ export async function transcribeAsset(
 			trimRegions: [],
 			signal: options.signal,
 			language: forcedLanguage,
+			prompt,
 			onStatus: forwardStatus,
 		});
 	// The voice stem, when the take has one: the words without the computer's sound on top.
@@ -127,6 +130,7 @@ export async function transcribeAsset(
 			trimRegions: [],
 			signal: options.signal,
 			language: forcedLanguage,
+			prompt,
 			onStatus: forwardStatus,
 		});
 	});

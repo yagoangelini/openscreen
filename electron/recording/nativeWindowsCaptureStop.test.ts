@@ -8,7 +8,9 @@ import {
 	readAudioDeviceDrops,
 	readCaptureFailureStage,
 	readMicrophoneDefaulted,
+	readMicrophoneNotFound,
 	readMicrophoneUnavailable,
+	readSecondaryWindowsApplied,
 	readStemsFinalized,
 	readStoppedPath,
 	readWebcamFormat,
@@ -161,6 +163,27 @@ describe("readMicrophoneDefaulted", () => {
 	});
 });
 
+describe("readSecondaryWindowsApplied", () => {
+	it("is true when the helper drew menus and popups into the capture", () => {
+		const output =
+			'{"event":"cursor-capture","schemaVersion":2,"requested":false,"applied":false}\n' +
+			'{"event":"secondary-windows","applied":true}\n' +
+			"Recording started\n";
+		expect(readSecondaryWindowsApplied(output)).toBe(true);
+	});
+
+	it("is false on a runtime older than Windows 11 24H2", () => {
+		expect(readSecondaryWindowsApplied('{"event":"secondary-windows","applied":false}\n')).toBe(
+			false,
+		);
+	});
+
+	it("is null when the helper said nothing, as for a monitor source", () => {
+		const output = '{"event":"cursor-capture","applied":true}\nRecording started\n';
+		expect(readSecondaryWindowsApplied(output)).toBe(null);
+	});
+});
+
 describe("readMicrophoneUnavailable", () => {
 	// The line ScreenCaptureRecorder.swift emits on macOS 13 and 14, which have no
 	// `captureMicrophone`, before recording the take without it (#700).
@@ -175,6 +198,22 @@ describe("readMicrophoneUnavailable", () => {
 		const output =
 			'{"event":"warning","code":"microphone-defaulted","message":"The requested microphone could not be resolved; capturing the default input."}\n';
 		expect(readMicrophoneUnavailable(output)).toBe(false);
+	});
+});
+
+describe("readMicrophoneNotFound", () => {
+	// The line ScreenCaptureRecorder.swift emits when macOS lists no audio input (#995).
+	it("sees the macOS helper record without a microphone that does not exist", () => {
+		const output =
+			'{"code":"microphone-not-found","event":"warning","message":"No audio input is connected; recording without the microphone."}\n';
+		expect(readMicrophoneNotFound(output)).toBe(true);
+		expect(readMicrophoneUnavailable(output)).toBe(false);
+	});
+
+	it("is false when this macOS cannot capture the microphone", () => {
+		const output =
+			'{"code":"microphone-unavailable","event":"warning","message":"Native microphone capture requires ScreenCaptureKit microphone support on this macOS version."}\n';
+		expect(readMicrophoneNotFound(output)).toBe(false);
 	});
 });
 

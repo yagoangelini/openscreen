@@ -88,7 +88,8 @@
 		"audioFiles": "Fichiers audio",
 		"openscreenProject": "Projet OpenScreen",
 		"allFiles": "Tous les fichiers",
-		"chooseRecordingsFolder": "Choisissez le dossier des nouveaux enregistrements"
+		"chooseRecordingsFolder": "Choisissez le dossier des nouveaux enregistrements",
+		"selectRecordingsFolder": "Sélectionner le dossier des enregistrements"
 	},
 	"recovery": {
 		"title": "Récupérer l'enregistrement",
@@ -105,5 +106,9 @@
 		"detail": "Fermer l'éditeur l'annule, et la vidéo ne sera pas enregistrée.",
 		"keep": "Continuer l'export",
 		"cancelAndClose": "Annuler l'export et fermer"
+	},
+	"recording": {
+		"lowDiskSpace": "Espace disque insuffisant pour démarrer l'enregistrement (seulement {{availableMb}} Mo disponibles). Libérez de l'espace ou choisissez un autre dossier d'enregistrements, puis réessayez.",
+		"folderUnavailable": "Le dossier des enregistrements {{path}} est inaccessible. Rebranchez son disque, ou choisissez un autre dossier dans le mode Enregistrement."
 	}
 }

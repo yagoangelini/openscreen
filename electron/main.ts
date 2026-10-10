@@ -1,4 +1,3 @@
-import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -21,6 +20,7 @@ import {
 	PRODUCT_NAME,
 	usesNativeAboutPanel,
 } from "./about";
+import { flushChatPersistence } from "./ai-edition/chat-service";
 import { AppSettingsStore } from "./app-settings";
 import {
 	blockedFromInstalling,
@@ -53,12 +53,13 @@ import {
 	ownsItsUpdates,
 	platformOwnsUpdates,
 } from "./install-channel";
-import { exportJobs } from "./ipc/gifExportJobs";
+import { exportJobs } from "./ipc/exportJobs";
 import {
 	exportDiagnosticFile,
 	getSelectedDesktopSource,
 	registerIpcHandlers,
 } from "./ipc/handlers";
+import { isOnlyLingeringOverlay } from "./lingeringOverlay";
 import { installMainProcessErrorGuards } from "./main-process-errors";
 import { showMessageBoxOver } from "./messageBox";
 import {
@@ -66,11 +67,14 @@ import {
 	showPermissionsWindow,
 	showPermissionsWindowIfNeeded,
 } from "./permissions";
+import { setDisplaySleepBlocked } from "./recording/displaySleepBlocker";
 import { killRunningScans } from "./recording/ocrScan";
+import { RecordingsDirManager } from "./recording/recordingsDirManager";
 import { offersStarPrompt, REPO_URL, storeReviewUrl } from "./star-prompt";
 import { registerSttIpc, shutdownStt } from "./stt";
 import { checkLatestRelease } from "./update-checker";
 import { loadUpdateMode, saveUpdateMode } from "./update-settings";
+import { configureWaylandSupport } from "./wayland";
 import {
 	createCountdownOverlayWindow,
 	createEditorWindow,
@@ -92,37 +96,46 @@ if (process.platform === "darwin") {
 	app.commandLine.appendSwitch("disable-features", "MacCatapLoopbackAudioForScreenShare");
 }
 
-// Wayland support for screen capture and window management on Wayland compositors.
+// Keep the session default while allowing explicit Xwayland launches.
 if (process.platform === "linux") {
-	const isWayland =
-		process.env.XDG_SESSION_TYPE === "wayland" || process.env.WAYLAND_DISPLAY !== undefined;
-	if (isWayland) {
-		app.commandLine.appendSwitch("ozone-platform", "wayland");
-		// Enable WebRTCPipeWireCapturer for screen capture on Wayland
-		app.commandLine.appendSwitch("enable-features", "WaylandWindowDrag,WebRTCPipeWireCapturer");
-		// Chromium's Wayland Ozone backend can't use Vulkan. When it tries, the WebRTC
-		// PipeWire capturer fails to import DMA-BUF frames into EGL (EGL_BAD_MATCH), the
-		// stream renegotiates, and screen recording yields no usable frames. Force the
-		// GL/EGL path so DMA-BUF import works. (Chromium itself logs this suggestion:
-		// "'--ozone-platform=wayland' is not compatible with Vulkan ... disabling Vulkan".)
-		app.commandLine.appendSwitch("disable-features", "Vulkan");
-	}
+	configureWaylandSupport(app.commandLine, process.env);
 }
 
 disableHttpCacheForDevServer(app.commandLine, process.env);
 
 installMainProcessErrorGuards();
 
-export const RECORDINGS_DIR = path.join(app.getPath("userData"), "recordings");
+const recordingsDirManager = new RecordingsDirManager(app.getPath("userData"), () => isRecording);
+
+export const DEFAULT_RECORDINGS_DIR = recordingsDirManager.defaultDir;
+
+// Mutable: reassigned by setRecordingsDir() when the user picks another folder.
+// `handlers.ts` imports this as a live named binding, so every call site there
+// sees the change immediately, with no restart.
+export let RECORDINGS_DIR = recordingsDirManager.dir;
 
 async function ensureRecordingsDir() {
 	try {
-		await fs.mkdir(RECORDINGS_DIR, { recursive: true });
+		await recordingsDirManager.ensureExists();
 		console.log("RECORDINGS_DIR:", RECORDINGS_DIR);
 		console.log("User Data Path:", app.getPath("userData"));
 	} catch (error) {
 		console.error("Failed to create recordings directory:", error);
 	}
+}
+
+/**
+ * Switches where new recordings are written. `null` resets to the default
+ * (userData/recordings). Existing files stay where they are. Refused while a
+ * recording is active; see RecordingsDirManager.setDir.
+ */
+export async function setRecordingsDir(customDir: string | null): Promise<string> {
+	RECORDINGS_DIR = await recordingsDirManager.setDir(customDir);
+	return RECORDINGS_DIR;
+}
+
+export function getRecordingsDirInfo() {
+	return recordingsDirManager.getInfo();
 }
 
 // The built directory structure
@@ -1244,6 +1257,17 @@ if (!cliCommand) {
 	app.on("window-all-closed", () => {
 		app.quit();
 	});
+	// The countdown overlay hides between takes instead of closing, so it would keep
+	// `window-all-closed` from ever firing (#961). Close it with the last other window. Every
+	// HUD/editor switch opens the next window before the previous one's `closed` arrives, so
+	// this only fires when the user really closed the last one.
+	app.on("browser-window-created", (_, win) => {
+		win.once("closed", () => {
+			if (isOnlyLingeringOverlay(BrowserWindow.getAllWindows(), countdownOverlayWindow)) {
+				countdownOverlayWindow?.close();
+			}
+		});
+	});
 }
 
 app.on("activate", () => {
@@ -1304,6 +1328,9 @@ app.on("before-quit", (event) => {
 		.catch((error) => {
 			console.error("[stt] Failed to stop whisper helper during app quit:", error);
 		})
+		// Chat history is written asynchronously. Flushing after the helper stops also
+		// catches a reply that landed meanwhile; a turn still running is not waited for.
+		.then(flushChatPersistence)
 		.finally(() => {
 			sttShutdownFinished = true;
 			app.quit();
@@ -1538,7 +1565,7 @@ appReady?.then(async () => {
 	}
 	switchToHud = switchToHudWrapper;
 
-	recordingControls = registerIpcHandlers(
+	const ipcControls = registerIpcHandlers(
 		createEditorWindowWrapper,
 		createSourceSelectorWindowWrapper,
 		createCountdownOverlayWindowWrapper,
@@ -1550,6 +1577,7 @@ appReady?.then(async () => {
 		(recording: boolean, sourceName: string) => {
 			selectedSourceName = sourceName;
 			isRecording = recording;
+			setDisplaySleepBlocked(recording);
 			if (!tray) createTray();
 			updateTrayMenu(recording);
 			// `canOfferUpdateCheck()` now answers "not mid-take" too, and the app/Help menus are
@@ -1561,6 +1589,7 @@ appReady?.then(async () => {
 		},
 		switchToHudWrapper,
 	);
+	recordingControls = ipcControls;
 
 	// Native STT (whisper.cpp + forced alignment) — single instance per app.
 	registerSttIpc(ipcMain);
@@ -1582,6 +1611,9 @@ appReady?.then(async () => {
 	}
 
 	createWindow();
+	// Off unless the user turned it on in Settings → AI. Started here rather than
+	// in registerIpcHandlers so neither the headless CLI nor a bench run binds it.
+	void ipcControls.mcpController.startIfEnabled();
 	void showPermissionsWindowIfNeeded().catch((error) =>
 		console.warn("[permissions] could not read the permissions at launch:", error),
 	);

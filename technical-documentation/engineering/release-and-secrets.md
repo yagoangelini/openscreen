@@ -26,6 +26,8 @@ The workflow computes `X.Y.Z-rc.N`, migrates items from `Next Release` to the `v
 
 The two workflows push their tags with different credentials, which is deliberate: `promote.yml` uses `GITHUB_TOKEN` (a tag is a ref, not a file change), while `prerelease.yml` pushes the RC tag with `OPENSCREEN_RELEASE_TOKEN`. A `GITHUB_TOKEN` tag push is answered with `remote: Internal Server Error` — a 500, not a 403 — by a tag ruleset that rejects the Actions token, and that failure took down the whole `v1.8.0-rc.1` cut, skipping the build trigger and the Discord announce with it.
 
+**Which whisper helper a build ships.** `build.yml` does not compile `whisper-stt-server`: `scripts/stage-whisper-stt.sh` downloads it from a `build-whisper-stt.yml` run, which runs on the pushes that touch the helper. It takes the most recent successful run built from the **same helper sources** as the commit being packaged (the `electron/native/whisper-stt` tree, `scripts/build-whisper-stt.sh` and the workflow, compared by git object id), so the release branch's cherry-pick of a helper change matches the run built from `main`. No such run fails the build, with the command that makes one. Until 2026-09-30 it took the most recent artifact of any branch: `v2.0.0-rc.1` shipped whatever `main` had last built, and a PR branch pushed an hour later would have decided what rc.2 shipped. So after cherry-picking a helper change, let a `build-whisper-stt` run of those sources finish before dispatching `prerelease.yml`.
+
 RC tags are signed and notarized exactly like stable ones. That keeps testers out of `xattr -rd com.apple.quarantine`, and exercises the whole credential path on every candidate instead of first proving it on the promotion build.
 
 ### Promote to stable
@@ -73,6 +75,7 @@ RC=1.5.0-rc.1                          # bump the rc.N for every later candidate
 # Cut RC (skips milestone migration and Discord announce)
 git checkout -b release/v1.5.0 main    # rc.2+: git checkout release/v1.5.0 instead
 node .github/scripts/set-release-version.mjs "$RC"
+bash .github/scripts/refresh-nix-npm-hash.sh   # needs Nix; the lockfile version is in the hash
 git commit -am "chore(release): bump to $RC [skip ci]"
 git push origin release/v1.5.0
 git tag "v$RC" && git push origin "v$RC"
@@ -80,6 +83,7 @@ git tag "v$RC" && git push origin "v$RC"
 # Promote (skips milestone close and Discord announce)
 git checkout release/v1.5.0
 node .github/scripts/set-release-version.mjs 1.5.0
+bash .github/scripts/refresh-nix-npm-hash.sh
 git commit -am "chore(release): bump to 1.5.0 [skip ci]"
 git push origin release/v1.5.0
 git tag v1.5.0 && git push origin v1.5.0
@@ -221,8 +225,6 @@ The bot token comes from a Discord application authorized with the `bot` scope. 
 | `AUR_SSH_PRIVATE_KEY` | Secret | Private SSH key whose public key is authorized for the configured AUR package repository. | Add a replacement public key to AUR, update the private-key secret, manually dispatch and verify, then remove the old AUR key. |
 | `AUR_KNOWN_HOSTS` | Variable | Pinned `aur.archlinux.org` host-key lines; required because strict host checking is enabled. | Replace only after independently verifying an AUR host-key change. |
 | `AUR_PACKAGE_NAME` | Variable | AUR repository/package name and workflow gate. | Update if the package is renamed. |
-
-`bump-nix-package.yml` uses the workflow-scoped `GITHUB_TOKEN`; it requires repository contents and pull-request write permissions as declared in the workflow and has no additional long-lived secret.
 
 **Homebrew publishing does not complete yet, and now says so.** `update-homebrew-cask.yml` has never published a cask — not once since it was written for the v1.5.0 pipeline. Neither `HOMEBREW_TAP_OWNER` nor `HOMEBREW_TAP_REPO` has ever existed on this repository, both sat in the job-level `if`, and an unconfigured job resolves to `skipped`, which is green: every release run reads as a success. The same failure as WinGet below, found the same way and fixed the same way — the configuration test now lives in a step that names what is missing (#335). Three things are needed, and the third is the one a variable cannot supply: `HOMEBREW_TAP_OWNER` and `HOMEBREW_TAP_REPO`; the `HOMEBREW_TAP_TOKEN` secret with contents write on that repository; and the tap repository itself, which **must** be named `homebrew-<something>` — that prefix is how `brew tap` resolves a repository at all, so `getopenscreen/openscreen-tap` would be checked out and pushed to successfully and still be untappable. With `getopenscreen/homebrew-openscreen`, the install command is `brew install --cask getopenscreen/openscreen/openscreen`.
 

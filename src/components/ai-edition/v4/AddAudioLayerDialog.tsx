@@ -161,6 +161,11 @@ export function AddAudioLayerDialog({
 			return;
 		}
 		try {
+			const storage = await window.electronAPI?.checkRecordingStorage?.();
+			if (storage && !storage.success) {
+				toast.error(storage.error);
+				return;
+			}
 			// Either read may be missing or fail: the default microphone is still a voiceover.
 			const [devices, prefs] = await Promise.all([
 				Promise.resolve()

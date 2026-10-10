@@ -50,7 +50,7 @@ No Windows, no macOS e no Linux, um botão de modo do cursor alterna entre:
 O que a sobreposição editável captura depende da plataforma:
 - **Windows** — o formato real do cursor e os cliques.
 - **macOS** — o formato do cursor e os cliques, que exigem a permissão de Acessibilidade. Nesse modo, apertar gravar sem ela abre a janela de permissões, em vez de começar a gravar (veja a [instalação no macOS](./installation.md#macos)).
-- **Linux** — posição e formato pelo portal ScreenCast, além dos cliques com o botão esquerdo quando seu usuário está no grupo `input` (veja [Cliques do mouse no Wayland](./installation.md#mouse-clicks-on-wayland)).
+- **Linux** — posição e formato pelo portal ScreenCast, além dos cliques com o botão esquerdo quando seu usuário tem acesso de leitura ao mouse, por uma regra do udev (recomendada) ou pelo grupo `input` (veja [Cliques do mouse no Wayland](./installation.md#mouse-clicks-on-wayland)).
 
 Uma tomada no Linux que recorre à [captura pelo navegador](#native-vs-browser-capture) grava o cursor do sistema, seja qual for o modo escolhido.
 
@@ -80,7 +80,7 @@ Você não precisa começar pelo HUD. No editor, mude a barra superior para **Gr
 
 - **Fonte** — o mesmo seletor de tela/janela, em uma janela modal, ou o seletor do sistema da Apple no macOS 15.2 e posterior. No Linux, essa linha também mostra *O sistema perguntará o que compartilhar*, e a caixa de diálogo do portal faz a escolha.
 - **Áudio do sistema**, **Microfone**, **Câmera** — cada um é uma linha de ativar/desativar; o microfone e a câmera se expandem em uma lista de dispositivos, e a câmera mostra uma pré-visualização ao vivo para você se enquadrar antes de começar.
-- **Destaque do cursor** — ativado significa o cursor da sobreposição editável; desativado significa o cursor comum do sistema.
+- **Cursor editável** — ativado significa o cursor da sobreposição editável; desativado significa o cursor comum do sistema.
 
 **Iniciar gravação** abre o widget de gravação e fecha a janela do editor; cancelar leva você de volta ao modo Editar. É também aqui que **Novo projeto → Gravação de tela** leva você.
 

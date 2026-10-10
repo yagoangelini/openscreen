@@ -8,11 +8,15 @@ keywords:
   - zoom automático al grabar pantalla en windows
 ---
 
+import DemoLoop from "@site/src/components/DemoLoop";
+
 # Un grabador de pantalla gratis con zoom automático
 
 OpenScreen es un grabador de pantalla con zoom automático para Windows, macOS y Linux, gratis y con licencia MIT. Después de cada toma, lee los clics que grabó y hace zoom en ellos, sin llamadas de red ni modelo de IA. Screen Studio, Cap y Camtasia también hacen zoom automáticamente; OpenScreen lo hace gratis, en los tres sistemas.
 
 Esta página la publica el proyecto OpenScreen. Los datos sobre Screen Studio, Cap y Camtasia vienen de screen.studio, cap.so y techsmith.com, y se verificaron en septiembre de 2026. Las fuentes están al final.
+
+<DemoLoop name="classic-zoom" />
 
 ## De un vistazo {#at-a-glance}
 
@@ -50,7 +54,7 @@ Algunos detalles importan en la práctica:
 - **Los resultados son zooms comunes.** Haz clic en uno para cambiar su profundidad, cámara 3D o enfoque, arrastra sus bordes para mover su inicio y fin, o elimínalo.
 - **Se ejecuta después de cada toma.** Cada grabación nueva recibe sus zooms al abrirse en el editor. Para evitarlo, desactiva **Zoom automático tras grabar** en el modo **Grabar** del editor. Para ejecutarlo cuando quieras, elige **Zooms automáticos** en el editor, o pasa `--auto-zoom` en la línea de comandos.
 - **Te avisa cuando no encuentra ningún momento válido.** El editor reporta que no se encontraron momentos para zoom automático.
-- **Funciona a partir de los clics grabados.** En Windows se graban los clics. En macOS necesitan el permiso de Accesibilidad, y en Linux tu usuario debe estar en el grupo `input`.
+- **Funciona a partir de los clics grabados.** En Windows se graban los clics. En macOS necesitan el permiso de Accesibilidad, y en Linux tu usuario necesita acceso de lectura al mouse, mediante una regla de udev (recomendada) o el grupo `input` ([Clics del mouse en Wayland](/docs/installation/#mouse-clicks-on-wayland)).
 - **Señalar no es hacer clic.** Un puntero que mantienes quieto mientras hablas sobre algo no recibe zoom. Agrega uno a mano con `Z`.
 
 El mismo menú tiene un segundo elemento, **Cortes inteligentes**, marcado *Con IA*. Es una función distinta: le pide al agente de chat opcional que corte el tiempo muerto. Espera la transcripción de la grabación, y solo funciona una vez que conectas un proveedor de IA con tu propia clave. Consulta [Edición con IA](/docs/ai-editing/).
@@ -68,11 +72,15 @@ Los zooms automáticos son un punto de partida. Las mismas regiones de zoom se p
 
 Un zoom manual con enfoque manual no necesita datos de cursor, así que también funciona en un video importado de otra herramienta. Consulta [Regiones de zoom](/docs/editing-timeline/#zoom-regions) para el inspector de zoom.
 
+<DemoLoop name="3d-camera" />
+
 ## El cursor después de la toma {#the-cursor-after-the-take}
 
 El mismo movimiento grabado maneja el cursor en la exportación. El panel Cursor lo muestra u oculta y define su tamaño, suavizado, desenfoque de movimiento, rebote al clic e impacto del clic. La trayectoria del cursor se suaviza de la misma forma para la vista previa y la exportación, así que la vista previa coincide con el archivo.
 
-El rebote al clic necesita clics grabados. En macOS eso requiere el permiso de Accesibilidad, y en Linux tu usuario debe estar en el grupo `input`. [Grabación](/docs/recording/) enumera lo que captura cada plataforma.
+El rebote al clic necesita clics grabados. En macOS eso requiere el permiso de Accesibilidad, y en Linux, acceso de lectura al mouse, mediante una regla de udev o el grupo `input`. [Grabación](/docs/recording/) enumera lo que captura cada plataforma.
+
+<DemoLoop name="3d-cursors" />
 
 ## Desde la línea de comandos {#from-the-command-line}
 

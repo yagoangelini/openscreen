@@ -8,11 +8,15 @@ keywords:
   - Windows 自动缩放屏幕录制
 ---
 
+import DemoLoop from "@site/src/components/DemoLoop";
+
 # 一款带自动缩放的免费录屏软件
 
 OpenScreen 是一款面向 Windows、macOS 和 Linux 的免费录屏软件，采用 MIT 许可证，具备自动缩放功能。每次录制结束后，OpenScreen 会读取它录制下来的点击，并在这些点击处放大画面，无需联网、无需 AI 模型。Screen Studio、Cap 和 Camtasia 也都具备自动缩放功能；OpenScreen 在这三个系统上都免费提供这项功能。
 
 本页由 OpenScreen 项目发布。关于 Screen Studio、Cap 和 Camtasia 的信息来自 screen.studio、cap.so 和 techsmith.com，核实于 2026 年 9 月。信息来源列于文末。
+
+<DemoLoop name="classic-zoom" />
 
 ## 一览 {#at-a-glance}
 
@@ -50,7 +54,7 @@ OpenScreen 是一款面向 Windows、macOS 和 Linux 的免费录屏软件，采
 - **结果是普通的缩放。** 点击任意一个即可修改其深度、3D 镜头或焦点，拖动边缘可调整起止时间，也可以删除它。
 - **每次录制结束后都会运行。** 每段新录制的内容在编辑器中打开时就会带上缩放。如需关闭，请在编辑器的**录制**模式中关闭**录制后自动缩放**。也可以随时手动运行：在编辑器中选择**自动缩放**，或在命令行中传入 `--auto-zoom`。
 - **没有符合条件的内容时会告知你。** 编辑器会提示未找到可自动缩放的时刻。
-- **依据录制到的点击工作。** 在 Windows 上会记录点击。在 macOS 上，这需要辅助功能权限；在 Linux 上，你的用户必须加入 `input` 组。
+- **依据录制到的点击工作。** 在 Windows 上会记录点击。在 macOS 上，这需要辅助功能权限；在 Linux 上，你的用户需要通过 udev 规则（推荐）或 `input` 组获得鼠标的读取权限（[Wayland 上的鼠标点击](/docs/installation/#mouse-clicks-on-wayland)）。
 - **指向不等于点击。** 在你讲解某处内容时保持静止的指针不会获得缩放。可以用 `Z` 手动添加一个。
 
 同一菜单中还有第二项，**智能剪切**，标有“*使用 AI*”字样。这是一项不同的功能：它会请求可选的聊天代理来剪掉无效时间。它需要等待录制内容的转录文本，并且只有在你用自己的密钥连接了 AI 提供方之后才能使用。参见 [AI 编辑](/docs/ai-editing/)。
@@ -68,11 +72,15 @@ OpenScreen 是一款面向 Windows、macOS 和 Linux 的免费录屏软件，采
 
 带有手动焦点的手动缩放不需要光标数据，因此也适用于从其他工具导入的视频。缩放检查器详见[缩放区间](/docs/editing-timeline/#zoom-regions)。
 
+<DemoLoop name="3d-camera" />
+
 ## 录制结束后的光标 {#the-cursor-after-the-take}
 
 导出中的光标同样由这份录制的移动数据驱动。光标面板可以显示或隐藏光标，并设置其大小、平滑度、运动模糊、点击回弹和点击按压效果。光标路径在预览和导出时采用相同的平滑处理方式，因此预览效果与最终文件一致。
 
-点击回弹需要录制到的点击数据。在 macOS 上，这需要辅助功能权限；在 Linux 上，你的用户必须加入 `input` 组。[屏幕录制](/docs/recording/)列出了各平台能采集到的内容。
+点击回弹需要录制到的点击数据。在 macOS 上，这需要辅助功能权限；在 Linux 上，你的用户需要通过 udev 规则或 `input` 组获得鼠标的读取权限。[屏幕录制](/docs/recording/)列出了各平台能采集到的内容。
+
+<DemoLoop name="3d-cursors" />
 
 ## 通过命令行 {#from-the-command-line}
 

@@ -31,10 +31,12 @@ flowchart LR
 Three optional layers sit on the cursor, all drawn by the compositor in the preview and the export alike:
 
 - **Click ring** (`cursor.clickRing`, editor setting `cursorClickRing`): an expanding ring at each click, laid on an identity plane so it stays round under the 3D camera (`click_ring` in `SceneCursor`, extent `CLICK_RING_EXTENT`). On in new projects. The older *click impact* effect (shader mode 16) is a separate setting and stays off.
-- **Spotlight** (`cursor.spotlight`, `cursorSpotlight`): the whole frame dimmed outside a soft disc on the smoothed pointer (`spotlight_cb`, shader mode 19, drawn first so the rings sit on top). Off by default. **Direct3D 11 only**: the Metal and wgpu shaders have no mode 19, so `frame_geometry.rs` emits it only under `cfg!(target_os = "windows")`.
+- **Spotlight** (`cursor.spotlight`, `cursorSpotlight`): the whole frame dimmed outside a soft disc on the smoothed pointer (`spotlight_cb`, shader mode 20 — 19 is Glass Lens — drawn first so the rings sit on top). Off by default. **Direct3D 11 only**: the Metal and wgpu shaders have no spotlight mode, so `frame_geometry.rs` emits it only under `cfg!(target_os = "windows")`.
 - **Shortcut plates** (`cursorShowKeystrokes`): the chords the Windows sampler named (Ctrl/Alt/Win + key; see Input signals) become text plates at the bottom of the frame. `keystrokes.ts` reads them at import (`keystrokesFromCursorSamples`, kept free of `@/` imports because the main process loads it) into `asset.keystrokes`; `keystrokeRegions.ts` turns them into text regions in `buildSceneDescription`. On in new projects.
 
 A crash-safe copy of the samples is kept while recording: `CursorCheckpointWriter` (`electron/recording/cursorCheckpoint.ts`) appends them to `<take>.mp4.cursor.ndjson` every 5 s, and a take recovered at launch rebuilds its telemetry from that file. If the sampler process dies, the session restarts it up to `MAX_HELPER_RESTARTS` (5) times, 500 ms apart (`windowsNativeRecordingSession.ts`); after that it only logs `restart-gave-up` — the app does not tell the user yet.
+
+Glass cursors read the picture under them. When the cursor is the Prism Glow crystal or Glass Lens (`CursorPlan::glass`), each backend copies the frame as composed so far, footage and privacy blurs included, just before drawing the cursor, and the shader refracts that copy. Glass Lens does this with the 3D option off as well: its sprite names a glass model (`glass` in `cursorSprites`), and mode 19 (`cursor_glass_cb`) draws that model face on instead of the PNG, which only serves the theme picker.
 
 ## Settings
 

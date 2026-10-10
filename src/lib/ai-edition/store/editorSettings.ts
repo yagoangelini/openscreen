@@ -208,6 +208,8 @@ interface LegacyShape {
 	cursorShowKeystrokes?: boolean;
 	cursorClickRing?: boolean;
 	cursorSpotlight?: boolean;
+	cursorClickSound?: boolean;
+	cursorClickSoundGainDb?: number;
 	cursorShow?: boolean;
 	cursorAutoHide?: boolean;
 	cursorTheme?: string;
@@ -266,6 +268,12 @@ export function getEditorSettings(doc: AxcutDocument | null | undefined): Editor
 		// The same for the click highlight.
 		...(legacy?.cursorClickRing === true ? { clickRing: true } : {}),
 		...(legacy?.cursorSpotlight === true ? { spotlight: true } : {}),
+		clickSound: bool(legacy?.cursorClickSound, DEFAULT_EDITOR_SETTINGS.cursor.clickSound),
+		clickSoundGainDb: readBounded(
+			legacy?.cursorClickSoundGainDb,
+			"cursorClickSoundGainDb",
+			defaults.cursor.clickSoundGainDb,
+		),
 		autoHide: bool(legacy?.cursorAutoHide, DEFAULT_EDITOR_SETTINGS.cursorAutoHide),
 	};
 
@@ -436,6 +444,8 @@ function nextLegacy(current: LegacyShape | null, patch: EditorSettingsPatch): Le
 		if (c.showKeystrokes !== undefined) next.cursorShowKeystrokes = c.showKeystrokes;
 		if (c.clickRing !== undefined) next.cursorClickRing = c.clickRing;
 		if (c.spotlight !== undefined) next.cursorSpotlight = c.spotlight;
+		if (c.clickSound !== undefined) next.cursorClickSound = c.clickSound;
+		if (c.clickSoundGainDb !== undefined) next.cursorClickSoundGainDb = c.clickSoundGainDb;
 		if (c.theme !== undefined) next.cursorTheme = c.theme;
 		if (c.show !== undefined) next.cursorShow = c.show;
 		if (c.autoHide !== undefined) next.cursorAutoHide = c.autoHide;

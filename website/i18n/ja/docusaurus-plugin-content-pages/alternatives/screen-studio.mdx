@@ -9,6 +9,9 @@ keywords:
   - Screen Studio 代替 オープンソース
 ---
 
+import DemoLoop from "@site/src/components/DemoLoop";
+import DemoLoopPair from "@site/src/components/DemoLoop/Pair";
+
 # 無料・オープンソースの Screen Studio 代替
 
 OpenScreen は、Windows・macOS・Linux 向けの無料の MIT ライセンスの Screen Studio 代替です。Screen Studio と同じように、クリックした場所にズームし、テイク後にカーソルのスタイルを変更し、背景と端末上の字幕を追加し、MP4 または GIF を出力します。macOS でしか動かず、エクスポートに有料プランが必要な Screen Studio と違い、OpenScreen は無料で、アカウントも不要です。コメント付きのホスティングされたリンクで録画を共有する場合や、iPhone や iPad を録画する場合は、Screen Studio のほうが今も適しています。
@@ -29,7 +32,7 @@ OpenScreen は、Windows・macOS・Linux 向けの無料の MIT ライセンス�
 | 字幕の翻訳 | 接続した AI プロバイダーを通じて 15 言語 | 字幕ガイドに翻訳の手順なし |
 | マルチクリップのタイムライン | あり | ロードマップに「マルチクリップ録画」が計画中として掲載 |
 | テキスト・矢印・画像の注釈 | あり | ロードマップに「注釈」が保留中として掲載 |
-| エクスポート | MP4（H.264 または H.265）または GIF、最大 60 fps、透かしなし | MP4 または GIF、フレームレート・出力サイズ・画質の設定あり。コーデック設定の記載なし |
+| エクスポート | MP4（H.264）または GIF、最大 60 fps、透かしなし | MP4 または GIF、フレームレート・出力サイズ・画質の設定あり |
 | ホスティングされた共有リンク | なし | あり。録画 1 本あたり最大 30 分（2026 年 9 月時点）、タイムスタンプ付きコメント対応 |
 | iPhone・iPad の録画 | なし | あり。USB 経由、デバイスフレーム付き |
 | コマンドラインインターフェース | あり | ガイドに記載なし |
@@ -49,6 +52,11 @@ OpenScreen は、Windows・macOS・Linux 向けの無料の MIT ライセンス�
 - **録画中のメモ。** どちらもスピーカーノートを備えています。Windows と macOS では、OpenScreen のノートウィンドウにテレプロンプターモードもあります。
 - **ローカル処理。** Screen Studio は、録画に関するデータを自社サーバーに送信することはないとしています。OpenScreen にはアカウントも、独自サーバーも、分析機能もありません。それでも行われるわずかな通信は[よくある質問](/docs/faq/#does-openscreen-work-offline)に一覧しています。
 
+<DemoLoopPair>
+  <DemoLoop name="background-picker" />
+  <DemoLoop name="sensitive-data-mask" />
+</DemoLoopPair>
+
 ## OpenScreen が異なる点 {#where-openscreen-differs}
 
 ### 価格、ライセンス、対応プラットフォーム {#price-license-and-platforms}
@@ -63,9 +71,13 @@ OpenScreen は、Windows・macOS・Linux 向けの無料の MIT ライセンス�
 - **注釈。** 6 種類のアニメーション付きテキスト、8 方向の矢印、画像、ぼかし領域。Screen Studio のロードマップには、クリックの視覚的・文章的な説明とされる「注釈」が保留中として掲載されています。[編集とタイムライン](/docs/editing-timeline/)を参照してください。
 - **ウェブカメラの背景。** 安定版で、グリーンスクリーンなしにカメラの背景を削除・ぼかし・置き換えできます。Screen Studio はカメラ背景の削除をベータ機能として挙げています。
 
+<DemoLoopPair>
+  <DemoLoop name="every-layout" />
+  <DemoLoop name="camera-blur" />
+</DemoLoopPair>
+
 ### エクスポートと自動化 {#export-and-automation}
 
-- **コーデックの選択。** MP4 は H.264 または H.265 でエクスポートされます。Screen Studio のエクスポートガイドにコーデック設定の記載はありません。[エクスポート](/docs/export/)を参照してください。
 - **コマンドラインインターフェース。** スクリプト、CI、コーディングエージェントが[コマンドライン](/docs/cli/)から OpenScreen を操作できます。Screen Studio のガイドにコマンドラインの項目はありません。
 - **自分の API キーによる任意のチャット編集。** Claude、OpenAI、Gemini、Mistral、OpenRouter、MiniMax、または任意の OpenAI 互換エンドポイントを接続し、カット、ズーム、速度変更、注釈を普段の言葉で指示できます。変更はすべて元に戻せる通常の編集として反映されます。プロバイダーを接続するまではオフで、同じプロバイダーが字幕を 15 言語に翻訳します。[AI 編集](/docs/ai-editing/)を参照してください。
 

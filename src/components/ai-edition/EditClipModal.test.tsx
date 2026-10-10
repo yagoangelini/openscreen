@@ -130,6 +130,79 @@ describe("EditClipModal trim duration readout (#558)", () => {
 	});
 });
 
+describe("EditClipModal in a short window (#1005)", () => {
+	// The actions used to sit at the end of the scrolling body. In a window too short for the
+	// card, Apply was clipped out of view, and a click where it should have been landed on the
+	// backdrop, which closed the dialog and dropped the new trim and crop without a word.
+	function renderWithSpies() {
+		const onClose = vi.fn();
+		const onApply = vi.fn();
+		renderWithI18n(
+			<EditClipModal
+				open
+				onClose={onClose}
+				clip={CLIP}
+				assetMeta={ASSET}
+				videoSources={[]}
+				onApply={onApply}
+			/>,
+		);
+		return { onClose, onApply };
+	}
+
+	function clickBackdrop() {
+		const backdrop = document.querySelector('[class*="modalBackdrop"]');
+		if (!backdrop) throw new Error("no modal backdrop rendered");
+		fireEvent.click(backdrop);
+	}
+
+	it("keeps the actions out of the scrolling body", () => {
+		renderWithSpies();
+		const apply = screen.getByRole("button", { name: "Apply" });
+
+		expect(apply.closest('[class*="modalBody"]')).toBeNull();
+		expect(apply.closest('[class*="modalFoot"]')).not.toBeNull();
+	});
+
+	it("closes on a backdrop click while there is nothing to lose", () => {
+		const { onClose } = renderWithSpies();
+
+		clickBackdrop();
+
+		expect(onClose).toHaveBeenCalledTimes(1);
+	});
+
+	it.each([
+		[
+			"a trim",
+			() => {
+				fireEvent.pointerDown(screen.getByRole("button", { name: "Adjust clip start" }), {
+					clientX: 0,
+				});
+				act(() => {
+					window.dispatchEvent(new MouseEvent("pointermove", { clientX: 100 }));
+					window.dispatchEvent(new MouseEvent("pointerup"));
+				});
+			},
+		],
+		["a crop", () => fireEvent.click(screen.getByRole("button", { name: "1:1" }))],
+	])("keeps %s through a backdrop click, and drops it on Escape or Cancel", (_, edit) => {
+		const { onClose, onApply } = renderWithSpies();
+		edit();
+
+		clickBackdrop();
+		expect(onClose).not.toHaveBeenCalled();
+		expect(screen.getByRole("button", { name: "Apply" })).toBeEnabled();
+
+		// Those two say "discard"; a click beside the card does not.
+		fireEvent.keyDown(document, { key: "Escape" });
+		expect(onClose).toHaveBeenCalledTimes(1);
+		fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+		expect(onClose).toHaveBeenCalledTimes(2);
+		expect(onApply).not.toHaveBeenCalled();
+	});
+});
+
 describe("EditClipModal crop from the keyboard", () => {
 	it("moves the crop with the arrows and resizes it with Shift + the arrows", () => {
 		const onApply = vi.fn();
@@ -160,5 +233,127 @@ describe("EditClipModal crop from the keyboard", () => {
 			105,
 			expect.objectContaining({ x: 0.01, y: 0, width: 0.99 }),
 		);
+	});
+});
+
+describe("EditClipModal playhead for framing the crop", () => {
+	// jsdom has no media pipeline: stand in a clock the modal can seek.
+	let videoTime = 0;
+	let readyState = 1;
+	afterEach(() => {
+		readyState = 1;
+	});
+	beforeAll(() => {
+		Object.defineProperty(HTMLMediaElement.prototype, "currentTime", {
+			configurable: true,
+			get: () => videoTime,
+			set: (v: number) => {
+				videoTime = v;
+			},
+		});
+		Object.defineProperty(HTMLMediaElement.prototype, "readyState", {
+			configurable: true,
+			get: () => readyState,
+		});
+		HTMLMediaElement.prototype.pause = vi.fn();
+	});
+
+	function renderWithVideo() {
+		const onClose = vi.fn();
+		renderWithI18n(
+			<EditClipModal
+				open
+				onClose={onClose}
+				clip={CLIP}
+				assetMeta={ASSET}
+				videoSources={[{ id: "asset_1", src: "file:///rec.mp4", label: "rec" }]}
+				onApply={vi.fn()}
+			/>,
+		);
+		return { onClose };
+	}
+	// 1550px track over 155s: 10px a second.
+	const playheadPct = () => screen.getByTestId("edit-clip-playhead").style.left;
+	const pct = (sec: number) => `${(sec / 155) * 100}%`;
+	const drag = (target: HTMLElement, fromX: number, toX: number) => {
+		fireEvent.pointerDown(target, { clientX: fromX });
+		act(() => {
+			window.dispatchEvent(new MouseEvent("pointermove", { clientX: toX }));
+			window.dispatchEvent(new MouseEvent("pointerup"));
+		});
+	};
+
+	it("opens on the in-point and shows the frame under a click or drag of the track", () => {
+		renderWithVideo();
+		expect(playheadPct()).toBe(pct(20));
+		expect(videoTime).toBe(20);
+		const track = screen.getByTestId("edit-clip-trim-track");
+
+		fireEvent.pointerDown(track, { clientX: 500 });
+		expect(playheadPct()).toBe(pct(50));
+		expect(videoTime).toBe(50);
+		act(() => {
+			window.dispatchEvent(new MouseEvent("pointermove", { clientX: 700 }));
+		});
+		expect(playheadPct()).toBe(pct(70));
+		expect(videoTime).toBe(70);
+	});
+
+	it("holds the playhead inside the kept range", () => {
+		renderWithVideo();
+		const track = screen.getByTestId("edit-clip-trim-track");
+
+		drag(track, 500, 1500);
+		expect(playheadPct()).toBe(pct(105));
+		expect(videoTime).toBe(105);
+		drag(track, 50, 50);
+		expect(playheadPct()).toBe(pct(20));
+		expect(videoTime).toBe(20);
+	});
+
+	it("is pushed along by a trim that crosses it, and stays there", () => {
+		renderWithVideo();
+		drag(screen.getByTestId("edit-clip-trim-track"), 500, 500);
+		const end = screen.getByRole("button", { name: "Adjust clip end" });
+
+		drag(end, 0, -600);
+		expect(screen.getByTestId("edit-clip-trim-range")).toHaveTextContent("0:20.0–0:45.0");
+		expect(playheadPct()).toBe(pct(45));
+		expect(videoTime).toBe(45);
+
+		drag(end, 0, 300);
+		expect(playheadPct()).toBe(pct(45));
+		expect(videoTime).toBe(45);
+
+		drag(screen.getByRole("button", { name: "Adjust clip start" }), 0, 400);
+		expect(playheadPct()).toBe(pct(60));
+		expect(videoTime).toBe(60);
+	});
+
+	it("keeps a scrub made before the video's metadata loads", () => {
+		readyState = 0;
+		videoTime = 0;
+		renderWithVideo();
+		drag(screen.getByTestId("edit-clip-trim-track"), 500, 500);
+		expect(videoTime).toBe(0);
+
+		readyState = 1;
+		const video = document.querySelector("video");
+		if (!video) throw new Error("no preview video rendered");
+		act(() => {
+			video.dispatchEvent(new Event("loadedmetadata"));
+		});
+		expect(videoTime).toBe(50);
+	});
+
+	it("is not an edit: Apply stays off and the backdrop still closes", () => {
+		const { onClose } = renderWithVideo();
+		drag(screen.getByTestId("edit-clip-trim-track"), 500, 800);
+
+		expect(screen.getByRole("button", { name: "Apply" })).toBeDisabled();
+		const backdrop = document.querySelector('[class*="modalBackdrop"]');
+		if (!backdrop) throw new Error("no modal backdrop rendered");
+		fireEvent.click(backdrop);
+		expect(onClose).toHaveBeenCalledTimes(1);
 	});
 });

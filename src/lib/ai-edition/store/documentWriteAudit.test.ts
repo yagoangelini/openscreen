@@ -119,6 +119,9 @@ const DECLARED: WritePath[] = [
 		"gesture",
 	),
 
+	// The project's names and terms for Whisper (#1023), saved when the field loses focus.
+	w("src/components/ai-edition/v4/MediaStage.tsx", "MediaStage", "save", "gesture"),
+
 	// The persist that follows an undo. Recording it would undo the undo.
 	w("src/components/ai-edition/NewEditorShell.tsx", "NewEditorShell", "save", "automatic"),
 	// "Save" on the unsaved-changes prompt.
@@ -269,6 +272,8 @@ const DECLARED: WritePath[] = [
 	w("src/lib/ai-edition/store/useTimeline.ts", "addTrim", "save", "gesture"),
 	w("src/lib/ai-edition/store/useTimeline.ts", "addZoom", "save", "gesture"),
 	w("src/lib/ai-edition/store/useTimeline.ts", "addZoomsBulk", "save", "gesture"),
+	// The Clear timeline button: every edit region in one write, so one undo step.
+	w("src/lib/ai-edition/store/useTimeline.ts", "clearTimeline", "save", "gesture"),
 	// The two drag commits. One undo step per gesture, recorded on release and only
 	// if the write lands — `historyBase` carries the pre-drag document.
 	w("src/lib/ai-edition/store/useTimeline.ts", "commitAnnotationChange", "save", "gesture"),

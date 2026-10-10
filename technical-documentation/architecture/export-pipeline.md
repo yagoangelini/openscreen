@@ -122,6 +122,19 @@ and **one** encoder + muxer pair:
   table, asserted by `outputFrameCount.test.ts` and by
   `speed_segments_match_the_exporter_frame_totals`.
 
+- **Cancel stops between frames, and only a finished file is published.**
+  The dialog's Cancel reaches the same `ExportControl` the GIF export uses
+  ([`export_control.rs`](../../crates/compositor/src/export_control.rs)),
+  which `run_composited_multi_cancellable` checks before every frame. The
+  MP4 is muxed into a staged file beside the destination, named with the
+  destination's extension because ffmpeg picks the container from it, and
+  renamed over the destination only once the trailer is written. A
+  cancelled or failed run deletes the staged file and leaves an existing
+  destination untouched. Guards close the muxer on every exit, which
+  Windows requires: it refuses to delete a file ffmpeg still holds open.
+  Audio jobs already in flight are joined, so a cancel settles once they
+  finish.
+
 - **Imported audio tracks** (voiceover / BGM / SFX, issue #350) are mixed
   on top of the assembled programme by `audio.rs::mix_external_tracks`,
   between `assemble_concatenated_pcm` and `finish_audio`. Each track's
@@ -166,9 +179,12 @@ and **one** encoder + muxer pair:
 ## Output formats and codecs
 
 The native MP4 export takes `width`, `height`, `fps`, `codec` and `bitrate` as
-parameters on `exportMulti` and writes H.264 (AMF) by default. The
-user-facing codec choice crosses as the plain `ExportVideoCodec` string
-(`"h264"` / `"h265"` / `"vp9"`) in those params; VP9
+parameters on `exportMulti` and writes H.264 (AMF) by default. The dialog
+always sends `"h264"`: `ExportVideoCodec` still accepts `"h265"`, which the
+pipeline encodes, but nothing offers it any more — H.265 is software-only on
+Linux, slower than software on the measured Macs (see
+[native-compositor.md](native-compositor.md)), and the files are the ones half
+the players cannot open. VP9
 falls back to the same H.264 path on machines without a hardware VP9
 encoder (software VP9 was measured too slow and removed — see
 [native-compositor.md](native-compositor.md#known-gaps)). GIF goes through

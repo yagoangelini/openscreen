@@ -88,7 +88,8 @@
 		"audioFiles": "オーディオファイル",
 		"openscreenProject": "OpenScreen プロジェクト",
 		"allFiles": "すべてのファイル",
-		"chooseRecordingsFolder": "新しい録画のフォルダーを選択"
+		"chooseRecordingsFolder": "新しい録画のフォルダーを選択",
+		"selectRecordingsFolder": "録画フォルダーを選択"
 	},
 	"recovery": {
 		"title": "録画を復元",
@@ -105,5 +106,9 @@
 		"detail": "エディターを閉じるとエクスポートは中止され、動画は保存されません。",
 		"keep": "エクスポートを続ける",
 		"cancelAndClose": "エクスポートを中止して閉じる"
+	},
+	"recording": {
+		"lowDiskSpace": "録画を開始するのに十分なディスク容量がありません（空き容量は{{availableMb}} MBのみ）。空き容量を確保するか、別の録画フォルダーを選択してから、もう一度お試しください。",
+		"folderUnavailable": "録画フォルダー {{path}} にアクセスできません。ドライブを接続し直すか、録画モードで別のフォルダーを選択してください。"
 	}
 }

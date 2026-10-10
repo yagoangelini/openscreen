@@ -25,6 +25,7 @@ import {
 } from "../timeline/timelineMap";
 import { dropTrimPillsByIds, trimAppliesToClip } from "../timeline/trim-mapping";
 import {
+	cutTakeHead,
 	dropUnusedGeneratedMedia,
 	reanchorAudioTracks,
 	removeAudioTrack,
@@ -352,7 +353,7 @@ type StoredRegion = {
 };
 
 /** Apply `fn` to all four modifier collections (document-level + legacyEditor envelopes). */
-function mapAllRegionCollections(
+export function mapAllRegionCollections(
 	document: AxcutDocument,
 	fn: (regions: StoredRegion[], prefix: string) => StoredRegion[],
 ): AxcutDocument {
@@ -475,7 +476,7 @@ function rederiveAnchoredRegion<
 	if (!span) return [];
 	return [
 		{
-			...region,
+			...cutTakeHead(region, sourceStartSec - region.sourceStartSec),
 			sourceStartSec,
 			sourceEndSec,
 			startMs: Math.round(span.startSec * 1000),
@@ -1003,6 +1004,11 @@ export function moveClip(
 // afterwards, which is the point: editing the copy's cut no longer edits the original's.
 // Only ANCHORED trims are copied — an un-anchored one already reaches the copy through
 // the asset-wide fallback, so copying it would cut the same span twice.
+//
+// The modifiers anchored to the clip are copied the same way, across every collection
+// `mapAllRegionCollections` walks; `withClipsChanged` then places the copies on the new
+// clip. Imported audio is left out on purpose: a take is media on its own lane, not an
+// effect on the clip.
 export function duplicateClip(
 	document: AxcutDocument,
 	clipId: string,
@@ -1025,12 +1031,22 @@ export function duplicateClip(
 	const copiedTrims = document.timeline.trimRanges
 		.filter((t) => t.clipId === original.id)
 		.map((t) => ({ ...t, id: createId("trim"), clipId: copy.id }));
+	const withModifiers = mapAllRegionCollections(document, (regions, prefix) =>
+		prefix === "audio"
+			? regions
+			: [
+					...regions,
+					...regions
+						.filter((region) => hasCompleteClipAnchor(region) && region.clipId === original.id)
+						.map((region) => ({ ...region, id: createId(prefix), clipId: copy.id })),
+				],
+	);
 	return withClipsChanged(
 		{
-			...document,
+			...withModifiers,
 			timeline: {
-				...document.timeline,
-				trimRanges: [...document.timeline.trimRanges, ...copiedTrims],
+				...withModifiers.timeline,
+				trimRanges: [...withModifiers.timeline.trimRanges, ...copiedTrims],
 			},
 		},
 		next,
@@ -1129,6 +1145,53 @@ export function removeRegion(document: AxcutDocument, kind: RegionKind, id: stri
 	}
 }
 
+const legacyRegionCount = (document: AxcutDocument, key: string): number => {
+	const stored = (document.legacyEditor as Record<string, unknown> | null)?.[key];
+	return Array.isArray(stored) ? stored.length : 0;
+};
+const withLegacyRegionsCleared = (document: AxcutDocument, key: string): AxcutDocument =>
+	document.legacyEditor
+		? { ...document, legacyEditor: { ...document.legacyEditor, [key]: [] } }
+		: document;
+
+/**
+ * The edit regions "Clear timeline" empties: one entry per `RegionKind` but `audio`. A Record
+ * rather than a list, so a new kind is a compile error here until someone decides whether it
+ * is an edit. `audio` is deliberately absent, like everything that is not a region at all:
+ * clips, media, transcripts, captions and the pauses added words made are content the user
+ * put there on purpose. (`timeline.speedRanges` is not the speed lane's store; the lane and
+ * the export read `legacyEditor.speedRegions`.)
+ */
+const EDIT_REGIONS: Record<
+	Exclude<RegionKind, "audio">,
+	{ count: (d: AxcutDocument) => number; clear: (d: AxcutDocument) => AxcutDocument }
+> = {
+	zoom: { count: (d) => d.zoomRanges.length, clear: (d) => ({ ...d, zoomRanges: [] }) },
+	annotation: { count: (d) => d.annotations.length, clear: (d) => ({ ...d, annotations: [] }) },
+	trim: {
+		count: (d) => d.timeline.trimRanges.length,
+		clear: (d) => ({ ...d, timeline: { ...d.timeline, trimRanges: [] } }),
+	},
+	speed: {
+		count: (d) => legacyRegionCount(d, "speedRegions"),
+		clear: (d) => withLegacyRegionsCleared(d, "speedRegions"),
+	},
+	cameraFullscreen: {
+		count: (d) => legacyRegionCount(d, "cameraFullscreenRegions"),
+		clear: (d) => withLegacyRegionsCleared(d, "cameraFullscreenRegions"),
+	},
+};
+
+/** How many edit regions the document holds, stored rows and not pills. Pure. */
+export function countEditRegions(document: AxcutDocument): number {
+	return Object.values(EDIT_REGIONS).reduce((sum, kind) => sum + kind.count(document), 0);
+}
+
+/** The document with every edit region gone (see {@link EDIT_REGIONS}). Pure. */
+export function clearEditRegions(document: AxcutDocument): AxcutDocument {
+	return Object.values(EDIT_REGIONS).reduce((doc, kind) => kind.clear(doc), document);
+}
+
 /**
  * The document, with its clip list changed to this one.
  *
@@ -1212,15 +1275,20 @@ function joinable(left: AxcutClip, right: AxcutClip): boolean {
  *  zoom, an annotation and an audio take all name a clip the same way, and an id that no
  *  longer exists has to stop being named. */
 function reanchorRows(document: AxcutDocument, absorbed: Map<string, string>): AxcutDocument {
-	const moved = mapAllRegionCollections(document, (regions) =>
+	const relabel = <T extends StoredRegion>(regions: T[]): T[] =>
 		regions.map((region) =>
 			hasCompleteClipAnchor(region) && absorbed.has(region.clipId)
 				? { ...region, clipId: absorbed.get(region.clipId) as string }
 				: region,
-		),
-	);
+		);
+	const moved = mapAllRegionCollections(document, relabel);
 	return {
 		...moved,
+		// Relabelled and nothing more. The walk above also re-cuts every take, but against the
+		// clips as they were, which put the absorbed id straight back and the rederive that
+		// follows dropped what the absorbed clip carried (#1011). That rederive re-cuts them
+		// against the joined clips.
+		audioTracks: relabel(document.audioTracks),
 		timeline: {
 			...moved.timeline,
 			trimRanges: moved.timeline.trimRanges.map((trim) =>

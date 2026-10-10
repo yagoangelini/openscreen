@@ -11,10 +11,11 @@ use napi::{Env, JsFunction, Task};
 use napi_derive::napi;
 use openscreen_compositor::compositor::{live_params_from_scene, Compositor};
 use openscreen_compositor::d3d::{Backend, Gpu};
-use openscreen_compositor::gif_export::{GifExportParams, GifStats};
-use openscreen_compositor::gif_export_control::{
+use openscreen_compositor::export_control::{
     ExportCancelled, ExportControl, ExportProgress, GifExportControl,
 };
+use openscreen_compositor::frame_geometry::FootageQuad;
+use openscreen_compositor::gif_export::{GifExportParams, GifStats};
 use openscreen_compositor::live::{LiveView, PausedPreviews};
 use openscreen_compositor::scene::Scene;
 use openscreen_compositor::{config, pipeline};
@@ -293,6 +294,16 @@ pub struct FramePacket {
     /// R,G,B,A tightly-packed, `width * height * 4` octets — ce que `putImageData` /
     /// `ImageData` attendent côté JS (canvas 2D, format natif RGBA8).
     pub data: Buffer,
+    /// Le métrage dans cette image : ses coins TL, TR, BR, BL (x, y en fractions de l'image,
+    /// huit nombres), là où l'éditeur pose le gimbal d'un flou. Absent avant toute composition.
+    pub footage: Option<Vec<f64>>,
+    /// Le métrage passe de ses coins à l'image par leur homographie (caméra réelle), pas par
+    /// leur interpolation bilinéaire.
+    pub footage_projective: bool,
+    /// Clip actif de la scène quand la frame a été composée (`FramePosition`).
+    pub clip_index: u32,
+    /// Temps source de la frame écran composée, en secondes.
+    pub source_time_sec: f64,
 }
 
 /// Renvoie la dernière frame readback du thread de rendu SI elle est plus récente que
@@ -333,16 +344,94 @@ pub fn read_frame(id: i32, since_gen: f64) -> Result<Option<FramePacket>> {
                 v.latest_frame_since(since_gen.max(0.0) as u64)
             }
         };
-        Ok(slot.map(|(gen, w, h, pixels)| {
+        Ok(slot.map(|(gen, w, h, pixels, footage, position)| {
             debug_assert_eq!(pixels.len(), (w as usize) * (h as usize) * 4);
             FramePacket {
                 gen: gen as f64,
                 width: w,
                 height: h,
                 data: Buffer::from(pixels),
+                footage: footage_corners(footage),
+                footage_projective: footage.is_some_and(|q| q.projective),
+                clip_index: position.clip_index,
+                source_time_sec: position.source_time_sec,
             }
         }))
     })
+}
+
+/// Les coins du métrage (TL, TR, BR, BL) aplatis en huit nombres, tels que JS les lit.
+fn footage_corners(footage: Option<FootageQuad>) -> Option<Vec<f64>> {
+    footage.map(|q| q.corners.iter().flatten().map(|&v| v as f64).collect())
+}
+
+/// Une frame de preview posée dans une texture partagée : de quoi l'importer côté GPU
+/// (`sharedTexture.importSharedTexture`) au lieu d'en recevoir les pixels.
+#[napi(object)]
+pub struct SharedFramePacket {
+    pub gen: f64,
+    /// Case de l'anneau qui porte la frame, à rendre avec `gen` par `release_shared_frame`
+    /// quand Chromium l'a relâchée.
+    pub slot: u32,
+    /// Handle NT de la texture, 8 octets little-endian : la forme qu'attend Electron
+    /// (`SharedTextureHandle.ntHandle`). Valable dans ce processus seulement.
+    pub handle: Buffer,
+    pub width: u32,
+    pub height: u32,
+    pub footage: Option<Vec<f64>>,
+    pub footage_projective: bool,
+    pub clip_index: u32,
+    pub source_time_sec: f64,
+}
+
+/// Livrer les frames de la vue par textures partagées plutôt que par `read_frame`. Rend
+/// `false` quand la machine ne le peut pas (hors Windows, backend logiciel) : la vue reste
+/// alors au readback.
+#[napi]
+pub fn set_shared_frames(id: i32, enabled: bool) -> bool {
+    registry()
+        .lock()
+        .unwrap()
+        .get(&id)
+        .is_some_and(|v| v.set_shared_frames(enabled))
+}
+
+/// Le pendant de `read_frame` pour une vue en textures partagées : la dernière frame posée
+/// dans l'anneau, si elle est plus récente que `since_gen`. Sa case reste tenue jusqu'à
+/// `release_shared_frame`. `Ok(None)` aussi quand la vue relit en RAM.
+#[napi]
+pub fn read_shared_frame(id: i32, since_gen: f64) -> Result<Option<SharedFramePacket>> {
+    let frame = match registry().lock().unwrap().get(&id) {
+        None => return Ok(None),
+        Some(v) => {
+            // Même relais que `read_frame` : sans lui, un thread de rendu mort ne se verrait
+            // que par un canvas noir.
+            if let Some(fatal) = v.fatal_error() {
+                return Err(Error::from_reason(fatal));
+            }
+            v.take_shared_frame(since_gen.max(0.0) as u64)
+        }
+    };
+    Ok(frame.map(|f| SharedFramePacket {
+        gen: f.gen as f64,
+        slot: f.slot,
+        handle: f.handle.to_le_bytes().to_vec().into(),
+        width: f.width,
+        height: f.height,
+        footage: footage_corners(f.footage),
+        footage_projective: f.footage.is_some_and(|q| q.projective),
+        clip_index: f.position.clip_index,
+        source_time_sec: f.position.source_time_sec,
+    }))
+}
+
+/// Chromium a relâché la frame `gen` de la case `slot` (`allReferencesReleased` côté
+/// Electron) : le thread de rendu peut y réécrire. Sans effet sur une vue détruite.
+#[napi]
+pub fn release_shared_frame(id: i32, slot: u32, gen: f64) {
+    if let Some(v) = registry().lock().unwrap().get(&id) {
+        v.release_shared_frame(slot, gen.max(0.0) as u64);
+    }
 }
 
 /// Param live (inspector). Le type de valeur route vers le bon setter :
@@ -707,6 +796,7 @@ impl ExportMultiTask {
         // Même sélection que la preview : l'export d'un hôte sans GPU passe par
         // libopenh264 au lieu d'AMF, plutôt que d'échouer.
         let gpu = Gpu::create_auto(false).map_err(|e| Error::from_reason(format!("{e:#}")))?;
+        self.control.check().map_err(export_task_error)?;
         let mut cfg = config::all().pop().expect("au moins une config"); // C8
         cfg.zoom = false;
         cfg.layout_anim = false;
@@ -893,12 +983,12 @@ pub fn cancel_export(control: External<ExportControl>) -> bool {
 /// `Compositor` (équivalent de `cfg.cursor = false` dans
 /// `run_composited_multi`).
 #[napi]
-pub fn create_gif_export_control() -> External<GifExportControl> {
-    External::new(GifExportControl::default())
+pub fn create_gif_export_control() -> External<ExportControl> {
+    External::new(ExportControl::default())
 }
 
 #[napi]
-pub fn cancel_gif_export(control: External<GifExportControl>) -> bool {
+pub fn cancel_gif_export(control: External<ExportControl>) -> bool {
     control.cancel()
 }
 
@@ -1024,7 +1114,7 @@ pub fn export_gif(
     scene_json: Option<String>,
     params: Option<GifParamsInput>,
     on_progress: Option<JsFunction>,
-    control: Option<External<GifExportControl>>,
+    control: Option<External<ExportControl>>,
 ) -> Result<AsyncTask<ExportGifTask>> {
     // Deliberately the same argument shape as `export_multi`: the caller builds
     // one clip list and one scene, and picks the container. Cursor comes from

@@ -88,7 +88,8 @@
 		"audioFiles": "File audio",
 		"openscreenProject": "Progetto OpenScreen",
 		"allFiles": "Tutti i file",
-		"chooseRecordingsFolder": "Scegli la cartella per le nuove registrazioni"
+		"chooseRecordingsFolder": "Scegli la cartella per le nuove registrazioni",
+		"selectRecordingsFolder": "Seleziona cartella registrazioni"
 	},
 	"recovery": {
 		"title": "Recupera registrazione",
@@ -105,5 +106,9 @@
 		"detail": "Chiudere l'editor la annulla e il video non verrà salvato.",
 		"keep": "Continua a esportare",
 		"cancelAndClose": "Annulla esportazione e chiudi"
+	},
+	"recording": {
+		"lowDiskSpace": "Spazio su disco insufficiente per avviare la registrazione (solo {{availableMb}} MB disponibili). Libera spazio o scegli un'altra cartella per le registrazioni, quindi riprova.",
+		"folderUnavailable": "Impossibile raggiungere la cartella registrazioni {{path}}. Ricollega la sua unità o scegli un'altra cartella in modalità Registra."
 	}
 }

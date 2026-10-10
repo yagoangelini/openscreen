@@ -1,8 +1,14 @@
 import { ArrowDown, Film, Plus, RotateCw, Search, X } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import { Tooltip } from "@/components/ui/tooltip";
 import { useI18n, useScopedT } from "@/contexts/I18nContext";
-import type { AxcutAsset, TranscriptLanguageCode } from "@/lib/ai-edition/schema";
+import type {
+	AxcutAsset,
+	AxcutDocument,
+	AxcutTranscript,
+	TranscriptLanguageCode,
+} from "@/lib/ai-edition/schema";
 import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
 import {
 	useAssetTranscriptions,
@@ -18,6 +24,8 @@ import {
 	type AssetTranscriptionStatus,
 	type AssetTranscriptionView,
 	isSilentFailure,
+	transcriptHasSpeech,
+	transcriptionFailureHintKey,
 } from "@/lib/ai-edition/transcription/status";
 import { loadUserPreferences, saveUserPreferences } from "@/lib/userPreferences";
 import { formatBytes } from "@/utils/formatBytes";
@@ -38,6 +46,26 @@ const THUMB_GRADIENTS = [
 
 function basename(path: string): string {
 	return path.split(/[\\/]/).pop() ?? path;
+}
+
+export function detectedLanguageForTranscript(transcript: AxcutTranscript | null): string | null {
+	if (!transcript || transcript.language === "auto" || !transcriptHasSpeech(transcript)) {
+		return null;
+	}
+	return transcript.language;
+}
+
+/**
+ * Whisper reads at most the last 223 tokens of its prompt; 600 characters of
+ * names and terms stays under that for Latin scripts (issue #1023).
+ */
+export const VOCABULARY_MAX_CHARS = 600;
+
+/** The document with its names and terms set, or null when nothing changed. */
+export function withVocabulary(document: AxcutDocument, text: string): AxcutDocument | null {
+	const vocabulary = text.trim().slice(0, VOCABULARY_MAX_CHARS) || undefined;
+	if (vocabulary === document.project.vocabulary) return null;
+	return { ...document, project: { ...document.project, vocabulary } };
 }
 
 export async function addSelectedAssetToTimeline(
@@ -86,6 +114,8 @@ export function MediaStage({
 	const projectId = useProjectStore((s) => s.projectId);
 	const document = useProjectStore((s) => s.document);
 	const addAsset = useProjectStore((s) => s.addAsset);
+	const saveDocument = useProjectStore((s) => s.saveDocument);
+	const vocabularySave = useRef<Promise<boolean>>(undefined);
 	// Transcripts are produced in the background as soon as a media lands here
 	// (see transcriptionStore) — this stage only reports where each one is at,
 	// and lets the user force a re-run in another language.
@@ -118,11 +148,15 @@ export function MediaStage({
 	const transcript = selected
 		? (document?.transcripts?.find((t) => t.assetId === selected.id) ?? null)
 		: null;
+	const detectedLanguage = detectedLanguageForTranscript(transcript);
 	const selectedTranscription: AssetTranscriptionView = selected
 		? (transcriptions[selected.id] ?? { assetId: selected.id, status: "idle" })
 		: { assetId: "", status: "idle" };
 	const selectedBusy =
 		selectedTranscription.status === "running" || selectedTranscription.status === "queued";
+	const failureHintKey = selectedTranscription.failure
+		? transcriptionFailureHintKey(selectedTranscription.failure)
+		: null;
 
 	const handleImport = async () => {
 		if (!projectId) {
@@ -365,7 +399,7 @@ export function MediaStage({
 								    reaching the document and being displayed nowhere. It belongs next to
 								    "Regenerate as" below in any case: that selector is the control
 								    you set BECAUSE of what was detected. */}
-								{transcript?.language && transcript.language !== "auto" ? (
+								{detectedLanguage ? (
 									<span
 										style={{
 											display: "inline-flex",
@@ -380,7 +414,7 @@ export function MediaStage({
 										}}
 									>
 										{t("mediaStage.detectedLanguage", {
-											language: languageLabel(transcript.language, locale),
+											language: languageLabel(detectedLanguage, locale),
 										})}
 									</span>
 								) : null}
@@ -398,11 +432,52 @@ export function MediaStage({
 										color: "var(--muted)",
 									}}
 								>
-									{selectedTranscription.failure.kind === "error"
-										? selectedTranscription.failure.message
-										: t("mediaStage.noAudioTrackHint")}
+									{failureHintKey ? t(failureHintKey) : selectedTranscription.failure.message}
 								</p>
 							) : null}
+
+							{/* Project-wide: whisper's initial prompt for every run (issue #1023).
+							    Uncontrolled and keyed on the saved value, so an undo that restores
+							    an older list shows it; the save happens on blur, one undo step. */}
+							<label style={{ display: "block", marginBottom: 12 }}>
+								<span
+									style={{
+										display: "block",
+										fontSize: 12.5,
+										fontWeight: 600,
+										color: "var(--fg-2)",
+										marginBottom: 6,
+									}}
+								>
+									{t("mediaStage.namesAndTerms")}
+								</span>
+								<textarea
+									key={`${document?.project.id}:${document?.project.vocabulary ?? ""}`}
+									defaultValue={document?.project.vocabulary ?? ""}
+									maxLength={VOCABULARY_MAX_CHARS}
+									rows={2}
+									spellCheck={false}
+									onBlur={(e) => {
+										// The latest document, not the render's: a save replaces the whole
+										// document, so a stale one would undo a transcript written meanwhile.
+										const latest = useProjectStore.getState().document;
+										const next = latest && withVocabulary(latest, e.target.value);
+										if (next) vocabularySave.current = saveDocument(next, { history: true });
+									}}
+									style={{
+										width: "100%",
+										padding: "8px 10px",
+										borderRadius: 9,
+										border: "1px solid var(--border)",
+										background: "var(--surface-2)",
+										color: "var(--fg)",
+										fontSize: 12.5,
+										lineHeight: 1.5,
+										resize: "vertical",
+										outline: "none",
+									}}
+								/>
+							</label>
 
 							<div style={{ marginBottom: 12 }}>
 								<div
@@ -439,28 +514,44 @@ export function MediaStage({
 											</option>
 										))}
 									</select>
-									<button
-										type="button"
-										title={t("mediaStage.regenerate")}
-										aria-label={t("mediaStage.regenerate")}
-										disabled={selectedBusy}
-										onClick={() => void requestTranscription(selected.id, lang)}
-										style={{
-											width: 36,
-											height: 36,
-											flexShrink: 0,
-											display: "grid",
-											placeItems: "center",
-											borderRadius: 9,
-											color: "var(--fg-2)",
-											background: "var(--surface-2)",
-											border: "1px solid var(--border)",
-											cursor: selectedBusy ? "not-allowed" : "pointer",
-											opacity: selectedBusy ? 0.6 : 1,
-										}}
-									>
-										<RotateCw size={14} className={selectedBusy ? "animate-spin" : undefined} />
-									</button>
+									{/* A bare refresh icon beside a language list: the tip says what it redoes. */}
+									<Tooltip content={t("mediaStage.regenerateTip")}>
+										<button
+											type="button"
+											aria-label={t("mediaStage.regenerate")}
+											// `aria-disabled`, not `disabled`: a natively disabled button cannot take focus or
+											// open its tooltip. It does nothing while a transcription runs.
+											aria-disabled={selectedBusy || undefined}
+											onClick={
+												selectedBusy
+													? undefined
+													: async () => {
+															// Clicking here blurs the terms field, whose save is still in
+															// flight: the run must read the terms it just saved, so a failed
+															// save (already toasted) runs nothing.
+															const saving = vocabularySave.current;
+															vocabularySave.current = undefined;
+															if ((await saving) === false) return;
+															void requestTranscription(selected.id, lang);
+														}
+											}
+											style={{
+												width: 36,
+												height: 36,
+												flexShrink: 0,
+												display: "grid",
+												placeItems: "center",
+												borderRadius: 9,
+												color: "var(--fg-2)",
+												background: "var(--surface-2)",
+												border: "1px solid var(--border)",
+												cursor: selectedBusy ? "not-allowed" : "pointer",
+												opacity: selectedBusy ? 0.6 : 1,
+											}}
+										>
+											<RotateCw size={14} className={selectedBusy ? "animate-spin" : undefined} />
+										</button>
+									</Tooltip>
 								</div>
 								<label
 									style={{

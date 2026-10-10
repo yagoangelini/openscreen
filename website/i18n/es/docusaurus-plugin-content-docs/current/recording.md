@@ -50,7 +50,7 @@ En Windows, macOS y Linux, un interruptor de modo de cursor alterna entre:
 Lo que captura el cursor editable depende de la plataforma:
 - **Windows**: la forma real del cursor y los clics.
 - **macOS**: la forma del cursor y los clics, que necesitan el permiso de Accesibilidad. En este modo, si presionas grabar sin ese permiso, en lugar de empezar se abre la ventana de permisos (consulta la [instalación en macOS](./installation.md#macos)).
-- **Linux**: la posición y la forma mediante el portal ScreenCast, más los clics izquierdos cuando tu usuario está en el grupo `input` (consulta [Clics del mouse en Wayland](./installation.md#mouse-clicks-on-wayland)).
+- **Linux**: la posición y la forma mediante el portal ScreenCast, más los clics izquierdos cuando tu usuario tiene acceso de lectura al mouse, mediante una regla de udev (recomendada) o el grupo `input` (consulta [Clics del mouse en Wayland](./installation.md#mouse-clicks-on-wayland)).
 
 Una toma en Linux que recurre a la [captura por navegador](#native-vs-browser-capture) graba el cursor del sistema, sea cual sea el modo que elegiste.
 
@@ -80,7 +80,7 @@ No tienes que empezar desde el HUD. En el editor, cambia la barra superior a **G
 
 - **Fuente**: el mismo selector de pantalla o ventana, en una ventana modal, o el selector del sistema de Apple en macOS 15.2 y posteriores. En Linux, esta fila también dice *El sistema te preguntará qué compartir*, y el cuadro de diálogo del portal es el que elige.
 - **Audio del sistema**, **Micrófono**, **Cámara**: cada uno es una fila que se activa o desactiva; el micrófono y la cámara se despliegan en una lista de dispositivos, y la cámara muestra una vista previa en vivo para que te encuadres antes de empezar.
-- **Resaltar cursor**: activado significa el cursor editable; desactivado, el cursor normal del sistema.
+- **Cursor editable**: activado significa el cursor editable; desactivado, el cursor normal del sistema.
 
 **Iniciar grabación** abre el widget de grabación y cierra la ventana del editor; si cancelas, vuelves al modo Editar. Este es también el punto de partida al que te lleva **Nuevo proyecto → Grabación de pantalla**.
 

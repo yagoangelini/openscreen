@@ -88,7 +88,8 @@
 		"audioFiles": "Zvukové soubory",
 		"openscreenProject": "Projekt OpenScreen",
 		"allFiles": "Všechny soubory",
-		"chooseRecordingsFolder": "Vyberte složku pro nové nahrávky"
+		"chooseRecordingsFolder": "Vyberte složku pro nové nahrávky",
+		"selectRecordingsFolder": "Vybrat složku pro nahrávky"
 	},
 	"recovery": {
 		"title": "Obnovit nahrávku",
@@ -105,5 +106,9 @@
 		"detail": "Zavřením editoru se zruší a video se neuloží.",
 		"keep": "Pokračovat v exportu",
 		"cancelAndClose": "Zrušit export a zavřít"
+	},
+	"recording": {
+		"lowDiskSpace": "Nedostatek místa na disku pro zahájení nahrávání (volno pouze {{availableMb}} MB). Uvolněte místo nebo vyberte jinou složku pro nahrávky a zkuste to znovu.",
+		"folderUnavailable": "Složka pro nahrávky {{path}} není dostupná. Znovu připojte její disk, nebo zvolte jinou složku v režimu Nahrávání."
 	}
 }

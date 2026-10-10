@@ -30,9 +30,11 @@
 //!   the SAME clip walk the MP4 exporter uses, so clip iteration, speed
 //!   segments and output-time decoder advancement have exactly one
 //!   definition. Per output frame the walk composes, then this module does
-//!   `Compositor::readback_direct` → palette → optional fused
-//!   Floyd-Steinberg → `GifWriter::write_frame`. Reports the same `GifStats`
-//!   shape the MP4 `pipeline::Stats` returns.
+//!   `Compositor::readback_direct` → palette on the export thread, hands the
+//!   frame to a `FrameEncoder` worker for the mapping (optional fused
+//!   Floyd-Steinberg) and LZW, and writes the results back in order with
+//!   `GifWriter::write_frame`. Reports the same `GifStats` shape the MP4
+//!   `pipeline::Stats` returns.
 //!
 //!   It previously ran its own loop over the live-preview `Player`, stepping
 //!   one SOURCE frame per OUTPUT frame — which made a 30 s/60 fps recording
@@ -51,10 +53,9 @@
 //!   we ship (≤ 480p) and good enough for screen content; the
 //!   requantize-every-30-frames cadence trades a small per-frame
 //!   color drift for keeping the palette adapted to the timeline.
-//! - `map_to_indices` — brute-force nearest-color search. The hot loop
-//!   is 4 reads + 3 muls + 2 adds + 1 compare per pixel, small enough
-//!   for the compiler to autovectorize; a NeuQuant network lookup
-//!   would be slower at 256 colors and isn't worth its complexity.
+//! - `map_to_indices` — exact nearest-color search over the palette
+//!   sorted by red (`SortedPalette`), which prunes most of the 256
+//!   entries per pixel.
 //! - `map_to_indices_dithered` — the same search with Floyd-Steinberg
 //!   error diffusion fused into it (alpha left as the readback emitted
 //!   it), two row-buffers so the working set is O(width) per row. Fused
@@ -74,14 +75,15 @@
 use crate::compositor::Compositor;
 use crate::config::Cfg;
 use crate::d3d::Gpu;
-use crate::gif_export_control::{with_gif_output, GifExportControl};
+use crate::export_control::{with_staged_output, ExportControl};
 use crate::pipeline::{ClipSource, Decoder};
 use crate::timeline_walk::walk_composited_timeline;
 use anyhow::{anyhow, bail, Context, Result};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::path::Path;
+use std::sync::{mpsc, Arc, Mutex};
 use std::time::Instant;
 
 /// Default output width/height. GIF is 8-bit indexed; smaller frames look
@@ -173,7 +175,7 @@ pub fn export_gif(
 	params: &GifExportParams,
 	progress: &mut dyn FnMut(u64),
 ) -> Result<GifStats> {
-    export_gif_cancellable(clips, out_path, gpu, comp, cfg, params, progress, &GifExportControl::default())
+    export_gif_cancellable(clips, out_path, gpu, comp, cfg, params, progress, &ExportControl::default())
 }
 
 pub fn export_gif_cancellable(
@@ -184,9 +186,9 @@ pub fn export_gif_cancellable(
     cfg: &Cfg,
     params: &GifExportParams,
     progress: &mut dyn FnMut(u64),
-    control: &GifExportControl,
+    control: &ExportControl,
 ) -> Result<GifStats> {
-    with_gif_output(out_path, control, |file, staging_path| {
+    with_staged_output(out_path, control, |file, staging_path| {
         export_gif_inner(clips, staging_path, file, gpu, comp, cfg, params, progress, control)
     })
 }
@@ -200,7 +202,7 @@ fn export_gif_inner(
 	cfg: &Cfg,
 	params: &GifExportParams,
 	progress: &mut dyn FnMut(u64),
-	control: &GifExportControl,
+	control: &ExportControl,
 ) -> Result<GifStats> {
 	control.check()?;
 	if clips.is_empty() {
@@ -227,18 +229,9 @@ fn export_gif_inner(
 	// delays actually written is kept for `video_duration_s`.
 	let mut total_delay_cs: u64 = 0;
 
-	// Pre-allocate the per-frame index buffer. Reused across
-	// frames so we don't hit the allocator in the hot loop.
-	let mut indices: Vec<u8> = vec![0u8; (width as usize) * (height as usize)];
-	// Optional dither error buffer (one signed channel per
-	// pixel per channel, 3 channels per pixel, 2 rows of state
-	// for the FS pass). Allocated once; only touched when
-	// `dither` is true.
-	let mut err_cur: Vec<f32> = vec![0.0f32; (width as usize) * 3];
-	let mut err_next: Vec<f32> = vec![0.0f32; (width as usize) * 3];
-	// Cached palette: rebuilt on a schedule
-	// (`PALETTE_REQUANTIZE_EVERY`).
-	let mut palette_rgb: Vec<u8> = vec![0u8; PALETTE_COLORS * 3];
+	// Cached palette: rebuilt on a schedule (`PALETTE_REQUANTIZE_EVERY`),
+	// shared with the workers mapping the frames that use it.
+	let mut palette_rgb: Arc<Vec<u8>> = Arc::new(vec![0u8; PALETTE_COLORS * 3]);
 
 	let t0 = Instant::now();
 	let scene = comp.scene_snapshot();
@@ -260,64 +253,108 @@ fn export_gif_inner(
 			Decoder::open_for_export(&clips[0].screen, gpu)?
 		});
 
-		let frames = unsafe {
-			walk_composited_timeline(
-				clips,
-				gpu,
-				comp,
-				cfg,
-				fps as i32,
-				&scene,
-				&mut screen_decs,
-				&mut webcam_decs,
-				&mut |frame_index| {
-					control.check()?;
-					// CPU readback of the staged RT (RGBA8 tightly-packed,
-					// `width * height * 4` bytes). The dominant per-frame cost,
-					// and the reason GIF can't use the MP4 zero-copy sink.
-					let (rw, rh, rgba) = comp
-						.readback_direct()
-						.map_err(|e| anyhow!("export_gif: readback @ frame {frame_index}: {e:#}"))?;
-					debug_assert_eq!(rw, width);
-					debug_assert_eq!(rh, height);
-
-					// Refresh the palette on a schedule. Building the histogram
-					// and running median-cut is O(unique colors) — fast enough at
-					// 480p on our 30-frame cadence.
-					if frame_index % PALETTE_REQUANTIZE_EVERY == 0 {
-						build_palette_median_cut(&rgba, PALETTE_COLORS, &mut palette_rgb);
+		// Mapping and LZW are over 90 % of a frame's time and need nothing but
+		// the frame and its palette, so they run on a pool, one frame per
+		// worker. This thread decodes, composes, reads back, builds the
+		// palette, and writes the encoded frames back in order.
+		let workers = std::thread::available_parallelism().map_or(1, |n| n.get());
+		let (job_tx, job_rx) = mpsc::sync_channel::<FrameJob>(workers);
+		let job_rx = Mutex::new(job_rx);
+		let frames = std::thread::scope(|scope| -> Result<u64> {
+			let (done_tx, done_rx) = mpsc::channel::<EncodedFrame>();
+			for _ in 0..workers {
+				let (job_rx, done_tx) = (&job_rx, done_tx.clone());
+				scope.spawn(move || {
+					let mut enc = FrameEncoder::new(width, height, dither);
+					loop {
+						// Bound first: a guard in a `while let` scrutinee would be
+						// held through `encode` and serialise the pool. `recv`
+						// fails once the walk is over and the sender dropped.
+						let Ok(job) = job_rx.lock().unwrap().recv() else { break };
+						if done_tx.send(enc.encode(job)).is_err() {
+							break;
+						}
 					}
+				});
+			}
+			drop(done_tx);
 
-					// Quantize (with optional dithering). The dither pass diffuses
-					// the error against the CHOSEN PALETTE ENTRY, so it has to run
-					// fused with the index mapping — see `map_to_indices_dithered`.
-					if dither {
-						map_to_indices_dithered(
-							&palette_rgb,
-							&rgba,
-							width,
-							height,
-							&mut err_cur,
-							&mut err_next,
-							&mut indices,
-						);
-					} else {
-						map_to_indices(&palette_rgb, &rgba, &mut indices);
-					}
-
-					// Per-frame palette (GIF local palette, written by `write_frame`).
-					control.check()?;
-					let delay_cs = frame_delay_cs(frame_index as u64, fps);
+			// Frames come back out of order; write each once its turn comes.
+			let mut pending: BTreeMap<u64, EncodedFrame> = BTreeMap::new();
+			let in_flight_max = 2 * workers as u64;
+			let mut written: u64 = 0;
+			// Writes what is next in line, returns how many frames are written.
+			let mut write_ready = |pending: &mut BTreeMap<u64, EncodedFrame>| -> Result<u64> {
+				while let Some(f) = pending.remove(&written) {
+					let delay_cs = frame_delay_cs(written, fps);
 					total_delay_cs += delay_cs as u64;
-					gw.write_frame(&indices, &palette_rgb, delay_cs, fps)?;
-					progress(frame_index + 1);
-					Ok(())
-				},
-				// GIF has no audio track, so clip boundaries need no work.
-				&mut |_, _, _| control.check(),
-				&mut |_, _, _, _| control.check(),
-			)?
-		};
+					gw.write_frame(&f.lzw, &f.palette_rgb, delay_cs)?;
+					written += 1;
+					progress(written);
+				}
+				Ok(written)
+			};
+
+			let frames = unsafe {
+				walk_composited_timeline(
+					clips,
+					gpu,
+					comp,
+					cfg,
+					fps as i32,
+					&scene,
+					&mut screen_decs,
+					&mut webcam_decs,
+					&mut |frame_index| {
+						control.check()?;
+						// CPU readback of the staged RT (RGBA8 tightly-packed,
+						// `width * height * 4` bytes), and the reason GIF can't
+						// use the MP4 zero-copy sink.
+						let (rw, rh, rgba) = comp.readback_direct().map_err(|e| {
+							anyhow!("export_gif: readback @ frame {frame_index}: {e:#}")
+						})?;
+						debug_assert_eq!(rw, width);
+						debug_assert_eq!(rh, height);
+
+						// Refresh the palette on a schedule. Building the histogram
+						// and running median-cut is O(unique colors) — fast enough at
+						// 480p on our 30-frame cadence.
+						if frame_index % PALETTE_REQUANTIZE_EVERY == 0 {
+							let mut p = vec![0u8; PALETTE_COLORS * 3];
+							build_palette_median_cut(&rgba, PALETTE_COLORS, &mut p);
+							palette_rgb = Arc::new(p);
+						}
+						// Bound what is submitted but not yet written: behind one slow
+						// frame the rest would pile up in `pending`, each holding its
+						// encoded buffer. The frame that blocks the window is already
+						// submitted, so waiting on `done_rx` always makes progress.
+						while frame_index - write_ready(&mut pending)? >= in_flight_max {
+							let f = done_rx
+								.recv()
+								.map_err(|_| anyhow!("export_gif: encoder worker died"))?;
+							pending.insert(f.index, f);
+						}
+						let job =
+							FrameJob { index: frame_index, rgba, palette_rgb: palette_rgb.clone() };
+						job_tx.send(job).map_err(|_| anyhow!("export_gif: encoder worker died"))?;
+						for f in done_rx.try_iter() {
+							pending.insert(f.index, f);
+						}
+						write_ready(&mut pending).map(|_| ())
+					},
+					// GIF has no audio track, so clip boundaries need no work.
+					&mut |_, _, _| control.check(),
+					&mut |_, _, _, _| control.check(),
+				)?
+			};
+			drop(job_tx);
+			while write_ready(&mut pending)? < frames {
+				control.check()?;
+				let f = done_rx.recv().map_err(|_| anyhow!("export_gif: encoder worker died"))?;
+				pending.insert(f.index, f);
+			}
+			Ok(frames)
+		})?;
 
 		control.check()?;
 		gw.finish()?;
@@ -337,6 +374,66 @@ fn export_gif_inner(
 	Ok(GifStats { frames, wall_s, fps: fps_actual, video_duration_s, file_bytes })
 }
 
+/// One frame for an encoder worker: its pixels and the palette to map them to.
+struct FrameJob {
+	index: u64,
+	rgba: Vec<u8>,
+	palette_rgb: Arc<Vec<u8>>,
+}
+
+/// A frame ready to write: its indices, LZW-encoded, and its palette.
+struct EncodedFrame {
+	index: u64,
+	lzw: Vec<u8>,
+	palette_rgb: Arc<Vec<u8>>,
+}
+
+/// A worker's scratch buffers, reused across the frames it encodes.
+struct FrameEncoder {
+	width: u32,
+	height: u32,
+	dither: bool,
+	indices: Vec<u8>,
+	// Two rows of Floyd-Steinberg error, 3 channels per pixel.
+	err_cur: Vec<f32>,
+	err_next: Vec<f32>,
+}
+
+impl FrameEncoder {
+	fn new(width: u32, height: u32, dither: bool) -> Self {
+		let w = width as usize;
+		FrameEncoder {
+			width,
+			height,
+			dither,
+			indices: vec![0u8; w * height as usize],
+			err_cur: vec![0.0f32; w * 3],
+			err_next: vec![0.0f32; w * 3],
+		}
+	}
+
+	fn encode(&mut self, job: FrameJob) -> EncodedFrame {
+		// The dither pass diffuses the error against the CHOSEN palette
+		// entry, so it runs fused with the mapping — see
+		// `map_to_indices_dithered`.
+		if self.dither {
+			map_to_indices_dithered(
+				&job.palette_rgb,
+				&job.rgba,
+				self.width,
+				self.height,
+				&mut self.err_cur,
+				&mut self.err_next,
+				&mut self.indices,
+			);
+		} else {
+			map_to_indices(&job.palette_rgb, &job.rgba, &mut self.indices);
+		}
+		let mut lzw = Vec::new();
+		lzw_compress(&self.indices, 8, &mut lzw);
+		EncodedFrame { index: job.index, lzw, palette_rgb: job.palette_rgb }
+	}
+}
 
 // =====================================================================
 // GIF89a format writer (pure std::io::Write).
@@ -407,15 +504,9 @@ impl<W: Write> GifWriter<W> {
 
 	/// Write one animated frame: Graphics Control Extension (delay
 	/// only — no transparency, no disposal), Image Descriptor, local
-	/// color table, LZW-compressed index stream.
-	fn write_frame(
-		&mut self,
-		indices: &[u8],
-		palette_rgb: &[u8],
-		delay_cs: u16,
-		_fps: u32,
-	) -> Result<()> {
-		debug_assert_eq!(indices.len(), (self.width as usize) * (self.height as usize));
+	/// color table, and `lzw`, the frame's indices as `lzw_compress`
+	/// encodes them with a minimum code size of 8.
+	fn write_frame(&mut self, lzw: &[u8], palette_rgb: &[u8], delay_cs: u16) -> Result<()> {
 		debug_assert_eq!(palette_rgb.len(), PALETTE_COLORS * 3);
 
 		// Graphics Control Extension: delay only. The disposal
@@ -451,9 +542,7 @@ impl<W: Write> GifWriter<W> {
 		// sub-blocks of compressed bytes, then a 0x00 terminator.
 		// LZW min code size is 8 for a 256-color palette.
 		self.w.write_all(&[8])?;
-		let mut compressed: Vec<u8> = Vec::new();
-		lzw_compress(indices, 8, &mut compressed);
-		write_sub_blocks(&mut self.w, &compressed)?;
+		write_sub_blocks(&mut self.w, lzw)?;
 		self.w.write_all(&[0x00])?; // image data terminator
 		Ok(())
 	}
@@ -670,7 +759,13 @@ fn build_palette_median_cut(rgba: &[u8], num_colors: usize, out_palette: &mut [u
 	// frames is the only call site, and the cost (one allocation +
 	// one memcpy from the hashmap) is well under a millisecond at
 	// 480p.
-	let entries: Vec<([u8; 3], u32)> = histogram.into_iter().collect();
+	//
+	// Sorted, because a `HashMap` iterates in a per-process random
+	// order and the axis sorts below are stable: equal channel values
+	// kept that order, so the same frame got a different palette on
+	// every run and no two exports were byte-identical.
+	let mut entries: Vec<([u8; 3], u32)> = histogram.into_iter().collect();
+	entries.sort_unstable();
 
 	// 2. Repeatedly split the bucket with the longest channel
 	//    range until we have `num_colors` buckets. The split is
@@ -829,66 +924,109 @@ fn channel_range(bucket: &[([u8; 3], u32)], channel: usize) -> u32 {
 // Nearest-color index mapping.
 // =====================================================================
 //
-// Brute-force squared-distance search over 256 palette entries per
-// pixel. The inner loop is `4 reads + 3 muls + 2 adds + 1 compare`
-// per (pixel × palette entry) — small enough that the compiler
-// autovectorizes the pixel loop on x86-64 (the `pow(2)` distance
-// rule is fine because we only compare, not sort by it). A
-// NeuQuant-network lookup would walk a per-frame tree (≈ 512-node
-// path per pixel), which is **slower** than 256 brute-force
-// comparisons on modern CPUs with wide SIMD.
-//
-// Cost on the 854×480 fixture (410 k pixels × 256 entries) is
-// ~100 M simple integer ops, well under one frame on a recent
-// CPU. If it ever shows up on the bench, the right fix is
-// `std::simd` or a hand-written AVX2 inner loop — both in this
-// file, no new deps.
+// Exact nearest palette entry by squared distance, through
+// `SortedPalette`.
 
 fn map_to_indices(palette_rgb: &[u8], rgba: &[u8], indices: &mut [u8]) {
 	let npix = indices.len();
 	debug_assert_eq!(rgba.len(), npix * 4);
 	debug_assert_eq!(palette_rgb.len(), PALETTE_COLORS * 3);
 
-	// Pre-transpose the palette into `[r0..r255, g0..g255, b0..b255]`
-	// form so the inner loop's three channel reads are contiguous
-	// and the compiler can pack them into SIMD loads. The cost
-	// is 768 bytes per frame, written once; the alternative
-	// (interleaved reads with a `* 3` step) costs the same in
-	// the hot loop and is harder to vectorize.
-	let mut pr = [0u8; PALETTE_COLORS];
-	let mut pg = [0u8; PALETTE_COLORS];
-	let mut pb = [0u8; PALETTE_COLORS];
-	for (k, chunk) in palette_rgb.chunks_exact(3).enumerate() {
-		pr[k] = chunk[0];
-		pg[k] = chunk[1];
-		pb[k] = chunk[2];
-	}
-
+	let pal = SortedPalette::new(palette_rgb);
+	let mut hint = 0;
 	for i in 0..npix {
 		let base = i * 4;
-		let r = rgba[base] as i32;
-		let g = rgba[base + 1] as i32;
-		let b = rgba[base + 2] as i32;
-		// Branchless nearest. The 256-entry loop body is 3 reads
-		// + 3 subs + 3 muls + 2 adds + 1 compare + 1 conditional
-		// store — well within autovectorization budget. The
-		// (distance, index) packing into a single `i32` was
-		// tried and dropped: the conditional store didn't
-		// improve (the compiler vectorizes the simple form
-		// already).
-		let mut best_idx: usize = 0;
-		let mut best_dist: i32 = i32::MAX;
-		for k in 0..PALETTE_COLORS {
-			let dr = r - pr[k] as i32;
-			let dg = g - pg[k] as i32;
-			let db = b - pb[k] as i32;
-			let dist = dr * dr + dg * dg + db * db;
-			if dist < best_dist {
-				best_dist = dist;
-				best_idx = k;
-			}
+		// Integer channels: every distance is an integer below 2^24, so the
+		// f32 search finds exactly what an i32 one would.
+		let (idx, pos) = pal.nearest(
+			rgba[base] as f32,
+			rgba[base + 1] as f32,
+			rgba[base + 2] as f32,
+			hint,
+		);
+		indices[i] = idx;
+		hint = pos;
+	}
+}
+
+/// The palette sorted by red, for an exact nearest-colour search that skips
+/// most of it.
+///
+/// A brute-force scan of all 256 entries per pixel was 92 % of a dithered
+/// export's wall time (172 ms per 864×480 frame, measured): the arg-min does not
+/// autovectorize. Here the scan starts at the pixel's red value and walks out
+/// both ways, stopping once the red distance alone exceeds the best full
+/// distance, since no entry further along can be closer.
+///
+/// Exact, not approximate: same distance formula, and ties go to the lowest
+/// palette index, as in the scan it replaces — the exported GIF is
+/// byte-identical.
+struct SortedPalette {
+	r: [f32; PALETTE_COLORS],
+	g: [f32; PALETTE_COLORS],
+	b: [f32; PALETTE_COLORS],
+	/// Palette index of each sorted entry.
+	idx: [u8; PALETTE_COLORS],
+}
+
+impl SortedPalette {
+	fn new(palette_rgb: &[u8]) -> Self {
+		let mut order: Vec<usize> = (0..PALETTE_COLORS).collect();
+		order.sort_by_key(|&k| palette_rgb[k * 3]);
+		let mut p = SortedPalette {
+			r: [0.0; PALETTE_COLORS],
+			g: [0.0; PALETTE_COLORS],
+			b: [0.0; PALETTE_COLORS],
+			idx: [0; PALETTE_COLORS],
+		};
+		for (s, &k) in order.iter().enumerate() {
+			p.r[s] = palette_rgb[k * 3] as f32;
+			p.g[s] = palette_rgb[k * 3 + 1] as f32;
+			p.b[s] = palette_rgb[k * 3 + 2] as f32;
+			p.idx[s] = k as u8;
 		}
-		indices[i] = best_idx as u8;
+		p
+	}
+
+	/// Nearest entry to `(cr, cg, cb)`, as `(palette index, sorted position)`.
+	/// `hint` is a sorted position to seed the bound with — the previous
+	/// pixel's answer, usually the right one again.
+	fn nearest(&self, cr: f32, cg: f32, cb: f32, hint: usize) -> (u8, usize) {
+		let dist = |s: usize| {
+			let dr = cr - self.r[s];
+			let dg = cg - self.g[s];
+			let db = cb - self.b[s];
+			dr * dr + dg * dg + db * db
+		};
+		let mut best = hint;
+		let mut best_dist = dist(hint);
+		// Lowest palette index wins a tie, as in a 0..256 scan with `<`.
+		let consider = |s: usize, best: &mut usize, best_dist: &mut f32| {
+			let d = dist(s);
+			if d < *best_dist || (d == *best_dist && self.idx[s] < self.idx[*best]) {
+				*best_dist = d;
+				*best = s;
+			}
+		};
+		// `dist >= dr * dr` holds in f32 too (adding non-negatives never
+		// rounds below an operand), so stopping on `>` loses no entry,
+		// tied ones included.
+		let start = self.r.partition_point(|&r| r < cr);
+		for s in start..PALETTE_COLORS {
+			let dr = self.r[s] - cr;
+			if dr * dr > best_dist {
+				break;
+			}
+			consider(s, &mut best, &mut best_dist);
+		}
+		for s in (0..start).rev() {
+			let dr = cr - self.r[s];
+			if dr * dr > best_dist {
+				break;
+			}
+			consider(s, &mut best, &mut best_dist);
+		}
+		(self.idx[best], best)
 	}
 }
 
@@ -919,6 +1057,8 @@ fn map_to_indices_dithered(
 
 	err_cur.fill(0.0);
 	err_next.fill(0.0);
+	let pal = SortedPalette::new(palette_rgb);
+	let mut hint = 0;
 
 	for y in 0..h {
 		for x in 0..w {
@@ -929,19 +1069,10 @@ fn map_to_indices_dithered(
 			let cg = (rgba[base + 1] as f32 + err_cur[e + 1]).clamp(0.0, 255.0);
 			let cb = (rgba[base + 2] as f32 + err_cur[e + 2]).clamp(0.0, 255.0);
 
-			let mut best_idx = 0usize;
-			let mut best_dist = f32::MAX;
-			for k in 0..PALETTE_COLORS {
-				let dr = cr - palette_rgb[k * 3] as f32;
-				let dg = cg - palette_rgb[k * 3 + 1] as f32;
-				let db = cb - palette_rgb[k * 3 + 2] as f32;
-				let dist = dr * dr + dg * dg + db * db;
-				if dist < best_dist {
-					best_dist = dist;
-					best_idx = k;
-				}
-			}
-			indices[y * w + x] = best_idx as u8;
+			let (idx, pos) = pal.nearest(cr, cg, cb, hint);
+			hint = pos;
+			let best_idx = idx as usize;
+			indices[y * w + x] = idx;
 
 			// THE error: distance to the colour actually written.
 			let er = cr - palette_rgb[best_idx * 3] as f32;
@@ -1051,8 +1182,9 @@ mod tests {
 			gw.write_header().unwrap();
 			gw.write_netscape_loop(0).unwrap();
 			let palette = vec![0u8; PALETTE_COLORS * 3];
-			let indices = vec![0u8; 4];
-			gw.write_frame(&indices, &palette, 10, 12).unwrap();
+			let mut lzw = Vec::new();
+			lzw_compress(&[0u8; 4], 8, &mut lzw);
+			gw.write_frame(&lzw, &palette, 10).unwrap();
 			gw.finish().unwrap();
 		}
 		// Magic.
@@ -1272,7 +1404,9 @@ mod tests {
 			let mut gw = GifWriter::new(&mut buf, w as u16, h as u16).unwrap();
 			gw.write_header().unwrap();
 			gw.write_netscape_loop(0).unwrap();
-			gw.write_frame(&indices, &palette, 8, 12).unwrap();
+			let mut lzw = Vec::new();
+			lzw_compress(&indices, 8, &mut lzw);
+			gw.write_frame(&lzw, &palette, 8).unwrap();
 			gw.finish().unwrap();
 		}
 
@@ -1307,6 +1441,28 @@ mod tests {
 		let has_blue = palette.chunks_exact(3).any(|c| c[2] > 200 && c[0] < 50 && c[1] < 50);
 		assert!(has_red, "median-cut dropped red");
 		assert!(has_blue, "median-cut dropped blue");
+	}
+
+	/// The same frame must give the same palette, so an export is reproducible.
+	/// Many colours share channel values here, which is where the histogram's
+	/// iteration order used to leak into the splits.
+	#[test]
+	fn median_cut_is_deterministic() {
+		let mut seed = 0x2545_F491u32;
+		let rgba: Vec<u8> = (0..50_000)
+			.flat_map(|_| {
+				seed = seed.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+				let level = |shift: u32| ((seed >> shift) % 11) as u8 * 25;
+				[level(8), level(14), level(20), 255]
+			})
+			.collect();
+		let mut first = vec![0u8; 256 * 3];
+		build_palette_median_cut(&rgba, 256, &mut first);
+		for _ in 0..8 {
+			let mut again = vec![0u8; 256 * 3];
+			build_palette_median_cut(&rgba, 256, &mut again);
+			assert_eq!(again, first);
+		}
 	}
 
 	/// Median-cut on a uniform image (single color) must not
@@ -1424,6 +1580,82 @@ mod tests {
 			dithered_err < 1.5,
 			"dithering left the ramp banded: {dithered_err:.2} vs {plain_err:.2} undithered"
 		);
+	}
+
+	/// The pruned search must pick exactly what a full scan picks, ties to the
+	/// lowest index included, on both paths. The palette repeats entries (the
+	/// median cut pads with duplicates) and shares red values, which is where
+	/// ties and the pruning bound meet.
+	#[test]
+	fn sorted_palette_search_matches_a_full_scan() {
+		let mut seed = 0x9E37_79B9u32;
+		let mut next = || {
+			seed = seed.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+			(seed >> 24) as u8
+		};
+		let palette: Vec<u8> = (0..PALETTE_COLORS)
+			.flat_map(|i| match i % 5 {
+				0 => [i as u8 & 0xF0, 128, 64],
+				_ => [next(), next(), next()],
+			})
+			.collect();
+		let (w, h) = (97usize, 61usize);
+		let rgba: Vec<u8> = (0..w * h).flat_map(|_| [next(), next(), next(), 255]).collect();
+
+		let full_scan = |c: [f32; 3]| -> u8 {
+			let mut best = (f32::MAX, 0usize);
+			for k in 0..PALETTE_COLORS {
+				let d: Vec<f32> = (0..3).map(|j| c[j] - palette[k * 3 + j] as f32).collect();
+				let dist = d[0] * d[0] + d[1] * d[1] + d[2] * d[2];
+				if dist < best.0 {
+					best = (dist, k);
+				}
+			}
+			best.1 as u8
+		};
+
+		let mut plain = vec![0u8; w * h];
+		map_to_indices(&palette, &rgba, &mut plain);
+		for (i, px) in rgba.chunks_exact(4).enumerate() {
+			let k = full_scan([px[0] as f32, px[1] as f32, px[2] as f32]);
+			assert_eq!(plain[i], k, "pixel {i}");
+		}
+
+		// The dithered path, replayed with a full scan.
+		let mut dithered = vec![0u8; w * h];
+		let (mut err_cur, mut err_next) = (vec![0.0f32; w * 3], vec![0.0f32; w * 3]);
+		map_to_indices_dithered(
+			&palette,
+			&rgba,
+			w as u32,
+			h as u32,
+			&mut err_cur,
+			&mut err_next,
+			&mut dithered,
+		);
+		let (mut cur, mut nxt) = (vec![0.0f32; w * 3], vec![0.0f32; w * 3]);
+		for y in 0..h {
+			for x in 0..w {
+				let (base, e) = ((y * w + x) * 4, x * 3);
+				let c: Vec<f32> =
+					(0..3).map(|j| (rgba[base + j] as f32 + cur[e + j]).clamp(0.0, 255.0)).collect();
+				let k = full_scan([c[0], c[1], c[2]]);
+				assert_eq!(dithered[y * w + x], k, "dithered pixel ({x}, {y})");
+				for j in 0..3 {
+					let err = c[j] - palette[k as usize * 3 + j] as f32;
+					if x + 1 < w {
+						cur[e + 3 + j] += err * (7.0 / 16.0);
+						nxt[e + 3 + j] += err * (1.0 / 16.0);
+					}
+					if x > 0 {
+						nxt[e - 3 + j] += err * (3.0 / 16.0);
+					}
+					nxt[e + j] += err * (5.0 / 16.0);
+				}
+			}
+			cur.copy_from_slice(&nxt);
+			nxt.fill(0.0);
+		}
 	}
 
 	/// The export dithers unless told not to: without it every gradient wallpaper bands.

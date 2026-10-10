@@ -2,17 +2,20 @@ import path from "node:path";
 import { app, type IpcMain } from "electron";
 import { planChunks } from "./chunking";
 import { extractMono16kPcm } from "./extractAudio";
-import { ensureModels, modelPaths } from "./modelManager";
 import {
-	STT_VAD_UNAVAILABLE,
-	type SttPhraseSegment,
-	type SttStatusEvent,
-	type SttTiming,
-	type SttTranscribeRequest,
-	type SttTranscribeResponse,
-	type SttVadResponse,
-	type SttVadSegment,
-	type SttWordSegment,
+	alignerPath,
+	cachedAligner,
+	ensureAligner,
+	ensureModels,
+	modelPaths,
+} from "./modelManager";
+import type {
+	SttPhraseSegment,
+	SttStatusEvent,
+	SttTiming,
+	SttTranscribeRequest,
+	SttTranscribeResponse,
+	SttWordSegment,
 } from "./transcriptionContract";
 import { WhisperServerManager } from "./whisperServer";
 
@@ -114,6 +117,60 @@ export class SttManager {
 	private cancelEpoch = 0;
 
 	/**
+	 * The word aligner per language (ctcAlign.ts). A chunk never waits for a
+	 * download: it is an improvement, and a 350 MB fetch inside a chunk would hold
+	 * the helper's queue for as long as the network takes, past any request
+	 * ceiling and out of Cancel's reach. So:
+	 * - a copy already on disk is verified in place the first time a language is
+	 *   asked for in a session (a local read, no network), then reused;
+	 * - otherwise the download starts in the background and the chunks keep
+	 *   whisper's times until it lands; later chunks and transcriptions use it;
+	 * - Cancel and quit abort it, and so does a stall (`ensureAligner`). A failed
+	 *   one is not retried for the rest of the run, only on the next transcription.
+	 */
+	private readonly alignersReady = new Map<string, string>();
+	private readonly alignersChecked = new Set<string>();
+	private readonly alignerDownloads = new Map<string, AbortController>();
+	private readonly alignersFailed = new Set<string>();
+
+	private readonly alignerFor = async (language: string): Promise<string | null> => {
+		const ready = this.alignersReady.get(language);
+		if (ready) return ready;
+		if (!alignerPath(this.getModelsDir(), language)) return null;
+		if (!this.alignersChecked.has(language)) {
+			this.alignersChecked.add(language);
+			const cached = await cachedAligner(this.getModelsDir(), language);
+			if (cached) {
+				this.alignersReady.set(language, cached);
+				return cached;
+			}
+		}
+		if (!this.alignersFailed.has(language) && !this.alignerDownloads.has(language)) {
+			this.downloadAligner(language);
+		}
+		return null;
+	};
+
+	private downloadAligner(language: string): void {
+		const controller = new AbortController();
+		this.alignerDownloads.set(language, controller);
+		console.info(`[stt] downloading the "${language}" word aligner in the background`);
+		ensureAligner({ baseDir: this.getModelsDir(), language, signal: controller.signal })
+			.then((file) => {
+				if (file) this.alignersReady.set(language, file);
+				console.info(`[stt] "${language}" word aligner ready`);
+			})
+			.catch((error: unknown) => {
+				this.alignersFailed.add(language);
+				console.warn(
+					`[stt] no word aligner for "${language}", keeping whisper's word times: ` +
+						`${error instanceof Error ? error.message : String(error)}`,
+				);
+			})
+			.finally(() => this.alignerDownloads.delete(language));
+	}
+
+	/**
 	 * The extraction in flight, if any. `cancelEpoch` alone stops the CHUNK loop, which is
 	 * checked between chunks — so a cancel during the decode left ffmpeg running to
 	 * completion on a file that can be hours long, and the user saw nothing stop.
@@ -152,6 +209,7 @@ export class SttManager {
 	cancel(): void {
 		this.cancelEpoch++;
 		this.extraction?.abort();
+		for (const download of this.alignerDownloads.values()) download.abort(cancelledError());
 	}
 
 	/**
@@ -238,12 +296,18 @@ export class SttManager {
 	private async transcribeChunk(
 		samples: Float32Array,
 		language: string | undefined,
+		prompt: string | undefined,
 	): Promise<Awaited<ReturnType<WhisperServerManager["transcribe"]>>> {
 		let lastError: unknown;
 		for (let attempt = 1; attempt <= CHUNK_ATTEMPTS; attempt++) {
 			if (this.shuttingDown) throw cancelledError();
 			try {
-				return await this.server.transcribe({ samples, language });
+				return await this.server.transcribe({
+					samples,
+					language,
+					prompt,
+					alignerFor: this.alignerFor,
+				});
 			} catch (error) {
 				lastError = error;
 				if (this.shuttingDown) throw cancelledError();
@@ -286,6 +350,7 @@ export class SttManager {
 		await this.init();
 
 		const epoch = this.cancelEpoch;
+		this.alignersFailed.clear();
 		// Extraction is part of the run, and on a long file it is the part the user used
 		// to watch the editor freeze through. Doing it here means the renderer hands over
 		// a path and gets segments back, holding none of the audio. No new status phase:
@@ -338,6 +403,7 @@ export class SttManager {
 			const result = await this.transcribeChunk(
 				samples.subarray(chunk.startSample, chunk.endSample),
 				language,
+				req.prompt,
 			).catch((error) => {
 				if (error instanceof Error && error.name === "AbortError") throw error;
 				// Say where it died. Without this the user gets "Transcription
@@ -450,25 +516,8 @@ export class SttManager {
 	async shutdown(): Promise<void> {
 		if (this.shuttingDown) return;
 		this.shuttingDown = true;
-		this.cancelEpoch++;
+		this.cancel();
 		await this.server.shutdown();
-	}
-
-	/** True when the helper reported Silero VAD loaded and ready. */
-	isVadAvailable(): boolean {
-		return this.server.status.vadAvailable;
-	}
-
-	/**
-	 * Run Voice Activity Detection (Silero VAD) to detect speech segments in samples.
-	 */
-	async detectSpeech(samples: Float32Array): Promise<SttVadSegment[]> {
-		if (this.shuttingDown) throw cancelledError();
-		await this.init();
-		if (!this.server.status.vadAvailable) {
-			throw new Error(STT_VAD_UNAVAILABLE);
-		}
-		return this.server.detectVadSegments({ samples });
 	}
 }
 
@@ -526,13 +575,6 @@ export function registerSttIpc(ipcMain: IpcMain): void {
 			} finally {
 				detach();
 			}
-		},
-	);
-	ipcMain.handle(
-		"stt:vad",
-		async (_event, req: { samples: Float32Array }): Promise<SttVadResponse> => {
-			const segments = await manager.detectSpeech(req.samples);
-			return { segments };
 		},
 	);
 	ipcMain.handle("stt:cancel", () => {

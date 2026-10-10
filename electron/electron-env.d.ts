@@ -40,6 +40,15 @@ interface Window {
 		onNativeExportProgress?: (
 			callback: (frames: number, exportId?: string, phase?: "finalizing") => void,
 		) => () => void;
+		/** Preview frames the main process hands over as shared GPU textures (Windows). The
+		 *  listener draws `frame` and closes it; one listener at a time. Returns the
+		 *  unsubscribe. Optional: shim/web contexts have no bridge. */
+		onCompositorFrame?: (
+			listener: (
+				frame: VideoFrame,
+				meta: import("../src/native/contracts").CompositorSharedFrameMeta,
+			) => void,
+		) => () => void;
 		getSources: (opts: Electron.SourcesOptions) => Promise<ProcessedDesktopSource[]>;
 		switchToEditor: () => Promise<void>;
 		switchToHud: () => Promise<void>;
@@ -50,6 +59,8 @@ interface Window {
 		}>;
 		/** Sources are picked in Apple's system picker (macOS 15.2+), not in an app list. */
 		usesSystemSourcePicker?: () => Promise<boolean>;
+		/** Name of the last source picked in Apple's picker, for display only: it is not selected. */
+		getLastPickedSource?: () => Promise<string | null>;
 		openNotes: () => Promise<{
 			opened: boolean;
 			reason?: string;
@@ -95,6 +106,12 @@ interface Window {
 		onHudMarkerAdded: (callback: (count: number) => void) => () => void;
 		onAiEditionChatEvent: (
 			callback: (event: import("../src/native/contracts").AiEditionChatEvent) => void,
+		) => () => void;
+		/** Optional: absent in the browser shim and in tests that stub electronAPI. */
+		onAiEditionMcpRequest?: (
+			callback: (
+				request: import("../src/native/contracts").AiEditionMcpHostRequest,
+			) => Promise<import("../src/native/contracts").AiEditionMcpHostResponse["result"]>,
 		) => () => void;
 		requestCameraAccess: () => Promise<{
 			success: boolean;
@@ -209,6 +226,7 @@ interface Window {
 		startNativeMacRecording: (
 			request: import("../src/lib/nativeMacRecording").NativeMacRecordingRequest,
 		) => Promise<import("../src/lib/nativeMacRecording").NativeMacRecordingStartResult>;
+		onNativeMacSystemAudioUnavailable: (callback: () => void) => () => void;
 		pauseNativeMacRecording: () => Promise<{
 			success: boolean;
 			error?: string;
@@ -357,6 +375,17 @@ interface Window {
 			message?: string;
 			error?: string;
 		}>;
+		// Stage one of the two bundled click-sound samples where the compositor can read it
+		// by path. Only the two names the app ships are accepted, so nothing is sanitised here.
+		stageClickSoundHit: (
+			name: string,
+			data: ArrayBuffer,
+		) => Promise<{
+			success: boolean;
+			path?: string;
+			message?: string;
+			error?: string;
+		}>;
 		setCurrentVideoPath: (path: string) => Promise<{ success: boolean }>;
 		setCurrentRecordingSession: (
 			session: import("../src/lib/recordingSession").RecordingSession | null,
@@ -435,6 +464,7 @@ interface Window {
 			success: boolean;
 			path?: string;
 			project?: unknown;
+			storedProjectId?: string;
 			message?: string;
 			canceled?: boolean;
 			error?: string;
@@ -452,6 +482,7 @@ interface Window {
 			success: boolean;
 			path?: string;
 			project?: unknown;
+			storedProjectId?: string;
 			message?: string;
 			canceled?: boolean;
 			error?: string;
@@ -476,6 +507,17 @@ interface Window {
 		revealInFolder: (
 			filePath: string,
 		) => Promise<{ success: boolean; error?: string; message?: string }>;
+		/** Whether a take can start: refused, with the message to show, when the recordings folder
+		 *  cannot be reached or its disk is nearly full. */
+		checkRecordingStorage: () => Promise<{ success: true } | { success: false; error: string }>;
+		getRecordingsDir: () => Promise<{ path: string; isDefault: boolean }>;
+		/** Opens the native folder picker; the main process never takes a path from the renderer. */
+		chooseRecordingsDir: () => Promise<
+			{ success: true; path: string } | { success: false; canceled?: boolean; message?: string }
+		>;
+		resetRecordingsDir: () => Promise<
+			{ success: true; path: string } | { success: false; message?: string }
+		>;
 		getShortcuts: () => Promise<Record<string, unknown> | null>;
 		saveShortcuts: (shortcuts: unknown) => Promise<{ success: boolean; error?: string }>;
 		updateGlobalShortcuts: (

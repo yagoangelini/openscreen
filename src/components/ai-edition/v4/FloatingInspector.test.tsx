@@ -1,8 +1,20 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom";
-import { fireEvent, render, screen, within } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+	act,
+	fireEvent,
+	type RenderOptions,
+	render as renderWithoutTooltips,
+	screen,
+	waitFor,
+	within,
+} from "@testing-library/react";
+import type { ReactElement } from "react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { assetSchema, clipSchema, createEmptyDocument } from "@/lib/ai-edition/schema";
 import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
+import { nativeBridgeClient } from "@/native";
 
 vi.mock("@/contexts/I18nContext", () => ({
 	useScopedT: (scope: string) => (key: string) => `${scope}.${key}`,
@@ -49,6 +61,17 @@ vi.mock("../CaptionsPane", () => ({
 
 import { AnnotationSizeControl, AnnotationSizeField, FloatingInspector } from "./FloatingInspector";
 
+// The rail's buttons have tooltips, and the app's root provides the provider they need.
+function render(ui: ReactElement, options?: Omit<RenderOptions, "wrapper">) {
+	return renderWithoutTooltips(ui, { wrapper: TooltipProvider, ...options });
+}
+
+class StubResizeObserver {
+	observe = vi.fn();
+	unobserve = vi.fn();
+	disconnect = vi.fn();
+}
+
 describe("FloatingInspector", () => {
 	const defaultProps: React.ComponentProps<typeof FloatingInspector> = {
 		facet: "layout" as const,
@@ -75,6 +98,162 @@ describe("FloatingInspector", () => {
 		// lucide Camera icon renders an svg with class lucide-camera
 		const svg = layoutBtn.querySelector("svg");
 		expect(svg?.classList.contains("lucide-camera")).toBe(true);
+	});
+
+	// The rail is icon-only. The name is the pane's title (which is also its heading), and the tip
+	// says what the pane holds: a second key, because the title cannot carry the list.
+	describe("rail tooltips", () => {
+		beforeEach(() => {
+			vi.stubGlobal("ResizeObserver", StubResizeObserver);
+		});
+		afterEach(() => {
+			vi.unstubAllGlobals();
+		});
+
+		async function tooltipOf(name: string) {
+			const button = screen.getByRole("button", { name });
+			// A keyboard focus: one the mouse gave opens no tooltip.
+			fireEvent.keyDown(window, { key: "Tab" });
+			act(() => button.focus());
+			await screen.findByRole("tooltip");
+			const visible = document.querySelector<HTMLElement>('[data-slot="tooltip-content"]');
+			const text = screen.getByRole("tooltip").textContent;
+			const side = visible?.getAttribute("data-side");
+			act(() => button.blur());
+			await waitFor(() => expect(screen.queryByRole("tooltip")).toBeNull());
+			return { text, side, hasChip: Boolean(visible?.querySelector("kbd")) };
+		}
+
+		const oneClip = [
+			clipSchema.parse({
+				id: "c1",
+				assetId: "a1",
+				sourceStartSec: 0,
+				sourceEndSec: 10,
+				timelineStartSec: 0,
+				timelineEndSec: 10,
+				origin: "user",
+			}),
+		];
+
+		it("says what each facet holds, on the side that does not cover the next button", async () => {
+			render(<FloatingInspector {...defaultProps} clips={oneClip} />);
+
+			const names: Array<[string, string]> = [
+				["settings.effects.title", "settings.facets.tips.effects"],
+				["settings.layout.title", "settings.facets.tips.layout"],
+				["settings.audio.title", "settings.facets.tips.audio"],
+				["settings.facets.transcript", "settings.facets.tips.transcript"],
+				["editor.editClipDialog.title", "editor.inspector.editClipTip"],
+			];
+			for (const [name, tip] of names) {
+				const opened = await tooltipOf(name);
+				expect(opened.text).toBe(tip);
+				expect(opened.side).toBe("left");
+				expect(opened.hasChip).toBe(false);
+			}
+		});
+
+		it("uses no native title on any rail button", () => {
+			render(<FloatingInspector {...defaultProps} clips={oneClip} />);
+			const rail = screen.getByRole("button", { name: "settings.layout.title" }).parentElement;
+			const buttons = Array.from(rail?.querySelectorAll("button") ?? []);
+			expect(buttons.length).toBeGreaterThanOrEqual(5);
+			for (const button of buttons) expect(button).not.toHaveAttribute("title");
+		});
+
+		it("names a rail button on hover, and Escape closes it", async () => {
+			render(<FloatingInspector {...defaultProps} clips={oneClip} />);
+			fireEvent.pointerMove(screen.getByRole("button", { name: "settings.audio.title" }));
+			expect((await screen.findByRole("tooltip")).textContent).toBe("settings.facets.tips.audio");
+
+			fireEvent.keyDown(document.body, { key: "Escape" });
+			await waitFor(() => expect(screen.queryByRole("tooltip")).toBeNull());
+		});
+
+		// Issue #1016: the focus comes back to the clicked button when the window is switched back
+		// to, and its tooltip opened then, over the panel and the next buttons, until a blur.
+		it("leaves no tooltip on a clicked rail button when the focus comes back to it", () => {
+			render(<FloatingInspector {...defaultProps} clips={oneClip} />);
+			const audio = screen.getByRole("button", { name: "settings.audio.title" });
+			fireEvent.pointerDown(audio);
+			fireEvent.mouseDown(audio);
+			act(() => audio.focus());
+			fireEvent.pointerUp(audio);
+			fireEvent.mouseUp(audio);
+			fireEvent.click(audio);
+			act(() => {
+				audio.blur();
+				audio.focus();
+			});
+			expect(audio).toHaveFocus();
+			expect(screen.queryByRole("tooltip")).toBeNull();
+		});
+	});
+
+	// Issue #1006: drawn inside the stage, the list was clipped by the stage's edge and its last
+	// rows sat under the timeline, where no click reached them.
+	describe("clip picker", () => {
+		beforeEach(() => {
+			vi.stubGlobal("ResizeObserver", StubResizeObserver);
+		});
+		afterEach(() => {
+			vi.unstubAllGlobals();
+		});
+
+		const threeClips = [0, 1, 2].map((i) =>
+			clipSchema.parse({
+				id: `c${i}`,
+				assetId: "a1",
+				sourceStartSec: i * 10,
+				sourceEndSec: i * 10 + 10,
+				timelineStartSec: i * 10,
+				timelineEndSec: i * 10 + 10,
+				origin: "user",
+			}),
+		);
+		const editClip = () => screen.getByRole("button", { name: "editor.editClipDialog.title" });
+
+		it("opens outside the stage, and every row opens its clip", () => {
+			const onEditClip = vi.fn();
+			const { container } = render(
+				<FloatingInspector {...defaultProps} clips={threeClips} onEditClip={onEditClip} />,
+			);
+			fireEvent.click(editClip());
+			const menu = screen.getByRole("menu", { name: "editor.editClipDialog.pickClipTitle" });
+			expect(container).not.toContainElement(menu);
+			expect(editClip()).toHaveAttribute("aria-expanded", "true");
+
+			const rows = within(menu).getAllByRole("menuitem");
+			expect(rows).toHaveLength(3);
+			fireEvent.click(rows[2]);
+			expect(onEditClip).toHaveBeenCalledWith(threeClips[2]);
+			expect(screen.queryByRole("menu")).toBeNull();
+		});
+
+		it("closes on Escape without opening a clip", async () => {
+			const onEditClip = vi.fn();
+			render(<FloatingInspector {...defaultProps} clips={threeClips} onEditClip={onEditClip} />);
+			fireEvent.click(editClip());
+			fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
+			await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
+			expect(onEditClip).not.toHaveBeenCalled();
+		});
+
+		it("opens the only clip at once, with no menu", () => {
+			const onEditClip = vi.fn();
+			render(
+				<FloatingInspector
+					{...defaultProps}
+					clips={threeClips.slice(0, 1)}
+					onEditClip={onEditClip}
+				/>,
+			);
+			expect(editClip()).not.toHaveAttribute("aria-haspopup");
+			fireEvent.click(editClip());
+			expect(onEditClip).toHaveBeenCalledWith(threeClips[0]);
+			expect(screen.queryByRole("menu")).toBeNull();
+		});
 	});
 
 	it("renders collapse button with editor.inspector.collapseInspector and collapses inspector when clicked", () => {
@@ -271,6 +450,167 @@ describe("FloatingInspector", () => {
 				editorSettings.cursorShow = true;
 				editorSettings.autoFocusAll = false;
 			}
+		});
+	});
+
+	describe("cursor facet", () => {
+		const cursorFacet = () => screen.queryByRole("button", { name: "settings.cursor.title" });
+
+		/** A read that has not answered yet, and the way to let it answer. */
+		function pendingRead() {
+			let open: (() => void) | undefined;
+			const gate = new Promise<void>((resolve) => {
+				open = resolve;
+			});
+			return {
+				gate,
+				release: () =>
+					act(async () => {
+						open?.();
+						await gate;
+					}),
+			};
+		}
+
+		/**
+		 * One clip per recording. A recording is the number of samples its cursor file holds, or a
+		 * gate its read waits on before finding three.
+		 */
+		function openProject(...takes: Array<number | Promise<void>>) {
+			// A path per test: every recording is read once per session.
+			const run = crypto.randomUUID();
+			const takeOf = new Map<string, number | Promise<void>>();
+			const assets = takes.map((take, i) => {
+				const originalPath = `/recordings/${run}-${i}.mp4`;
+				takeOf.set(originalPath, take);
+				return assetSchema.parse({ id: `a${i}`, label: "take", originalPath });
+			});
+			const clips = assets.map((asset, i) =>
+				clipSchema.parse({
+					id: `c${i}`,
+					assetId: asset.id,
+					sourceStartSec: 0,
+					sourceEndSec: 10,
+					timelineStartSec: i * 10,
+					timelineEndSec: i * 10 + 10,
+					origin: "user",
+				}),
+			);
+			const read = vi
+				.spyOn(nativeBridgeClient.cursor, "getRecordingData")
+				.mockImplementation(async (videoPath) => {
+					const take = takeOf.get(videoPath ?? "") ?? 0;
+					if (typeof take !== "number") await take;
+					return {
+						version: 2,
+						provider: "native",
+						assets: [],
+						samples: Array.from({ length: typeof take === "number" ? take : 3 }, (_, i) => ({
+							timeMs: i * 100,
+							cx: 0.5,
+							cy: 0.5,
+						})),
+					};
+				});
+			const document = createEmptyDocument({ projectId: "p", title: "t" });
+			useProjectStore.setState({
+				projectId: "p",
+				document: { ...document, assets, timeline: { ...document.timeline, clips } },
+			});
+			return read;
+		}
+
+		/** Lets the recordings' cursor files be read, so an absence is an answer and not a wait. */
+		async function readAll(read: ReturnType<typeof openProject>) {
+			await waitFor(() => expect(read).toHaveBeenCalled());
+			await act(async () => {
+				await Promise.all(read.mock.results.map((r) => r.value));
+			});
+		}
+
+		afterEach(() => {
+			vi.restoreAllMocks();
+			useProjectStore.setState({ document: null });
+		});
+
+		it("is offered when a recording on the timeline has cursor data", async () => {
+			openProject(3);
+			render(<FloatingInspector {...defaultProps} />);
+			expect(await screen.findByRole("button", { name: "settings.cursor.title" })).toBeVisible();
+		});
+
+		// A system-cursor take has the cursor baked into its pixels and no cursor file.
+		it("is left out for a take with no cursor data", async () => {
+			const read = openProject(0);
+			render(<FloatingInspector {...defaultProps} />);
+			await readAll(read);
+			expect(cursorFacet()).toBeNull();
+			expect(screen.getByRole("button", { name: "settings.layout.title" })).toBeVisible();
+		});
+
+		it("is offered as soon as one of several recordings has cursor data", async () => {
+			openProject(0, 2);
+			render(<FloatingInspector {...defaultProps} />);
+			expect(await screen.findByRole("button", { name: "settings.cursor.title" })).toBeVisible();
+		});
+
+		// The first read to find data settles it: the others cannot take the answer back.
+		it("is offered before the other recordings have been read", async () => {
+			const slow = pendingRead();
+			openProject(3, slow.gate);
+			render(<FloatingInspector {...defaultProps} />);
+			expect(await screen.findByRole("button", { name: "settings.cursor.title" })).toBeVisible();
+			await slow.release();
+		});
+
+		// The previous recording's answer says nothing about a recording swapped in for it.
+		it("is not carried over to a recording that has not been read yet", async () => {
+			openProject(3);
+			render(<FloatingInspector {...defaultProps} />);
+			expect(await screen.findByRole("button", { name: "settings.cursor.title" })).toBeVisible();
+			const slow = pendingRead();
+			act(() => void openProject(slow.gate));
+			await waitFor(() => expect(cursorFacet()).toBeNull());
+			await slow.release();
+			expect(await screen.findByRole("button", { name: "settings.cursor.title" })).toBeVisible();
+		});
+
+		it("is left out with nothing on the timeline", async () => {
+			render(<FloatingInspector {...defaultProps} />);
+			await act(() => Promise.resolve());
+			expect(cursorFacet()).toBeNull();
+		});
+
+		it("falls back to the first facet when the chosen one is left out", async () => {
+			const read = openProject(0);
+			render(<FloatingInspector {...defaultProps} facet="cursor" />);
+			await readAll(read);
+			expect(screen.getByTestId("effects-pane")).toBeInTheDocument();
+			expect(screen.queryByTestId("cursor-pane")).toBeNull();
+			expect(screen.getByRole("button", { name: "settings.effects.title" })).toHaveAttribute(
+				"aria-pressed",
+				"true",
+			);
+		});
+
+		it("shows the cursor pane once the chosen facet has data", async () => {
+			openProject(3);
+			render(<FloatingInspector {...defaultProps} facet="cursor" />);
+			expect(await screen.findByTestId("cursor-pane")).toBeInTheDocument();
+			expect(cursorFacet()).toHaveAttribute("aria-pressed", "true");
+		});
+
+		it("says what the cursor facet holds, once it is offered", async () => {
+			vi.stubGlobal("ResizeObserver", StubResizeObserver);
+			openProject(3);
+			render(<FloatingInspector {...defaultProps} />);
+			const facet = await screen.findByRole("button", { name: "settings.cursor.title" });
+			// A keyboard focus: one the mouse gave opens no tooltip.
+			fireEvent.keyDown(window, { key: "Tab" });
+			act(() => facet.focus());
+			expect((await screen.findByRole("tooltip")).textContent).toBe("settings.facets.tips.cursor");
+			expect(facet).not.toHaveAttribute("title");
+			vi.unstubAllGlobals();
 		});
 	});
 });

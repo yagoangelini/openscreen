@@ -152,6 +152,9 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 	private var totalPausedDuration = CMTime.zero
 	/// Sample queue only. See `VideoTimestampGate` for the failure it exists to prevent.
 	private var videoTimestampGate = VideoTimestampGate()
+	/// Sample queue only. Frames the writer input was not ready for, or refused, reported in
+	/// `recording-stopped` so a macOS drop rate can be measured at all (#937).
+	private var droppedVideoFrames = 0
 	private var nativeMicrophoneEnabled = false
 	private var outputWidth = 1920
 	private var outputHeight = 1080
@@ -454,8 +457,11 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 					"captureBounds": captureBoundsPayload(),
 				])
 			} else if !appended {
+				droppedVideoFrames += 1
 				reportWriterFailure("video append")
 			}
+		} else {
+			droppedVideoFrames += 1
 		}
 	}
 
@@ -701,26 +707,50 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 		configuration.minimumFrameInterval = CMTime(value: 1, timescale: CMTimeScale(max(1, request.video.fps)))
 		configuration.queueDepth = 6
 		configuration.showsCursor = !request.video.hideSystemCursor
-		configuration.pixelFormat = kCVPixelFormatType_32BGRA
+		// Studio-range BT.709 YCbCr from ScreenCaptureKit itself, which the encoder takes as is
+		// and the compositor decodes (#943). BGRA left the matrix to VideoToolbox. Nothing here
+		// reads the pixels: a frame goes through `retimedSampleBuffer` (timing only) to
+		// `append`, and `isCompleteFrame` reads attachments. 1.5 bytes a pixel instead of 4,
+		// times `queueDepth`.
+		configuration.pixelFormat = kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
+		configuration.colorMatrix = captureYCbCrMatrix
+		// Unset, the buffers carry the display's colour space: P3 on most Macs.
+		configuration.colorSpaceName = CGColorSpace.sRGB
 		configuration.sampleRate = 48_000
 		configuration.channelCount = 2
 		configuration.excludesCurrentProcessAudio = true
 		configuration.capturesAudio = request.audio.system.enabled && !tapsSystemAudio
 
-		if request.audio.microphone.enabled {
-			guard supportsNativeMicrophoneCapture(streamConfig: configuration) else {
-				nativeMicrophoneEnabled = false
-				emit([
-					"event": "warning",
-					"code": "microphone-unavailable",
-					"message": "Native microphone capture requires ScreenCaptureKit microphone support on this macOS version.",
-				])
-				return configuration
+		nativeMicrophoneEnabled = false
+		guard request.audio.microphone.enabled else {
+			return configuration
+		}
+		let microphone = resolveMicrophoneCapture(
+			supported: supportsNativeMicrophoneCapture(streamConfig: configuration),
+			deviceID: request.audio.microphone.deviceId,
+			deviceName: request.audio.microphone.deviceName,
+			devices: AVCaptureDevice.devices(for: .audio).map {
+				(id: $0.uniqueID, name: $0.localizedName)
 			}
+		)
+		switch microphone {
+		case .unsupported:
+			emit([
+				"event": "warning",
+				"code": "microphone-unavailable",
+				"message": "Native microphone capture requires ScreenCaptureKit microphone support on this macOS version.",
+			])
+		case .noInput:
+			emit([
+				"event": "warning",
+				"code": "microphone-not-found",
+				"message": "No audio input is connected; recording without the microphone.",
+			])
+		case .device(let deviceId):
 			nativeMicrophoneEnabled = true
 			configuration.capturesAudio = true
 			configuration.setValue(true, forKey: "captureMicrophone")
-			if let deviceId = resolveMicrophoneCaptureDeviceID() {
+			if let deviceId {
 				configuration.setValue(deviceId, forKey: "microphoneCaptureDeviceID")
 			} else if requestedASpecificMicrophone {
 				emit([
@@ -729,8 +759,6 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 					"message": "The requested microphone could not be resolved; capturing the default input.",
 				])
 			}
-		} else {
-			nativeMicrophoneEnabled = false
 		}
 
 		return configuration
@@ -754,8 +782,12 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 			AVVideoCodecKey: AVVideoCodecType.h264,
 			AVVideoWidthKey: outputWidth,
 			AVVideoHeightKey: outputHeight,
+			// BT.709 tags, the colour the stream is captured in (#943).
+			AVVideoColorPropertiesKey: videoColorProperties,
 			AVVideoCompressionPropertiesKey: [
-				AVVideoAverageBitRateKey: request.video.bitrate ?? 18_000_000,
+				// From the size this stream really got. The renderer sends none (#924).
+				AVVideoAverageBitRateKey: request.video.bitrate
+					?? defaultVideoBitrate(width: outputWidth, height: outputHeight, fps: request.video.fps),
 				AVVideoExpectedSourceFrameRateKey: request.video.fps,
 				// Without this the encoder defaults to B-frames, and a reordered
 				// stream needs a composition offset per sample. AVAssetWriter emits
@@ -784,6 +816,11 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 				// particular run happened to die. Reordering off is 3/3 clean across
 				// both rates, and a SIGKILL at 25s still leaves 27 readable `moof`.
 				AVVideoAllowFrameReorderingKey: false,
+				// A keyframe every second, by frame count and by time: a still screen
+				// delivers fewer frames than the fps, and the count alone would then
+				// stretch the GOP, which is the editor's scrub cost (#937).
+				AVVideoMaxKeyFrameIntervalKey: videoKeyFrameInterval(fps: request.video.fps),
+				AVVideoMaxKeyFrameIntervalDurationKey: 1,
 			],
 		]
 		let input = AVAssetWriterInput(mediaType: .video, outputSettings: settings)
@@ -906,7 +943,9 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 			}
 		}
 
-		let refusedVideoFrames = sampleQueue.sync { videoTimestampGate.rejectedCount }
+		let (refusedVideoFrames, droppedFrames) = sampleQueue.sync {
+			(videoTimestampGate.rejectedCount, droppedVideoFrames)
+		}
 		if refusedVideoFrames > 1 {
 			emit([
 				"event": "warning",
@@ -929,6 +968,7 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 			emit([
 				"event": "recording-stopped",
 				"screenPath": request.outputs.screenPath,
+				"droppedVideoFrames": droppedFrames,
 			])
 		} else {
 			emitError(
@@ -1088,7 +1128,7 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 	///
 	/// The same test the Windows helper makes before emitting this warning
 	/// (`wantedAParticularMicrophone` in wgc-capture/src/wasapi_loopback_capture.cpp),
-	/// and it has to be made here too because `resolveMicrophoneCaptureDeviceID()`
+	/// and it has to be made here too because `resolveMicrophoneDeviceID()`
 	/// returns nil for two very different situations. One is a chosen microphone that
 	/// nothing here could find, which is worth saying out loud. The other is no choice
 	/// at all, which is the common case and has to stay silent: the HUD leaves both
@@ -1107,16 +1147,6 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 		// "Default" warned about a microphone the user never chose.
 		if deviceId == "default" { return false }
 		return !deviceId.isEmpty || !deviceName.isEmpty
-	}
-
-	private func resolveMicrophoneCaptureDeviceID() -> String? {
-		resolveMicrophoneDeviceID(
-			deviceID: request.audio.microphone.deviceId,
-			deviceName: request.audio.microphone.deviceName,
-			devices: AVCaptureDevice.devices(for: .audio).map {
-				(id: $0.uniqueID, name: $0.localizedName)
-			}
-		)
 	}
 }
 

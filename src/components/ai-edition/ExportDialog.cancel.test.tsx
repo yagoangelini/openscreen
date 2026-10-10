@@ -106,7 +106,31 @@ async function start() {
 	return { ...view, id };
 }
 
-describe("GIF export cancellation", () => {
+function pendingMp4Export() {
+	let resolve!: (stats: CompositorExportResult) => void;
+	let reject!: (error: Error) => void;
+	const result = new Promise<CompositorExportResult>((yes, no) => {
+		resolve = yes;
+		reject = no;
+	});
+	vi.mocked(exportMultiNative).mockReturnValueOnce(result);
+	return { resolve, reject };
+}
+
+async function startMp4() {
+	render(
+		<I18nProvider>
+			<ExportDialog open onClose={onClose} document={DOC} />
+		</I18nProvider>,
+	);
+	fireEvent.click(screen.getByRole("button", { name: "Export MP4" }));
+	await waitFor(() => expect(exportMultiNative).toHaveBeenCalledOnce());
+	const id = vi.mocked(exportMultiNative).mock.calls[0][4];
+	expect(id).toMatch(/^[A-Za-z0-9_-]+$/);
+	return id as string;
+}
+
+describe("export cancellation", () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
 		vi.mocked(cancelExportNative).mockResolvedValue({ accepted: true });
@@ -196,6 +220,46 @@ describe("GIF export cancellation", () => {
 		expect(screen.queryByText(/Exporting your video/i)).not.toBeInTheDocument();
 	});
 
+	it("cancels an MP4 mid-render and returns to the same options", async () => {
+		const job = pendingMp4Export();
+		const id = await startMp4();
+		const cancel = screen.getByRole("button", { name: "Cancel" });
+		expect(cancel).toBeEnabled();
+		fireEvent.click(cancel);
+		await waitFor(() => expect(cancelExportNative).toHaveBeenCalledWith(id));
+		expect(cancel).toBeDisabled();
+		await act(async () =>
+			job.reject(
+				new NativeBridgeRequestError({
+					code: "CANCELLED",
+					message: "cancelled",
+					retryable: false,
+				}),
+			),
+		);
+		expect(screen.getByRole("button", { name: "Export MP4" })).toBeEnabled();
+		expect(onClose).not.toHaveBeenCalled();
+		expect(toast.success).not.toHaveBeenCalled();
+		expect(toast.error).not.toHaveBeenCalled();
+	});
+
+	it("goes back to the progress when native refuses the cancel", async () => {
+		// An addon built before MP4 cancellation refuses every cancel; the export runs on.
+		vi.mocked(cancelExportNative).mockResolvedValue({ accepted: false });
+		const job = pendingMp4Export();
+		const id = await startMp4();
+		const cancel = screen.getByRole("button", { name: "Cancel" });
+		fireEvent.click(cancel);
+		await waitFor(() => expect(cancelExportNative).toHaveBeenCalledWith(id));
+		await waitFor(() => expect(cancel).toBeEnabled());
+		// 10 s at the default 60 fps: 60 frames is 10%.
+		act(() => progress(60, id));
+		expect(screen.getByText("10%")).toBeVisible();
+		await act(async () => job.resolve(STATS));
+		expect(screen.getByText("/tmp/result.gif")).toBeVisible();
+		expect(toast.success).toHaveBeenCalledOnce();
+	});
+
 	it("reports success when native publication wins the race", async () => {
 		vi.mocked(cancelExportNative).mockResolvedValue({ accepted: false });
 		const job = pendingExport();
@@ -248,18 +312,7 @@ describe("GIF export cancellation", () => {
 	});
 });
 
-function pendingMp4Export() {
-	let resolve!: (stats: CompositorExportResult) => void;
-	let reject!: (error: Error) => void;
-	const result = new Promise<CompositorExportResult>((yes, no) => {
-		resolve = yes;
-		reject = no;
-	});
-	vi.mocked(exportMultiNative).mockReturnValueOnce(result);
-	return { resolve, reject };
-}
-
-async function startMp4() {
+async function startMp4View() {
 	const view = render(
 		<I18nProvider>
 			<ExportDialog open onClose={onClose} document={DOC} />
@@ -290,7 +343,7 @@ describe("MP4 export cancellation and finishing", () => {
 
 	it("cancels an MP4 export by its ID and returns to the options", async () => {
 		const job = pendingMp4Export();
-		const { id } = await startMp4();
+		const { id } = await startMp4View();
 		const cancel = screen.getByRole("button", { name: "Cancel" });
 		expect(cancel).toBeEnabled();
 		fireEvent.click(cancel);
@@ -307,7 +360,7 @@ describe("MP4 export cancellation and finishing", () => {
 
 	it("says it is finishing the file after the last frame, and can still be cancelled there", async () => {
 		const job = pendingMp4Export();
-		const { id } = await startMp4();
+		const { id } = await startMp4View();
 		act(() => progress(600, id));
 		expect(screen.getByText("100%")).toBeVisible();
 		act(() => progress(600, id, "finalizing"));
@@ -327,7 +380,7 @@ describe("MP4 export cancellation and finishing", () => {
 
 	it("explains a GPU reset in the app's own words", async () => {
 		const job = pendingMp4Export();
-		await startMp4();
+		await startMp4View();
 		await act(async () =>
 			job.reject(
 				new Error(
@@ -341,7 +394,7 @@ describe("MP4 export cancellation and finishing", () => {
 
 	it("cancels a running MP4 export when the dialog goes away", async () => {
 		pendingMp4Export();
-		const { id, unmount } = await startMp4();
+		const { id, unmount } = await startMp4View();
 		unmount();
 		expect(cancelExportNative).toHaveBeenCalledWith(id);
 	});

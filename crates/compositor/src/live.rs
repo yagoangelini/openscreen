@@ -27,9 +27,12 @@ use crate::regions::{speed_at, ProgrammeClock};
 use crate::scene::Scene;
 use crate::config::{self, Cfg};
 use crate::cursor::CursorTrack;
-use crate::d3d::Gpu;
+use crate::d3d::{Backend, Gpu};
 use crate::frame_geometry::webcam_is_real;
 use crate::pipeline::Decoder;
+#[cfg(windows)]
+use crate::shared_frames::SharedRing;
+use crate::shared_frames::{SharedFrame, SlotBook};
 use crate::timeline_walk::{frame_step, FrameStep, NextFrameTime};
 use anyhow::Result;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -106,9 +109,13 @@ struct PrefetchedClip {
 /// `should_draw_webcam`).
 ///
 /// ponytail: on garde le remplaçant plutôt que de passer `wdec` en `Option<Decoder>`, ce qui
-/// toucherait 22 sites dont le pool de décodeurs et la boucle de composition `unsafe`. À faire
-/// si quelqu'un mesure que le décodeur inutile coûte (VRAM des pools D3D11VA, une ouverture
-/// par clip) — l'avertissement ci-dessous dit enfin à quelle fréquence le cas visible arrive.
+/// toucherait 22 sites dont le pool de décodeurs et la boucle de composition `unsafe`. Il est
+/// ouvert mais n'est plus jamais avancé ni recherché : la composition reçoit la frame écran à
+/// sa place (`Player::webcam_frame`), l'image même qu'il aurait décodée. Le décoder à côté de
+/// l'écran coûtait la moitié du débit de décodage, sans caméra, c'est-à-dire le cas courant :
+/// une source 4K lue à 2× plafonnait à ~46 frames/s pour 97 que le décodeur seul tient, et la
+/// preview prenait des secondes de retard dans les régions de vitesse. Reste à faire si la
+/// VRAM des pools D3D11VA ou l'ouverture par clip se mesurent.
 unsafe fn open_webcam_or_stand_in(
     screen_path: &str,
     webcam_path: &str,
@@ -152,10 +159,11 @@ unsafe fn open_and_seek_clip(
     let source_time_sec = source_time_sec.max(0.0);
     let mut sdec = Decoder::open(screen_path, gpu)?;
     let (mut wdec, webcam_decoder_is_real) = open_webcam_or_stand_in(screen_path, webcam_path, gpu)?;
-    let sf = sdec.seek_to(source_time_sec)?;
-    let mut wf = wdec.seek_to(webcam_seek_time(source_time_sec, webcam_offset_sec))?;
-    if wf.is_null() {
-        wf = wdec.seek_to(0.0)?;
+    let sf = sdec.seek_to_or_last(source_time_sec)?;
+    // La caméra aussi tient sa dernière image au-delà de sa fin. L'ancien repli `seek_to(0.0)`
+    // y montrait sa PREMIÈRE image (#990).
+    if webcam_decoder_is_real {
+        wdec.seek_to_or_last(webcam_seek_time(source_time_sec, webcam_offset_sec))?;
     }
     if sf.is_null() {
         anyhow::bail!("clip préchargé vide au temps source {source_time_sec:.3}s (screen=\"{screen_path}\")");
@@ -189,17 +197,20 @@ struct PooledClip {
 unsafe fn seek_pair(
     sdec: &mut Decoder,
     wdec: &mut Decoder,
+    webcam_decoder_is_real: bool,
     source_time_sec: f64,
     webcam_offset_sec: f64,
 ) -> Result<bool> {
-    let sf = sdec.seek_to(source_time_sec)?;
+    let sf = sdec.seek_to_or_last(source_time_sec)?;
     if sf.is_null() {
         return Ok(false);
     }
-    let mut wf = wdec.seek_to(webcam_seek_time(source_time_sec, webcam_offset_sec))?;
-    if wf.is_null() {
-        wf = wdec.seek_to(0.0)?;
+    // Le remplaçant n'est jamais lu (`Player::webcam_frame`) : rien à positionner.
+    if !webcam_decoder_is_real {
+        return Ok(true);
     }
+    // Au-delà de sa fin, la caméra tient sa dernière image, pas la première (#990).
+    let wf = wdec.seek_to_or_last(webcam_seek_time(source_time_sec, webcam_offset_sec))?;
     if wf.is_null() {
         return Ok(false);
     }
@@ -234,7 +245,13 @@ unsafe fn swap_clip_pooled(
             let mut pooled = pool.remove(i);
             // Reseek les décodeurs poolés AVANT de les installer. Échec → on les jette et on
             // ouvre à neuf (chemin connu sûr), jamais une frame vide.
-            if seek_pair(&mut pooled.clip.sdec, &mut pooled.clip.wdec, t, request.webcam_offset_sec)? {
+            if seek_pair(
+                &mut pooled.clip.sdec,
+                &mut pooled.clip.wdec,
+                pooled.clip.webcam_decoder_is_real,
+                t,
+                request.webcam_offset_sec,
+            )? {
                 pooled.clip.idx = (t * pooled.clip.sdec.fps()).round().max(0.0) as u32;
                 hit = true;
                 pooled.clip
@@ -359,7 +376,13 @@ impl Player {
         // Les DEUX flux doivent avoir une frame : `compose_frame` les échantillonne tous les
         // deux sans condition, un seul manquant suffit à le faire échouer (d'où le `false` que
         // `seek_pair` peut rendre → l'appelant retombe sur l'ouverture complète).
-        if !seek_pair(&mut self.sdec, &mut self.wdec, source_time_sec, self.webcam_offset_sec)? {
+        if !seek_pair(
+            &mut self.sdec,
+            &mut self.wdec,
+            self.webcam_decoder_is_real,
+            source_time_sec,
+            self.webcam_offset_sec,
+        )? {
             return Ok(false);
         }
         self.idx = (source_time_sec * self.sdec.fps()).round().max(0.0) as u32;
@@ -421,12 +444,29 @@ impl Player {
         self.webcam_decoder_is_real
     }
 
+    /// La frame webcam à composer avec la frame écran `screen` : celle de la caméra, ou sans
+    /// caméra la frame écran elle-même, que le remplaçant aurait décodée à l'identique et que
+    /// la composition ne dessine pas (`should_draw_webcam`).
+    unsafe fn webcam_frame(&self, screen: *mut crate::ffi::AVFrame) -> *mut crate::ffi::AVFrame {
+        if self.webcam_decoder_is_real {
+            self.wdec.cur_frame()
+        } else {
+            screen
+        }
+    }
+
     /// Temps source courant du décodeur écran — utilisé par `render_thread` pour détecter le
     /// franchissement de la fin de fenêtre du clip actif pendant la lecture libre, et pour
     /// calculer la cible de `step` en lecture libre. `pub` (pas `pub(crate)`) : le harnais
     /// `poc-d3d` (crate externe) en a besoin pour piloter sa propre boucle de lecture libre.
     pub unsafe fn screen_time_sec(&self) -> f64 {
         self.sdec.cur_time_sec()
+    }
+
+    /// Temps source courant du décodeur webcam, le remplaçant compris : sans caméra il ne doit
+    /// jamais bouger (`tests/no_camera_stand_in.rs`).
+    pub unsafe fn webcam_time_sec(&self) -> f64 {
+        self.wdec.cur_time_sec()
     }
 
     /// Recalcule l'horloge programme pour le clip `clip_index` de `scene` (la scène COMPLÈTE,
@@ -448,6 +488,25 @@ impl Player {
     pub unsafe fn programme_time(&self) -> Option<f32> {
         let t = self.sdec.cur_time_sec();
         self.programme.as_ref().map(|c| c.at(t) as f32)
+    }
+
+    /// La lecture libre est-elle au bout de la source écran ? Oui quand la frame courante,
+    /// composée, atteint `end_sec` (la fin de la fenêtre du clip), quand la suivante, due d'ici
+    /// `target_source_time`, tomberait hors de la fenêtre (`step` composerait une frame coupée),
+    /// ou qu'aucune autre ne la suit dans le fichier : `step` y reboucle au début.
+    unsafe fn reached_end(&mut self, end_sec: f64, target_source_time: f64) -> Result<bool> {
+        // Une frame repositionnée (seek, bascule de clip) attend encore d'être composée.
+        if self.use_current_on_next_step {
+            return Ok(false);
+        }
+        if self.sdec.cur_time_sec() >= end_sec {
+            return Ok(true);
+        }
+        Ok(match self.sdec.peek_next_time_sec()? {
+            NextFrameTime::At(t) => t >= end_sec && t <= target_source_time,
+            NextFrameTime::Eof => true,
+            NextFrameTime::Unknown => false,
+        })
     }
 
     /// Compose la PROCHAINE frame due (→ `comp.rt`), au plus une, si `target_source_time`
@@ -509,7 +568,10 @@ impl Player {
         }
 
         let target_webcam_t = (self.sdec.cur_time_sec() - self.webcam_offset_sec).max(0.0);
-        let wf = if use_current {
+        let wf = if !self.webcam_decoder_is_real {
+            // Pas de caméra : le remplaçant n'est pas décodé (cf. `open_webcam_or_stand_in`).
+            sf
+        } else if use_current {
             self.wdec.cur_frame()
         } else {
             let cur = self.wdec.cur_frame();
@@ -582,7 +644,7 @@ impl Player {
             return Ok(false);
         }
         let sf = self.sdec.cur_frame();
-        let wf = self.wdec.cur_frame();
+        let wf = self.webcam_frame(sf);
         if sf.is_null() || wf.is_null() {
             return Ok(false);
         }
@@ -598,10 +660,15 @@ impl Player {
     /// aucun raccourci keyframe pour les seeks avant lointains (lent ET, combiné au bug de
     /// `set_time`, incorrect au-delà de 6s sur un enregistrement réel).
     pub unsafe fn present_frame(&mut self, comp: &Compositor, cfg: &Cfg, target_sec: f64) -> Result<bool> {
-        let sf = self.sdec.seek_to(target_sec)?;
-        let wf = self
-            .wdec
-            .seek_to(webcam_seek_time(target_sec, self.webcam_offset_sec))?;
+        let sf = self.sdec.seek_to_or_last(target_sec)?;
+        // La caméra aussi, au-delà de sa dernière image comprise : sans frame webcam, la frame
+        // ne serait pas composée. Sans caméra, la frame écran tient sa place.
+        let wf = if self.webcam_decoder_is_real {
+            self.wdec
+                .seek_to_or_last(webcam_seek_time(target_sec, self.webcam_offset_sec))?
+        } else {
+            sf
+        };
         if sf.is_null() || wf.is_null() {
             self.has_current_frame = false;
             return Ok(false);
@@ -756,15 +823,34 @@ fn scene_for_clip(scene: &Scene, clip_index: usize) -> Scene {
 
 /// Dernière frame readback vers CPU, prête pour le napi `read_frame`.
 ///
-/// `(gen, w, h, vec)` où `vec.len() == w*h*4` octets RGBA8 tightly-packed (R, G, B, A
-/// en mémoire — cf. `Compositor::readback_resized`). `gen` est une génération monotone
+/// `(gen, w, h, vec, métrage, position)` où `vec.len() == w*h*4` octets RGBA8 tightly-packed
+/// (R, G, B, A en mémoire — cf. `Compositor::readback_resized`). `gen` est une génération monotone
 /// (≥ 1, `0` réservé à « le consommateur n'a encore rien vu ») incrémentée à CHAQUE
 /// publication, càd uniquement quand une nouvelle frame a réellement été composée (le
 /// thread de rendu ne republie pas une frame identique — cf. `stepped || first`). Elle
 /// est l'IDENTITÉ de la frame : le consommateur (`read_frame`) ne repaie le clone + l'IPC
 /// que lorsqu'elle change. `None` = "aucune frame composée pour l'instant" (toutes les
 /// lectures avant la 1re frame composée retournent `None` côté napi, jamais un buffer vide).
-type LatestFrame = (u64, u32, u32, Vec<u8>);
+pub type LatestFrame = (
+    u64,
+    u32,
+    u32,
+    Vec<u8>,
+    Option<crate::frame_geometry::FootageQuad>,
+    FramePosition,
+);
+
+/// Où en est la vue quand elle compose une frame : le clip actif de la scène et le temps
+/// source de la frame écran. Voyage avec chaque frame publiée, quel que soit le transport,
+/// pour que l'app compare la position RÉELLE de la vue à sa propre tête de lecture au lieu
+/// de la deviner à partir de l'horloge murale.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct FramePosition {
+    /// Index du clip actif dans `scene.clips`.
+    pub clip_index: u32,
+    /// pts de la frame écran composée, en secondes du fichier source.
+    pub source_time_sec: f64,
+}
 
 /// État partagé thread appelant → thread de rendu (commandes sans blocage).
 struct Shared {
@@ -800,6 +886,15 @@ struct Shared {
     /// vide la ferait repartir à 1 — donc rejouer des générations déjà peintes. Monotone,
     /// jamais remise à zéro.
     frame_gen: AtomicU64,
+    /// La vue livre ses frames dans l'anneau de textures partagées (`take_shared_frame`) au
+    /// lieu de les relire en RAM (`latest_frame_since`). Posé par JS ; le thread de rendu le
+    /// rabat à `false` si l'anneau ne peut pas servir, et les frames repassent par la RAM.
+    shared_frames: AtomicBool,
+    /// Tenue des cases de l'anneau, entre le thread de rendu et le thread Node.
+    slot_book: Mutex<SlotBook>,
+    /// Republier la frame courante au prochain tour, même en pause : posé quand le transport
+    /// change, pour que le consommateur ait une image sans attendre que quelque chose bouge.
+    republish: AtomicBool,
     /// Erreur fatale du thread de rendu (device D3D11 introuvable, décodeur qui refuse
     /// le fichier…). Le thread meurt sur la première erreur ; sans ce champ, elle
     /// finissait dans un `eprintln!` que personne ne lit et l'utilisateur n'avait
@@ -853,6 +948,9 @@ impl LiveView {
             stop: AtomicBool::new(false),
             latest_frame: Mutex::new(None),
             frame_gen: AtomicU64::new(0),
+            shared_frames: AtomicBool::new(false),
+            slot_book: Mutex::new(SlotBook::default()),
+            republish: AtomicBool::new(false),
             fatal: Mutex::new(None),
         });
         let sh = shared.clone();
@@ -894,7 +992,7 @@ impl LiveView {
     /// FFI vers le Buffer napi). Le `Vec<u8>` retourné a `len() == w*h*4`.
     /// Préférer `latest_frame_since` sur le chemin chaud : il évite ce clone quand
     /// le consommateur possède déjà la génération courante.
-    pub fn latest_frame(&self) -> Option<(u64, u32, u32, Vec<u8>)> {
+    pub fn latest_frame(&self) -> Option<LatestFrame> {
         self.shared
             .latest_frame
             .lock()
@@ -910,7 +1008,7 @@ impl LiveView {
     /// frame figée — on n'exécute PAS le clone `O(w·h)` : c'est tout l'intérêt du
     /// compteur. Le consommateur passe la dernière génération qu'il a peinte (`0` au
     /// départ) ; `None` ⇒ il ne fait rien, `Some` ⇒ il peint et retient `gen`.
-    pub fn latest_frame_since(&self, since_gen: u64) -> Option<(u64, u32, u32, Vec<u8>)> {
+    pub fn latest_frame_since(&self, since_gen: u64) -> Option<LatestFrame> {
         let mut guard = self.shared.latest_frame.lock().ok()?;
         match guard.as_ref() {
             // Le buffer est EMPORTÉ, pas copié. Le thread de rendu le remplace à chaque
@@ -926,6 +1024,35 @@ impl LiveView {
             // redimensionnement provoque de toute façon une recomposition.
             Some((gen, ..)) if *gen > since_gen => guard.take(),
             _ => None,
+        }
+    }
+
+    /// Livrer les frames par textures partagées plutôt que par readback. Seul le backend
+    /// matériel de Windows sait le faire : ailleurs la demande est refusée et la vue continue
+    /// de relire en RAM. Rend l'état obtenu.
+    pub fn set_shared_frames(&self, enabled: bool) -> bool {
+        let on = enabled && cfg!(windows) && Gpu::probe() == Some(Backend::Hardware);
+        if self.shared.shared_frames.swap(on, Ordering::Relaxed) != on {
+            if !on {
+                if let Ok(mut book) = self.shared.slot_book.lock() {
+                    book.clear_ready();
+                }
+            }
+            self.shared.republish.store(true, Ordering::Relaxed);
+        }
+        on
+    }
+
+    /// La dernière frame posée dans l'anneau, si elle est plus récente que `since_gen`. Sa
+    /// case reste tenue jusqu'à `release_shared_frame`. `None` aussi quand la vue relit en RAM.
+    pub fn take_shared_frame(&self, since_gen: u64) -> Option<SharedFrame> {
+        self.shared.slot_book.lock().ok()?.take(since_gen, Instant::now())
+    }
+
+    /// Chromium a relâché la frame `gen` de la case `slot` : le thread de rendu peut y réécrire.
+    pub fn release_shared_frame(&self, slot: u32, gen: u64) {
+        if let Ok(mut book) = self.shared.slot_book.lock() {
+            book.release(slot, gen);
         }
     }
 
@@ -1157,12 +1284,20 @@ fn should_settle(now: Instant, settle_until: Option<Instant>, last_settle: Insta
         && now.duration_since(last_settle) >= SETTLE_STEP
 }
 
+/// Le clip que la lecture libre enchaîne après `active`. Aucun après le dernier : le programme
+/// s'arrête là, comme la tête de lecture de l'app. Reboucler sur le premier emmenait la vue
+/// où l'app ne la suivait pas, et ses seeks suivants, qui ne nomment pas de clip, cherchaient
+/// alors dans le fichier du premier (#997).
+fn next_clip_index(scene: &Scene, active: usize) -> Option<usize> {
+    (active + 1 < scene.clips.len()).then_some(active + 1)
+}
+
 /// Démarre le préchargement du clip suivant sur un thread dédié dès qu'on entre dans la
 /// fenêtre `PREFETCH_LEAD_SEC` avant la fin du clip actif — pour que la bascule à la
 /// frontière (`advance_to_next_scene_clip`) trouve les décodeurs déjà ouverts et positionnés
 /// au lieu de payer l'E/S + le parsing FFmpeg sur le thread de rendu pile au moment de la
 /// transition (la pause perceptible observée en usage réel). No-op si un préchargement est
-/// déjà en cours, ou pour une scène à 1 clip (voir `advance_to_next_scene_clip`).
+/// déjà en cours, ou sur le dernier clip (voir `next_clip_index`).
 unsafe fn maybe_start_prefetch(
     scene: &Scene,
     active_clip_index: usize,
@@ -1170,9 +1305,12 @@ unsafe fn maybe_start_prefetch(
     gpu: &Gpu,
     prefetch: &mut Option<PendingPrefetch>,
 ) {
-    if scene.clips.len() <= 1 || prefetch.is_some() {
+    if prefetch.is_some() {
         return;
     }
+    let Some(next_index) = next_clip_index(scene, active_clip_index) else {
+        return;
+    };
     let Some(clip) = scene.clips.get(active_clip_index) else {
         return;
     };
@@ -1180,11 +1318,6 @@ unsafe fn maybe_start_prefetch(
     if !(0.0..PREFETCH_LEAD_SEC).contains(&remaining) {
         return;
     }
-    let next_index = if active_clip_index + 1 < scene.clips.len() {
-        active_clip_index + 1
-    } else {
-        0
-    };
     let next_clip = scene.clips[next_index].clone();
     // Copie légère (COM refcount, pas de nouveau device) — même motif que `Player::open`.
     let gpu_clone = Gpu {
@@ -1212,9 +1345,8 @@ unsafe fn maybe_start_prefetch(
     *prefetch = Some((next_index, rx));
 }
 
-/// Bascule le `Player` + le compositeur sur le clip suivant de `scene` (reboucle sur le
-/// premier après le dernier). No-op pour une scène à 1 clip (le bouclage léger existant de
-/// `Player::step` suffit et coûte moins cher qu'un `set_active_clip` — reopen des décodeurs).
+/// Bascule le `Player` + le compositeur sur le clip suivant de `scene`. No-op sur le dernier
+/// clip, que rien ne suit (`next_clip_index`) : la boucle de rendu y tient la dernière image.
 ///
 /// Partagée entre le déclenchement PROACTIF (seuil `source_end_sec` franchi) et le filet de
 /// sécurité RÉACTIF de `render_thread` (le temps du décodeur a reculé — `Player::step` a
@@ -1242,13 +1374,8 @@ unsafe fn advance_to_next_scene_clip(
     loaded_cursor_path: &mut String,
     last_smoothing: &mut f32,
 ) {
-    if scene.clips.len() <= 1 {
+    let Some(next_index) = next_clip_index(scene, *active_clip_index) else {
         return;
-    }
-    let next_index = if *active_clip_index + 1 < scene.clips.len() {
-        *active_clip_index + 1
-    } else {
-        0
     };
     let next_clip = &scene.clips[next_index];
 
@@ -1426,8 +1553,19 @@ unsafe fn render_thread(
     // appliquée, on refuse de jouer le layout fixture (POC) : un fallback fixture ne ferait que
     // MASQUER un scene-push cassé. On attend la scène avant de produire le 1er frame.
     let mut scene_applied = false;
+    // Textures partagées de la preview, créées au premier besoin (voir `publish_shared`).
+    let mut ring = Ring::default();
+    // Une frame composée qui n'a trouvé aucune case libre dans l'anneau : le RT la garde, elle
+    // repart dès qu'une case se libère. Sans ça, une frame composée en pause (seek, réglage)
+    // restait invisible jusqu'au changement suivant — en lecture, la suivante la remplace.
+    let mut publish_pending = false;
 
     while !shared.stop.load(Ordering::SeqCst) {
+        // Le transport vient de changer : le consommateur doit recevoir la frame courante
+        // sans attendre qu'une autre soit composée (en pause, il n'y en aurait pas).
+        if shared.republish.swap(false, Ordering::Relaxed) {
+            first = true;
+        }
         // params inspector : booléens/taps → cfg ; valeurs continues → live_params
         let ip = *shared.inspector.lock().unwrap();
         let mut clip_changed = false;
@@ -1690,7 +1828,7 @@ unsafe fn render_thread(
             loop {
                 // Timeline = niveau d'abstraction AU-DESSUS des clips : dès que le décodeur
                 // écran atteint la fin de fenêtre du clip actif, on enchaîne nous-mêmes sur
-                // le clip suivant (ou on reboucle sur le premier après le dernier) — sans
+                // le clip suivant (après le dernier, on tient sa dernière image) — sans
                 // dépendre d'un `active_clip_request` poussé par le JS en réaction au
                 // franchissement. Ce round-trip arrivait toujours trop tard : le décodeur
                 // avait déjà dépassé la fin de la fenêtre, voire atteint l'EOF brut du
@@ -1708,6 +1846,14 @@ unsafe fn render_thread(
                         &mut prefetch,
                     );
                     if let Some(clip) = scene.clips.get(active_clip_index) {
+                        // Fin du programme : la vue s'y arrête comme la tête de lecture de l'app,
+                        // au lieu de reboucler sur un clip où l'app ne la suit pas (#997).
+                        if next_clip_index(scene, active_clip_index).is_none()
+                            && player.reached_end(clip.source_end_sec, player.screen_time_sec() + acc)?
+                        {
+                            acc = 0.0;
+                            break;
+                        }
                         if player.screen_time_sec() >= clip.source_end_sec {
                             advance_to_next_scene_clip(
                                 &mut player,
@@ -1783,39 +1929,56 @@ unsafe fn render_thread(
             stepped = true;
         }
 
-        if stepped || first {
+        if stepped || first || publish_pending {
             if pw > 0 && ph > 0 {
-                // Step complet : `compose_frame` (déjà appelé par `step`/`present_frame`/
-                // `recompose`) a rastérisé le RT à la géométrie de sortie ramenée au panneau.
-                // On lit ce RT DIRECTEMENT à sa résolution de rendu (`readback_direct` : copy
-                // rt → staging → Map/Unmap), sans le resize `blit_resized` qui, depuis la
-                // refonte ratio, n'était plus qu'une copie identité + une alloc NV12 inutile.
-                match comp.readback_direct() {
-                    Ok((rw, rh, rgba)) => {
-                        // Publie dans `latest_frame` : on remplace le buffer précédent
-                        // (le canvas ne montre que la dernière frame, peu importe combien
-                        // le renderer en a raté entre deux lectures napi). On incrémente
-                        // la génération sous le MÊME lock que l'écriture du buffer, pour
-                        // qu'un lecteur ne puisse jamais voir un `gen` neuf appairé à un
-                        // buffer périmé (ou l'inverse). `+ 1` depuis la précédente, `1` au
-                        // premier publish. Les dims publiées sont celles du RENDU (`rw`×`rh`) :
-                        // le canvas JS s'y dimensionne (packet auto-descriptif) puis CSS met à
-                        // l'échelle vers la boîte du panneau — plus de resize GPU intermédiaire.
-                        // La génération vient d'un compteur atomique et non du slot : la
-                        // livraison sans copie VIDE le slot en le lisant, et un
-                        // `unwrap_or(1)` repartirait alors de 1 — le consommateur recevrait
-                        // des générations déjà peintes et boucherait. Séquence identique à
-                        // l'ancienne dérivation tant que le slot n'est pas vidé.
-                        let next_gen = shared.frame_gen.fetch_add(1, Ordering::Relaxed) + 1;
-                        if let Ok(mut slot) = shared.latest_frame.lock() {
-                            *slot = Some((next_gen, rw, rh, rgba));
-                        }
+                let position = FramePosition {
+                    clip_index: active_clip_index as u32,
+                    source_time_sec: player.screen_time_sec(),
+                };
+                match publish_shared(&shared, &gpu, &comp, &mut ring, position) {
+                    SharedPublish::Published => {
                         first = false;
+                        publish_pending = false;
                     }
-                    Err(e) => {
-                        eprintln!("[live] readback_direct: {e:#}");
-                        std::thread::sleep(Duration::from_millis(8));
+                    // Chromium tient toutes les cases : la frame attend dans le RT, et la boucle
+                    // ne tourne pas à vide le temps qu'il en relâche une.
+                    SharedPublish::NoFreeSlot => {
+                        publish_pending = true;
+                        std::thread::sleep(Duration::from_millis(2));
                     }
+                    // Step complet : `compose_frame` (déjà appelé par `step`/`present_frame`/
+                    // `recompose`) a rastérisé le RT à la géométrie de sortie ramenée au panneau.
+                    // On lit ce RT DIRECTEMENT à sa résolution de rendu (`readback_direct` : copy
+                    // rt → staging → Map/Unmap), sans le resize `blit_resized` qui, depuis la
+                    // refonte ratio, n'était plus qu'une copie identité + une alloc NV12 inutile.
+                    SharedPublish::Off => match comp.readback_direct() {
+                        Ok((rw, rh, rgba)) => {
+                            // Publie dans `latest_frame` : on remplace le buffer précédent
+                            // (le canvas ne montre que la dernière frame, peu importe combien
+                            // le renderer en a raté entre deux lectures napi). On incrémente
+                            // la génération sous le MÊME lock que l'écriture du buffer, pour
+                            // qu'un lecteur ne puisse jamais voir un `gen` neuf appairé à un
+                            // buffer périmé (ou l'inverse). `+ 1` depuis la précédente, `1` au
+                            // premier publish. Les dims publiées sont celles du RENDU (`rw`×`rh`) :
+                            // le canvas JS s'y dimensionne (packet auto-descriptif) puis CSS met à
+                            // l'échelle vers la boîte du panneau — plus de resize GPU intermédiaire.
+                            // La génération vient d'un compteur atomique et non du slot : la
+                            // livraison sans copie VIDE le slot en le lisant, et un
+                            // `unwrap_or(1)` repartirait alors de 1 — le consommateur recevrait
+                            // des générations déjà peintes et boucherait. Séquence identique à
+                            // l'ancienne dérivation tant que le slot n'est pas vidé.
+                            let next_gen = shared.frame_gen.fetch_add(1, Ordering::Relaxed) + 1;
+                            if let Ok(mut slot) = shared.latest_frame.lock() {
+                                *slot = Some((next_gen, rw, rh, rgba, comp.footage_quad(), position));
+                            }
+                            first = false;
+                            publish_pending = false;
+                        }
+                        Err(e) => {
+                            eprintln!("[live] readback_direct: {e:#}");
+                            std::thread::sleep(Duration::from_millis(8));
+                        }
+                    },
                 }
             }
         } else {
@@ -1823,6 +1986,101 @@ unsafe fn render_thread(
         }
     }
     Ok(())
+}
+
+/// Ce que la publication dans l'anneau partagé a fait de la frame composée.
+enum SharedPublish {
+    /// Posée dans une case de l'anneau.
+    Published,
+    /// Chromium tient toutes les cases : la frame attend dans le RT qu'il en relâche une.
+    NoFreeSlot,
+    /// Transport partagé coupé ou indisponible : la frame repasse par le readback.
+    Off,
+}
+
+#[cfg(windows)]
+type Ring = Option<SharedRing>;
+#[cfg(not(windows))]
+type Ring = ();
+
+/// Pose la frame composée dans l'anneau de textures partagées, si la vue livre ainsi.
+///
+/// Toute panne coupe le transport (`shared_frames` à `false`) et rend `Off` : la frame part
+/// par le readback, et le service, qui lit les deux, n'a rien à décider.
+#[cfg(windows)]
+unsafe fn publish_shared(
+    shared: &Shared,
+    gpu: &Gpu,
+    comp: &Compositor,
+    ring: &mut Ring,
+    position: FramePosition,
+) -> SharedPublish {
+    if !shared.shared_frames.load(Ordering::Relaxed) {
+        return SharedPublish::Off;
+    }
+    let turn_off = |why: String| {
+        eprintln!("[live] textures partagées coupées ({why}) — retour au readback");
+        shared.shared_frames.store(false, Ordering::Relaxed);
+        SharedPublish::Off
+    };
+    // WARP ne partage rien avec le device de Chromium.
+    if gpu.backend != Backend::Hardware {
+        return turn_off("backend logiciel".into());
+    }
+    if ring.is_none() {
+        match SharedRing::new(gpu) {
+            Ok(created) => *ring = Some(created),
+            Err(e) => return turn_off(format!("{e:#}")),
+        }
+    }
+    let Some(ring) = ring.as_mut() else {
+        return SharedPublish::Off;
+    };
+    let (claimed, lost) = match shared.slot_book.lock() {
+        Ok(mut book) => (book.claim(crate::shared_frames::RING_SLOTS), book.lost(Instant::now())),
+        Err(_) => (None, false),
+    };
+    let Some(slot) = claimed else {
+        // Chromium relâche d'ordinaire une case dans la milliseconde. Une case perdue ne
+        // reviendra plus : la réécrire déchirerait peut-être une image qu'il lit encore, et
+        // l'attendre figerait la preview.
+        if lost {
+            return turn_off("une case jamais relâchée par Chromium".into());
+        }
+        return SharedPublish::NoFreeSlot;
+    };
+    let (width, height) = comp.render_size();
+    match ring.write(slot, comp.render_target(), width, height) {
+        Ok(handle) => {
+            if let Ok(mut book) = shared.slot_book.lock() {
+                // Le compteur du readback : une seule suite de générations quel que soit le
+                // transport, incrémentée sous le lock de la publication comme là-bas.
+                let gen = shared.frame_gen.fetch_add(1, Ordering::Relaxed) + 1;
+                book.publish(SharedFrame {
+                    gen,
+                    slot,
+                    handle,
+                    width,
+                    height,
+                    footage: comp.footage_quad(),
+                    position,
+                });
+            }
+            SharedPublish::Published
+        }
+        Err(e) => turn_off(format!("{e:#}")),
+    }
+}
+
+#[cfg(not(windows))]
+unsafe fn publish_shared(
+    _: &Shared,
+    _: &Gpu,
+    _: &Compositor,
+    _: &mut Ring,
+    _: FramePosition,
+) -> SharedPublish {
+    SharedPublish::Off
 }
 
 // ---------- harnais standalone (poc-d3d.exe --live) ----------
@@ -1958,7 +2216,7 @@ pub fn run_standalone(screen: &str, webcam: &str, cursor_json: &str) -> Result<(
             // standalone n'affiche pas réellement les pixels ici (l'embed Electron est
             // le consumer réel). On imprime juste une frame de temps en temps pour
             // confirmer que la chaîne fonctionne.
-            if let Some((_gen, fw, fh, _pixels)) = view.latest_frame() {
+            if let Some((_gen, fw, fh, _pixels, _, _)) = view.latest_frame() {
                 if (fw, fh) != (w, h) {
                     // garde-fou : la staging de readback suit `set_rect` côté thread
                     // de rendu, donc ce serait une désynchro transitoire — acceptable.

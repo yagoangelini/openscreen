@@ -128,36 +128,58 @@ export function readWebcamAnchor(anchor: unknown, legacyPosition: unknown): Webc
 	return "bottom-right";
 }
 
-/** The camera's proportions. Its roundness is a setting of its own, `webcamRoundness`. */
+/**
+ * The camera's proportions: a square crop, or the camera's own ("rectangle", shown as
+ * "Original": a portrait camera stays portrait). Its roundness is a setting of its own,
+ * `webcamRoundness`.
+ */
 export type WebcamMask = "rectangle" | "square";
 
 /**
  * The camera's corner rounding, 0 square to 1 fully round, as a fraction of half the camera's
  * short side. A fraction, so the same value draws the same shape at any size and resolution;
- * at 1 a square camera is a circle.
+ * at 1 a square camera is a circle. Each proportion starts at its own: a square takes more
+ * rounding than a wide camera before it reads as a blob.
  */
-export const DEFAULT_WEBCAM_ROUNDNESS = 0.3;
+export const DEFAULT_WEBCAM_ROUNDNESS: Record<WebcamMask, number> = { square: 0.7, rectangle: 0.4 };
+
+/** What a stored `rectangle` or `square` drew before the roundness was a setting. */
+const LEGACY_WEBCAM_ROUNDNESS = 0.3;
 
 /**
  * The picture-in-picture camera's size, in percent of the frame's short side: the camera's
- * long side, so a 16:9 camera at 50 is 28% of a 1080p frame's height. Below 15 a face no
+ * long side, so a 16:9 camera at 60 is 34% of a 1080p frame's height. Below 15 a face no
  * longer reads, and less still once a zoom shrinks it; older builds allowed 10, read back as 15.
  */
 export const WEBCAM_SIZE_MIN = 15;
-export const WEBCAM_SIZE_MAX = 50;
+export const WEBCAM_SIZE_MAX = 60;
 
 /**
  * Reads a stored camera shape and roundness. `circle` and `rounded` were a proportion and a
  * rounding folded into one value; they split here into the two settings, the way
- * `readRecordingFrame` splits the old window themes. A stored roundness wins.
+ * `readRecordingFrame` splits the old window themes. A stored roundness wins; with no shape
+ * stored at all, both are the factory default.
  */
 export function readWebcamMask(
 	shape: unknown,
 	roundness: unknown,
 ): { shape: WebcamMask; roundness: number } {
-	const fromShape = shape === "circle" ? 1 : shape === "rounded" ? 0.6 : DEFAULT_WEBCAM_ROUNDNESS;
+	const proportion: WebcamMask =
+		shape === "square" || shape === "circle"
+			? "square"
+			: shape === "rectangle" || shape === "rounded"
+				? "rectangle"
+				: DEFAULT_PROJECT_APPEARANCE.webcamMaskShape;
+	const fromShape =
+		shape === "circle"
+			? 1
+			: shape === "rounded"
+				? 0.6
+				: shape === "rectangle" || shape === "square"
+					? LEGACY_WEBCAM_ROUNDNESS
+					: DEFAULT_WEBCAM_ROUNDNESS[proportion];
 	return {
-		shape: shape === "square" || shape === "circle" ? "square" : "rectangle",
+		shape: proportion,
 		roundness:
 			typeof roundness === "number" && Number.isFinite(roundness)
 				? Math.min(1, Math.max(0, roundness))
@@ -181,7 +203,7 @@ export interface ProjectAppearanceDefaults {
 	borderRadius: number;
 	padding: number;
 	webcamLayoutPreset: "picture-in-picture" | "vertical-stack" | "dual-frame" | "no-webcam";
-	/** The camera's proportions: its own ("rectangle") or cropped square. See `readWebcamMask`. */
+	/** The camera's proportions: cropped square or its own ("rectangle"). See `readWebcamMask`. */
 	webcamMaskShape: WebcamMask;
 	/** 0 square corners to 1 fully round. See `DEFAULT_WEBCAM_ROUNDNESS`. */
 	webcamRoundness: number;
@@ -200,6 +222,8 @@ export interface ProjectAppearanceDefaults {
 		model3d: boolean;
 		asArrow: CursorKind[];
 		clickImpact: boolean;
+		clickSound: boolean;
+		clickSoundGainDb: number;
 		autoHide: boolean;
 	};
 	cursorShow: boolean;
@@ -230,20 +254,19 @@ export const DEFAULT_PROJECT_APPEARANCE: ProjectAppearanceDefaults = {
 	borderRadius: 40,
 	padding: 50,
 	webcamLayoutPreset: "picture-in-picture",
-	webcamMaskShape: "rectangle",
-	webcamRoundness: DEFAULT_WEBCAM_ROUNDNESS,
+	webcamMaskShape: "square",
+	webcamRoundness: DEFAULT_WEBCAM_ROUNDNESS.square,
 	webcamMirrored: false,
 	webcamReactiveZoom: true,
-	webcamSizePreset: 25,
+	webcamSizePreset: 40,
 	webcamAnchor: "bottom-right",
 	webcamBackgroundMode: "none",
 	webcamWallpaper: "/wallpapers/wallpaper11.jpg",
 	webcamBlurIntensity: 0.5,
 	cursor: {
-		// 1.95 draws a 53 px arrow in a 1080p export, about two and a half times the system one:
-		// the cursor effects are part of the product, and 1.5's 41 px played them down.
-		// 3 drew it at 82 px, a quarter of the screen's height at the top of its range.
-		size: 1.95,
+		// 3.6 draws a 98 px arrow in a 1080p export, about five times the system one: the cursor
+		// effects are part of the product, and a smaller arrow plays them down. 6 reaches 164 px.
+		size: 3.6,
 		smoothing: 0.67,
 		motionBlur: 0.35,
 		// A light tap: 2.5 squashed the arrow to 40% and threw it to 140% in 260 ms on every click.
@@ -253,6 +276,8 @@ export const DEFAULT_PROJECT_APPEARANCE: ProjectAppearanceDefaults = {
 		// arrow until picked (`CURSOR_KINDS`). A test holds this to every kind but the hand.
 		asArrow: ["text", "grab", "resize", "busy", "crosshair", "not-allowed", "help", "up-arrow"],
 		clickImpact: false,
+		clickSound: false,
+		clickSoundGainDb: 0,
 		autoHide: false,
 	},
 	cursorShow: true,
@@ -287,6 +312,10 @@ export const SETTING_BOUNDS = {
 	cursorMotionBlur: [0, 1],
 	// Past about 4.2 the arrow shrank to nothing on every click.
 	cursorClickBounce: [0, 2],
+	// The click sound's level in dB. The bundled hits are cut to a 0.7 peak, which the export's
+	// −1.5 dBFS limiter already reaches by about +1.6: measured, +6 dB came out only 1.6 dB
+	// louder. So 0 is the top, and the slider only turns them down.
+	cursorClickSoundGainDb: [-24, 0],
 	// 16 is Chromium's `playbackRate` ceiling: past it the preview could not show what the
 	// export rendered.
 	playbackSpeed: [0.25, 16],

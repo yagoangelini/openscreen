@@ -27,7 +27,7 @@ npm run build:native:mac
 
 On non-macOS hosts this command exits successfully and does not affect Windows/Linux development. On macOS it builds the Swift package at `electron/native/screencapturekit`, writes the development binaries to `electron/native/screencapturekit/build`, and copies redistributable binaries to `electron/native/bin/darwin-${arch}`.
 
-The current helper implementation supports display/window ScreenCaptureKit video capture, control-window exclusion through the request's optional `excludedWindowIds` and `SCContentFilter(display:excludingWindows:)`, cursor exclusion through `SCStreamConfiguration.showsCursor`, H.264 encoding, MP4 muxing (with `AVAssetWriter.movieFragmentInterval` at 1s, so a helper that dies before `finishWriting()` still leaves a readable file — same reasoning as the Windows fragmented sink below), and ScreenCaptureKit system audio. Electron supplies only the HUD and an open Notes window as exclusions for full-display capture, so ordinary OpenScreen windows remain recordable. The helper adds Notification Center's windows on its own, and Finder's desktop-icon windows when the request sets `hideDesktopIcons`; a banner appears as a new window, so a direct capture re-reads the exclusion every 250 ms, while the system picker excludes Notification Center by bundle id. The helper also attempts native ScreenCaptureKit microphone capture when the running macOS version exposes that capability, which is macOS 15 and later. Below that it records the take without the microphone and emits a `microphone-unavailable` warning; the app does not offer the microphone there (`canRecordMicrophone` in `src/utils/platformUtils.ts`). Webcam recording currently stays as an Electron sidecar and is attached to the same recording session after the native screen capture stops.
+The current helper implementation supports display/window ScreenCaptureKit video capture, control-window exclusion through the request's optional `excludedWindowIds` and `SCContentFilter(display:excludingWindows:)`, cursor exclusion through `SCStreamConfiguration.showsCursor`, H.264 encoding, MP4 muxing (with `AVAssetWriter.movieFragmentInterval` at 1s, so a helper that dies before `finishWriting()` still leaves a readable file — same reasoning as the Windows fragmented sink below), and ScreenCaptureKit system audio. Electron supplies only the HUD and an open Notes window as exclusions for a direct full-display capture, so ordinary OpenScreen windows remain recordable there. The helper adds Notification Center's windows on its own, and Finder's desktop-icon windows when the request sets `hideDesktopIcons`; a banner appears as a new window, so a direct capture re-reads the exclusion every 250 ms, while the system picker excludes Notification Center by bundle id. It excludes OpenScreen itself the same way, so a screen picked in the editor's Record mode still leaves out the HUD that only appears at Start: a picker capture records none of OpenScreen's windows, and window mode does not offer them. The helper reports this as `excludesApp` on `picker-selected`. The helper also attempts native ScreenCaptureKit microphone capture when the running macOS version exposes that capability, which is macOS 15 and later. Below that it records the take without the microphone and emits a `microphone-unavailable` warning; the app does not offer the microphone there (`canRecordMicrophone` in `src/utils/platformUtils.ts`). With no audio input listed it does the same and emits `microphone-not-found`: asked for a microphone anyway, ScreenCaptureKit starts that take and stalls the next one in the picker session (#995). Webcam recording currently stays as an Electron sidecar and is attached to the same recording session after the native screen capture stops.
 
 Electron exposes `is-native-mac-capture-available` for capability probing. It resolves the same helper locations listed above and reports `missing-helper` until a Swift helper binary is present. When available, macOS recording routes screen/window capture through the native helper so editable cursor recordings do not bake the system cursor into the video. Cursor positions are sampled in Electron; when the cursor helper is available and Accessibility is granted, samples are also tagged with link/text cursor hints such as `pointer`.
 
@@ -45,10 +45,16 @@ Windows native recording is resolved from one of these locations:
 Build the Windows helper with:
 
 ```powershell
+# Builds for the host architecture by default (x64 on x64 hosts, arm64 on arm64 hosts).
 npm run build:native:win
+
+# Explicit target architecture (native on a matching host, or cross-compiled otherwise):
+node scripts/build-windows-wgc-helper.mjs --arch arm64
 ```
 
-The build writes the CMake output to `electron/native/wgc-capture/build/wgc-capture.exe` and copies the redistributable binary to `electron/native/bin/win32-x64/wgc-capture.exe`.
+The target architecture is resolved from `--arch` (or the `OPENSCREEN_WIN_HELPER_ARCH` env var), falling back to the host arch. Cross-compiling requires the matching MSVC component — "VS C++ ARM64/ARM64EC build tools" for `arm64`. The build writes the CMake output to `electron/native/wgc-capture/build/wgc-capture.exe` and copies the redistributable binary to `electron/native/bin/win32-<arch>/wgc-capture.exe` (e.g. `win32-arm64`).
+
+Cross-compiling covers this helper, not the installer. `npm run build:win:arm64` has to run on an ARM64 host: `fetch-ffmpeg.mjs` and `fetch-onnxruntime.mjs` provision for the host, and the ffmpeg licence check runs the downloaded binary. CI therefore builds the arm64 installer on a `windows-11-arm` runner.
 
 The helper contract is process-based: the app starts the process with one JSON argument and sends commands on stdin. `stop\n` finalizes the recording. During migration the helper prints both newline-delimited JSON events and the legacy text messages `Recording started` / `Recording stopped. Output path: <path>`.
 
@@ -97,6 +103,13 @@ At startup the helper also emits `capture-adapter`, naming the GPU its D3D devic
 
 Desktop icons: `"hideDesktopIcons": true` on a display capture puts a borderless window, painted with the wallpaper by `PaintDesktop`, on the captured monitor directly above the window that hosts the icons (`SHELLDLL_DefView`'s top-level parent) and below every app window (`src/desktop_icon_cover.cpp`). WGC cannot exclude another process's window, so covering is the only route that changes no setting. The window belongs to the helper, so it goes away with the recording or with a crashed helper; there is nothing to restore. Windows notifications cannot be kept out: toasts are drawn above every app window, and the only switch is Do Not Disturb, a user setting the helper does not touch.
 
+Menus and popups in window recordings: a window source is captured per HWND, and a context menu or dropdown is a window of its own, so it used to be missing from the video (#894). On Windows 11 24H2 (build 26100) and later the helper sets `GraphicsCaptureSession.IncludeSecondaryWindows` (`IGraphicsCaptureSession6`) on window sources, and DWM draws the popups belonging to the captured window into the same texture: the frame size, DPI handling, occlusion immunity and the fixed frame pool are unchanged. Monitor sources never set it, since they already contain everything on the screen. Four things to know:
+
+- **Popups are clipped at the window's edge.** The texture is the window's size, so the part of a menu that overhangs it is not recorded (measured: a 276 px menu opened 138 px inside the right edge shows 138 px, cut at the last column).
+- **It needs 24H2.** Older runtimes keep capturing the window alone, as before. The helper reports the outcome as `{"event":"secondary-windows","applied":true|false}` (absent for monitor sources and when the option is disabled); the app logs it and shows nothing. Set `OPENSCREEN_WGC_DISABLE_SECONDARY_WINDOWS=1` to turn the option off and get the window-only capture back.
+- **What DWM lets in was measured, because Microsoft's rule is style and z-order, not process.** It draws windows with `WS_POPUP` or `WS_EX_TOOLWINDOW` that overlap the window and have only other such windows between them and it. On build 26200, three unrelated TopMost popups from other processes (`WS_POPUP`, `WS_POPUP` plus `WS_EX_TOOLWINDOW`, and `WS_EX_TOOLWINDOW` alone), all overlapping the window with nothing else above it, stayed out of the recording, as did Explorer's own Win+X menu; the window's own owned menu was in. `npm run test:wgc-window-popup:win` reproduces the measurement (menu present, strangers absent, overhang clipped, kill switch removes the menu) and refuses to pass if a non-qualifying window sits above its target, since a stranger missing for that reason would prove nothing.
+- **The menu shows up only when no ordinary window sits above the recorded window.** If another window (neither a popup nor a tool window) overlaps it, the menu is missing from the first frame to the last, which is expected from how DWM selects secondary windows (#910). Measured on a second machine (Windows 11 build 26200, AMD, 46 runs of the fixture): the menu was captured in all 25 runs with nothing ordinary above the window, and absent in all 21 runs with one above it (Claude Desktop, Notepad); in the 20 valid runs at 2000 ms and 5000 ms no unrelated popup leaked (0 px). That is 0 leaks in 20 runs, which does not exclude a failure rate up to about 15 percent, and the fixture is synthetic WinForms, not a real application's menus.
+
 Encoder diagnostic on final sink-writer failure: when the final sink-writer attempt fails (`MFCreateSinkWriterFromMediaSink` on the fragmented container, `MFCreateSinkWriterFromURL` on the plain one; the message names which), the helper logs the registered H.264 video encoder MFT count (via `MFTEnumEx`), the registered AAC encoder count when audio was requested, and the hex HRESULT. If no H.264 encoder is registered, it additionally emits the four-bullet actionable error (missing Media Feature Pack / GPU driver registration / empty `HKLM:\SOFTWARE\Microsoft\Windows Media Foundation\Transforms` / reboot). If an H.264 encoder IS registered but the sink writer still failed, it logs a hint pointing at invalid output path, missing MP4 mux, or GPU driver incompatibility. There is still no fail-fast pre-flight gate because `MFTEnumEx` and the sink writer can disagree about which H.264 encoders are available in non-interactive / Session 0 contexts.
 
 Smoke-test the helper with:
@@ -104,6 +117,7 @@ Smoke-test the helper with:
 ```powershell
 npm run test:wgc-helper:win
 npm run test:wgc-window:win
+npm run test:wgc-window-popup:win
 npm run test:wgc-audio:win
 npm run test:wgc-mic:win
 npm run test:wgc-mixed-audio:win
@@ -213,14 +227,16 @@ electron/native/bin/linux-x64/openscreen-pipewire-helper '{"probeOnly":true}'
 
 ### Known gaps
 
-- **Mouse clicks need the `input` group.** Wayland exposes no portal for input
+- **Mouse clicks need read access to evdev.** Wayland exposes no portal for input
   events, so the helper reads left-button presses straight from evdev
-  (`/dev/input/event*`). Those nodes are `root:input`, so a user outside the
+  (`/dev/input/event*`). Those nodes are `root:input`, so a user with neither a
+  udev `uaccess` rule for pointer devices (recommended) nor membership in the
   `input` group gets no readable device and every sample's `interactionType`
   stays `"move"` — the same as before. When a device is readable, the coinciding
   sample is tagged `"click"`. Scope is deliberately narrow: `BTN_LEFT` only,
   never keystrokes (see `pipewire-capture/src/input.rs`), and
-  `OPENSCREEN_DISABLE_CLICK_CAPTURE=1` turns it off entirely.
+  `OPENSCREEN_DISABLE_CLICK_CAPTURE=1` turns it off entirely. User setup:
+  [Mouse clicks on Wayland](../../website/docs/installation.md#mouse-clicks-on-wayland).
 - **The user picks a source twice.** Electron's `desktopCapturer` raises its own
   portal dialog for the video, and this helper raises a second one for the cursor.
   Collapsing them requires one portal session serving both, which is why the

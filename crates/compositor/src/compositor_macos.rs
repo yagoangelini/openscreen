@@ -261,6 +261,8 @@ pub struct Compositor {
     scene: RefCell<Option<Scene>>,
     cursor: RefCell<Option<crate::cursor::CursorTrack>>,
     cursor_time: RefCell<Option<f32>>,
+    /// Le métrage dans la dernière image composée, que l'éditeur lit avec elle (`live.rs`).
+    footage: std::cell::Cell<Option<crate::frame_geometry::FootageQuad>>,
     timeline_time: RefCell<Option<f32>>,
     /// Temps programme (secondes de sortie) — cf. `FrameGeometryInput::programme_time`.
     programme_time: RefCell<Option<f32>>,
@@ -316,6 +318,17 @@ pub struct Compositor {
     pipeline_fs_tex: metal::RenderPipelineState,
     /// `vs_main` + `ps_main` en additif : les échantillons de traînée du curseur.
     pipeline_add: metal::RenderPipelineState,
+    /// `pipeline_main` et `pipeline_add` compilés AVEC les modèles 3D (`LAYER_MODELS`, cf.
+    /// l'en-tête de `shaders.metal`). Les deux autres ne les ont pas ; `draw_layer` bascule sur
+    /// ceux-ci le temps du draw d'un modèle (`LayerCB::needs_models`).
+    pipeline_main_models: metal::RenderPipelineState,
+    pipeline_add_models: metal::RenderPipelineState,
+    /// La passe en cours a été ouverte sur `pipeline_add` (cf. `begin_pass`) : dit à
+    /// `draw_layer` laquelle des deux variantes « modèles » prendre.
+    layer_add: std::cell::Cell<bool>,
+    /// Le dernier fond fixe composé et sa clé (`BackgroundKey`) : recopié dans le RT tant
+    /// que la clé tient, au lieu d'être redessiné.
+    bg_cache: RefCell<Option<BgCache>>,
     /// Buffer d'accumulation ISOLÉ (transparent) pour la traînée. Accumuler directement sur
     /// le RT reviendrait à AJOUTER du blanc à ce qui est déjà dessous : sur un fond clair,
     /// le curseur disparaît. Même raisonnement que côté D3D11.
@@ -537,6 +550,18 @@ enum Blend {
     Add,
 }
 
+/// `shaders.metal` avec les modèles 3D : la source dont seuls les pipelines de ces calques sont
+/// tirés (cf. son en-tête).
+fn msl_source_with_models() -> String {
+    format!("#define LAYER_MODELS 1\n{}", include_str!("shaders.metal"))
+}
+
+/// Le fond tel que la passe de fond (et son flou) l'a laissé dans le RT, et la clé qui le décrit.
+struct BgCache {
+    key: crate::frame_geometry::BackgroundKey,
+    tex: metal::Texture,
+}
+
 /// Un pipeline state à une seule pièce jointe couleur.
 fn make_pipeline(
     device: &metal::Device,
@@ -661,6 +686,25 @@ impl Compositor {
             metal::MTLPixelFormat::RGBA8Unorm,
             Blend::Add,
         )?;
+        let library_models = device
+            .new_library_with_source(&msl_source_with_models(), &metal::CompileOptions::new())
+            .map_err(|e| anyhow!("MTLDevice::new_library_with_source (modèles) a échoué : {e}"))?;
+        let pipeline_main_models = make_pipeline(
+            device,
+            &library_models,
+            "vs_main",
+            "ps_main",
+            metal::MTLPixelFormat::RGBA8Unorm,
+            Blend::Over,
+        )?;
+        let pipeline_add_models = make_pipeline(
+            device,
+            &library_models,
+            "vs_main",
+            "ps_main",
+            metal::MTLPixelFormat::RGBA8Unorm,
+            Blend::Add,
+        )?;
         let pipeline_kdown = make_pipeline(
             device, &library, "vs_fs", "ps_kawase_down",
             metal::MTLPixelFormat::RGBA8Unorm, Blend::Replace,
@@ -682,6 +726,7 @@ impl Compositor {
             scene: RefCell::new(None),
             cursor: RefCell::new(None),
             cursor_time: RefCell::new(None),
+            footage: std::cell::Cell::new(None),
             timeline_time: RefCell::new(None),
             programme_time: RefCell::new(None),
             live_params: RefCell::new(LiveParams::default()),
@@ -703,6 +748,10 @@ impl Compositor {
             pipeline_fs_uv,
             pipeline_fs_tex,
             pipeline_add,
+            pipeline_main_models,
+            pipeline_add_models,
+            layer_add: std::cell::Cell::new(false),
+            bg_cache: RefCell::new(None),
             accum,
             trail,
             blur_half,
@@ -761,6 +810,7 @@ impl Compositor {
             blur_quarter,
             blur_eighth,
             ann_copy,
+            bg_cache: RefCell::new(None),
             ..self
         })
     }
@@ -909,7 +959,20 @@ impl Compositor {
             enc.set_fragment_texture(0, Some(y));
             enc.set_fragment_texture(1, Some(uv));
         }
-        enc.draw_primitives(metal::MTLPrimitiveType::TriangleStrip, 0, 4);
+        // Un modèle 3D passe, le temps de son draw, par la variante « modèles » du pipeline de la
+        // passe, la seule à le compiler ; le pipeline plat reprend ensuite la main.
+        if cb.needs_models() {
+            let (models, flat) = if self.layer_add.get() {
+                (&self.pipeline_add_models, &self.pipeline_add)
+            } else {
+                (&self.pipeline_main_models, &self.pipeline_main)
+            };
+            enc.set_render_pipeline_state(models);
+            enc.draw_primitives(metal::MTLPrimitiveType::TriangleStrip, 0, 4);
+            enc.set_render_pipeline_state(flat);
+        } else {
+            enc.draw_primitives(metal::MTLPrimitiveType::TriangleStrip, 0, 4);
+        }
     }
 
     /// Quad de couleur pleine / gradient / ombre — tout ce qui n'échantillonne pas la vidéo.
@@ -1417,6 +1480,37 @@ impl Compositor {
     }
 
 
+    /// Le fond gardé (`bg_cache`) : copie le RT dans `tex`, ou `tex` dans le RT (`into_rt`).
+    unsafe fn blit_background(&self, cmd: &metal::CommandBufferRef, tex: &metal::Texture, into_rt: bool) {
+        let (src, dst) = if into_rt { (tex, &self.rt) } else { (&self.rt, tex) };
+        let blit = cmd.new_blit_command_encoder();
+        blit.copy_from_texture(
+            src, 0, 0,
+            metal::MTLOrigin { x: 0, y: 0, z: 0 },
+            metal::MTLSize { width: self.render_w as u64, height: self.render_h as u64, depth: 1 },
+            dst, 0, 0,
+            metal::MTLOrigin { x: 0, y: 0, z: 0 },
+        );
+        blit.end_encoding();
+    }
+
+    /// Fige l'image composée dans `ann_copy` (mip 0), qu'y lisent les flous (mips dérivés,
+    /// `mips`) et le cristal de Prism Glow.
+    unsafe fn snapshot_rt(&self, cmd: &metal::CommandBufferRef, mips: bool) {
+        let blit = cmd.new_blit_command_encoder();
+        blit.copy_from_texture(
+            &self.rt, 0, 0,
+            metal::MTLOrigin { x: 0, y: 0, z: 0 },
+            metal::MTLSize { width: self.render_w as u64, height: self.render_h as u64, depth: 1 },
+            &self.ann_copy, 0, 0,
+            metal::MTLOrigin { x: 0, y: 0, z: 0 },
+        );
+        if mips {
+            blit.generate_mipmaps(&self.ann_copy);
+        }
+        blit.end_encoding();
+    }
+
     /// Annotations : calque le plus haut, ancré sur `s_ann` — le rect écran SANS ZOOM, le
     /// conteneur que reçoit l'overlay web. Port de `compositor_windows::draw_annotations`.
     ///
@@ -1425,6 +1519,9 @@ impl Compositor {
     /// grossir les sous-titres sous un zoom (issue #179, puis #397 sur Linux). L'arithmétique
     /// elle-même vit dans `frame_geometry::annotation_dst_in`, partagée par les trois backends.
     /// Le flou, lui, se place par `g.privacy_mask` : un masque doit rester sur ce qu'il cache.
+    ///
+    /// `privacy` : les flous de confidentialité seuls, dessinés sur le métrage avant le curseur ;
+    /// sinon toutes les autres annotations, le calque le plus haut.
     unsafe fn draw_annotations(
         &self,
         cmd: &metal::CommandBufferRef,
@@ -1432,30 +1529,21 @@ impl Compositor {
         t: f32,
         s_ann: [f32; 4],
         g: &crate::frame_geometry::FrameGeometry,
+        privacy: bool,
     ) -> Result<()> {
         let Some(scene) = scene else { return Ok(()) };
-        if scene.annotations.is_empty() {
-            return Ok(());
-        }
         let (rw, rh) = (self.render_w as f32, self.render_h as f32);
         let visible = |a: &crate::scene::SceneAnnotation| {
-            t >= a.start_sec as f32 && t < a.end_sec as f32
+            t >= a.start_sec as f32 && t < a.end_sec as f32 && (a.kind == "blur") == privacy
         };
+        if !scene.annotations.iter().any(visible) {
+            return Ok(());
+        }
         // UNE seule recopie pour toutes les annotations flou de la frame : leur lecture doit
         // voir l'image composée SANS les flous eux-mêmes, sinon deux zones qui se recouvrent
         // s'échantillonneraient l'une l'autre selon l'ordre de dessin.
-        if scene.annotations.iter().any(|a| a.kind == "blur" && visible(a)) {
-            let blit = cmd.new_blit_command_encoder();
-            blit.copy_from_texture(
-                &self.rt, 0, 0,
-                metal::MTLOrigin { x: 0, y: 0, z: 0 },
-                metal::MTLSize { width: rw as u64, height: rh as u64, depth: 1 },
-                &self.ann_copy, 0, 0,
-                metal::MTLOrigin { x: 0, y: 0, z: 0 },
-            );
-            // Seul le mip 0 est rempli ; le GPU dérive le reste.
-            blit.generate_mipmaps(&self.ann_copy);
-            blit.end_encoding();
+        if privacy {
+            self.snapshot_rt(cmd, true);
         }
 
         let enc = self.begin_pass(cmd, &self.rt, None, &self.pipeline_main)?;
@@ -2058,6 +2146,8 @@ impl Compositor {
         ca.set_store_action(metal::MTLStoreAction::Store);
         let enc = cmd.new_render_command_encoder(&desc);
         enc.set_render_pipeline_state(pipeline);
+        // La famille du pipeline de calque de cette passe, pour `draw_layer`.
+        self.layer_add.set(std::ptr::eq(pipeline, &self.pipeline_add));
         Ok(enc)
     }
 
@@ -2066,7 +2156,8 @@ impl Compositor {
     /// `frame_geometry::cursor_sprite_cb`, partagée avec Windows et Linux.
     ///
     /// Avec `model`, le même sprite extrudé (mode 15, `cursor_model_cb`) : le sprite en
-    /// texture(2), son champ de distance en texture(4).
+    /// texture(2), son champ de distance en texture(4), l'enregistrement que l'appelant a lié en
+    /// texture(0) et (1).
     #[allow(clippy::too_many_arguments)]
     unsafe fn draw_cursor_sprite(
         &self,
@@ -2077,26 +2168,38 @@ impl Compositor {
         sprite: &crate::scene::SceneCursorSprite,
         clip: [f32; 4],
         model: Option<crate::frame_geometry::CursorPose>,
-    ) -> Result<()> {
+    ) -> Result<Option<[f32; 4]>> {
         let (tex, iw, ih) = self.cached_image(sprite.path.as_str())?;
         // Sans champ de distance, repli sur le sprite plat plutôt qu'aucun curseur. Parité Linux.
         if let Some(pose) = model {
             match self.cursor_sdf(sprite.path.as_str()) {
                 Ok((sdf, shape)) => {
                     let shape = crate::frame_geometry::model_shape(sprite, shape);
-                    if let Some(cb) = crate::frame_geometry::cursor_model_cb(
+                    let Some(cb) = crate::frame_geometry::cursor_model_cb(
                         placement, size_px, pose, shape, a, clip,
-                    ) {
-                        enc.set_fragment_texture(2, Some(&tex));
-                        enc.set_fragment_texture(4, Some(&sdf));
-                        self.draw_solid(enc, &cb);
-                    }
-                    return Ok(());
+                    ) else {
+                        return Ok(None);
+                    };
+                    enc.set_fragment_texture(2, Some(&tex));
+                    enc.set_fragment_texture(4, Some(&sdf));
+                    self.draw_solid(enc, &cb);
+                    return Ok(Some(cb.dst));
                 }
                 Err(e) => eprintln!("[curseur] champ de \"{}\" : {e:#}", sprite.path),
             }
         }
         let (rw, rh) = (self.render_w as f32, self.render_h as f32);
+        // Le verre à plat de Glass Lens (mode 19) : la copie qu'il réfracte est déjà en
+        // texture(5) (`CursorPlan::glass`). Parité Windows.
+        if model.is_none() {
+            let glass = sprite.glass.as_deref().and_then(|name| {
+                crate::frame_geometry::cursor_glass_cb(placement, size_px, name, a, clip, [rw, rh])
+            });
+            if let Some(cb) = glass {
+                self.draw_solid(enc, &cb);
+                return Ok(Some(cb.dst));
+            }
+        }
         let ar = iw as f32 / ih.max(1) as f32;
         let (pw, ph) = if ar >= 1.0 { (size_px, size_px / ar) } else { (size_px * ar, size_px) };
         let cb = crate::frame_geometry::cursor_sprite_cb(
@@ -2109,7 +2212,7 @@ impl Compositor {
         );
         enc.set_fragment_texture(2, Some(&tex));
         self.draw_solid(enc, &cb);
-        Ok(())
+        Ok(Some(cb.dst))
     }
 
     /// Curseur thématisé : le sprite de l'état courant, sinon la flèche, sinon rien.
@@ -2132,14 +2235,17 @@ impl Compositor {
         a: f32,
         clip: [f32; 4],
         model: Option<crate::frame_geometry::CursorPose>,
-    ) {
-        let sprite = cursor_type.and_then(|t| sprites.get(t)).or_else(|| sprites.get("arrow"));
-        if let Some(sprite) = sprite {
-            if let Err(e) = self.draw_cursor_sprite(enc, placement, size_px, a, sprite, clip, model)
-            {
-                eprintln!("[compositor] sprite curseur \"{}\" : {e:#}", sprite.path);
-            }
-        }
+    ) -> Option<[f32; 4]> {
+        let sprite = cursor_type.and_then(|t| sprites.get(t)).or_else(|| sprites.get("arrow"))?;
+        self.draw_cursor_sprite(enc, placement, size_px, a, sprite, clip, model).unwrap_or_else(|e| {
+            eprintln!("[compositor] sprite curseur \"{}\" : {e:#}", sprite.path);
+            None
+        })
+    }
+
+    /// Le métrage dans la dernière image composée : ses coins et son warp (`FootageQuad`).
+    pub fn footage_quad(&self) -> Option<crate::frame_geometry::FootageQuad> {
+        self.footage.get()
     }
 
     /// Compose la frame : fond, ombre écran, écran, ombre caméra, caméra — puis miroir
@@ -2211,6 +2317,7 @@ impl Compositor {
             timeline_t_override: *self.timeline_time.borrow(),
             programme_time: *self.programme_time.borrow(),
         });
+        self.footage.set(Some(g.footage_quad([rw, rh])));
 
         let cmd_buf = self.gpu.context.new_command_buffer();
         // Profondeur de champ : pyramide remplie seulement sur une frame inclinée qui la lit,
@@ -2220,46 +2327,75 @@ impl Compositor {
         } else {
             None
         };
-        let enc = self.begin_pass(
-            cmd_buf,
-            &self.rt,
-            Some(metal::MTLClearColor::new(0.0, 0.0, 0.0, 1.0)),
-            &self.pipeline_main,
-        )?;
-        // Les deux plans écran restent liés par défaut : les quads de couleur ne les
-        // échantillonnent pas, mais Metal veut des slots renseignés pour les draws qui, eux,
-        // le font.
-        enc.set_fragment_texture(0, Some(&sy));
-        enc.set_fragment_texture(1, Some(&suv));
+        // Le fond de la frame d'avant, flou compris, s'il est celui qu'on demande
+        // (`BackgroundKey`) : recopié au lieu d'être redessiné.
+        let bg_desc = scene_ref.as_ref().map(|s| &s.background);
+        let bg_blur = scene_ref.as_ref().map_or(0.0, |s| s.effects.blur);
+        let bg_cached = self
+            .bg_cache
+            .borrow()
+            .as_ref()
+            .is_some_and(|c| c.key.matches(bg_desc, bg_blur, lp.bg_color, [rw, rh]));
+        if bg_cached {
+            if let Some(c) = self.bg_cache.borrow().as_ref() {
+                self.blit_background(cmd_buf, &c.tex, true);
+            }
+        } else {
+            let enc = self.begin_pass(
+                cmd_buf,
+                &self.rt,
+                Some(metal::MTLClearColor::new(0.0, 0.0, 0.0, 1.0)),
+                &self.pipeline_main,
+            )?;
+            // Les deux plans écran restent liés par défaut : les quads de couleur ne les
+            // échantillonnent pas, mais Metal veut des slots renseignés pour les draws qui, eux,
+            // le font.
+            enc.set_fragment_texture(0, Some(&sy));
+            enc.set_fragment_texture(1, Some(&suv));
 
-        // --- fond --- (parité `compositor_windows.rs`, section « fond »)
-        match scene_ref.as_ref().map(|s| s.background.clone()) {
-            Some(SceneBackground::Color { color }) => {
-                let c = parse_hex(&color).unwrap_or(lp.bg_color);
-                self.draw_solid(
-                    enc,
-                    &LayerCB { dst: [0.0, 0.0, 1.0, 1.0], mode: 1.0, color: c, ..Default::default() },
-                );
-            }
-            Some(SceneBackground::Gradient { angle_deg, stops, offsets, motion }) => {
-                let a = angle_deg.to_radians();
-                let (anim, mb) =
-                    crate::frame_geometry::wallpaper_motion_slots(motion, g.programme_t, rw / rh);
-                self.draw_solid(
-                    enc,
-                    &LayerCB {
-                        dst: [0.0, 0.0, 1.0, 1.0],
-                        fx: [a.sin(), -a.cos(), anim[0], anim[1]],
-                        mb,
-                        ..crate::frame_geometry::gradient_layer(&stops, &offsets, lp.bg_color)
-                    },
-                );
-            }
-            Some(SceneBackground::Image { path, motion }) => {
-                // Repli couleur en cas d'échec, mais LOGGÉ : un fallback silencieux masquerait
-                // un chemin cassé.
-                if let Err(e) = self.draw_image_bg(enc, &path, rw / rh, motion, g.programme_t) {
-                    eprintln!("[compositor] wallpaper image \"{path}\" : {e:#}");
+            // --- fond --- (parité `compositor_windows.rs`, section « fond »)
+            // Faux si l'image du fond n'a pas pu se charger : son repli n'est pas gardé.
+            let mut bg_drawn = true;
+            match scene_ref.as_ref().map(|s| s.background.clone()) {
+                Some(SceneBackground::Color { color }) => {
+                    let c = parse_hex(&color).unwrap_or(lp.bg_color);
+                    self.draw_solid(
+                        enc,
+                        &LayerCB { dst: [0.0, 0.0, 1.0, 1.0], mode: 1.0, color: c, ..Default::default() },
+                    );
+                }
+                Some(SceneBackground::Gradient { angle_deg, stops, offsets, motion }) => {
+                    let a = angle_deg.to_radians();
+                    let (anim, mb) =
+                        crate::frame_geometry::wallpaper_motion_slots(motion, g.programme_t, rw / rh);
+                    self.draw_solid(
+                        enc,
+                        &LayerCB {
+                            dst: [0.0, 0.0, 1.0, 1.0],
+                            fx: [a.sin(), -a.cos(), anim[0], anim[1]],
+                            mb,
+                            ..crate::frame_geometry::gradient_layer(&stops, &offsets, lp.bg_color)
+                        },
+                    );
+                }
+                Some(SceneBackground::Image { path, motion }) => {
+                    // Repli couleur en cas d'échec, mais LOGGÉ : un fallback silencieux masquerait
+                    // un chemin cassé.
+                    if let Err(e) = self.draw_image_bg(enc, &path, rw / rh, motion, g.programme_t) {
+                        eprintln!("[compositor] wallpaper image \"{path}\" : {e:#}");
+                        bg_drawn = false;
+                        self.draw_solid(
+                            enc,
+                            &LayerCB {
+                                dst: [0.0, 0.0, 1.0, 1.0],
+                                mode: 1.0,
+                                color: lp.bg_color,
+                                ..Default::default()
+                            },
+                        );
+                    }
+                }
+                None => {
                     self.draw_solid(
                         enc,
                         &LayerCB {
@@ -2271,25 +2407,34 @@ impl Compositor {
                     );
                 }
             }
-            None => {
-                self.draw_solid(
-                    enc,
-                    &LayerCB {
-                        dst: [0.0, 0.0, 1.0, 1.0],
-                        mode: 1.0,
-                        color: lp.bg_color,
-                        ..Default::default()
-                    },
-                );
-            }
-        }
 
-        // « Blur BG » (parité web `blurredBackgroundLayer`) : floute CE wallpaper qu'on vient
-        // de dessiner, pas la vidéo. No-op visuel sur une couleur plate, effet réel sur un
-        // gradient ou une image. Il lui faut ses propres passes, d'où la coupure ici.
-        enc.end_encoding();
-        if let Some(blur) = scene_ref.as_ref().map(|s| s.effects.blur) {
-            self.blur_bg(cmd_buf, blur)?;
+            // « Blur BG » (parité web `blurredBackgroundLayer`) : floute CE wallpaper qu'on vient
+            // de dessiner, pas la vidéo. No-op visuel sur une couleur plate, effet réel sur un
+            // gradient ou une image. Il lui faut ses propres passes, d'où la coupure ici.
+            enc.end_encoding();
+            if let Some(blur) = scene_ref.as_ref().map(|s| s.effects.blur) {
+                self.blur_bg(cmd_buf, blur)?;
+            }
+            // Pas de cache pour un fond animé (`of` rend `None`).
+            let key = bg_drawn
+                .then(|| crate::frame_geometry::BackgroundKey::of(bg_desc, bg_blur, lp.bg_color, [rw, rh]))
+                .flatten();
+            if let Some(key) = key {
+                // L'ancienne texture est reprise : `resized` vide le cache, sa taille est la bonne.
+                let old = self.bg_cache.borrow_mut().take().map(|c| c.tex);
+                let tex = old.unwrap_or_else(|| {
+                    make_texture(
+                        &self.gpu.device,
+                        metal::MTLPixelFormat::RGBA8Unorm,
+                        self.render_w,
+                        self.render_h,
+                        metal::MTLStorageMode::Private,
+                        metal::MTLTextureUsage::ShaderRead,
+                    )
+                });
+                self.blit_background(cmd_buf, &tex, false);
+                *self.bg_cache.borrow_mut() = Some(BgCache { key, tex });
+            }
         }
         // --- écran : ombre puis vidéo ---
         let s_px = [g.s_dst[2] * rw, g.s_dst[3] * rh];
@@ -2400,6 +2545,11 @@ impl Compositor {
 
         enc.end_encoding();
 
+        // --- flous de confidentialité : sur le métrage, AVANT le curseur (parité Windows). Le
+        // curseur reste net par-dessus, et le cristal de Prism Glow, qui réfracte l'image
+        // composée, n'y voit que des pixels déjà floutés.
+        self.draw_annotations(cmd_buf, scene_ref.as_ref(), g.source_t, g.s_ann, &g, true)?;
+
         // --- curseur --- (parité `compositor_windows.rs`, section « curseur custom »)
         if let Some(track) = cursor_ref.as_ref() {
             let plan = crate::frame_geometry::plan_cursor(
@@ -2422,6 +2572,12 @@ impl Compositor {
                     .map(|s| s.cursor.cursor_sprites.clone())
                     .unwrap_or_default();
                 let kind = plan.cursor_type.as_deref();
+                // Le cristal de Prism Glow réfracte l'image telle qu'elle est composée à cet
+                // instant, flous compris : sa copie en texture(5), une fois pour toutes les copies
+                // de la traînée (`ann_copy` est libre, les flous l'ont déjà lue).
+                if plan.glass {
+                    self.snapshot_rt(cmd_buf, false);
+                }
                 // L'impact des clics (mode 16, sans texture), posé sur l'écran SOUS le curseur.
                 if !plan.impacts.is_empty() {
                     let e = self.begin_pass(cmd_buf, &self.rt, None, &self.pipeline_main)?;
@@ -2432,6 +2588,9 @@ impl Compositor {
                 }
                 if plan.taps <= 1 {
                     let e = self.begin_pass(cmd_buf, &self.rt, None, &self.pipeline_main)?;
+                    if plan.glass {
+                        e.set_fragment_texture(5, Some(&self.ann_copy));
+                    }
                     self.draw_cur_themed(
                         e,
                         &sprites,
@@ -2454,11 +2613,17 @@ impl Compositor {
                         Some(metal::MTLClearColor::new(0.0, 0.0, 0.0, 0.0)),
                         &self.pipeline_add,
                     )?;
+                    if plan.glass {
+                        e.set_fragment_texture(5, Some(&self.ann_copy));
+                    }
+                    // L'union des quads peints dans `accum` (x0, y0, x1, y1 en fractions de la
+                    // sortie) : la seule région que la recopie doit relire.
+                    let mut bounds = [f32::MAX, f32::MAX, f32::MIN, f32::MIN];
                     for k in 0..plan.taps {
                         let f = k as f32 / (plan.taps - 1) as f32;
                         let w = crate::frame_geometry::cursor_tap_weight(k, plan.taps);
                         e.set_blend_color(w, w, w, w);
-                        self.draw_cur_themed(
+                        let drawn = self.draw_cur_themed(
                             e,
                             &sprites,
                             kind,
@@ -2468,12 +2633,36 @@ impl Compositor {
                             plan.clip,
                             plan.model,
                         );
+                        if let Some(d) = drawn {
+                            bounds = [
+                                bounds[0].min(d[0]),
+                                bounds[1].min(d[1]),
+                                bounds[2].max(d[0] + d[2]),
+                                bounds[3].max(d[1] + d[3]),
+                            ];
+                        }
                     }
                     e.end_encoding();
 
                     let c = self.begin_pass(cmd_buf, &self.rt, None, &self.pipeline_fs_tex)?;
                     c.set_fragment_texture(0, Some(&self.accum));
-                    c.draw_primitives(metal::MTLPrimitiveType::Triangle, 0, 3);
+                    // Rien n'a été peint dans `accum` hors des quads de la traînée : la recopie
+                    // s'y borne au lieu de repasser sur toute la sortie (0,5 ms par frame 1080p
+                    // mesurée sur Linux, Radeon 610M).
+                    let (w, h) = (self.render_w as f32, self.render_h as f32);
+                    let x0 = (bounds[0] * w).floor().clamp(0.0, w) as u64;
+                    let y0 = (bounds[1] * h).floor().clamp(0.0, h) as u64;
+                    let x1 = (bounds[2] * w).ceil().clamp(0.0, w) as u64;
+                    let y1 = (bounds[3] * h).ceil().clamp(0.0, h) as u64;
+                    if x1 > x0 && y1 > y0 {
+                        c.set_scissor_rect(metal::MTLScissorRect {
+                            x: x0,
+                            y: y0,
+                            width: x1 - x0,
+                            height: y1 - y0,
+                        });
+                        c.draw_primitives(metal::MTLPrimitiveType::Triangle, 0, 3);
+                    }
                     c.end_encoding();
                 }
             }
@@ -2578,8 +2767,9 @@ impl Compositor {
         // --- annotations : calque le plus haut, ancré sur le rect ÉCRAN SANS ZOOM ---
         // `s_ann`, pas `s_dst` : le zoom vit dans la boîte depuis l'issue #179, donc `s_dst`
         // grandit avec lui et emmenait annotations et sous-titres dans le mouvement. Le flou de
-        // confidentialité est l'exception : il suit le contenu, d'où `&g`.
-        self.draw_annotations(cmd_buf, scene_ref.as_ref(), g.source_t, g.s_ann, &g)?;
+        // confidentialité est l'exception : il suit le contenu, d'où `&g` ; il est passé avant le
+        // curseur (plus haut).
+        self.draw_annotations(cmd_buf, scene_ref.as_ref(), g.source_t, g.s_ann, &g, false)?;
 
         // Ni miroir RGBA ni attente ici : le miroir ne sert qu'à `readback_direct` (la
         // preview), et l'export ne lit jamais le RGBA — le blit pleine résolution était payé
@@ -4267,6 +4457,12 @@ mod tests {
                 &metal::CompileOptions::new(),
             )
             .expect("shaders.metal doit compiler");
+        // La variante des modèles 3D (`LAYER_MODELS`) : la seule à compiler leurs branches.
+        device
+            .new_library_with_source(&super::msl_source_with_models(), &metal::CompileOptions::new())
+            .expect("shaders.metal doit compiler avec LAYER_MODELS")
+            .get_function("ps_main", None)
+            .expect("ps_main absent de la variante LAYER_MODELS");
         for name in [
             "vs_main",
             "vs_fs",

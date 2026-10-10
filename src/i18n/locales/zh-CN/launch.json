@@ -1,15 +1,20 @@
 {
 	"tooltips": {
-		"hideHUD": "隐藏控制面板",
-		"closeApp": "关闭应用",
-		"restartRecording": "重新开始录制",
-		"cancelRecording": "取消录制",
+		"hideHUD": "隐藏录制栏",
+		"hideHUDTip": "隐藏录制栏，可通过系统托盘图标重新显示",
+		"closeApp": "退出 OpenScreen",
+		"restartRecording": "删除本次录制并重新开始",
+		"cancelRecording": "停止录制并删除本次录制内容",
 		"pauseRecording": "暂停录制",
 		"resumeRecording": "继续录制",
-		"useVerticalTray": "使用竖向托盘",
-		"useHorizontalTray": "使用横向托盘",
-		"openStudio": "打开工作室",
-		"openNotes": "打开笔记",
+		"useVerticalTray": "切换为竖向录制栏",
+		"useHorizontalTray": "切换为横向录制栏",
+		"changeSource": "选择其他屏幕或窗口",
+		"systemAudio": "系统音频：录制电脑播放的声音",
+		"microphone": "麦克风：录制语音",
+		"camera": "摄像头：单独录制摄像头画面，可在编辑器中调整位置",
+		"openStudio": "打开工作室，编辑录制内容",
+		"openNotes": "打开笔记，查看录制时需要阅读的文字",
 		"openNotesPlaceholder": "在此输入笔记...",
 		"notesToolbar": {
 			"bold": "加粗",
@@ -27,35 +32,31 @@
 			"fontSize": "字体大小",
 			"decreaseFontSize": "减小字体",
 			"increaseFontSize": "增大字体",
-			"mirror": "水平镜像"
+			"mirror": "水平镜像",
+			"mirrorTip": "左右翻转文字，便于通过镜面阅读"
 		},
 		"confirmDiscardRecording": "再次点击以丢弃此录制"
 	},
 	"audio": {
-		"enableSystemAudio": "启用系统音频",
-		"disableSystemAudio": "禁用系统音频",
-		"enableMicrophone": "启用麦克风",
-		"disableMicrophone": "禁用麦克风",
-		"defaultMicrophone": "默认麦克风",
 		"systemAudio": "系统音频",
 		"microphone": "麦克风",
-		"on": "开",
-		"off": "关",
 		"inputDevice": "输入设备"
 	},
 	"webcam": {
-		"enableWebcam": "启用摄像头",
-		"disableWebcam": "禁用摄像头",
-		"defaultCamera": "默认摄像头",
 		"searching": "正在搜索...",
 		"noneFound": "未找到摄像头",
 		"unavailable": "摄像头不可用",
 		"camera": "摄像头",
-		"cameraDevice": "摄像头设备"
+		"cameraDevice": "摄像头设备",
+		"quality": "摄像头画质",
+		"quality1080p": "1080p",
+		"quality1440p": "1440p",
+		"quality2160p": "4K"
 	},
 	"cursor": {
-		"useEditableCursorHint": "使用可编辑光标：将重新开启自动缩放和光标效果",
-		"useSystemCursorHint": "使用系统光标：将关闭自动缩放和光标效果"
+		"name": "可编辑光标",
+		"editableTip": "可编辑光标：单独记录光标，可在编辑器中修改样式并使用自动缩放",
+		"systemTip": "系统光标：直接录制到视频中，无法修改样式或使用自动缩放"
 	},
 	"sourceSelector": {
 		"loading": "正在加载源...",
@@ -67,13 +68,15 @@
 		"defaultSourceName": "屏幕"
 	},
 	"recording": {
-		"selectSource": "请选择要录制的源",
-		"systemPicker": "系统将询问要共享的内容",
-		"inProgress": "正在录制",
+		"selectSource": "选择要录制的屏幕或窗口",
+		"systemPicker": "系统将提示你选择要共享的内容",
+		"start": "开始录制",
+		"stop": "停止录制并保存",
 		"saving": "正在保存...",
 		"markerAdded": "已添加标记 {{count}}"
 	},
 	"language": "语言",
+	"languageWithName": "语言：{{language}}",
 	"systemLanguagePrompt": {
 		"title": "使用系统语言吗？",
 		"description": "我们检测到你的系统语言是{{language}}。是否将 OpenScreen 切换为{{language}}？",
@@ -88,9 +91,9 @@
 	},
 	"deviceSettings": {
 		"title": "设备设置",
-		"done": "完成",
+		"close": "关闭",
 		"micLevel": "输入音量",
-		"micHint": "说话以测试麦克风",
+		"micHint": "说话试试，检查麦克风是否正常",
 		"noMicrophones": "未找到麦克风",
 		"preview": "预览",
 		"previewUnavailable": "预览不可用",
