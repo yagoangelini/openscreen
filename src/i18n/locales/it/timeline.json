@@ -31,7 +31,8 @@
 		"imageItem": "Immagine",
 		"emptyText": "Testo vuoto",
 		"cameraFullscreen": "Camera a schermo intero",
-		"cameraFullscreenItem": "Camera a schermo intero {{index}}"
+		"cameraFullscreenItem": "Camera a schermo intero {{index}}",
+		"marker": "Marcatore a {{time}}"
 	},
 	"emptyState": {
 		"noVideo": "Nessun video caricato",

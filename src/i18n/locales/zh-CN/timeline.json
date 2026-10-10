@@ -31,7 +31,8 @@
 		"imageItem": "图片",
 		"emptyText": "空文本",
 		"cameraFullscreen": "全屏摄像头",
-		"cameraFullscreenItem": "全屏摄像头 {{index}}"
+		"cameraFullscreenItem": "全屏摄像头 {{index}}",
+		"marker": "{{time}} 处的标记"
 	},
 	"emptyState": {
 		"noVideo": "未加载视频",

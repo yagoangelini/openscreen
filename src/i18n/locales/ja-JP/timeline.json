@@ -31,7 +31,8 @@
 		"imageItem": "画像",
 		"emptyText": "空のテキスト",
 		"cameraFullscreen": "フルスクリーンカメラ",
-		"cameraFullscreenItem": "フルスクリーンカメラ {{index}}"
+		"cameraFullscreenItem": "フルスクリーンカメラ {{index}}",
+		"marker": "{{time}} のマーカー"
 	},
 	"emptyState": {
 		"noVideo": "ビデオが読み込まれていません",

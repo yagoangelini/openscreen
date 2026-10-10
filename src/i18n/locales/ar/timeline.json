@@ -31,7 +31,8 @@
 		"imageItem": "صورة",
 		"emptyText": "نص فارغ",
 		"cameraFullscreen": "كاميرا كاملة الشاشة",
-		"cameraFullscreenItem": "كاميرا كاملة الشاشة {{index}}"
+		"cameraFullscreenItem": "كاميرا كاملة الشاشة {{index}}",
+		"marker": "علامة عند {{time}}"
 	},
 	"emptyState": {
 		"noVideo": "لم يتم تحميل أي فيديو",

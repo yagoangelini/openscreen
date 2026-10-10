@@ -26,6 +26,7 @@ import {
 	type StylePresetAppearance,
 	stylePresetLegacyEditor,
 } from "../../src/lib/ai-edition/stylePresets";
+import { RECORDING_MARKERS_SUFFIX } from "../../src/lib/recordingSession";
 import { ensureDocumentExtensions } from "../media/extensionClip";
 import { relinkProjectMedia } from "../media/projectMediaRelinker";
 
@@ -149,6 +150,25 @@ async function renameWithRetry(from: string, to: string): Promise<void> {
 			if (attempt >= 5 || !RETRYABLE.has(code)) throw error;
 			await new Promise((resolve) => setTimeout(resolve, 10 * 2 ** attempt));
 		}
+	}
+}
+
+/**
+ * The marker-shortcut positions of a take, from the .markers.json written beside it,
+ * in source seconds. Undefined when there is none or it cannot be read -- markers are
+ * a convenience and never a reason to refuse an import.
+ */
+async function readRecordingMarkersSec(videoPath: string): Promise<number[] | undefined> {
+	try {
+		const raw = JSON.parse(await fs.readFile(`${videoPath}${RECORDING_MARKERS_SUFFIX}`, "utf8"));
+		const values: unknown = raw?.markersMs;
+		if (!Array.isArray(values)) return undefined;
+		return values
+			.filter((ms): ms is number => typeof ms === "number" && Number.isFinite(ms) && ms >= 0)
+			.map((ms) => ms / 1000)
+			.sort((a, b) => a - b);
+	} catch {
+		return undefined;
 	}
 }
 
@@ -442,6 +462,7 @@ export class DocumentService {
 		} catch {
 			sizeBytes = undefined;
 		}
+		const markersSec = kind === "audio" ? undefined : await readRecordingMarkersSec(absolutePath);
 		const asset: AxcutAsset = {
 			id: createId("asset"),
 			kind,
@@ -449,6 +470,7 @@ export class DocumentService {
 			originalPath: absolutePath,
 			sizeBytes,
 			cameraTrack: null,
+			...(markersSec && markersSec.length > 0 ? { markersSec } : {}),
 		};
 		// An audio import is an overlay, never the thing the timeline is built
 		// around, so it must not claim the empty primaryAssetId slot — otherwise the

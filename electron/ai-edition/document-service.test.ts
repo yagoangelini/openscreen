@@ -396,6 +396,24 @@ describe("DocumentService", () => {
 			expect(updated.project.primaryAssetId).toBe(asset?.id);
 		});
 
+		it("carries a take's marker-shortcut positions into the asset, in seconds", async () => {
+			const doc = await service.createProject("P");
+			const videoPath = path.join(mediaDir, "recording-1.mp4");
+			await fs.writeFile(videoPath, "");
+			await fs.writeFile(
+				`${videoPath}.markers.json`,
+				JSON.stringify({ version: 1, markersMs: [20110, 5532, -3, "x"] }),
+			);
+			const updated = await service.addAsset(doc.project.id, { path: videoPath });
+			expect(updated.assets[0]?.markersSec).toEqual([5.532, 20.11]);
+		});
+
+		it("imports a take with no markers file and no markers", async () => {
+			const doc = await service.createProject("P");
+			const updated = await service.addAsset(doc.project.id, { path: "/tmp/no-markers.mp4" });
+			expect(updated.assets[0]).not.toHaveProperty("markersSec");
+		});
+
 		it("resolves relative paths against the cwd", async () => {
 			const doc = await service.createProject("P");
 			const updated = await service.addAsset(doc.project.id, { path: "recording.webm" });

@@ -1514,6 +1514,28 @@
 }
 /* Ticks hang from the TOP of the band and the label sits under them, so the
    numbers are below the playhead head rather than behind it. */
+/* A mark left with the marker shortcut while recording. */
+.tlMarker {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	width: 2px;
+	margin-left: -1px;
+	background: #f59e0b;
+	border-radius: 1px;
+	pointer-events: auto;
+	z-index: 1;
+}
+.tlMarker::before {
+	content: "";
+	position: absolute;
+	top: 0;
+	left: -4px;
+	border-left: 5px solid transparent;
+	border-right: 5px solid transparent;
+	border-top: 6px solid #f59e0b;
+}
+
 .tlTick {
 	position: absolute;
 	top: 0;

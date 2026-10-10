@@ -31,7 +31,8 @@
 		"imageItem": "Görüntü",
 		"emptyText": "Boş metin",
 		"cameraFullscreen": "Tam Ekran Kamera",
-		"cameraFullscreenItem": "Tam Ekran Kamera {{index}}"
+		"cameraFullscreenItem": "Tam Ekran Kamera {{index}}",
+		"marker": "{{time}} konumunda işaret"
 	},
 	"emptyState": {
 		"noVideo": "Video Yüklenmedi",

@@ -31,7 +31,8 @@
 		"imageItem": "Изображение",
 		"emptyText": "Пустой текст",
 		"cameraFullscreen": "Камера на весь экран",
-		"cameraFullscreenItem": "Камера на весь экран {{index}}"
+		"cameraFullscreenItem": "Камера на весь экран {{index}}",
+		"marker": "Маркер на {{time}}"
 	},
 	"emptyState": {
 		"noVideo": "Видео не загружено",

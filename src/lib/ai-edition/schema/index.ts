@@ -190,6 +190,10 @@ export const assetSchema = z.object({
 	// no schema-version bump (an older build simply drops the key on save).
 	transcriptionFailure: assetTranscriptionFailureSchema.nullish(),
 	cameraTrack: cameraTrackSchema,
+	// Positions (source seconds) the user marked with the marker shortcut while
+	// recording, read from the take's .markers.json at import. Additive like
+	// transcriptionFailure: no schema-version bump.
+	markersSec: z.array(z.number().nonnegative()).optional(),
 });
 
 // A crop is a sub-rectangle of the source video, expressed as fractions
