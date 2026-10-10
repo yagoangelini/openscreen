@@ -114,7 +114,7 @@ If your recording has editable cursor data (native capture in the editable curso
 | Play / Pause | `Space` |
 | Copy region attributes | `Ctrl/Cmd + C` |
 | Paste region attributes | `Ctrl/Cmd + V` |
-| Open App (works from any app) | `Ctrl/Cmd + Shift + O` |
+| Open App (works from any app) | `Ctrl/Cmd + Shift + F12` |
 
 Fixed (not reassignable):
 

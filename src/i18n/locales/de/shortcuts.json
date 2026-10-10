@@ -16,6 +16,9 @@
 	"registrationFailed": "Kürzel konnte nicht registriert werden. Möglicherweise wird es von einer anderen App verwendet. Probiere eine andere Taste.",
 	"actions": {
 		"openApp": "App öffnen",
+		"recordToggle": "Aufnahme starten / stoppen",
+		"pauseToggle": "Aufnahme pausieren / fortsetzen",
+		"addMarker": "Markierung während der Aufnahme setzen",
 		"addZoom": "Zoom hinzufügen",
 		"addTrim": "Trim hinzufügen",
 		"addSpeed": "Tempo hinzufügen",

@@ -1,17 +1,23 @@
 import fs from "node:fs/promises";
 import { globalShortcut } from "electron";
-import { type ShortcutBinding } from "../src/lib/shortcuts";
+import {
+	DEFAULT_SHORTCUTS,
+	GLOBAL_SHORTCUT_ACTIONS,
+	type GlobalShortcutAction,
+	type GlobalShortcutsConfig,
+	type ShortcutBinding,
+} from "../src/lib/shortcuts";
 import { SHORTCUTS_FILE } from "./ipc/handlers";
-
-const DEFAULT_OPEN_APP_BINDING: ShortcutBinding = { key: "o", ctrl: true, shift: true };
 
 // Maps KeyboardEvent.key values to Electron accelerator key names
 const KEY_TO_ACCELERATOR: Record<string, string> = {
 	" ": "Space",
 	"+": "Plus",
-	"-": "numsub",
-	"*": "nummult",
-	"/": "numdiv",
+	// The main-row keys. These used to map to numsub/nummult/numdiv, so binding
+	// Ctrl+Shift+- registered the NUMPAD minus instead.
+	"-": "-",
+	"*": "*",
+	"/": "/",
 	arrowup: "Up",
 	arrowdown: "Down",
 	arrowleft: "Left",
@@ -23,7 +29,7 @@ const KEY_TO_ACCELERATOR: Record<string, string> = {
 	tab: "Tab",
 };
 
-function bindingToAccelerator(binding: ShortcutBinding): string {
+export function bindingToAccelerator(binding: ShortcutBinding): string {
 	const parts: string[] = [];
 	if (binding.ctrl) parts.push("CommandOrControl");
 	if (binding.shift) parts.push("Shift");
@@ -36,42 +42,63 @@ function bindingToAccelerator(binding: ShortcutBinding): string {
 	return parts.join("+");
 }
 
-let currentAccelerator: string | null = null;
+const registered = new Map<GlobalShortcutAction, string>();
 
-export function registerOpenAppShortcut(binding: ShortcutBinding, onTrigger: () => void): boolean {
-	const accelerator = bindingToAccelerator(binding);
-
-	if (accelerator === currentAccelerator) {
-		return true;
-	}
-
-	// Register the new shortcut before unregistering the old, so a failure leaves the old binding intact
-	const success = globalShortcut.register(accelerator, onTrigger);
-
-	if (success) {
-		if (currentAccelerator) {
-			globalShortcut.unregister(currentAccelerator);
+/**
+ * Registers each system-wide shortcut. A binding that cannot be registered (another
+ * app owns it) keeps the action's previous binding, so a failed change never leaves
+ * the action with no shortcut at all. Returns, per action, whether its binding is live.
+ */
+export function registerGlobalShortcuts(
+	config: Partial<GlobalShortcutsConfig>,
+	handlers: Record<GlobalShortcutAction, () => void>,
+): Record<GlobalShortcutAction, boolean> {
+	const results = {} as Record<GlobalShortcutAction, boolean>;
+	for (const action of GLOBAL_SHORTCUT_ACTIONS) {
+		const binding = config[action] ?? DEFAULT_SHORTCUTS[action];
+		const accelerator = bindingToAccelerator(binding);
+		const previous = registered.get(action);
+		if (accelerator === previous) {
+			results[action] = true;
+			continue;
 		}
-		currentAccelerator = accelerator;
-		console.log(`Global shortcut registered: ${accelerator}`);
-	} else {
-		console.warn(`Failed to register global shortcut: ${accelerator}`);
+		// Release the old binding first only when another action is about to take it
+		// (a swap); otherwise register the new one first, so a failure keeps the old.
+		const takenByOther = [...registered.entries()].find(
+			([other, value]) => other !== action && value === accelerator,
+		);
+		if (takenByOther) {
+			globalShortcut.unregister(accelerator);
+			registered.delete(takenByOther[0]);
+		}
+		const success = globalShortcut.register(accelerator, handlers[action]);
+		if (success) {
+			if (previous) {
+				globalShortcut.unregister(previous);
+			}
+			registered.set(action, accelerator);
+			console.log(`Global shortcut registered: ${accelerator} (${action})`);
+		} else {
+			console.warn(`Failed to register global shortcut: ${accelerator} (${action})`);
+		}
+		results[action] = success;
 	}
-
-	return success;
+	return results;
 }
 
-export async function loadAndRegisterGlobalShortcut(onTrigger: () => void): Promise<void> {
+export async function loadAndRegisterGlobalShortcuts(
+	handlers: Record<GlobalShortcutAction, () => void>,
+): Promise<void> {
+	let saved: Partial<GlobalShortcutsConfig> = {};
 	try {
-		const data = await fs.readFile(SHORTCUTS_FILE, "utf-8");
-		const shortcuts = JSON.parse(data);
-		const binding = shortcuts.openApp || DEFAULT_OPEN_APP_BINDING;
-		registerOpenAppShortcut(binding, onTrigger);
+		saved = JSON.parse(await fs.readFile(SHORTCUTS_FILE, "utf-8"));
 	} catch {
-		registerOpenAppShortcut(DEFAULT_OPEN_APP_BINDING, onTrigger);
+		// No saved shortcuts yet: the defaults apply.
 	}
+	registerGlobalShortcuts(saved, handlers);
 }
 
 export function unregisterAllGlobalShortcuts(): void {
 	globalShortcut.unregisterAll();
+	registered.clear();
 }

@@ -16,6 +16,9 @@
 	"registrationFailed": "Failed to register shortcut. It may be in use by another app. Try a different key.",
 	"actions": {
 		"openApp": "Open App",
+		"recordToggle": "Start / Stop Recording",
+		"pauseToggle": "Pause / Resume Recording",
+		"addMarker": "Add Marker While Recording",
 		"addZoom": "Add Zoom",
 		"addTrim": "Add Trim",
 		"addSpeed": "Add Speed",

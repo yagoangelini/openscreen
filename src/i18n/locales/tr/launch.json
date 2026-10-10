@@ -70,7 +70,8 @@
 		"selectSource": "Lütfen kayıt için bir kaynak seçin",
 		"systemPicker": "Sisteminiz neyi paylaşacağınızı soracak",
 		"inProgress": "Kaydediliyor",
-		"saving": "Kaydediliyor..."
+		"saving": "Kaydediliyor...",
+		"markerAdded": "{{count}}. işaret eklendi"
 	},
 	"language": "Dil",
 	"systemLanguagePrompt": {

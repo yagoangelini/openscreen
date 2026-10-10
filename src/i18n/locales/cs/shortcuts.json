@@ -16,6 +16,9 @@
 	"registrationFailed": "Nepodařilo se zaregistrovat zkratku. Může být používána jinou aplikací. Zkuste jinou klávesu.",
 	"actions": {
 		"openApp": "Otevřít aplikaci",
+		"recordToggle": "Spustit / zastavit nahrávání",
+		"pauseToggle": "Pozastavit / obnovit nahrávání",
+		"addMarker": "Přidat značku během nahrávání",
 		"addZoom": "Přidat přiblížení",
 		"addTrim": "Přidat oříznutí",
 		"addSpeed": "Přidat rychlost",

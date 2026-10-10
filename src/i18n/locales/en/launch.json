@@ -70,7 +70,8 @@
 		"selectSource": "Choose a screen or window to record",
 		"systemPicker": "Your system will ask what to share",
 		"inProgress": "Recording",
-		"saving": "Saving..."
+		"saving": "Saving...",
+		"markerAdded": "Marker {{count}} added"
 	},
 	"language": "Language",
 	"systemLanguagePrompt": {

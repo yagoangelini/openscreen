@@ -66,7 +66,8 @@
 		"selectSource": "يرجى تحديد مصدر للتسجيل",
 		"systemPicker": "سيسألك النظام عمّا تريد مشاركته",
 		"inProgress": "جارٍ التسجيل",
-		"saving": "جاري الحفظ..."
+		"saving": "جاري الحفظ...",
+		"markerAdded": "تمت إضافة العلامة {{count}}"
 	},
 	"language": "اللغة",
 	"systemLanguagePrompt": {

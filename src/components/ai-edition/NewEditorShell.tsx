@@ -52,7 +52,7 @@ import {
 	ventilateTimelineSpanToTrims,
 } from "@/lib/ai-edition/timeline/trim-mapping";
 import { firstTimelineBusyView } from "@/lib/ai-edition/transcription/status";
-import { matchesShortcut } from "@/lib/shortcuts";
+import { isTextEditingTarget, matchesShortcut } from "@/lib/shortcuts";
 import { nativeBridgeClient } from "@/native";
 import type { AiEditionProjectSummary } from "@/native/contracts";
 import { resolveVisibleClips } from "@/native/sceneDescription";
@@ -1213,8 +1213,7 @@ export function NewEditorShell() {
 
 	useEffect(() => {
 		const onKey = (e: KeyboardEvent) => {
-			if (e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLInputElement) return;
-			if (e.target instanceof HTMLElement && e.target.isContentEditable) return;
+			if (isTextEditingTarget(e.target)) return;
 			// A modal owns the screen. Its own controls are buttons, not text fields, so the two
 			// guards above let every editor shortcut through underneath it: Delete destroyed the
 			// selected region behind the backdrop, Ctrl+O stacked a second `aria-modal` dialog on
@@ -1223,12 +1222,14 @@ export function NewEditorShell() {
 			// happened to live in a context, so Z/T/C kept adding regions under Export (#434).
 			if (isModalOpen()) return;
 			const ctrl = e.ctrlKey || e.metaKey;
-			if (ctrl && e.key === "s") {
+			// Lower-cased: with Caps Lock on, Ctrl+S arrives as "S" and saved nothing.
+			const key = e.key.toLowerCase();
+			if (ctrl && key === "s") {
 				e.preventDefault();
 				void handleSave();
 				return;
 			}
-			if (ctrl && e.key === "n") {
+			if (ctrl && key === "n") {
 				e.preventDefault();
 				void (async () => {
 					const choice = await promptUnsaved("new");
@@ -1242,7 +1243,7 @@ export function NewEditorShell() {
 				})();
 				return;
 			}
-			if (ctrl && e.key === "o") {
+			if (ctrl && key === "o") {
 				e.preventDefault();
 				void (async () => {
 					const choice = await promptUnsaved("open");
@@ -1408,7 +1409,12 @@ export function NewEditorShell() {
 			}
 			if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
 				e.preventDefault();
-				const frameStepSec = 1 / 60;
+				// One frame of the recording, not of a 60 fps one: on a 30 fps take
+				// the arrows moved half a frame.
+				const sourceFps =
+					useProjectStore.getState().document?.assets.find((asset) => (asset.video?.fps ?? 0) > 0)
+						?.video?.fps ?? 60;
+				const frameStepSec = 1 / sourceFps;
 				const direction = e.key === "ArrowLeft" ? -1 : 1;
 				const playhead = useProjectStore.getState().currentTimeSec;
 				handleSeek(Math.max(0, playhead + direction * frameStepSec));

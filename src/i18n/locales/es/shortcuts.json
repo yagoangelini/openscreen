@@ -16,6 +16,9 @@
 	"registrationFailed": "Error al registrar el atajo. Puede estar en uso por otra aplicación. Prueba otra tecla.",
 	"actions": {
 		"openApp": "Abrir aplicación",
+		"recordToggle": "Iniciar / Detener grabación",
+		"pauseToggle": "Pausar / Reanudar grabación",
+		"addMarker": "Añadir marcador durante la grabación",
 		"addZoom": "Agregar zoom",
 		"addTrim": "Agregar recorte",
 		"addSpeed": "Agregar velocidad",

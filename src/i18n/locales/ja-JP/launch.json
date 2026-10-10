@@ -70,7 +70,8 @@
 		"selectSource": "録画するソースを選択してください",
 		"systemPicker": "共有する対象はシステムが確認します",
 		"inProgress": "録画中",
-		"saving": "保存中..."
+		"saving": "保存中...",
+		"markerAdded": "マーカー {{count}} を追加しました"
 	},
 	"language": "言語",
 	"systemLanguagePrompt": {

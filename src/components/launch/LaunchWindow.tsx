@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 import { useI18n, useScopedT } from "@/contexts/I18nContext";
 import { getAvailableLocales, getLocaleName } from "@/i18n/loader";
 import { loadUserPreferences, saveUserPreferences } from "@/lib/userPreferences";
@@ -823,6 +824,23 @@ export function LaunchWindow() {
 			})();
 		});
 	}, [applySelectedSource]);
+
+	// The global pause and marker shortcuts land here: they are pressed while another
+	// app has focus, so the HUD is the one that acts and answers.
+	const togglePausedRef = useRef(togglePaused);
+	togglePausedRef.current = togglePaused;
+	useEffect(() => {
+		const offPause = window.electronAPI?.onHudTogglePause?.(() => {
+			togglePausedRef.current();
+		});
+		const offMarker = window.electronAPI?.onHudMarkerAdded?.((count) => {
+			toast.success(t("recording.markerAdded", { count }), { duration: 1500 });
+		});
+		return () => {
+			offPause?.();
+			offMarker?.();
+		};
+	}, [t]);
 
 	const sendHudOverlayHide = useCallback(() => {
 		window.electronAPI?.hudOverlayHide?.();

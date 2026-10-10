@@ -114,7 +114,7 @@ keywords:
 | 播放 / 暫停 | `Space` |
 | 複製區域屬性 | `Ctrl/Cmd + C` |
 | 貼上區域屬性 | `Ctrl/Cmd + V` |
-| 開啟應用程式（在任何應用程式中都有效） | `Ctrl/Cmd + Shift + O` |
+| 開啟應用程式（在任何應用程式中都有效） | `Ctrl/Cmd + Shift + F12` |
 
 固定（無法重新指定）：
 

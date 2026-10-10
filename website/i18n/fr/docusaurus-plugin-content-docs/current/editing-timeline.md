@@ -114,7 +114,7 @@ L'icône d'engrenage de la barre supérieure ouvre la fenêtre des raccourcis, o
 | Lecture / Pause | `Space` |
 | Copier les attributs de la région | `Ctrl/Cmd + C` |
 | Coller les attributs de la région | `Ctrl/Cmd + V` |
-| Ouvrir l'application (fonctionne depuis n'importe quelle application) | `Ctrl/Cmd + Shift + O` |
+| Ouvrir l'application (fonctionne depuis n'importe quelle application) | `Ctrl/Cmd + Shift + F12` |
 
 Fixes (non réaffectables) :
 

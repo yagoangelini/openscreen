@@ -13,7 +13,7 @@ import {
 	shell,
 	Tray,
 } from "electron";
-import { ShortcutBinding } from "../src/lib/shortcuts";
+import type { GlobalShortcutAction, GlobalShortcutsConfig } from "../src/lib/shortcuts";
 import {
 	type AboutFacts,
 	COPYRIGHT,
@@ -42,8 +42,8 @@ import { disableHttpCacheForDevServer } from "./dev-http-cache";
 import { isDiagnosticModeEnabled, mainLogBuffer } from "./diagnostics/main-log-buffer";
 import { buildEditMenuSubmenu, type EditorUndoRedoChannel, routeEditorUndoRedo } from "./edit-menu";
 import {
-	loadAndRegisterGlobalShortcut,
-	registerOpenAppShortcut,
+	loadAndRegisterGlobalShortcuts,
+	registerGlobalShortcuts,
 	unregisterAllGlobalShortcuts,
 } from "./globalShortcut";
 import { mainT, setMainLocale } from "./i18n";
@@ -216,6 +216,68 @@ if (cliCommand) {
 function isEditorWindow(window: BrowserWindow) {
 	return window.webContents.getURL().includes("windowType=editor");
 }
+
+/** The HUD, when it is the open window and its renderer can still answer. */
+function liveHudWindow(): BrowserWindow | null {
+	if (!mainWindow || mainWindow.isDestroyed() || isEditorWindow(mainWindow)) {
+		return null;
+	}
+	return mainWindow.webContents.isCrashed() ? null : mainWindow;
+}
+
+function sendToHudWhenLoaded(hudWindow: BrowserWindow, channel: string, ...args: unknown[]) {
+	const send = () => hudWindow.webContents.send(channel, ...args);
+	if (hudWindow.webContents.isLoading()) {
+		hudWindow.webContents.once("did-finish-load", send);
+	} else {
+		send();
+	}
+}
+
+/**
+ * The system-wide shortcuts. They exist for the moment OpenScreen is NOT the
+ * focused app: the user is in the browser or Teams recording a tutorial, and
+ * reaching for the HUD would put the hand on screen.
+ */
+const globalShortcutHandlers: Record<GlobalShortcutAction, () => void> = {
+	openApp: () => showMainWindow(),
+	recordToggle: () => {
+		if (isRecording) {
+			const hudWindow = liveHudWindow();
+			if (hudWindow) {
+				hudWindow.webContents.send("stop-recording-from-tray");
+				return;
+			}
+			void recordingControls?.stopAndSaveNativeWindowsRecording({ openEditor: true });
+			return;
+		}
+		// From the editor this does what its own "Start recording" does: hand over to
+		// the HUD, which starts the take.
+		if (!liveHudWindow()) {
+			switchToHud();
+		}
+		const hudWindow = liveHudWindow();
+		if (hudWindow) {
+			sendToHudWhenLoaded(hudWindow, "hud-auto-start-recording");
+		}
+	},
+	pauseToggle: () => {
+		const hudWindow = liveHudWindow();
+		if (isRecording && hudWindow) {
+			hudWindow.webContents.send("hud-toggle-pause");
+		}
+	},
+	addMarker: () => {
+		const count = recordingControls?.addRecordingMarker() ?? null;
+		const hudWindow = liveHudWindow();
+		if (count !== null && hudWindow) {
+			hudWindow.webContents.send("hud-marker-added", count);
+		}
+	},
+};
+
+/** Replaced the editor with the HUD; assigned once the windows exist. */
+let switchToHud: () => void = () => showMainWindow();
 
 function sendEditorMenuAction(
 	channel: "menu-load-project" | "menu-save-project" | "menu-save-project-as" | "menu-new-project",
@@ -1280,9 +1342,9 @@ appReady?.then(async () => {
 		updateTrayMenu();
 	});
 
-	ipcMain.handle("update-global-shortcut", (_, binding: ShortcutBinding) => {
-		const success = registerOpenAppShortcut(binding, showMainWindow);
-		return { success };
+	ipcMain.handle("update-global-shortcuts", (_, config: Partial<GlobalShortcutsConfig>) => {
+		const results = registerGlobalShortcuts(config ?? {}, globalShortcutHandlers);
+		return { success: Object.values(results).every(Boolean), results };
 	});
 
 	// The HUD's settings panel shows the running version and, where this copy owns its updates,
@@ -1405,6 +1467,7 @@ appReady?.then(async () => {
 		}
 		showMainWindow();
 	}
+	switchToHud = switchToHudWrapper;
 
 	recordingControls = registerIpcHandlers(
 		createEditorWindowWrapper,
@@ -1433,7 +1496,7 @@ appReady?.then(async () => {
 	// Native STT (whisper.cpp + forced alignment) — single instance per app.
 	registerSttIpc(ipcMain);
 
-	await loadAndRegisterGlobalShortcut(showMainWindow);
+	await loadAndRegisterGlobalShortcuts(globalShortcutHandlers);
 
 	// --bench=<query>: run the export bench instead of the app. Opens the real
 	// editor window (same webPreferences, same preload) pointed at the bench

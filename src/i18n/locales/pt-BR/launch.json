@@ -70,7 +70,8 @@
 		"selectSource": "Por favor, selecione uma fonte para gravar",
 		"systemPicker": "O sistema perguntará o que compartilhar",
 		"inProgress": "Gravando",
-		"saving": "Salvando..."
+		"saving": "Salvando...",
+		"markerAdded": "Marcador {{count}} adicionado"
 	},
 	"language": "Idioma",
 	"systemLanguagePrompt": {

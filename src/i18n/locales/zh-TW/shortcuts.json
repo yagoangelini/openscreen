@@ -16,6 +16,9 @@
 	"registrationFailed": "快捷鍵註冊失敗。可能已被其他應用程式佔用。請嘗試其他按鍵。",
 	"actions": {
 		"openApp": "開啟應用程式",
+		"recordToggle": "開始 / 停止錄製",
+		"pauseToggle": "暫停 / 繼續錄製",
+		"addMarker": "錄製時新增標記",
 		"addZoom": "新增縮放",
 		"addTrim": "新增剪輯",
 		"addSpeed": "新增速度",

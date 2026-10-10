@@ -13,6 +13,9 @@ export interface ProjectMedia {
 	cursorCaptureMode?: CursorCaptureMode;
 }
 
+/** Sidecar beside a take's screen video holding the marker-shortcut positions (media ms). */
+export const RECORDING_MARKERS_SUFFIX = ".markers.json";
+
 export type CursorCaptureMode = "editable-overlay" | "system";
 
 export interface RecordingSession extends ProjectMedia {

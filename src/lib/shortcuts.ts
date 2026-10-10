@@ -1,5 +1,8 @@
 export const SHORTCUT_ACTIONS = [
 	"openApp",
+	"recordToggle",
+	"pauseToggle",
+	"addMarker",
 	"addZoom",
 	"addTrim",
 	"addSpeed",
@@ -14,6 +17,30 @@ export const SHORTCUT_ACTIONS = [
 ] as const;
 
 export type ShortcutAction = (typeof SHORTCUT_ACTIONS)[number];
+
+/**
+ * The actions registered system-wide, so they work while another app has focus --
+ * the whole point while recording a tutorial in that other app.
+ */
+export const GLOBAL_SHORTCUT_ACTIONS = [
+	"openApp",
+	"recordToggle",
+	"pauseToggle",
+	"addMarker",
+] as const;
+
+export type GlobalShortcutAction = (typeof GLOBAL_SHORTCUT_ACTIONS)[number];
+
+export type GlobalShortcutsConfig = Record<GlobalShortcutAction, ShortcutBinding>;
+
+export function pickGlobalShortcuts(config: ShortcutsConfig): GlobalShortcutsConfig {
+	return {
+		openApp: config.openApp,
+		recordToggle: config.recordToggle,
+		pauseToggle: config.pauseToggle,
+		addMarker: config.addMarker,
+	};
+}
 
 export interface ShortcutBinding {
 	key: string;
@@ -108,8 +135,16 @@ export function findConflict(
 	return null;
 }
 
+// Global defaults sit on Ctrl+Shift+F-keys. Ctrl+Shift+O, the old "open app", is
+// VS Code's Go to Symbol and Chrome's bookmark manager, so pressing it while
+// recording a tutorial in either app summoned OpenScreen instead. Alt+F9/F10 are
+// the NVIDIA overlay's, Win+Alt+R is the Game Bar's, and Ctrl+Alt+letter is AltGr
+// on an ABNT2 keyboard.
 export const DEFAULT_SHORTCUTS: ShortcutsConfig = {
-	openApp: { key: "o", ctrl: true, shift: true },
+	openApp: { key: "f12", ctrl: true, shift: true },
+	recordToggle: { key: "f9", ctrl: true, shift: true },
+	pauseToggle: { key: "f10", ctrl: true, shift: true },
+	addMarker: { key: "f8", ctrl: true, shift: true },
 	addZoom: { key: "z" },
 	addTrim: { key: "t" },
 	addSpeed: { key: "s" },
@@ -126,6 +161,9 @@ export const DEFAULT_SHORTCUTS: ShortcutsConfig = {
 
 export const SHORTCUT_LABELS: Record<ShortcutAction, string> = {
 	openApp: "Open App",
+	recordToggle: "Start / Stop Recording",
+	pauseToggle: "Pause / Resume Recording",
+	addMarker: "Add Marker While Recording",
 	addZoom: "Add Zoom",
 	addTrim: "Add Trim",
 	addSpeed: "Add Speed",
@@ -155,13 +193,27 @@ export function matchesShortcut(
 	return true;
 }
 
-/** True when the event target is a text-editing surface where shortcuts should not fire. */
+/**
+ * True when the event target owns its own keys, so editor shortcuts must not fire:
+ * text fields, but also a focused dropdown (typing "p" to jump to "Português" added a
+ * trim region instead) and sliders/comboboxes, whose arrow keys moved the playhead.
+ */
 export function isTextEditingTarget(target: EventTarget | null): boolean {
-	return (
+	if (
 		target instanceof HTMLInputElement ||
 		target instanceof HTMLTextAreaElement ||
-		(target instanceof HTMLElement && target.isContentEditable)
-	);
+		target instanceof HTMLSelectElement
+	) {
+		return true;
+	}
+	if (!(target instanceof HTMLElement)) {
+		return false;
+	}
+	if (target.isContentEditable) {
+		return true;
+	}
+	const role = target.getAttribute("role");
+	return role === "slider" || role === "combobox" || role === "spinbutton" || role === "listbox";
 }
 
 const KEY_LABELS: Record<string, string> = {

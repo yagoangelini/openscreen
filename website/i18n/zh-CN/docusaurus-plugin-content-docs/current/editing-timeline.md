@@ -114,7 +114,7 @@ keywords:
 | 播放 / 暂停 | `Space` |
 | 复制区间属性 | `Ctrl/Cmd + C` |
 | 粘贴区间属性 | `Ctrl/Cmd + V` |
-| 打开应用（在任何应用中均可使用） | `Ctrl/Cmd + Shift + O` |
+| 打开应用（在任何应用中均可使用） | `Ctrl/Cmd + Shift + F12` |
 
 固定快捷键（不可重新分配）：
 

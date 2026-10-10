@@ -77,7 +77,13 @@ export function redo(): boolean {
  * points, so it lives in one function.
  */
 function isTextEditingTarget(node: EventTarget | null): boolean {
-	if (node instanceof HTMLTextAreaElement || node instanceof HTMLInputElement) return true;
+	if (
+		node instanceof HTMLTextAreaElement ||
+		node instanceof HTMLInputElement ||
+		node instanceof HTMLSelectElement
+	) {
+		return true;
+	}
 	return node instanceof HTMLElement && node.isContentEditable;
 }
 

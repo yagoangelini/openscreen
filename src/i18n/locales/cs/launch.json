@@ -70,7 +70,8 @@
 		"selectSource": "Vyberte prosím zdroj pro nahrávání",
 		"systemPicker": "Systém se zeptá, co sdílet",
 		"inProgress": "Nahrávání",
-		"saving": "Ukládání..."
+		"saving": "Ukládání...",
+		"markerAdded": "Značka {{count}} přidána"
 	},
 	"language": "Jazyk",
 	"systemLanguagePrompt": {

@@ -114,7 +114,7 @@ El ícono del engranaje de la barra superior abre el cuadro de diálogo de atajo
 | Reproducir / Pausar | `Space` |
 | Copiar los atributos de la región | `Ctrl/Cmd + C` |
 | Pegar los atributos de la región | `Ctrl/Cmd + V` |
-| Abrir aplicación (funciona desde cualquier app) | `Ctrl/Cmd + Shift + O` |
+| Abrir aplicación (funciona desde cualquier app) | `Ctrl/Cmd + Shift + F12` |
 
 Fijos (no se pueden reasignar):
 

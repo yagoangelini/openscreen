@@ -7,7 +7,12 @@ import {
 	useMemo,
 	useState,
 } from "react";
-import { DEFAULT_SHORTCUTS, mergeWithDefaults, type ShortcutsConfig } from "@/lib/shortcuts";
+import {
+	DEFAULT_SHORTCUTS,
+	mergeWithDefaults,
+	pickGlobalShortcuts,
+	type ShortcutsConfig,
+} from "@/lib/shortcuts";
 import { isMac as getIsMac } from "@/utils/platformUtils";
 
 interface ShortcutsContextValue {
@@ -61,7 +66,9 @@ export function ShortcutsProvider({ children }: { children: ReactNode }) {
 			const configToSave = config ?? shortcuts;
 			await window.electronAPI?.saveShortcuts?.(configToSave);
 
-			const result = await window.electronAPI?.updateGlobalShortcut?.(configToSave.openApp);
+			const result = await window.electronAPI?.updateGlobalShortcuts?.(
+				pickGlobalShortcuts(configToSave),
+			);
 			return result ? result.success : true;
 		},
 		[shortcuts],

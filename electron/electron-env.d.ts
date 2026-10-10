@@ -68,6 +68,10 @@ interface Window {
 		) => () => void;
 		onSourceSelectorClosed: (callback: () => void) => () => void;
 		onAutoStartRecording: (callback: () => void) => () => void;
+		/** The pause shortcut, pressed while another app had focus. Returns an unsubscribe. */
+		onHudTogglePause: (callback: () => void) => () => void;
+		/** The marker shortcut added a marker; `count` is the take's total so far. */
+		onHudMarkerAdded: (callback: (count: number) => void) => () => void;
 		onAiEditionChatEvent: (
 			callback: (event: import("../src/native/contracts").AiEditionChatEvent) => void,
 		) => () => void;
@@ -451,12 +455,9 @@ interface Window {
 		) => Promise<{ success: boolean; error?: string; message?: string }>;
 		getShortcuts: () => Promise<Record<string, unknown> | null>;
 		saveShortcuts: (shortcuts: unknown) => Promise<{ success: boolean; error?: string }>;
-		updateGlobalShortcut: (binding: {
-			key: string;
-			ctrl?: boolean;
-			shift?: boolean;
-			alt?: boolean;
-		}) => Promise<{ success: boolean }>;
+		updateGlobalShortcuts: (
+			config: Partial<import("../src/lib/shortcuts").GlobalShortcutsConfig>,
+		) => Promise<{ success: boolean }>;
 		hudOverlayHide: () => void;
 		hudOverlayClose: () => void;
 		setHudOverlayIgnoreMouseEvents: (ignore: boolean) => void;

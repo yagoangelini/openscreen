@@ -114,7 +114,7 @@ O ícone de engrenagem na barra superior abre a janela de atalhos, onde é poss�
 | Reproduzir / Pausar | `Space` |
 | Copiar atributos da região | `Ctrl/Cmd + C` |
 | Colar atributos da região | `Ctrl/Cmd + V` |
-| Abrir Aplicativo (funciona a partir de qualquer app) | `Ctrl/Cmd + Shift + O` |
+| Abrir Aplicativo (funciona a partir de qualquer app) | `Ctrl/Cmd + Shift + F12` |
 
 Fixos (não podem ser reatribuídos):
 

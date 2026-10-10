@@ -70,7 +70,8 @@
 		"selectSource": "Veuillez sélectionner une source à enregistrer",
 		"systemPicker": "Le système vous demandera quoi partager",
 		"inProgress": "Enregistrement en cours",
-		"saving": "Sauvegarde..."
+		"saving": "Sauvegarde...",
+		"markerAdded": "Repère {{count}} ajouté"
 	},
 	"language": "Langue",
 	"systemLanguagePrompt": {

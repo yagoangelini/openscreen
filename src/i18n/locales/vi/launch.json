@@ -66,7 +66,8 @@
 		"selectSource": "Vui lòng chọn một nguồn để ghi",
 		"systemPicker": "Hệ thống sẽ hỏi bạn muốn chia sẻ gì",
 		"inProgress": "Đang ghi",
-		"saving": "Đang lưu..."
+		"saving": "Đang lưu...",
+		"markerAdded": "Đã thêm điểm đánh dấu {{count}}"
 	},
 	"language": "Ngôn ngữ",
 	"systemLanguagePrompt": {

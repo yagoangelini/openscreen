@@ -37,6 +37,7 @@ import {
 	normalizeProjectMedia,
 	normalizeRecordingSession,
 	type ProjectMedia,
+	RECORDING_MARKERS_SUFFIX,
 	type RecordedVideoAssetInput,
 	type RecordingSession,
 	type StoreRecordedSessionInput,
@@ -753,6 +754,13 @@ let nativeWindowsInterruptionReason: string | null = null;
 let nativeWindowsDiskWatch: ReturnType<typeof setInterval> | null = null;
 /** How often free space is checked during a take. */
 const NATIVE_WINDOWS_DISK_WATCH_MS = 30_000;
+/** Wall clock of the first captured frame, the zero of the take's media time. */
+let nativeWindowsCaptureStartedAtMs: number | null = null;
+/** Paused time so far, kept apart from the cursor's ranges, which only exist in editable mode. */
+let nativeWindowsPausedTotalMs = 0;
+let nativeWindowsPausedSinceMs: number | null = null;
+/** Media-time positions (ms) the user marked with the marker shortcut during this take. */
+let nativeWindowsMarkersMs: number[] = [];
 
 function detachNativeWindowsCaptureOutputDrain() {
 	nativeWindowsCaptureDrainCleanup?.();
@@ -774,6 +782,10 @@ function resetNativeWindowsCaptureState() {
 	nativeWindowsCaptureContainer = null;
 	nativeWindowsTakeEndedEarly = false;
 	nativeWindowsInterruptionReason = null;
+	nativeWindowsCaptureStartedAtMs = null;
+	nativeWindowsPausedTotalMs = 0;
+	nativeWindowsPausedSinceMs = null;
+	nativeWindowsMarkersMs = [];
 	if (nativeWindowsDiskWatch) {
 		clearInterval(nativeWindowsDiskWatch);
 		nativeWindowsDiskWatch = null;
@@ -2979,6 +2991,7 @@ export function registerIpcHandlers(
 
 				await waitForNativeWindowsCaptureStart(proc);
 				const captureStartedAtMs = Date.now();
+				nativeWindowsCaptureStartedAtMs = captureStartedAtMs;
 				nativeWindowsCursorOffsetMs =
 					cursorCaptureMode === "editable-overlay"
 						? Math.max(0, captureStartedAtMs - cursorStartTimeMs)
@@ -3353,6 +3366,7 @@ export function registerIpcHandlers(
 			proc.stdin.write("pause\n");
 			nativeWindowsIsPaused = true;
 			nativeWindowsPauseStartedAtMs = Date.now();
+			nativeWindowsPausedSinceMs = nativeWindowsPauseStartedAtMs;
 			return { success: true };
 		} catch (error) {
 			return { success: false, error: error instanceof Error ? error.message : String(error) };
@@ -3374,6 +3388,10 @@ export function registerIpcHandlers(
 		try {
 			proc.stdin.write("resume\n");
 			completeNativeWindowsCursorPauseRange();
+			if (nativeWindowsPausedSinceMs !== null) {
+				nativeWindowsPausedTotalMs += Date.now() - nativeWindowsPausedSinceMs;
+				nativeWindowsPausedSinceMs = null;
+			}
 			nativeWindowsIsPaused = false;
 			return { success: true };
 		} catch (error) {
@@ -3611,6 +3629,17 @@ export function registerIpcHandlers(
 				await registerRecordingMediaLinks(screenVideoPath, { webcamVideoPath, cursorCaptureMode });
 			} catch (error) {
 				console.warn("[native-wgc] could not register the recording's media links", error);
+			}
+			if (nativeWindowsMarkersMs.length > 0) {
+				try {
+					await fs.writeFile(
+						`${screenVideoPath}${RECORDING_MARKERS_SUFFIX}`,
+						JSON.stringify({ version: 1, markersMs: nativeWindowsMarkersMs }, null, 2),
+						"utf-8",
+					);
+				} catch (error) {
+					console.warn("[native-wgc] could not write the take's markers", error);
+				}
 			}
 			// The journal keeps the session as it was saved, so a take that never
 			// reaches the editor -- the app quit, or the editor never opened -- is
@@ -5181,7 +5210,28 @@ export function registerIpcHandlers(
 		deleteAiEditionChatSession: (projectId, sessionId) => deleteSession(projectId, sessionId),
 	});
 
+	/**
+	 * Marks the current position of a running take, for the marker shortcut. The
+	 * position is media time -- since the first frame, minus pauses -- so it lands
+	 * on the same frame in the editor. Returns the count so far, or null when no
+	 * take is recording (or it is paused, where there is no "now" to mark).
+	 */
+	const addRecordingMarker = (): number | null => {
+		if (
+			!nativeWindowsCaptureProcess ||
+			nativeWindowsCaptureStartedAtMs === null ||
+			nativeWindowsIsPaused ||
+			nativeWindowsStopInFlight
+		) {
+			return null;
+		}
+		const mediaMs = Date.now() - nativeWindowsCaptureStartedAtMs - nativeWindowsPausedTotalMs;
+		nativeWindowsMarkersMs.push(Math.max(0, Math.round(mediaMs)));
+		return nativeWindowsMarkersMs.length;
+	};
+
 	return {
+		addRecordingMarker,
 		isNativeWindowsCaptureActive: () => nativeWindowsCaptureProcess !== null,
 		stopAndSaveNativeWindowsRecording,
 		offerPendingTakeRecovery,

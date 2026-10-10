@@ -114,7 +114,7 @@ Das Zahnradsymbol in der oberen Leiste öffnet den Dialog für Tastenkürzel. Do
 | Play / Pause | `Space` |
 | Bereichsattribute kopieren | `Ctrl/Cmd + C` |
 | Bereichsattribute einfügen | `Ctrl/Cmd + V` |
-| Open App (funktioniert aus jeder App) | `Ctrl/Cmd + Shift + O` |
+| Open App (funktioniert aus jeder App) | `Ctrl/Cmd + Shift + F12` |
 
 Fest (nicht neu belegbar):
 

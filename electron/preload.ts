@@ -3,7 +3,7 @@ import type { NativeLinuxRecordingRequest } from "../src/lib/nativeLinuxRecordin
 import type { NativeMacRecordingRequest } from "../src/lib/nativeMacRecording";
 import type { NativeWindowsRecordingRequest } from "../src/lib/nativeWindowsRecording";
 import type { RecordingSession, StoreRecordedSessionInput } from "../src/lib/recordingSession";
-import type { ShortcutBinding } from "../src/lib/shortcuts";
+import type { GlobalShortcutsConfig } from "../src/lib/shortcuts";
 import type { AiEditionChatEvent } from "../src/native/contracts";
 import { NATIVE_BRIDGE_CHANNEL, type NativeBridgeRequest } from "../src/native/contracts";
 import type { RecordingPrefs } from "./ipc/handlers";
@@ -158,6 +158,16 @@ contextBridge.exposeInMainWorld("electronAPI", {
 		const listener = () => callback();
 		ipcRenderer.on("source-selector-closed", listener);
 		return () => ipcRenderer.removeListener("source-selector-closed", listener);
+	},
+	onHudTogglePause: (callback: () => void) => {
+		const listener = () => callback();
+		ipcRenderer.on("hud-toggle-pause", listener);
+		return () => ipcRenderer.removeListener("hud-toggle-pause", listener);
+	},
+	onHudMarkerAdded: (callback: (count: number) => void) => {
+		const listener = (_event: unknown, count: number) => callback(count);
+		ipcRenderer.on("hud-marker-added", listener);
+		return () => ipcRenderer.removeListener("hud-marker-added", listener);
 	},
 	onAutoStartRecording: (callback: () => void) => {
 		const listener = () => callback();
@@ -452,8 +462,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	saveShortcuts: (shortcuts: unknown) => {
 		return ipcRenderer.invoke("save-shortcuts", shortcuts);
 	},
-	updateGlobalShortcut: (binding: ShortcutBinding) => {
-		return ipcRenderer.invoke("update-global-shortcut", binding);
+	updateGlobalShortcuts: (config: Partial<GlobalShortcutsConfig>) => {
+		return ipcRenderer.invoke("update-global-shortcuts", config);
 	},
 	setLocale: (locale: string) => {
 		return ipcRenderer.invoke("set-locale", locale);
