@@ -167,6 +167,19 @@ function createWindow() {
 
 	const hudWindow = createHudOverlayWindow();
 	mainWindow = hudWindow;
+	// The countdown overlay loads the whole renderer bundle just to draw a number,
+	// and creating it on the first Record click cost seconds -- measured 8.5 s from
+	// click to the first "3" on a busy laptop, before the capture had even begun to
+	// start. Build it, hidden, once the HUD itself has loaded, so the click only has
+	// to show it. It is closed again when the editor opens (see
+	// createEditorWindowWrapper), so a lone editor is still the last window.
+	hudWindow.webContents.once("did-finish-load", () => {
+		setTimeout(() => {
+			if (!hudWindow.isDestroyed() && mainWindow === hudWindow) {
+				createCountdownOverlayWindowWrapper();
+			}
+		}, 1000);
+	});
 	// The HUD is the only thing that can stop a take, so a HUD whose renderer
 	// died mid-recording used to leave the capture running with no way out
 	// but quitting -- and quitting lost the take too. Stop and save it here,
@@ -1102,6 +1115,12 @@ function createEditorWindowWrapper() {
 	}
 	mainWindow = createEditorWindow();
 	editorHasUnsavedChanges = false;
+	// A hidden countdown overlay would keep "all windows closed" from ever firing,
+	// so closing the editor would no longer quit the app. Nothing records from the
+	// editor -- its Record mode hands over to the HUD, which builds a new one.
+	if (countdownOverlayWindow && !countdownOverlayWindow.isDestroyed()) {
+		countdownOverlayWindow.close();
+	}
 
 	mainWindow.on("close", (event) => {
 		if (isForceClosing || !editorHasUnsavedChanges || isCloseConfirmInFlight) return;
