@@ -48,10 +48,6 @@ struct CaptureConfig {
     bool webcamEnabled = false;
     bool preferSoftwareEncoder = false;
     bool hideDesktopIcons = false;
-    // Initialize everything, announce {"event":"armed"}, then wait for "go" on
-    // stdin before the first frame. Lets the app spawn the helper as its
-    // countdown starts instead of after it ends.
-    bool deferStart = false;
     std::string microphoneDeviceId;
     std::string microphoneDeviceName;
     double microphoneGain = 1.0;
@@ -606,7 +602,6 @@ bool parseConfig(const std::string& json, CaptureConfig& config) {
     config.webcamEnabled = findBool(json, "webcamEnabled", false);
     config.preferSoftwareEncoder = findBool(json, "preferSoftwareEncoder", false);
     config.hideDesktopIcons = findBool(json, "hideDesktopIcons", false);
-    config.deferStart = findBool(json, "deferStart", false);
     config.microphoneDeviceId = findString(json, "microphoneDeviceId");
     config.microphoneDeviceName = findString(json, "microphoneDeviceName");
     config.microphoneGain = findDouble(json, "microphoneGain", 1.0);
@@ -1498,43 +1493,6 @@ int wmain(int argc, wchar_t* argv[]) {
         if (!hasVisibleWebcamFrame) {
             std::cerr << "WARNING: Native webcam started but no visible frame was available before screen capture"
                       << std::endl;
-        }
-    }
-
-    // Armed: every device, encoder and the capture item are ready, and nothing
-    // has been recorded. Opening them takes about two seconds on a laptop (the
-    // camera most of it), which used to start only after the countdown had
-    // finished; now it runs during it, and "go" starts the take at once. The
-    // audio mixer drops whatever its queues gathered while waiting when
-    // beginTimeline() runs below, so no pre-roll leaks into the take.
-    if (config.deferStart) {
-        std::cout << "{\"event\":\"armed\",\"schemaVersion\":2}" << std::endl;
-        bool go = false;
-        std::string commandLine;
-        while (std::getline(std::cin, commandLine)) {
-            if (!commandLine.empty() && commandLine.back() == '\r') {
-                commandLine.pop_back();
-            }
-            if (commandLine == "go") {
-                go = true;
-                break;
-            }
-            if (commandLine == "stop" || commandLine == "q" || commandLine == "quit") {
-                break;
-            }
-        }
-        if (!go) {
-            // Cancelled countdown (or the app went away): nothing was recorded.
-            webcamCapture.stop();
-            microphoneCapture.stop();
-            loopbackCapture.stop();
-            stopDeviceWatchIfActive();
-            stopRenderKeepAliveIfActive();
-            if (audioMixer) {
-                audioMixer->stop();
-            }
-            std::cerr << "[armed] cancelled before the first frame" << std::endl;
-            return 0;
         }
     }
 
