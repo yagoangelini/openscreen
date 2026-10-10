@@ -76,6 +76,51 @@ void mixAudioInPlace(
     const AudioInputFormat& format,
     double sourceGain = 1.0);
 
+// A microphone that reports two channels but only carries signal on one -- the
+// usual shape of a USB interface with the mic in input 1 -- would otherwise be
+// recorded in one ear. This watches the long-run level of each channel and, once
+// exactly one of them is live and every other sits 30 dB under it, copies the live
+// one over the rest. A genuinely stereo (or array) mic is left as it is.
+class MicrophoneChannelPicker {
+public:
+    void reset();
+    // Rewrites the interleaved packet in place. Returns the channel being copied
+    // to the others, or -1 while every channel is kept.
+    int process(BYTE* data, DWORD byteCount, const AudioInputFormat& format);
+    int liveChannel() const { return liveChannel_; }
+
+private:
+    std::vector<double> energy_;
+    int liveChannel_ = -1;
+};
+
+// A peak limiter on the final mix: instant attack, ~150 ms release. A boosted
+// microphone over loud system audio is pulled down under the ceiling instead of
+// being flat-topped at full scale; anything under the ceiling passes untouched.
+class PeakLimiter {
+public:
+    static constexpr double kCeiling = 0.95;  // about -0.45 dBFS
+    void reset() { gain_ = 1.0; }
+    void process(double* interleaved, size_t frames, UINT32 channels, UINT32 sampleRate);
+    double gain() const { return gain_; }
+
+private:
+    double gain_ = 1.0;
+};
+
+// Adds `source`, scaled by `gain`, into an interleaved double sum of the same
+// layout, and writes such a sum back out in `format` (clamped at full scale).
+void accumulateAudio(
+    std::vector<double>& sum,
+    const BYTE* source,
+    DWORD byteCount,
+    const AudioInputFormat& format,
+    double gain);
+void writeAudioFromDoubles(
+    const std::vector<double>& samples,
+    const AudioInputFormat& format,
+    std::vector<BYTE>& destination);
+
 class AudioMixer {
 public:
     using OutputCallback = std::function<bool(const BYTE* data, DWORD byteCount, int64_t timestampHns, int64_t durationHns)>;
@@ -124,6 +169,9 @@ private:
     std::vector<BYTE> microphoneQueue_;
     AudioDecimatorState systemDecimator_;
     AudioDecimatorState microphoneDecimator_;
+    MicrophoneChannelPicker microphoneChannels_;
+    std::vector<BYTE> microphoneScratch_;
+    PeakLimiter limiter_;
     std::vector<BYTE> gainBuffer_;
     std::thread thread_;
     std::atomic<bool> stopRequested_ = false;

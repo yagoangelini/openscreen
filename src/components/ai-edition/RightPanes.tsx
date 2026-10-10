@@ -3918,6 +3918,27 @@ export function CursorPane() {
 					/>
 				</div>
 			) : null}
+			{settings.cursorShow ? (
+				<div className={styles.paneRow}>
+					<span className={styles.label}>{ts("cursor.clickRing")}</span>
+					<Toggle
+						ariaLabel={ts("cursor.clickRing")}
+						checked={settings.cursor.clickRing === true}
+						disabled={!hasDocument}
+						onChange={(v) => void set({ cursor: { clickRing: v } })}
+					/>
+				</div>
+			) : null}
+			{/* The shortcuts come from the take's cursor file, so they show with the cursor on or off. */}
+			<div className={styles.paneRow}>
+				<span className={styles.label}>{ts("cursor.showKeystrokes")}</span>
+				<Toggle
+					ariaLabel={ts("cursor.showKeystrokes")}
+					checked={settings.cursor.showKeystrokes === true}
+					disabled={!hasDocument}
+					onChange={(v) => void set({ cursor: { showKeystrokes: v } })}
+				/>
+			</div>
 		</Pane>
 	);
 }

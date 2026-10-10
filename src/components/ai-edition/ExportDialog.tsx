@@ -13,6 +13,7 @@ import { Download, FileVideo, FolderOpen, Loader2, Star } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useScopedT } from "@/contexts/I18nContext";
+import { withDeliveryLoudness } from "@/lib/ai-edition/deliveryLoudness";
 import {
 	collectEffectiveClipDims,
 	type Dims,
@@ -36,6 +37,7 @@ import {
 } from "@/lib/exporter";
 import { calculateMp4ExportSettings, wouldUpscale } from "@/lib/exporter/mp4ExportSettings";
 import { outputFrameCount } from "@/lib/exporter/outputFrameCount";
+import { loadUserPreferences, saveUserPreferences } from "@/lib/userPreferences";
 import {
 	cancelExportNative,
 	exportGifNative,
@@ -48,6 +50,7 @@ import { buildSceneDescription, resolveVisibleClips } from "@/native/sceneDescri
 import { ModalShell } from "./Modals";
 import styles from "./NewEditorShell.module.css";
 import { Toggle } from "./RightPanes";
+import { YouTubeChapters } from "./YouTubeChapters";
 
 type Phase = "idle" | "configuring" | "rendering" | "writing" | "done" | "error";
 
@@ -184,6 +187,9 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 	const [gifFrameRate, setGifFrameRate] = useState<GifFrameRate>(15);
 	const [gifSize, setGifSize] = useState<GifSizePreset>("medium");
 	const [gifLoop, setGifLoop] = useState(true);
+	const [youtubeLoudness, setYoutubeLoudness] = useState(
+		() => loadUserPreferences().youtubeLoudness,
+	);
 	const [phase, setPhase] = useState<Phase>("idle");
 	const [progress, setProgress] = useState<ExportProgress | null>(null);
 	const [error, setError] = useState<string | null>(null);
@@ -445,7 +451,9 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 				// so the clip list needs no pre-rendering pass.
 				const exportClips = clips;
 
-				const sceneJson = JSON.stringify(sceneDesc);
+				const sceneJson = JSON.stringify(
+					format === "mp4" ? withDeliveryLoudness(sceneDesc, youtubeLoudness) : sceneDesc,
+				);
 				const outDims = tierOutputDims(quality);
 				if (exportClips.length === 0) {
 					throw new Error(t("exportDialog.nothingToExport"));
@@ -674,6 +682,20 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 								</div>
 							</div>
 						</div>
+						<div className={styles.paneRow} style={{ margin: "12px 0 0" }}>
+							<span className={styles.label} title={t("exportDialog.youtubeLoudnessHint")}>
+								{t("exportDialog.youtubeLoudness")}
+							</span>
+							<Toggle
+								checked={youtubeLoudness}
+								ariaLabel={t("exportDialog.youtubeLoudness")}
+								disabled={isBusy}
+								onChange={(value) => {
+									setYoutubeLoudness(value);
+									saveUserPreferences({ youtubeLoudness: value });
+								}}
+							/>
+						</div>
 					</section>
 				) : (
 					<section style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -747,6 +769,8 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 							.catch((err) => console.warn("[export] could not record the star answer:", err));
 					}}
 				/>
+
+				{phase === "done" && document ? <YouTubeChapters document={document} /> : null}
 
 				{cpuCompositor && phase !== "done" && (
 					// Placed next to the export button, not in a toast: it has to land while

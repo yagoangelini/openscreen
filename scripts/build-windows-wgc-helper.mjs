@@ -91,6 +91,14 @@ fs.copyFileSync(outputPath, distributablePath);
 const cursorSamplerDistributablePath = path.join(BIN_DIR, "cursor-sampler.exe");
 fs.copyFileSync(cursorSamplerOutputPath, cursorSamplerDistributablePath);
 
+const ocrScanOutputPath = path.join(BUILD_DIR, "ocr-scan.exe");
+if (!fs.existsSync(ocrScanOutputPath)) {
+	throw new Error(`WGC helper build completed but ${ocrScanOutputPath} was not found.`);
+}
+const ocrScanDistributablePath = path.join(BIN_DIR, "ocr-scan.exe");
+fs.copyFileSync(ocrScanOutputPath, ocrScanDistributablePath);
+console.log(`Copied ${ocrScanDistributablePath}`);
+
 console.log(`Built ${outputPath}`);
 console.log(`Copied ${distributablePath}`);
 console.log(`Built ${cursorSamplerOutputPath}`);

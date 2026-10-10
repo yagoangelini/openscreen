@@ -198,6 +198,8 @@ interface LegacyShape {
 	/** Written by builds with one "always use the arrow" switch; read as every kind. */
 	cursorAlwaysArrow?: boolean;
 	cursorClickImpact?: boolean;
+	cursorShowKeystrokes?: boolean;
+	cursorClickRing?: boolean;
 	cursorShow?: boolean;
 	cursorAutoHide?: boolean;
 	cursorTheme?: string;
@@ -249,6 +251,12 @@ export function getEditorSettings(doc: AxcutDocument | null | undefined): Editor
 			defaults.cursor.asArrow,
 		),
 		clickImpact: bool(legacy?.cursorClickImpact, DEFAULT_EDITOR_SETTINGS.cursor.clickImpact),
+		// Off for a project from before the plates: it was made without them. A new one is
+		// created with the switch on (`DocumentService.createProject`). Present only when on,
+		// so every other project reads exactly the settings it did before the switch existed.
+		...(legacy?.cursorShowKeystrokes === true ? { showKeystrokes: true } : {}),
+		// The same for the click highlight.
+		...(legacy?.cursorClickRing === true ? { clickRing: true } : {}),
 		autoHide: bool(legacy?.cursorAutoHide, DEFAULT_EDITOR_SETTINGS.cursorAutoHide),
 	};
 
@@ -405,6 +413,8 @@ function nextLegacy(current: LegacyShape | null, patch: EditorSettingsPatch): Le
 			delete next.cursorAlwaysArrow;
 		}
 		if (c.clickImpact !== undefined) next.cursorClickImpact = c.clickImpact;
+		if (c.showKeystrokes !== undefined) next.cursorShowKeystrokes = c.showKeystrokes;
+		if (c.clickRing !== undefined) next.cursorClickRing = c.clickRing;
 		if (c.theme !== undefined) next.cursorTheme = c.theme;
 		if (c.show !== undefined) next.cursorShow = c.show;
 		if (c.autoHide !== undefined) next.cursorAutoHide = c.autoHide;

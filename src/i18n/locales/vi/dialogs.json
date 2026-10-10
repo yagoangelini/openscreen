@@ -98,5 +98,12 @@
 		"later": "Để sau",
 		"forget": "Bỏ qua",
 		"takeInterrupted": "Bản ghi đã dừng sớm do lỗi. Mọi thứ đã ghi đến lúc đó đều đã được lưu."
+	},
+	"exportRunning": {
+		"title": "Đang xuất",
+		"message": "Một lượt xuất vẫn đang chạy.",
+		"detail": "Đóng trình chỉnh sửa sẽ hủy lượt xuất và video sẽ không được lưu.",
+		"keep": "Tiếp tục xuất",
+		"cancelAndClose": "Hủy xuất và đóng"
 	}
 }

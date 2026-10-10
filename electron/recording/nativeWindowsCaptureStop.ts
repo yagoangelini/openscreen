@@ -122,6 +122,39 @@ export function readMicrophoneDefaulted(output: string) {
 	return output.includes('"code":"microphone-defaulted"');
 }
 
+export type AudioDeviceDrop = {
+	source: "microphone" | "system-audio";
+	/** How long the take went without it, or null if it never came back. */
+	silentMs: number | null;
+};
+
+/**
+ * Every time an audio device died mid-take, and whether the helper got it back.
+ *
+ * The take carries on through a drop -- the mixer keeps the clock and fills the
+ * gap with silence -- so the recording is fine but has a hole in its sound, and
+ * the user should hear about it before editing rather than on YouTube.
+ */
+export function readAudioDeviceDrops(output: string): AudioDeviceDrop[] {
+	const drops: AudioDeviceDrop[] = [];
+	const pattern =
+		/"code":"audio-device-(lost|reopened)","source":"(microphone|system-audio)"(?:,"silentMs":(\d+))?/g;
+	for (const match of output.matchAll(pattern)) {
+		const source = match[2] as AudioDeviceDrop["source"];
+		if (match[1] === "lost") {
+			drops.push({ source, silentMs: null });
+			continue;
+		}
+		for (let index = drops.length - 1; index >= 0; index--) {
+			if (drops[index].source === source && drops[index].silentMs === null) {
+				drops[index].silentMs = Number(match[3] ?? 0);
+				break;
+			}
+		}
+	}
+	return drops;
+}
+
 /**
  * Did the macOS helper record without the microphone it was asked for?
  *

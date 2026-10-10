@@ -98,5 +98,12 @@
 		"later": "Plus tard",
 		"forget": "L'oublier",
 		"takeInterrupted": "L'enregistrement s'est arrêté plus tôt à cause d'une erreur. Tout ce qui a été enregistré jusque-là a été conservé."
+	},
+	"exportRunning": {
+		"title": "Export en cours",
+		"message": "Un export est toujours en cours.",
+		"detail": "Fermer l'éditeur l'annule, et la vidéo ne sera pas enregistrée.",
+		"keep": "Continuer l'export",
+		"cancelAndClose": "Annuler l'export et fermer"
 	}
 }

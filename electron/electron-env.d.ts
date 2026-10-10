@@ -73,6 +73,10 @@ interface Window {
 		onAutoStartRecording: (callback: () => void) => () => void;
 		/** The folder new takes are written to, resolved; `isDefault` when none was chosen. */
 		getRecordingsFolder: () => Promise<{ folder: string; isDefault: boolean }>;
+		/** Opens Windows' notification settings (Do not disturb). Windows only. */
+		openNotificationSettings: () => Promise<{ success: boolean }>;
+		/** OCR over a take, for the privacy blur: `ocr-scan.exe`'s NDJSON. Windows only. */
+		scanRecordingText?: (videoPath: string) => Promise<import("./recording/ocrScan").OcrScanResult>;
 		chooseRecordingsFolder: () => Promise<{ canceled: true } | { canceled: false; folder: string }>;
 		openRecordingsFolder: () => Promise<{ success: boolean }>;
 		/** The pause shortcut, pressed while another app had focus. Returns an unsubscribe. */
@@ -174,6 +178,8 @@ interface Window {
 			 * saved without it. Still a success — the screen video is intact.
 			 */
 			webcamDropped?: boolean;
+			/** Audio devices that died mid-take; silentMs is null for one that never came back. */
+			audioDrops?: import("./recording/nativeWindowsCaptureStop").AudioDeviceDrop[];
 			/**
 			 * The take ended before the user stopped it (the helper failed or
 			 * exited). Still a success: what was recorded until then was saved.

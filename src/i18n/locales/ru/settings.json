@@ -428,7 +428,9 @@
 		"autoHide": "Скрывать при неактивности",
 		"bounceNone": "Нет",
 		"bounceLight": "Лёгкий",
-		"bounceStrong": "Сильный"
+		"bounceStrong": "Сильный",
+		"showKeystrokes": "Сочетания клавиш на экране",
+		"clickRing": "Подсветка щелчков"
 	},
 	"export": {
 		"gifButton": "Экспорт GIF",

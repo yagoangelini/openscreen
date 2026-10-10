@@ -57,7 +57,11 @@
 		"diskSpaceLow": "Poco spazio su disco: circa {{minutes}} minuti di registrazione disponibili.",
 		"crashProtectionOff": "La protezione dai crash è disattivata per questa registrazione: se l'app si chiude all'improvviso, la ripresa non potrà essere recuperata.",
 		"takeStoppedDiskFull": "La registrazione è stata interrotta perché il disco è quasi pieno. Tutto ciò che è stato registrato è stato salvato.",
-		"saveFailedFileKept": "Non è stato possibile aprire la registrazione nell'editor, ma il file è stato conservato nella cartella delle registrazioni."
+		"saveFailedFileKept": "Non è stato possibile aprire la registrazione nell'editor, ma il file è stato conservato nella cartella delle registrazioni.",
+		"audioDeviceLostMicrophone": "Il microfono si è scollegato durante la registrazione e non è tornato: il resto della ripresa non ha voce.",
+		"audioDeviceLostSystemAudio": "Il dispositivo audio di sistema si è scollegato durante la registrazione e non è tornato: il resto della ripresa non ha l'audio del computer.",
+		"audioDeviceBackMicrophone": "Il microfono si è scollegato ed è tornato: circa {{seconds}} s della ripresa non hanno voce.",
+		"audioDeviceBackSystemAudio": "Il dispositivo audio di sistema si è scollegato ed è tornato: circa {{seconds}} s della ripresa non hanno l'audio del computer."
 	},
 	"emptyState": {
 		"title": "Nessun progetto aperto",
@@ -150,7 +154,10 @@
 		"defaultRecordingsFolder": "Usa predefinita",
 		"countdown": "Conto alla rovescia",
 		"countdownNone": "Nessuno",
-		"countdownSeconds": "{{seconds}} s"
+		"countdownSeconds": "{{seconds}} s",
+		"doNotDisturb": "Non disturbare",
+		"doNotDisturbHint": "Attivalo prima di registrare così le notifiche di Teams e Outlook non finiscono nel video.",
+		"openNotificationSettings": "Apri impostazioni"
 	},
 	"mediaStage": {
 		"openProjectFirst": "Apri prima un progetto",
@@ -182,7 +189,9 @@
 		"noAudioTrack": "Nessuna traccia audio",
 		"noAudioTrackHint": "Questo contenuto non ha una traccia audio: non c'è nulla da trascrivere.",
 		"noSpeechDetected": "Nessun parlato rilevato",
-		"autoTranscribe": "Trascrivi automaticamente le nuove registrazioni all'apertura dell'editor"
+		"autoTranscribe": "Trascrivi automaticamente le nuove registrazioni all'apertura dell'editor",
+		"autoRedact": "Sfoca i dati sensibili nelle nuove registrazioni",
+		"autoRedactHint": "Dopo una ripresa, l'OCR trova e-mail, domini del tenant, GUID, segreti e numeri di telefono sullo schermo e li sfoca. Ogni sfocatura è una normale annotazione da tenere o eliminare. Funziona offline."
 	},
 	"exportDialog": {
 		"title": "Esporta",
@@ -222,7 +231,9 @@
 		"failedToWriteFile": "Impossibile scrivere il file",
 		"qualityUpscaleWarning": "Upscaling",
 		"exportedVideoOf": "di video esportato in",
-		"nothingToExport": "Niente da esportare: la timeline è vuota."
+		"nothingToExport": "Niente da esportare: la timeline è vuota.",
+		"youtubeLoudness": "Volume YouTube (−14 LUFS)",
+		"youtubeLoudnessHint": "YouTube riproduce ogni video a −14 LUFS. Disattivato, l'esportazione resta ai −16 LUFS della voce e lì suona 2 dB più bassa."
 	},
 	"inspector": {
 		"resetFocusPoint": "Reimposta punto di messa a fuoco",
@@ -431,7 +442,8 @@
 		"addVideoBeforeExport": "Aggiungi un video al progetto prima di esportare.",
 		"regionPasted": "Regione incollata",
 		"regionCopied": "Regione copiata",
-		"cameraCheckFailed": "Impossibile cercare una registrazione della fotocamera vicino a {{name}}"
+		"cameraCheckFailed": "Impossibile cercare una registrazione della fotocamera vicino a {{name}}",
+		"sensitiveBlurred": "{{count}} aree sensibili sono state sfocate automaticamente. Controllale sulla timeline."
 	},
 	"exportPipeline": {
 		"quality1440p": "1440p",
@@ -458,5 +470,13 @@
 		"replanDone": "Zoom automatici pianificati: {{count}}",
 		"replanNone": "Nessun momento per uno zoom automatico trovato",
 		"replanFailed": "Impossibile pianificare gli zoom automatici"
+	},
+	"youtubeChapters": {
+		"title": "Capitoli di YouTube",
+		"copy": "Copia capitoli",
+		"copied": "Capitoli copiati: incollali nella descrizione",
+		"copyFailed": "Impossibile copiare i capitoli",
+		"needThree": "YouTube mostra i capitoli solo se sono almeno 3. Aggiungi marcatori (Ctrl+Maiusc+F8) mentre registri.",
+		"fallbackTitle": "Capitolo {{index}}"
 	}
 }

@@ -235,3 +235,107 @@ describe("WindowsNativeRecordingSession input events", () => {
 		expect(samples[0].interactionType).toBe("click");
 	});
 });
+
+describe("WindowsNativeRecordingSession helper resilience", () => {
+	const REAL_PLATFORM = process.platform;
+	const setPlatform = (value: NodeJS.Platform) =>
+		Object.defineProperty(process, "platform", { value, configurable: true });
+
+	beforeEach(() => {
+		setPlatform("win32");
+		process.env.OPENSCREEN_CURSOR_SAMPLER_EXE = __filename;
+		dipToScreenRect.mockReturnValue(PHYSICAL_BOUNDS);
+		vi.spyOn(console, "error").mockImplementation(() => undefined);
+		vi.spyOn(console, "info").mockImplementation(() => undefined);
+	});
+
+	afterEach(() => {
+		vi.useRealTimers();
+		setPlatform(REAL_PLATFORM);
+		process.env.OPENSCREEN_CURSOR_SAMPLER_EXE = undefined;
+		spawn.mockReset();
+		dipToScreenRect.mockReset();
+		vi.restoreAllMocks();
+	});
+
+	const tick = (timestampMs: number) => ({
+		type: "sample",
+		timestampMs,
+		x: 960,
+		y: 540,
+		visible: true,
+		handle: null,
+		asset: null,
+	});
+	const push = (stdout: Readable, line: Record<string, unknown>) =>
+		stdout.push(`${JSON.stringify(line)}\n`);
+	const flush = () => new Promise((resolve) => setImmediate(resolve));
+
+	const startSession = async () => {
+		const first = fakeHelper();
+		spawn.mockReturnValueOnce(first.child);
+		const session = new WindowsNativeRecordingSession({
+			getDisplayBounds: () => DIP_BOUNDS,
+			maxSamples: Number.POSITIVE_INFINITY,
+			sampleIntervalMs: 33,
+			startTimeMs: 1000,
+		});
+		const started = session.start();
+		push(first.stdout, { type: "ready", timestampMs: 1000 });
+		await started;
+		return { session, first };
+	};
+
+	it("keeps the helper through a secure-desktop error once the take is running", async () => {
+		const { session, first } = await startSession();
+		push(first.stdout, tick(1100));
+		push(first.stdout, { type: "error", timestampMs: 1133, message: "GetCursorInfo failed" });
+		push(first.stdout, tick(1166));
+		await flush();
+		expect(first.child.kill).not.toHaveBeenCalled();
+		const samples = (await session.stop()).samples;
+		expect(samples.map((s) => s.timeMs)).toEqual([100, 166]);
+	});
+
+	it("brings a helper that died mid-take back, and keeps one timeline", async () => {
+		vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+		const { session, first } = await startSession();
+		push(first.stdout, tick(1100));
+		await flush();
+		const second = fakeHelper();
+		spawn.mockReturnValueOnce(second.child);
+		first.child.emit("exit", 3221225477, null);
+		vi.advanceTimersByTime(500);
+		expect(spawn).toHaveBeenCalledTimes(2);
+		push(second.stdout, { type: "ready", timestampMs: 2000 });
+		push(second.stdout, tick(2100));
+		await flush();
+		const samples = (await session.stop()).samples;
+		expect(samples.map((s) => s.timeMs)).toEqual([100, 1100]);
+		expect(second.child.kill).toHaveBeenCalled();
+	});
+
+	it("does not restart a helper the take stopped", async () => {
+		vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+		const { session, first } = await startSession();
+		await session.stop();
+		first.child.emit("exit", null, "SIGTERM");
+		vi.advanceTimersByTime(5000);
+		expect(spawn).toHaveBeenCalledTimes(1);
+	});
+
+	it("gives up after five restarts", async () => {
+		vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+		const { session, first } = await startSession();
+		let current = first;
+		for (let restart = 0; restart < 7; restart++) {
+			const next = fakeHelper();
+			spawn.mockReturnValueOnce(next.child);
+			current.child.emit("exit", 1, null);
+			vi.advanceTimersByTime(500);
+			current = next;
+		}
+		expect(spawn).toHaveBeenCalledTimes(6);
+		await session.stop();
+	});
+});

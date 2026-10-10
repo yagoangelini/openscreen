@@ -57,7 +57,11 @@
 		"diskSpaceLow": "Мало места на диске: хватит примерно на {{minutes}} мин записи.",
 		"crashProtectionOff": "Защита от сбоев для этой записи отключена: если приложение неожиданно закроется, запись не удастся восстановить.",
 		"takeStoppedDiskFull": "Запись остановлена, потому что диск почти заполнен. Всё записанное сохранено.",
-		"saveFailedFileKept": "Не удалось открыть запись в редакторе, но её файл сохранён в папке записей."
+		"saveFailedFileKept": "Не удалось открыть запись в редакторе, но её файл сохранён в папке записей.",
+		"audioDeviceLostMicrophone": "Микрофон отключился во время записи и не вернулся: остаток дубля без голоса.",
+		"audioDeviceLostSystemAudio": "Системное аудиоустройство отключилось во время записи и не вернулось: остаток дубля без звука компьютера.",
+		"audioDeviceBackMicrophone": "Микрофон отключился и вернулся: около {{seconds}} с дубля без голоса.",
+		"audioDeviceBackSystemAudio": "Системное аудиоустройство отключилось и вернулось: около {{seconds}} с дубля без звука компьютера."
 	},
 	"emptyState": {
 		"title": "Нет открытых проектов",
@@ -150,7 +154,10 @@
 		"defaultRecordingsFolder": "По умолчанию",
 		"countdown": "Обратный отсчёт",
 		"countdownNone": "Нет",
-		"countdownSeconds": "{{seconds}} с"
+		"countdownSeconds": "{{seconds}} с",
+		"doNotDisturb": "Не беспокоить",
+		"doNotDisturbHint": "Включите перед записью, чтобы уведомления Teams и Outlook не попали в видео.",
+		"openNotificationSettings": "Открыть параметры"
 	},
 	"mediaStage": {
 		"openProjectFirst": "Сначала откройте проект",
@@ -182,7 +189,9 @@
 		"noAudioTrack": "Нет аудиодорожки",
 		"noAudioTrackHint": "В этом медиафайле нет аудиодорожки — расшифровывать нечего.",
 		"noSpeechDetected": "Речь не обнаружена",
-		"autoTranscribe": "Автоматически расшифровывать новые записи при открытии редактора"
+		"autoTranscribe": "Автоматически расшифровывать новые записи при открытии редактора",
+		"autoRedact": "Размывать конфиденциальные данные в новых записях",
+		"autoRedactHint": "После записи OCR находит на экране адреса почты, домены тенанта, GUID, секреты и номера телефонов и размывает их. Каждое размытие — обычная аннотация, её можно оставить или удалить. Работает офлайн."
 	},
 	"exportDialog": {
 		"title": "Экспорт",
@@ -222,7 +231,9 @@
 		"failedToWriteFile": "Не удалось записать файл",
 		"qualityUpscaleWarning": "Апскейл",
 		"exportedVideoOf": "видео экспортировано за",
-		"nothingToExport": "Нечего экспортировать — таймлайн пуст."
+		"nothingToExport": "Нечего экспортировать — таймлайн пуст.",
+		"youtubeLoudness": "Громкость YouTube (−14 LUFS)",
+		"youtubeLoudnessHint": "YouTube воспроизводит все видео на −14 LUFS. Если выключено, экспорт остаётся на −16 LUFS голоса и звучит там на 2 дБ тише."
 	},
 	"inspector": {
 		"resetFocusPoint": "Сбросить точку фокуса",
@@ -431,7 +442,8 @@
 		"addVideoBeforeExport": "Add a video to the project before exporting.",
 		"regionPasted": "Region pasted",
 		"regionCopied": "Region copied",
-		"cameraCheckFailed": "Could not check for a camera recording near {{name}}"
+		"cameraCheckFailed": "Could not check for a camera recording near {{name}}",
+		"sensitiveBlurred": "Автоматически размыто областей с конфиденциальными данными: {{count}}. Проверьте их на шкале времени."
 	},
 	"exportPipeline": {
 		"quality1440p": "1440p",
@@ -458,5 +470,13 @@
 		"replanDone": "Запланировано автоматических зумов: {{count}}",
 		"replanNone": "Не найдено моментов для автоматического зума",
 		"replanFailed": "Не удалось спланировать автоматические зумы"
+	},
+	"youtubeChapters": {
+		"title": "Главы YouTube",
+		"copy": "Копировать главы",
+		"copied": "Главы скопированы — вставьте их в описание видео",
+		"copyFailed": "Не удалось скопировать главы",
+		"needThree": "YouTube показывает главы, только если их не меньше 3. Ставьте маркеры (Ctrl+Shift+F8) во время записи.",
+		"fallbackTitle": "Глава {{index}}"
 	}
 }

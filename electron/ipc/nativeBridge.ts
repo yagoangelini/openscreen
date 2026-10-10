@@ -23,7 +23,7 @@ import { CursorService } from "../native-bridge/services/cursorService";
 import { ProjectService } from "../native-bridge/services/projectService";
 import { SystemService } from "../native-bridge/services/systemService";
 import { createNativeBridgeState } from "../native-bridge/store";
-import { GifExportJobs, isGifExportId } from "./gifExportJobs";
+import { exportJobs, isGifExportId } from "./gifExportJobs";
 
 export interface NativeBridgeContext {
 	getPlatform: () => NodeJS.Platform;
@@ -246,7 +246,7 @@ export function registerNativeBridgeHandlers(context: NativeBridgeContext) {
 		deleteSession: context.deleteAiEditionChatSession,
 	});
 
-	const gifExportJobs = new GifExportJobs();
+	const gifExportJobs = exportJobs;
 	ipcMain.handle(NATIVE_BRIDGE_CHANNEL, async (event, request: unknown) => {
 		if (!isBridgeRequest(request)) {
 			return createErrorResponse(undefined, "INVALID_REQUEST", "Invalid native bridge request.");

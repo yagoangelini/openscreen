@@ -428,7 +428,9 @@
 		"autoHide": "闲置时隐藏",
 		"bounceNone": "无",
 		"bounceLight": "轻",
-		"bounceStrong": "强"
+		"bounceStrong": "强",
+		"showKeystrokes": "屏幕显示快捷键",
+		"clickRing": "点击高亮"
 	},
 	"export": {
 		"gifButton": "导出 GIF",

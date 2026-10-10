@@ -57,7 +57,11 @@
 		"diskSpaceLow": "Low disk space: room for about {{minutes}} minutes of recording.",
 		"crashProtectionOff": "Crash protection is off for this recording: if the app closes unexpectedly, the take cannot be recovered.",
 		"takeStoppedDiskFull": "The recording was stopped because the disk is almost full. Everything recorded so far was saved.",
-		"saveFailedFileKept": "The recording could not be opened in the editor, but its file was kept in the recordings folder."
+		"saveFailedFileKept": "The recording could not be opened in the editor, but its file was kept in the recordings folder.",
+		"audioDeviceLostMicrophone": "The microphone disconnected during the recording and did not come back: the rest of the take has no voice.",
+		"audioDeviceLostSystemAudio": "The system audio device disconnected during the recording and did not come back: the rest of the take has no computer sound.",
+		"audioDeviceBackMicrophone": "The microphone disconnected and came back: about {{seconds}} s of the take have no voice.",
+		"audioDeviceBackSystemAudio": "The system audio device disconnected and came back: about {{seconds}} s of the take have no computer sound."
 	},
 	"emptyState": {
 		"title": "Start with a recording",
@@ -150,7 +154,10 @@
 		"defaultRecordingsFolder": "Use default",
 		"countdown": "Countdown",
 		"countdownNone": "None",
-		"countdownSeconds": "{{seconds}} s"
+		"countdownSeconds": "{{seconds}} s",
+		"doNotDisturb": "Do not disturb",
+		"doNotDisturbHint": "Turn it on before recording so Teams and Outlook notifications stay out of the video.",
+		"openNotificationSettings": "Open settings"
 	},
 	"mediaStage": {
 		"openProjectFirst": "Open a project first",
@@ -182,7 +189,9 @@
 		"noAudioTrack": "No audio track",
 		"noAudioTrackHint": "This media has no audio track — there is nothing to transcribe.",
 		"noSpeechDetected": "No speech detected",
-		"autoTranscribe": "Transcribe new recordings automatically when the editor opens"
+		"autoTranscribe": "Transcribe new recordings automatically when the editor opens",
+		"autoRedact": "Blur sensitive data in new recordings",
+		"autoRedactHint": "After a take, OCR finds e-mails, tenant domains, GUIDs, secrets and phone numbers on screen and blurs them. Each blur is a regular annotation you can keep or delete. Runs offline."
 	},
 	"exportDialog": {
 		"title": "Export",
@@ -222,7 +231,9 @@
 		"exportFailed": "Export failed",
 		"failedToWriteFile": "Failed to write file",
 		"qualityUpscaleWarning": "Upscale",
-		"nothingToExport": "Nothing to export — the timeline is empty."
+		"nothingToExport": "Nothing to export — the timeline is empty.",
+		"youtubeLoudness": "YouTube loudness (−14 LUFS)",
+		"youtubeLoudnessHint": "YouTube plays every video at −14 LUFS. Off, the export keeps the −16 LUFS the voice is levelled to, and plays 2 dB softer there."
 	},
 	"inspector": {
 		"resetFocusPoint": "Reset focus point",
@@ -431,7 +442,8 @@
 		"addVideoBeforeExport": "Add a video to the project before exporting.",
 		"regionPasted": "Region pasted",
 		"regionCopied": "Region copied",
-		"cameraCheckFailed": "Could not check for a camera recording near {{name}}"
+		"cameraCheckFailed": "Could not check for a camera recording near {{name}}",
+		"sensitiveBlurred": "{{count}} sensitive areas were blurred automatically. Check them on the timeline."
 	},
 	"exportPipeline": {
 		"quality1440p": "1440p",
@@ -458,5 +470,13 @@
 		"replanDone": "Automatic zooms planned: {{count}}",
 		"replanNone": "No moment for an automatic zoom was found",
 		"replanFailed": "Could not plan the automatic zooms"
+	},
+	"youtubeChapters": {
+		"title": "YouTube chapters",
+		"copy": "Copy chapters",
+		"copied": "Chapters copied — paste them into the video description",
+		"copyFailed": "Could not copy the chapters",
+		"needThree": "YouTube shows chapters only with at least 3. Add markers (Ctrl+Shift+F8) while recording.",
+		"fallbackTitle": "Chapter {{index}}"
 	}
 }

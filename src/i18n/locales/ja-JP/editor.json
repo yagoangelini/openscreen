@@ -57,7 +57,11 @@
 		"diskSpaceLow": "ディスクの空き容量が少なくなっています：約 {{minutes}} 分録画できます。",
 		"crashProtectionOff": "この録画ではクラッシュ保護がオフです。アプリが突然終了すると、録画を復元できません。",
 		"takeStoppedDiskFull": "ディスクがほぼいっぱいのため録画を停止しました。それまでの録画は保存されています。",
-		"saveFailedFileKept": "録画をエディターで開けませんでしたが、ファイルは録画フォルダーに残っています。"
+		"saveFailedFileKept": "録画をエディターで開けませんでしたが、ファイルは録画フォルダーに残っています。",
+		"audioDeviceLostMicrophone": "録画中にマイクが切断され、戻りませんでした。以降の音声は入っていません。",
+		"audioDeviceLostSystemAudio": "録画中にシステム音声デバイスが切断され、戻りませんでした。以降の PC の音は入っていません。",
+		"audioDeviceBackMicrophone": "マイクが切断され、再接続されました。約 {{seconds}} 秒間の音声が入っていません。",
+		"audioDeviceBackSystemAudio": "システム音声デバイスが切断され、再接続されました。約 {{seconds}} 秒間の PC の音が入っていません。"
 	},
 	"emptyState": {
 		"title": "プロジェクトが開かれていません",
@@ -150,7 +154,10 @@
 		"defaultRecordingsFolder": "既定に戻す",
 		"countdown": "カウントダウン",
 		"countdownNone": "なし",
-		"countdownSeconds": "{{seconds}} 秒"
+		"countdownSeconds": "{{seconds}} 秒",
+		"doNotDisturb": "応答不可",
+		"doNotDisturbHint": "Teams や Outlook の通知が動画に入らないよう、録画前にオンにしてください。",
+		"openNotificationSettings": "設定を開く"
 	},
 	"mediaStage": {
 		"openProjectFirst": "先にプロジェクトを開いてください",
@@ -182,7 +189,9 @@
 		"noAudioTrack": "音声トラックがありません",
 		"noAudioTrackHint": "このメディアには音声トラックがないため、文字起こしできません。",
 		"noSpeechDetected": "音声が検出されませんでした",
-		"autoTranscribe": "エディターを開いたときに新しい録画を自動で文字起こしする"
+		"autoTranscribe": "エディターを開いたときに新しい録画を自動で文字起こしする",
+		"autoRedact": "新しい録画の機密情報をぼかす",
+		"autoRedactHint": "録画後、OCR が画面上のメールアドレス、テナントのドメイン、GUID、シークレット、電話番号を見つけてぼかします。各ぼかしは通常の注釈なので、残すことも削除することもできます。オフラインで動作します。"
 	},
 	"exportDialog": {
 		"title": "エクスポート",
@@ -222,7 +231,9 @@
 		"failedToWriteFile": "ファイルの書き込みに失敗しました",
 		"qualityUpscaleWarning": "アップスケール",
 		"exportedVideoOf": "の動画を書き出しました。所要時間:",
-		"nothingToExport": "書き出す内容がありません — タイムラインが空です。"
+		"nothingToExport": "書き出す内容がありません — タイムラインが空です。",
+		"youtubeLoudness": "YouTube のラウドネス (−14 LUFS)",
+		"youtubeLoudnessHint": "YouTube はすべての動画を −14 LUFS で再生します。オフにすると声の −16 LUFS のまま書き出され、YouTube では 2 dB 小さく聞こえます。"
 	},
 	"inspector": {
 		"resetFocusPoint": "フォーカスポイントをリセット",
@@ -431,7 +442,8 @@
 		"addVideoBeforeExport": "Add a video to the project before exporting.",
 		"regionPasted": "Region pasted",
 		"regionCopied": "Region copied",
-		"cameraCheckFailed": "Could not check for a camera recording near {{name}}"
+		"cameraCheckFailed": "Could not check for a camera recording near {{name}}",
+		"sensitiveBlurred": "{{count}} か所の機密情報を自動でぼかしました。タイムラインで確認してください。"
 	},
 	"exportPipeline": {
 		"quality1440p": "1440p",
@@ -458,5 +470,13 @@
 		"replanDone": "自動ズームを {{count}} 件計画しました",
 		"replanNone": "自動ズームに適した場面が見つかりませんでした",
 		"replanFailed": "自動ズームを計画できませんでした"
+	},
+	"youtubeChapters": {
+		"title": "YouTube チャプター",
+		"copy": "チャプターをコピー",
+		"copied": "チャプターをコピーしました。動画の説明欄に貼り付けてください",
+		"copyFailed": "チャプターをコピーできませんでした",
+		"needThree": "YouTube のチャプターは 3 つ以上で表示されます。録画中にマーカー (Ctrl+Shift+F8) を追加してください。",
+		"fallbackTitle": "チャプター {{index}}"
 	}
 }

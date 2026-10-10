@@ -15,6 +15,10 @@ import path from "node:path";
 import { createId } from "../../src/lib/ai-edition/document/ids";
 import { removeClip } from "../../src/lib/ai-edition/document/timeline";
 import {
+	keystrokesFromCursorSamples,
+	SHOW_KEYSTROKES_KEY,
+} from "../../src/lib/ai-edition/keystrokes";
+import {
 	type AxcutAsset,
 	type AxcutDocument,
 	createEmptyDocument,
@@ -26,6 +30,7 @@ import {
 	type StylePresetAppearance,
 	stylePresetLegacyEditor,
 } from "../../src/lib/ai-edition/stylePresets";
+import { RECORDING_MARKERS_SUFFIX } from "../../src/lib/recordingSession";
 import { ensureDocumentExtensions } from "../media/extensionClip";
 import { relinkProjectMedia } from "../media/projectMediaRelinker";
 
@@ -149,6 +154,35 @@ async function renameWithRetry(from: string, to: string): Promise<void> {
 			if (attempt >= 5 || !RETRYABLE.has(code)) throw error;
 			await new Promise((resolve) => setTimeout(resolve, 10 * 2 ** attempt));
 		}
+	}
+}
+
+/**
+ * The marker-shortcut positions of a take, from the .markers.json written beside it,
+ * in source seconds. Undefined when there is none or it cannot be read -- markers are
+ * a convenience and never a reason to refuse an import.
+ */
+async function readRecordingMarkersSec(videoPath: string): Promise<number[] | undefined> {
+	try {
+		const raw = JSON.parse(await fs.readFile(`${videoPath}${RECORDING_MARKERS_SUFFIX}`, "utf8"));
+		const values: unknown = raw?.markersMs;
+		if (!Array.isArray(values)) return undefined;
+		return values
+			.filter((ms): ms is number => typeof ms === "number" && Number.isFinite(ms) && ms >= 0)
+			.map((ms) => ms / 1000)
+			.sort((a, b) => a - b);
+	} catch {
+		return undefined;
+	}
+}
+
+/** The shortcuts pressed during the take, from its cursor file; nothing when it has none. */
+async function readRecordingKeystrokes(videoPath: string) {
+	try {
+		const raw = JSON.parse(await fs.readFile(`${videoPath}.cursor.json`, "utf8"));
+		return keystrokesFromCursorSamples(raw?.samples);
+	} catch {
+		return undefined;
 	}
 }
 
@@ -376,9 +410,13 @@ export class DocumentService {
 		const projectId = createId("proj");
 		// Every new project comes through here — the New dialog, the empty state and a finished
 		// recording alike — so this is the one place it takes the user's look.
+		// The fork's factory choices for a new project, under whatever look it inherits:
+		// the shortcuts pressed while recording show on screen, and every click gets a
+		// ring (2026-10-09). A look that says otherwise wins.
+		const look = await this.newProjectLook();
 		const doc: AxcutDocument = {
 			...createEmptyDocument({ projectId, title: title?.trim() || "Untitled Project" }),
-			legacyEditor: await this.newProjectLook(),
+			legacyEditor: { [SHOW_KEYSTROKES_KEY]: true, cursorClickRing: true, ...(look ?? {}) },
 		};
 		await this.writeProject(doc);
 		return doc;
@@ -442,6 +480,8 @@ export class DocumentService {
 		} catch {
 			sizeBytes = undefined;
 		}
+		const markersSec = kind === "audio" ? undefined : await readRecordingMarkersSec(absolutePath);
+		const keystrokes = kind === "audio" ? undefined : await readRecordingKeystrokes(absolutePath);
 		const asset: AxcutAsset = {
 			id: createId("asset"),
 			kind,
@@ -449,6 +489,8 @@ export class DocumentService {
 			originalPath: absolutePath,
 			sizeBytes,
 			cameraTrack: null,
+			...(markersSec && markersSec.length > 0 ? { markersSec } : {}),
+			...(keystrokes && keystrokes.length > 0 ? { keystrokes } : {}),
 		};
 		// An audio import is an overlay, never the thing the timeline is built
 		// around, so it must not claim the empty primaryAssetId slot — otherwise the

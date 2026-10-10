@@ -15,6 +15,11 @@ export function isGifExportId(value: unknown): value is string {
 export class GifExportJobs {
 	private readonly jobs = new Map<number, { exportId: string; cancel: () => boolean }>();
 
+	/** Whether the window with this `webContents` id has an export running. */
+	isRunning(ownerId: number): boolean {
+		return this.jobs.has(ownerId);
+	}
+
 	cancel(owner: ExportOwner, exportId: string): boolean {
 		const job = this.jobs.get(owner.id);
 		return job?.exportId === exportId && job.cancel();
@@ -48,3 +53,9 @@ export class GifExportJobs {
 		}
 	}
 }
+
+/**
+ * The one table the native bridge runs its exports through, shared so the
+ * editor's close can ask whether closing would cancel one.
+ */
+export const exportJobs = new GifExportJobs();

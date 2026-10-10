@@ -31,7 +31,8 @@
 		"imageItem": "Hình ảnh",
 		"emptyText": "Văn bản trống",
 		"cameraFullscreen": "Camera Toàn màn hình",
-		"cameraFullscreenItem": "Camera Toàn màn hình {{index}}"
+		"cameraFullscreenItem": "Camera Toàn màn hình {{index}}",
+		"marker": "Điểm đánh dấu tại {{time}}"
 	},
 	"emptyState": {
 		"noVideo": "Chưa tải video",

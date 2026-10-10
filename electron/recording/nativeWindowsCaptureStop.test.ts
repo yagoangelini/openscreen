@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
 	isSalvageableFragmentedCapture,
 	NATIVE_WINDOWS_SALVAGEABLE_OUTPUT_BYTES,
+	readAudioDeviceDrops,
 	readCaptureFailureStage,
 	readMicrophoneDefaulted,
 	readMicrophoneUnavailable,
@@ -81,6 +82,24 @@ describe("readStoppedPath", () => {
 		expect(readStoppedPath("Recording started\n[stop-timing] step=microphone elapsed_ms=0\n")).toBe(
 			null,
 		);
+	});
+});
+
+describe("readAudioDeviceDrops", () => {
+	it("pairs a lost device with its reopen and keeps how long it was silent", () => {
+		const output =
+			"ERROR: IAudioCaptureClient::GetNextPacketSize failed (hr=0x88890004)\n" +
+			'{"event":"warning","code":"audio-device-lost","source":"microphone","hr":"0x88890004"}\n' +
+			'{"event":"warning","code":"audio-device-reopened","source":"microphone","silentMs":3200}\n' +
+			'{"event":"warning","code":"audio-device-lost","source":"system-audio","hr":"0x88890004"}\n';
+		expect(readAudioDeviceDrops(output)).toEqual([
+			{ source: "microphone", silentMs: 3200 },
+			{ source: "system-audio", silentMs: null },
+		]);
+	});
+
+	it("is empty for a take whose devices held", () => {
+		expect(readAudioDeviceDrops('{"event":"recording-stopped","schemaVersion":2}\n')).toEqual([]);
 	});
 });
 

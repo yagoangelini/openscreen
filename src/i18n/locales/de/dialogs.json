@@ -98,5 +98,12 @@
 		"later": "Nicht jetzt",
 		"forget": "Verwerfen",
 		"takeInterrupted": "Die Aufnahme wurde wegen eines Fehlers vorzeitig beendet. Alles bis dahin Aufgenommene wurde gespeichert."
+	},
+	"exportRunning": {
+		"title": "Export läuft",
+		"message": "Ein Export läuft noch.",
+		"detail": "Wenn du den Editor schließt, wird er abgebrochen und das Video nicht gespeichert.",
+		"keep": "Weiter exportieren",
+		"cancelAndClose": "Export abbrechen und schließen"
 	}
 }

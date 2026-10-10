@@ -428,7 +428,9 @@
 		"autoHide": "Bei Inaktivität ausblenden",
 		"bounceNone": "Keiner",
 		"bounceLight": "Leicht",
-		"bounceStrong": "Stark"
+		"bounceStrong": "Stark",
+		"showKeystrokes": "Tastenkürzel einblenden",
+		"clickRing": "Klicks hervorheben"
 	},
 	"export": {
 		"gifButton": "GIF exportieren",

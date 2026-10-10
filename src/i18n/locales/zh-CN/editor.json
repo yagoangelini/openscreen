@@ -57,7 +57,11 @@
 		"diskSpaceLow": "磁盘空间不足：约可录制 {{minutes}} 分钟。",
 		"crashProtectionOff": "本次录制的崩溃保护已关闭：如果应用意外关闭，录制将无法恢复。",
 		"takeStoppedDiskFull": "由于磁盘快满了，录制已停止。目前录制的内容均已保存。",
-		"saveFailedFileKept": "无法在编辑器中打开录制，但其文件已保留在录制文件夹中。"
+		"saveFailedFileKept": "无法在编辑器中打开录制，但其文件已保留在录制文件夹中。",
+		"audioDeviceLostMicrophone": "录制期间麦克风断开且未恢复：之后的内容没有人声。",
+		"audioDeviceLostSystemAudio": "录制期间系统音频设备断开且未恢复：之后的内容没有电脑声音。",
+		"audioDeviceBackMicrophone": "麦克风断开后已恢复：约 {{seconds}} 秒没有人声。",
+		"audioDeviceBackSystemAudio": "系统音频设备断开后已恢复：约 {{seconds}} 秒没有电脑声音。"
 	},
 	"emptyState": {
 		"title": "未打开任何项目",
@@ -150,7 +154,10 @@
 		"defaultRecordingsFolder": "使用默认",
 		"countdown": "倒计时",
 		"countdownNone": "无",
-		"countdownSeconds": "{{seconds}} 秒"
+		"countdownSeconds": "{{seconds}} 秒",
+		"doNotDisturb": "勿扰模式",
+		"doNotDisturbHint": "录制前开启，避免 Teams 和 Outlook 通知出现在视频中。",
+		"openNotificationSettings": "打开设置"
 	},
 	"mediaStage": {
 		"openProjectFirst": "请先打开一个项目",
@@ -182,7 +189,9 @@
 		"noAudioTrack": "无音频轨道",
 		"noAudioTrackHint": "此媒体没有音频轨道，没有可转录的内容。",
 		"noSpeechDetected": "未检测到语音",
-		"autoTranscribe": "打开编辑器时自动转录新录制"
+		"autoTranscribe": "打开编辑器时自动转录新录制",
+		"autoRedact": "模糊新录制中的敏感信息",
+		"autoRedactHint": "录制后，OCR 会找出屏幕上的邮箱、租户域名、GUID、密钥和电话号码并将其模糊。每处模糊都是普通标注，可保留或删除。离线运行。"
 	},
 	"exportDialog": {
 		"title": "导出",
@@ -222,7 +231,9 @@
 		"failedToWriteFile": "写入文件失败",
 		"qualityUpscaleWarning": "放大",
 		"exportedVideoOf": "的视频已导出，用时",
-		"nothingToExport": "没有可导出的内容 — 时间轴为空。"
+		"nothingToExport": "没有可导出的内容 — 时间轴为空。",
+		"youtubeLoudness": "YouTube 响度 (−14 LUFS)",
+		"youtubeLoudnessHint": "YouTube 以 −14 LUFS 播放所有视频。关闭时导出保持人声的 −16 LUFS，在 YouTube 上会小 2 dB。"
 	},
 	"inspector": {
 		"resetFocusPoint": "重置焦点",
@@ -431,7 +442,8 @@
 		"addVideoBeforeExport": "Add a video to the project before exporting.",
 		"regionPasted": "Region pasted",
 		"regionCopied": "Region copied",
-		"cameraCheckFailed": "Could not check for a camera recording near {{name}}"
+		"cameraCheckFailed": "Could not check for a camera recording near {{name}}",
+		"sensitiveBlurred": "已自动模糊 {{count}} 处敏感区域，请在时间线上检查。"
 	},
 	"exportPipeline": {
 		"quality1440p": "1440p",
@@ -458,5 +470,13 @@
 		"replanDone": "已规划 {{count}} 个自动缩放",
 		"replanNone": "没有找到适合自动缩放的时刻",
 		"replanFailed": "无法规划自动缩放"
+	},
+	"youtubeChapters": {
+		"title": "YouTube 章节",
+		"copy": "复制章节",
+		"copied": "章节已复制——粘贴到视频说明中",
+		"copyFailed": "无法复制章节",
+		"needThree": "YouTube 至少需要 3 个章节才会显示。录制时用 Ctrl+Shift+F8 添加标记。",
+		"fallbackTitle": "第 {{index}} 章"
 	}
 }

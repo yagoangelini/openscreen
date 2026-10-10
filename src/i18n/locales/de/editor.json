@@ -57,7 +57,11 @@
 		"diskSpaceLow": "Wenig Speicherplatz: Platz für etwa {{minutes}} Minuten Aufnahme.",
 		"crashProtectionOff": "Der Absturzschutz ist für diese Aufnahme aus: Wird die App unerwartet beendet, lässt sich die Aufnahme nicht wiederherstellen.",
 		"takeStoppedDiskFull": "Die Aufnahme wurde beendet, weil der Datenträger fast voll ist. Alles bisher Aufgenommene wurde gespeichert.",
-		"saveFailedFileKept": "Die Aufnahme konnte nicht im Editor geöffnet werden, ihre Datei wurde aber im Aufnahmeordner behalten."
+		"saveFailedFileKept": "Die Aufnahme konnte nicht im Editor geöffnet werden, ihre Datei wurde aber im Aufnahmeordner behalten.",
+		"audioDeviceLostMicrophone": "Das Mikrofon wurde während der Aufnahme getrennt und kam nicht zurück: Der Rest der Aufnahme hat keine Stimme.",
+		"audioDeviceLostSystemAudio": "Das Systemaudiogerät wurde während der Aufnahme getrennt und kam nicht zurück: Dem Rest der Aufnahme fehlt der Computerton.",
+		"audioDeviceBackMicrophone": "Das Mikrofon wurde getrennt und kam zurück: Etwa {{seconds}} s der Aufnahme haben keine Stimme.",
+		"audioDeviceBackSystemAudio": "Das Systemaudiogerät wurde getrennt und kam zurück: Etwa {{seconds}} s der Aufnahme fehlt der Computerton."
 	},
 	"emptyState": {
 		"title": "Kein Projekt geöffnet",
@@ -150,7 +154,10 @@
 		"defaultRecordingsFolder": "Standard verwenden",
 		"countdown": "Countdown",
 		"countdownNone": "Keiner",
-		"countdownSeconds": "{{seconds}} s"
+		"countdownSeconds": "{{seconds}} s",
+		"doNotDisturb": "Nicht stören",
+		"doNotDisturbHint": "Vor der Aufnahme einschalten, damit Teams- und Outlook-Benachrichtigungen nicht im Video landen.",
+		"openNotificationSettings": "Einstellungen öffnen"
 	},
 	"mediaStage": {
 		"openProjectFirst": "Öffne zuerst ein Projekt",
@@ -182,7 +189,9 @@
 		"noAudioTrack": "Keine Audiospur",
 		"noAudioTrackHint": "Dieses Medium hat keine Audiospur — es gibt nichts zu transkribieren.",
 		"noSpeechDetected": "Keine Sprache erkannt",
-		"autoTranscribe": "Neue Aufnahmen beim Öffnen des Editors automatisch transkribieren"
+		"autoTranscribe": "Neue Aufnahmen beim Öffnen des Editors automatisch transkribieren",
+		"autoRedact": "Sensible Daten in neuen Aufnahmen verwischen",
+		"autoRedactHint": "Nach einer Aufnahme findet die Texterkennung E-Mails, Tenant-Domains, GUIDs, Geheimnisse und Telefonnummern auf dem Bildschirm und verwischt sie. Jede Unschärfe ist eine normale Anmerkung zum Behalten oder Löschen. Läuft offline."
 	},
 	"exportDialog": {
 		"title": "Export",
@@ -222,7 +231,9 @@
 		"exportFailed": "Export fehlgeschlagen",
 		"failedToWriteFile": "Datei konnte nicht geschrieben werden",
 		"qualityUpscaleWarning": "Hochskalierung",
-		"nothingToExport": "Nichts zu exportieren — die Timeline ist leer."
+		"nothingToExport": "Nichts zu exportieren — die Timeline ist leer.",
+		"youtubeLoudness": "YouTube-Lautheit (−14 LUFS)",
+		"youtubeLoudnessHint": "YouTube spielt jedes Video mit −14 LUFS ab. Aus bleibt der Export bei den −16 LUFS der Stimme und klingt dort 2 dB leiser."
 	},
 	"inspector": {
 		"resetFocusPoint": "Fokuspunkt zurücksetzen",
@@ -431,7 +442,8 @@
 		"addVideoBeforeExport": "Füge dem Projekt vor dem Export ein Video hinzu.",
 		"regionPasted": "Bereich eingefügt",
 		"regionCopied": "Bereich kopiert",
-		"cameraCheckFailed": "Neben {{name}} konnte keine Kameraaufnahme gesucht werden"
+		"cameraCheckFailed": "Neben {{name}} konnte keine Kameraaufnahme gesucht werden",
+		"sensitiveBlurred": "{{count}} sensible Bereiche wurden automatisch verwischt. Prüfe sie in der Zeitleiste."
 	},
 	"exportPipeline": {
 		"quality1440p": "1440p",
@@ -458,5 +470,13 @@
 		"replanDone": "Geplante automatische Zooms: {{count}}",
 		"replanNone": "Kein Moment für einen automatischen Zoom gefunden",
 		"replanFailed": "Die automatischen Zooms konnten nicht geplant werden"
+	},
+	"youtubeChapters": {
+		"title": "YouTube-Kapitel",
+		"copy": "Kapitel kopieren",
+		"copied": "Kapitel kopiert — in die Videobeschreibung einfügen",
+		"copyFailed": "Kapitel konnten nicht kopiert werden",
+		"needThree": "YouTube zeigt Kapitel erst ab 3 an. Setze beim Aufnehmen Markierungen (Strg+Umschalt+F8).",
+		"fallbackTitle": "Kapitel {{index}}"
 	}
 }

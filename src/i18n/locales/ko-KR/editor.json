@@ -57,7 +57,11 @@
 		"diskSpaceLow": "디스크 공간 부족: 약 {{minutes}}분 녹화할 수 있습니다.",
 		"crashProtectionOff": "이 녹화는 충돌 보호가 꺼져 있습니다. 앱이 갑자기 종료되면 녹화를 복구할 수 없습니다.",
 		"takeStoppedDiskFull": "디스크가 거의 가득 차서 녹화를 중지했습니다. 지금까지 녹화된 내용은 저장되었습니다.",
-		"saveFailedFileKept": "녹화를 편집기에서 열 수 없지만 파일은 녹화 폴더에 보관되었습니다."
+		"saveFailedFileKept": "녹화를 편집기에서 열 수 없지만 파일은 녹화 폴더에 보관되었습니다.",
+		"audioDeviceLostMicrophone": "녹화 중 마이크 연결이 끊기고 다시 연결되지 않았습니다. 이후 부분에는 음성이 없습니다.",
+		"audioDeviceLostSystemAudio": "녹화 중 시스템 오디오 장치 연결이 끊기고 다시 연결되지 않았습니다. 이후 부분에는 컴퓨터 소리가 없습니다.",
+		"audioDeviceBackMicrophone": "마이크 연결이 끊겼다가 다시 연결되었습니다. 약 {{seconds}}초 동안 음성이 없습니다.",
+		"audioDeviceBackSystemAudio": "시스템 오디오 장치 연결이 끊겼다가 다시 연결되었습니다. 약 {{seconds}}초 동안 컴퓨터 소리가 없습니다."
 	},
 	"emptyState": {
 		"title": "열린 프로젝트 없음",
@@ -150,7 +154,10 @@
 		"defaultRecordingsFolder": "기본값 사용",
 		"countdown": "카운트다운",
 		"countdownNone": "없음",
-		"countdownSeconds": "{{seconds}}초"
+		"countdownSeconds": "{{seconds}}초",
+		"doNotDisturb": "방해 금지",
+		"doNotDisturbHint": "Teams와 Outlook 알림이 영상에 나오지 않도록 녹화 전에 켜세요.",
+		"openNotificationSettings": "설정 열기"
 	},
 	"mediaStage": {
 		"openProjectFirst": "먼저 프로젝트를 여세요",
@@ -182,7 +189,9 @@
 		"noAudioTrack": "오디오 트랙 없음",
 		"noAudioTrackHint": "이 미디어에는 오디오 트랙이 없어 받아쓸 내용이 없습니다.",
 		"noSpeechDetected": "음성이 감지되지 않음",
-		"autoTranscribe": "편집기를 열 때 새 녹화를 자동으로 받아쓰기"
+		"autoTranscribe": "편집기를 열 때 새 녹화를 자동으로 받아쓰기",
+		"autoRedact": "새 녹화에서 민감한 정보 흐리게 처리",
+		"autoRedactHint": "녹화 후 OCR이 화면의 이메일, 테넌트 도메인, GUID, 비밀 키, 전화번호를 찾아 흐리게 처리합니다. 각 흐림은 일반 주석이라 유지하거나 삭제할 수 있습니다. 오프라인으로 실행됩니다."
 	},
 	"exportDialog": {
 		"title": "내보내기",
@@ -222,7 +231,9 @@
 		"failedToWriteFile": "파일 쓰기에 실패했습니다",
 		"qualityUpscaleWarning": "업스케일",
 		"exportedVideoOf": "분량의 영상을 내보냈습니다. 소요 시간:",
-		"nothingToExport": "내보낼 항목이 없습니다 — 타임라인이 비어 있습니다."
+		"nothingToExport": "내보낼 항목이 없습니다 — 타임라인이 비어 있습니다.",
+		"youtubeLoudness": "YouTube 음량 (−14 LUFS)",
+		"youtubeLoudnessHint": "YouTube는 모든 동영상을 −14 LUFS로 재생합니다. 끄면 음성 기준인 −16 LUFS로 내보내져 YouTube에서 2 dB 작게 들립니다."
 	},
 	"inspector": {
 		"resetFocusPoint": "포커스 지점 재설정",
@@ -431,7 +442,8 @@
 		"addVideoBeforeExport": "Add a video to the project before exporting.",
 		"regionPasted": "Region pasted",
 		"regionCopied": "Region copied",
-		"cameraCheckFailed": "Could not check for a camera recording near {{name}}"
+		"cameraCheckFailed": "Could not check for a camera recording near {{name}}",
+		"sensitiveBlurred": "민감한 영역 {{count}}곳을 자동으로 흐리게 처리했습니다. 타임라인에서 확인하세요."
 	},
 	"exportPipeline": {
 		"quality1440p": "1440p",
@@ -458,5 +470,13 @@
 		"replanDone": "자동 확대 {{count}}개를 계획했습니다",
 		"replanNone": "자동 확대할 순간을 찾지 못했습니다",
 		"replanFailed": "자동 확대를 계획하지 못했습니다"
+	},
+	"youtubeChapters": {
+		"title": "YouTube 챕터",
+		"copy": "챕터 복사",
+		"copied": "챕터를 복사했습니다 — 동영상 설명에 붙여넣으세요",
+		"copyFailed": "챕터를 복사할 수 없습니다",
+		"needThree": "YouTube는 챕터가 3개 이상일 때만 표시합니다. 녹화 중 마커(Ctrl+Shift+F8)를 추가하세요.",
+		"fallbackTitle": "챕터 {{index}}"
 	}
 }

@@ -744,6 +744,18 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				if (result.webcamDropped) {
 					toast.error(tRef.current("recording.cameraCaptureUnavailable"));
 				}
+				for (const drop of result.audioDrops ?? []) {
+					const seconds = String(Math.max(1, Math.round((drop.silentMs ?? 0) / 1000)));
+					const message =
+						drop.source === "microphone"
+							? drop.silentMs === null
+								? tRef.current("recording.audioDeviceLostMicrophone")
+								: tRef.current("recording.audioDeviceBackMicrophone", { seconds })
+							: drop.silentMs === null
+								? tRef.current("recording.audioDeviceLostSystemAudio")
+								: tRef.current("recording.audioDeviceBackSystemAudio", { seconds });
+					toast.warning(message, { duration: 15_000 });
+				}
 				// Said before the editor opens, so a take that is shorter than the
 				// user thinks is not discovered halfway through editing it.
 				if (result.interrupted) {

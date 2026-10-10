@@ -3560,7 +3560,9 @@ pub fn plan_cursor(g: &FrameGeometry, input: &CursorPlanInput) -> Option<CursorP
     let model_sprite =
         modelled_sprite(input.scene, cursor_type).filter(|_| input.live.cursor_model3d);
     let model3d = model_sprite.is_some();
-    let place = |cxy: Option<(f32, f32)>, dst: [f32; 4]| -> Option<CursorPlacement> {
+    // `on_plane`: give an upright screen an identity plane, as the modelled cursor always needs
+    // and the click ring does too (its shader only knows how to draw on a plane).
+    let place_on = |cxy: Option<(f32, f32)>, dst: [f32; 4], on_plane: bool| -> Option<CursorPlacement> {
         cxy.and_then(|p| {
             let [fx, fy] = cursor_plane_point(g.cut, [input.u_max, input.v_max], p)?;
             Some(match tilt.as_ref() {
@@ -3574,7 +3576,7 @@ pub fn plan_cursor(g: &FrameGeometry, input: &CursorPlanInput) -> Option<CursorP
                 // Le curseur modélisé a toujours besoin d'un plan : sur écran droit, un plan
                 // IDENTITÉ taillé dans `dst`. À rotation nulle `rotated_quad_corners_px` rend les
                 // coins exacts (±w/2, ±h/2, échelle 1) : même caméra, même mode 15.
-                None if model3d => {
+                None if on_plane => {
                     let screen_px = [dst[2] * rw, dst[3] * rh];
                     CursorPlacement::Tilted {
                         plane_pt: [fx, fy],
@@ -3595,6 +3597,7 @@ pub fn plan_cursor(g: &FrameGeometry, input: &CursorPlanInput) -> Option<CursorP
             })
         })
     };
+    let place = |cxy: Option<(f32, f32)>, dst: [f32; 4]| place_on(cxy, dst, model3d);
     // Le curseur modélisé touche le plan à chaque clic : il se pose sur le point cliqué brut
     // (`pinned_at`), pas sur la piste lissée qui traîne derrière la souris. Le sprite plat garde
     // la piste telle quelle, son rendu est celui d'avant.
@@ -3694,15 +3697,24 @@ pub fn plan_cursor(g: &FrameGeometry, input: &CursorPlanInput) -> Option<CursorP
     };
 
     // L'impact : un anneau par clic récent, centré sur son point BRUT, là où la pointe se pose.
-    let strength = (lp.cursor_bounce_scale / MODEL_CLICK_BOUNCE_REF).clamp(0.0, 2.0);
-    let impacts = if model3d && strength > 0.0 {
-        let half_px = IMPACT_EXTENT * size_px * (0.75 + 0.25 * strength);
+    // Under the flat cursor it is the click highlight (`click_ring`): at full strength whatever
+    // the bounce, and larger, since no modelled tip lands in the middle of it.
+    let click_ring = !model3d && input.scene.is_some_and(|s| s.cursor.click_ring);
+    let strength = if click_ring {
+        1.0
+    } else {
+        (lp.cursor_bounce_scale / MODEL_CLICK_BOUNCE_REF).clamp(0.0, 2.0)
+    };
+    let impacts = if (model3d || click_ring) && strength > 0.0 {
+        let extent = if click_ring { CLICK_RING_EXTENT } else { IMPACT_EXTENT };
+        let half_px = extent * size_px * (0.75 + 0.25 * strength);
         input
             .track
             .clicks_with_points(input.t - IMPACT_DELAY_S - IMPACT_S, input.t - IMPACT_DELAY_S)
             .filter_map(|(tc, p)| {
                 let impact = impact_at(input.t - tc, strength)?;
-                let mut cb = cursor_impact_cb(place(Some(p), g.s_dst)?, half_px, impact, alpha)?;
+                let mut cb =
+                    cursor_impact_cb(place_on(Some(p), g.s_dst, true)?, half_px, impact, alpha)?;
                 if let Some(m) = g.screen_mask {
                     let dst = m.clip(cb.dst)?;
                     reframe_warped(&mut cb, dst, [rw, rh]);
@@ -4219,6 +4231,8 @@ const IMPACT_DELAY_S: f32 = 0.0495;
 const IMPACT_S: f32 = 0.4;
 /// Demi-côté du carré de l'impact, en tailles de curseur, à `clickBounce` par défaut.
 const IMPACT_EXTENT: f32 = 0.7;
+/// The click highlight's square, in cursor sizes: a ring about 1.5 arrows across at its widest.
+const CLICK_RING_EXTENT: f32 = 1.1;
 
 /// L'impact d'un clic, `age` secondes après lui, à la force `strength` (`clickBounce` rapporté à
 /// sa valeur par défaut). `None` hors de sa fenêtre.
@@ -8363,6 +8377,42 @@ mod tests {
             .len()
         };
         assert_eq!((plan(true, MODEL_CLICK_BOUNCE_REF), plan(false, MODEL_CLICK_BOUNCE_REF), plan(true, 0.0)), (1, 0, 0));
+
+        // The click highlight: the flat cursor rings too once `clickRing` is on, bounce or not,
+        // centred on the click like the modelled one.
+        let mut ringed = model_scene();
+        ringed.cursor.click_ring = true;
+        let flat = |bounce: f32, t: f32| {
+            plan_cursor(
+                &fg,
+                &CursorPlanInput {
+                    render_px: [1920.0, 1080.0],
+                    u_max: 1.0,
+                    v_max: 1.0,
+                    cfg: &cfg,
+                    live: LiveParams { cursor_model3d: false, cursor_bounce_scale: bounce, ..LiveParams::default() },
+                    scene: Some(&ringed),
+                    track,
+                    t,
+                },
+            )
+            .expect("plan")
+            .impacts
+        };
+        assert_eq!(flat(MODEL_CLICK_BOUNCE_REF, TC + 0.1).len(), 1);
+        assert_eq!(flat(0.0, TC + 0.1).len(), 1, "the highlight does not ride on the bounce");
+        assert!(flat(0.0, TC + IMPACT_DELAY_S + IMPACT_S + 0.001).is_empty(), "gone after 0.4 s");
+        let cb = flat(0.0, TC + 0.1)[0];
+        assert_eq!(cb.mode, 16.0);
+        let center = [
+            (cb.dst[0] + cb.dst[2] * 0.5) * 1920.0,
+            (cb.dst[1] + cb.dst[3] * 0.5) * 1080.0,
+        ];
+        let want = [0.3 * 1920.0, 0.18 * 1080.0];
+        assert!(
+            (center[0] - want[0]).abs() < 1.0 && (center[1] - want[1]).abs() < 1.0,
+            "ring at {center:?}, click at {want:?}"
+        );
     }
 
     #[test]

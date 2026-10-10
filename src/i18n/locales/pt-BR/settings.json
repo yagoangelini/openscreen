@@ -428,7 +428,9 @@
 		"autoHide": "Ocultar quando inativo",
 		"bounceNone": "Nenhum",
 		"bounceLight": "Leve",
-		"bounceStrong": "Forte"
+		"bounceStrong": "Forte",
+		"showKeystrokes": "Atalhos na tela",
+		"clickRing": "Destaque de clique"
 	},
 	"export": {
 		"gifButton": "Exportar GIF",

@@ -57,7 +57,11 @@
 		"diskSpaceLow": "Dung lượng đĩa thấp: đủ cho khoảng {{minutes}} phút ghi.",
 		"crashProtectionOff": "Bảo vệ khi sự cố đang tắt cho bản ghi này: nếu ứng dụng đóng đột ngột, bản ghi sẽ không thể khôi phục.",
 		"takeStoppedDiskFull": "Đã dừng ghi vì đĩa gần đầy. Mọi thứ đã ghi đều được lưu.",
-		"saveFailedFileKept": "Không thể mở bản ghi trong trình chỉnh sửa, nhưng tệp vẫn được giữ trong thư mục bản ghi."
+		"saveFailedFileKept": "Không thể mở bản ghi trong trình chỉnh sửa, nhưng tệp vẫn được giữ trong thư mục bản ghi.",
+		"audioDeviceLostMicrophone": "Micrô bị ngắt kết nối khi đang ghi và không kết nối lại: phần còn lại của bản ghi không có giọng nói.",
+		"audioDeviceLostSystemAudio": "Thiết bị âm thanh hệ thống bị ngắt kết nối khi đang ghi và không kết nối lại: phần còn lại của bản ghi không có âm thanh máy tính.",
+		"audioDeviceBackMicrophone": "Micrô bị ngắt rồi kết nối lại: khoảng {{seconds}} giây của bản ghi không có giọng nói.",
+		"audioDeviceBackSystemAudio": "Thiết bị âm thanh hệ thống bị ngắt rồi kết nối lại: khoảng {{seconds}} giây của bản ghi không có âm thanh máy tính."
 	},
 	"emptyState": {
 		"title": "Không có dự án nào được mở",
@@ -150,7 +154,10 @@
 		"defaultRecordingsFolder": "Dùng mặc định",
 		"countdown": "Đếm ngược",
 		"countdownNone": "Không",
-		"countdownSeconds": "{{seconds}} giây"
+		"countdownSeconds": "{{seconds}} giây",
+		"doNotDisturb": "Không làm phiền",
+		"doNotDisturbHint": "Bật trước khi ghi để thông báo Teams và Outlook không xuất hiện trong video.",
+		"openNotificationSettings": "Mở cài đặt"
 	},
 	"mediaStage": {
 		"openProjectFirst": "Hãy mở một dự án trước",
@@ -182,7 +189,9 @@
 		"noAudioTrack": "Không có bản âm thanh",
 		"noAudioTrackHint": "Media này không có bản âm thanh — không có gì để phiên âm.",
 		"noSpeechDetected": "Không phát hiện giọng nói",
-		"autoTranscribe": "Tự động chép lời bản ghi mới khi mở trình chỉnh sửa"
+		"autoTranscribe": "Tự động chép lời bản ghi mới khi mở trình chỉnh sửa",
+		"autoRedact": "Làm mờ dữ liệu nhạy cảm trong bản ghi mới",
+		"autoRedactHint": "Sau khi ghi, OCR tìm email, tên miền tenant, GUID, khóa bí mật và số điện thoại trên màn hình rồi làm mờ. Mỗi vùng mờ là một chú thích thông thường, bạn có thể giữ hoặc xóa. Chạy ngoại tuyến."
 	},
 	"exportDialog": {
 		"title": "Xuất",
@@ -222,7 +231,9 @@
 		"failedToWriteFile": "Không thể ghi tệp",
 		"qualityUpscaleWarning": "Upscale",
 		"exportedVideoOf": "video đã xuất trong",
-		"nothingToExport": "Không có gì để xuất — dòng thời gian trống."
+		"nothingToExport": "Không có gì để xuất — dòng thời gian trống.",
+		"youtubeLoudness": "Âm lượng YouTube (−14 LUFS)",
+		"youtubeLoudnessHint": "YouTube phát mọi video ở −14 LUFS. Khi tắt, bản xuất giữ mức −16 LUFS của giọng nói và nghe nhỏ hơn 2 dB ở đó."
 	},
 	"inspector": {
 		"resetFocusPoint": "Đặt lại điểm lấy nét",
@@ -431,7 +442,8 @@
 		"addVideoBeforeExport": "Add a video to the project before exporting.",
 		"regionPasted": "Region pasted",
 		"regionCopied": "Region copied",
-		"cameraCheckFailed": "Could not check for a camera recording near {{name}}"
+		"cameraCheckFailed": "Could not check for a camera recording near {{name}}",
+		"sensitiveBlurred": "Đã tự động làm mờ {{count}} vùng nhạy cảm. Hãy kiểm tra trên dòng thời gian."
 	},
 	"exportPipeline": {
 		"quality1440p": "1440p",
@@ -458,5 +470,13 @@
 		"replanDone": "Số lần thu phóng tự động đã lập: {{count}}",
 		"replanNone": "Không tìm thấy thời điểm nào để thu phóng tự động",
 		"replanFailed": "Không thể lập kế hoạch thu phóng tự động"
+	},
+	"youtubeChapters": {
+		"title": "Chương YouTube",
+		"copy": "Sao chép chương",
+		"copied": "Đã sao chép chương — dán vào mô tả video",
+		"copyFailed": "Không thể sao chép chương",
+		"needThree": "YouTube chỉ hiển thị chương khi có ít nhất 3. Thêm điểm đánh dấu (Ctrl+Shift+F8) khi ghi.",
+		"fallbackTitle": "Chương {{index}}"
 	}
 }

@@ -44,7 +44,6 @@ import {
 } from "../../src/lib/recordingSession";
 import type {
 	CursorRecordingData,
-	CursorRecordingSample,
 	ProjectFileResult,
 	ProjectPathResult,
 } from "../../src/native/contracts";
@@ -100,6 +99,14 @@ import {
 } from "../native-bridge/screen/macPickerSession";
 import { CompositorViewService } from "../native-bridge/services/compositorViewService";
 import { getMacPermissions, showPermissionsWindow } from "../permissions";
+import {
+	CURSOR_CHECKPOINT_INTERVAL_MS,
+	CURSOR_CHECKPOINT_SUFFIX,
+	CursorCheckpointWriter,
+	compactCursorPauseRanges,
+	recoverCursorCheckpoint,
+	shiftCursorTelemetry,
+} from "../recording/cursorCheckpoint";
 import { scoreDeviceNameMatch } from "../recording/deviceNameMatching";
 import { assessFreeSpace, readFreeBytes, STOP_RECORDING_FREE_BYTES } from "../recording/diskSpace";
 import {
@@ -116,6 +123,7 @@ import {
 import {
 	isSalvageableFragmentedCapture,
 	NATIVE_WINDOWS_SALVAGEABLE_OUTPUT_BYTES,
+	readAudioDeviceDrops,
 	readCaptureFailureStage,
 	readMicrophoneDefaulted,
 	readMicrophoneUnavailable,
@@ -124,6 +132,7 @@ import {
 	terminateNativeWindowsCapture,
 	waitForNativeWindowsCaptureStop,
 } from "../recording/nativeWindowsCaptureStop";
+import { runOcrScan } from "../recording/ocrScan";
 import {
 	clearPendingTake,
 	collectRecoverableTakes,
@@ -760,6 +769,39 @@ const MAX_CURSOR_SAMPLES = Number.POSITIVE_INFINITY;
 
 let cursorRecordingSession: CursorRecordingSession | null = null;
 let pendingCursorRecordingData: CursorRecordingData | null = null;
+let cursorCheckpoint: CursorCheckpointWriter | null = null;
+let cursorCheckpointTimer: NodeJS.Timeout | null = null;
+
+/** Starts appending the take's cursor telemetry next to its video, every few seconds. */
+function startCursorCheckpoint(screenVideoPath: string, cursorOffsetMs: number) {
+	stopCursorCheckpointTimer();
+	const writer = new CursorCheckpointWriter(`${screenVideoPath}${CURSOR_CHECKPOINT_SUFFIX}`);
+	writer.meta(cursorOffsetMs);
+	cursorCheckpoint = writer;
+	const flush = () => {
+		const live = cursorRecordingSession?.peek?.();
+		if (live && cursorCheckpoint === writer) {
+			void writer.flush(live);
+		}
+	};
+	flush();
+	cursorCheckpointTimer = setInterval(flush, CURSOR_CHECKPOINT_INTERVAL_MS);
+}
+
+function stopCursorCheckpointTimer() {
+	if (cursorCheckpointTimer) {
+		clearInterval(cursorCheckpointTimer);
+		cursorCheckpointTimer = null;
+	}
+}
+
+/** The stop wrote the real cursor file (or the take is gone): the checkpoint has served. */
+async function discardCursorCheckpoint() {
+	stopCursorCheckpointTimer();
+	const writer = cursorCheckpoint;
+	cursorCheckpoint = null;
+	await writer?.discard();
+}
 let nativeWindowsCaptureProcess: ChildProcessWithoutNullStreams | null = null;
 let nativeWindowsCaptureOutput = "";
 let nativeWindowsCaptureTargetPath: string | null = null;
@@ -858,6 +900,19 @@ async function removeNativeWindowsCaptureOutputs(
 		webcamVideoPath,
 		screenVideoPath ? `${screenVideoPath}.cursor.json` : null,
 	];
+	// The checkpoint follows the video: kept for as long as the take it would
+	// restore the cursor of might still be recovered.
+	const removeCheckpointIfVideoGone = async () => {
+		if (!screenVideoPath || !isInRecordingDirs(screenVideoPath)) {
+			return;
+		}
+		const videoLeft = await fs.stat(screenVideoPath).catch(() => null);
+		if (!videoLeft) {
+			await fs
+				.rm(`${screenVideoPath}${CURSOR_CHECKPOINT_SUFFIX}`, { force: true })
+				.catch(() => undefined);
+		}
+	};
 
 	for (const target of targets) {
 		if (!target || !isInRecordingDirs(target)) {
@@ -880,6 +935,7 @@ async function removeNativeWindowsCaptureOutputs(
 			console.warn("[native-wgc] could not remove leftover capture output:", target, error);
 		}
 	}
+	await removeCheckpointIfVideoGone();
 }
 let nativeMacCaptureProcess: ChildProcessWithoutNullStreams | null = null;
 /**
@@ -1451,19 +1507,10 @@ async function registerRecordingMediaLinks(
 }
 
 function shiftPendingCursorTelemetry(offsetMs: number) {
-	if (!pendingCursorRecordingData || !Number.isFinite(offsetMs) || offsetMs <= 0) {
+	if (!pendingCursorRecordingData) {
 		return;
 	}
-
-	pendingCursorRecordingData = {
-		...pendingCursorRecordingData,
-		samples: pendingCursorRecordingData.samples
-			.map((sample) => ({
-				...sample,
-				timeMs: Math.max(0, sample.timeMs - offsetMs),
-			}))
-			.sort((a, b) => a.timeMs - b.timeMs),
-	};
+	pendingCursorRecordingData = shiftCursorTelemetry(pendingCursorRecordingData, offsetMs);
 }
 
 function compactPendingCursorTelemetryPauseRanges(
@@ -1472,42 +1519,7 @@ function compactPendingCursorTelemetryPauseRanges(
 	if (!pendingCursorRecordingData || ranges.length === 0) {
 		return;
 	}
-
-	const normalizedRanges = ranges
-		.map((range) => ({
-			startMs: Math.max(0, Math.min(range.startMs, range.endMs)),
-			endMs: Math.max(0, Math.max(range.startMs, range.endMs)),
-		}))
-		.filter((range) => Number.isFinite(range.startMs) && Number.isFinite(range.endMs))
-		.filter((range) => range.endMs > range.startMs)
-		.sort((a, b) => a.startMs - b.startMs);
-
-	if (normalizedRanges.length === 0) {
-		return;
-	}
-
-	pendingCursorRecordingData = {
-		...pendingCursorRecordingData,
-		samples: pendingCursorRecordingData.samples
-			.map((sample) => {
-				let pausedBeforeSampleMs = 0;
-				for (const range of normalizedRanges) {
-					if (sample.timeMs >= range.startMs && sample.timeMs <= range.endMs) {
-						return null;
-					}
-					if (sample.timeMs > range.endMs) {
-						pausedBeforeSampleMs += range.endMs - range.startMs;
-					}
-				}
-
-				return {
-					...sample,
-					timeMs: Math.max(0, sample.timeMs - pausedBeforeSampleMs),
-				};
-			})
-			.filter((sample): sample is CursorRecordingSample => Boolean(sample))
-			.sort((a, b) => a.timeMs - b.timeMs),
-	};
+	pendingCursorRecordingData = compactCursorPauseRanges(pendingCursorRecordingData, ranges);
 }
 
 function completeNativeMacCursorPauseRange(endMs = Date.now()) {
@@ -1527,10 +1539,12 @@ function completeNativeWindowsCursorPauseRange(endMs = Date.now()) {
 		return;
 	}
 
-	nativeWindowsPauseRanges.push({
+	const range = {
 		startMs: Math.max(0, nativeWindowsPauseStartedAtMs - nativeWindowsCursorRecordingStartMs),
 		endMs: Math.max(0, endMs - nativeWindowsCursorRecordingStartMs),
-	});
+	};
+	nativeWindowsPauseRanges.push(range);
+	cursorCheckpoint?.pause(range);
 	nativeWindowsPauseStartedAtMs = null;
 }
 
@@ -2017,6 +2031,20 @@ export async function exportDiagnosticFile(payload: {
 	const HELPER_OUTPUT_MAX_BYTES = 64 * 1024;
 	const tail = (s: string, max: number) => (s.length <= max ? s : s.slice(s.length - max));
 
+	// Which GPU did what: on a hybrid laptop "the export used the integrated GPU"
+	// is the first question, and neither log answers it on its own. The
+	// compositor's adapter (preview and export) and Chromium's view of the GPUs
+	// (the editor window) can differ, which is itself the finding.
+	let compositorGpu: unknown = null;
+	try {
+		compositorGpu = new CompositorViewService().gpuAdapterInfo();
+	} catch (error) {
+		compositorGpu = { error: String(error) };
+	}
+	const chromiumGpu = await app
+		.getGPUInfo("basic")
+		.catch((error: unknown) => ({ error: String(error) }));
+
 	const diagnostic = {
 		timestamp: new Date().toISOString(),
 		appVersion: app.getVersion(),
@@ -2040,6 +2068,7 @@ export async function exportDiagnosticFile(payload: {
 			windows: tail(nativeWindowsCaptureOutput, HELPER_OUTPUT_MAX_BYTES),
 			mac: tail(nativeMacCaptureOutput, HELPER_OUTPUT_MAX_BYTES),
 		},
+		gpu: { compositor: compositorGpu, chromium: chromiumGpu },
 		mainProcessLogs: mainLogBuffer.snapshot(),
 	};
 
@@ -3083,6 +3112,9 @@ export function registerIpcHandlers(
 					cursorCaptureMode === "editable-overlay"
 						? Math.max(0, captureStartedAtMs - cursorStartTimeMs)
 						: 0;
+				if (cursorCaptureMode === "editable-overlay" && cursorRecordingSession) {
+					startCursorCheckpoint(outputPath, nativeWindowsCursorOffsetMs);
+				}
 				const webcamFormat = readWebcamFormat(nativeWindowsCaptureOutput);
 				const encoderSelection = readNativeWindowsEncoderSelection(nativeWindowsCaptureOutput);
 				// Captured now because stop may have no helper left to ask. A helper
@@ -3676,6 +3708,7 @@ export function registerIpcHandlers(
 					compactPendingCursorTelemetryPauseRanges(nativeWindowsPauseRanges);
 					shiftPendingCursorTelemetry(nativeWindowsCursorOffsetMs);
 					await writePendingCursorTelemetry(screenVideoPath);
+					await discardCursorCheckpoint();
 				} catch (error) {
 					console.warn(
 						"[native-wgc] could not write the cursor telemetry; saving without it",
@@ -3765,6 +3798,7 @@ export function registerIpcHandlers(
 				// unreported, the user would find out in the editor — which is exactly
 				// the silence this change exists to end.
 				webcamDropped: Boolean(preferredWebcamPath) && !webcamVideoPath,
+				audioDrops: readAudioDeviceDrops(nativeWindowsCaptureOutput),
 				message: recovered
 					? "Native Windows recording recovered from a failed stop"
 					: "Native Windows recording session stored successfully",
@@ -3873,6 +3907,10 @@ export function registerIpcHandlers(
 		if (response !== 0 || nativeWindowsCaptureProcess) {
 			return;
 		}
+		// The stop that would have written the cursor file never ran; the
+		// checkpoint written during the take stands in for it.
+		const cursorRecovered = await recoverCursorCheckpoint(take.screenVideoPath).catch(() => false);
+		console.info("[recovery] reopening a take", { path: take.screenVideoPath, cursorRecovered });
 		const session = normalizeRecordingSession({
 			screenVideoPath: take.screenVideoPath,
 			webcamVideoPath: take.webcamVideoPath,
@@ -4391,6 +4429,32 @@ export function registerIpcHandlers(
 	// model-generated content, so "the renderer is trusted" is not a strong enough
 	// premise to skip this. http/https/mailto is everything the app actually opens.
 	const EXTERNAL_URL_PROTOCOLS = new Set(["http:", "https:", "mailto:"]);
+
+	// Windows' notification settings, where Do not disturb lives -- so a Teams or
+	// Outlook toast does not land in the middle of a take. A fixed URI on purpose:
+	// the renderer names no target, so this cannot widen the allowlist above. There
+	// is no public API to toggle Do not disturb itself, and the app does not try.
+	// The text on screen in a take, for the automatic privacy blur. Only a file in a
+	// recordings folder: this runs a helper over whatever path it is given.
+	ipcMain.handle("scan-recording-text", async (_, videoPath: unknown) => {
+		if (typeof videoPath !== "string" || !isInRecordingDirs(videoPath)) {
+			return { success: false, error: "Not a recording." };
+		}
+		return runOcrScan(videoPath);
+	});
+
+	ipcMain.handle("open-notification-settings", async () => {
+		if (process.platform !== "win32") {
+			return { success: false };
+		}
+		try {
+			await shell.openExternal("ms-settings:notifications");
+			return { success: true };
+		} catch (error) {
+			console.warn("Could not open the notification settings:", error);
+			return { success: false };
+		}
+	});
 
 	ipcMain.handle("open-external-url", async (_, url: string) => {
 		try {

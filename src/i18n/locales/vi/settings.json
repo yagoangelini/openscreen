@@ -428,7 +428,9 @@
 		"autoHide": "Ẩn khi không hoạt động",
 		"bounceNone": "Không",
 		"bounceLight": "Nhẹ",
-		"bounceStrong": "Mạnh"
+		"bounceStrong": "Mạnh",
+		"showKeystrokes": "Hiển thị phím tắt",
+		"clickRing": "Làm nổi bật cú nhấp"
 	},
 	"export": {
 		"gifButton": "Xuất GIF",

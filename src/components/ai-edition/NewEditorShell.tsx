@@ -384,7 +384,15 @@ export function NewEditorShell() {
 		void (async () => {
 			if (!window.electronAPI) return;
 			try {
-				if (await importPendingRecording((warning) => toast.warning(warning))) {
+				if (
+					await importPendingRecording(
+						(warning) => toast.warning(warning),
+						(count) =>
+							toast.info(toastText("editor", "shellToasts.sensitiveBlurred", { count }), {
+								duration: 12_000,
+							}),
+					)
+				) {
 					toast.success(toastText("editor", "shellToasts.recordingAddedToNewProject"));
 					return;
 				}

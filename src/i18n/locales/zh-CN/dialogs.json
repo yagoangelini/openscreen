@@ -98,5 +98,12 @@
 		"later": "暂不",
 		"forget": "忽略",
 		"takeInterrupted": "录制因错误提前停止。截至该时刻录制的内容均已保存。"
+	},
+	"exportRunning": {
+		"title": "正在导出",
+		"message": "导出仍在进行中。",
+		"detail": "关闭编辑器会取消导出，视频不会被保存。",
+		"keep": "继续导出",
+		"cancelAndClose": "取消导出并关闭"
 	}
 }

@@ -25,6 +25,7 @@ import type {
 import { DEFAULT_CROP_REGION, getZoomScale } from "@/components/video-editor/types";
 import { annotationFontSizeFraction } from "@/lib/ai-edition/annotationScale";
 import {
+	captionBoxRect,
 	captionCuesToTextRegions,
 	deriveCaptionCues,
 	getCaptionSettings,
@@ -39,6 +40,7 @@ import {
 	readSpeedRegions,
 	resolvePlaybackSegments,
 } from "@/lib/ai-edition/document/timeline";
+import { keystrokeTextRegions } from "@/lib/ai-edition/keystrokeRegions";
 import type { AxcutAudioTrack, AxcutClip, AxcutDocument } from "@/lib/ai-edition/schema";
 import { getEditorSettings } from "@/lib/ai-edition/store/editorSettings";
 import { assetCameraSource } from "@/lib/ai-edition/timeline/camera";
@@ -454,6 +456,8 @@ export interface SceneCursor {
 	/** Each click gives the screen an impact, under every camera (`scene.rs`
 	 *  `SceneCursor::click_impact`). Omitted (not `false`) when off. */
 	clickImpact?: true;
+	/** The click highlight: a ring at each click under the flat cursor (`SceneCursor::click_ring`). */
+	clickRing?: true;
 	clipToBounds: boolean;
 	/** Cursor theme id (sprite set). */
 	theme: string;
@@ -1000,10 +1004,18 @@ export function buildSceneDescription(
 		captionSettings,
 		captionAspect,
 	);
+	// The shortcut plates join the same way, just over the captions when those show.
+	const keystrokeRegions = settings.cursor.showKeystrokes
+		? keystrokeTextRegions(document, {
+				aboveTopPct:
+					captionRegions.length > 0 ? captionBoxRect(captionSettings, captionAspect).y : null,
+			})
+		: [];
 	const projectedAnnotations = projectRegionsToSource(
 		[
 			...(document.annotations ?? []),
 			...(captionRegions as unknown as NonNullable<AxcutDocument["annotations"]>),
+			...(keystrokeRegions as unknown as NonNullable<AxcutDocument["annotations"]>),
 		],
 		visibleClips,
 		document.timeline.clips,
@@ -1265,6 +1277,7 @@ export function buildSceneDescription(
 			model3d: settings.cursor.model3d,
 			asArrow: settings.cursor.asArrow,
 			...(settings.cursor.clickImpact ? { clickImpact: true as const } : {}),
+			...(settings.cursor.clickRing ? { clickRing: true as const } : {}),
 			// The "Keep inside frame" option is gone: the cursor always overflows into the
 			// background. The field stays because the compositor's scene requires it.
 			clipToBounds: false,

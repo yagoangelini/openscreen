@@ -428,7 +428,9 @@
 		"autoHide": "Auto-hide when inactive",
 		"bounceNone": "None",
 		"bounceLight": "Light",
-		"bounceStrong": "Strong"
+		"bounceStrong": "Strong",
+		"showKeystrokes": "On-screen shortcuts",
+		"clickRing": "Click highlight"
 	},
 	"export": {
 		"gifButton": "Export GIF",

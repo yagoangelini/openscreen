@@ -56,6 +56,7 @@ export function MediaStage({
 }) {
 	const t = useScopedT("editor");
 	const [autoTranscribe, setAutoTranscribe] = useState(() => loadUserPreferences().autoTranscribe);
+	const [autoRedact, setAutoRedact] = useState(() => loadUserPreferences().autoRedact);
 	const { locale } = useI18n();
 	const projectId = useProjectStore((s) => s.projectId);
 	const document = useProjectStore((s) => s.document);
@@ -458,6 +459,30 @@ export function MediaStage({
 										}}
 									/>
 									{t("mediaStage.autoTranscribe")}
+								</label>
+								<label
+									style={{
+										display: "flex",
+										alignItems: "center",
+										gap: 8,
+										marginTop: 6,
+										fontSize: 12.5,
+										color: "var(--fg-2)",
+										cursor: "pointer",
+									}}
+									title={t("mediaStage.autoRedactHint")}
+								>
+									<input
+										type="checkbox"
+										data-testid="media-stage-auto-redact"
+										checked={autoRedact}
+										onChange={(event) => {
+											const enabled = event.target.checked;
+											setAutoRedact(enabled);
+											saveUserPreferences({ autoRedact: enabled });
+										}}
+									/>
+									{t("mediaStage.autoRedact")}
 								</label>
 							</div>
 

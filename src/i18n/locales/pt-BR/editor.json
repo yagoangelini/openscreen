@@ -57,7 +57,11 @@
 		"diskSpaceLow": "Pouco espaço em disco: cabe cerca de {{minutes}} minutos de gravação.",
 		"crashProtectionOff": "A proteção contra falhas está desligada nesta gravação: se o app fechar de repente, o take não poderá ser recuperado.",
 		"takeStoppedDiskFull": "A gravação foi parada porque o disco está quase cheio. Tudo o que foi gravado até agora foi salvo.",
-		"saveFailedFileKept": "Não foi possível abrir a gravação no editor, mas o arquivo foi mantido na pasta de gravações."
+		"saveFailedFileKept": "Não foi possível abrir a gravação no editor, mas o arquivo foi mantido na pasta de gravações.",
+		"audioDeviceLostMicrophone": "O microfone desconectou durante a gravação e não voltou: o resto do take ficou sem voz.",
+		"audioDeviceLostSystemAudio": "O dispositivo de áudio do sistema desconectou durante a gravação e não voltou: o resto do take ficou sem o som do computador.",
+		"audioDeviceBackMicrophone": "O microfone desconectou e voltou: cerca de {{seconds}} s do take ficaram sem voz.",
+		"audioDeviceBackSystemAudio": "O dispositivo de áudio do sistema desconectou e voltou: cerca de {{seconds}} s do take ficaram sem o som do computador."
 	},
 	"emptyState": {
 		"title": "Nenhum projeto aberto",
@@ -150,7 +154,10 @@
 		"defaultRecordingsFolder": "Usar padrão",
 		"countdown": "Contagem regressiva",
 		"countdownNone": "Nenhuma",
-		"countdownSeconds": "{{seconds}} s"
+		"countdownSeconds": "{{seconds}} s",
+		"doNotDisturb": "Não incomodar",
+		"doNotDisturbHint": "Ative antes de gravar para que notificações do Teams e do Outlook não apareçam no vídeo.",
+		"openNotificationSettings": "Abrir configurações"
 	},
 	"mediaStage": {
 		"openProjectFirst": "Abra um projeto primeiro",
@@ -182,7 +189,9 @@
 		"noAudioTrack": "Sem faixa de áudio",
 		"noAudioTrackHint": "Esta mídia não tem faixa de áudio — não há nada para transcrever.",
 		"noSpeechDetected": "Nenhuma fala detectada",
-		"autoTranscribe": "Transcrever novas gravações automaticamente ao abrir o editor"
+		"autoTranscribe": "Transcrever novas gravações automaticamente ao abrir o editor",
+		"autoRedact": "Desfocar dados sensíveis nas novas gravações",
+		"autoRedactHint": "Depois de gravar, o OCR encontra e-mails, domínios de tenant, GUIDs, segredos e telefones na tela e os desfoca. Cada desfoque é uma anotação comum, que você mantém ou apaga. Funciona offline."
 	},
 	"exportDialog": {
 		"title": "Exportar",
@@ -222,7 +231,9 @@
 		"failedToWriteFile": "Falha ao gravar o arquivo",
 		"qualityUpscaleWarning": "Upscaling",
 		"exportedVideoOf": "de vídeo exportado em",
-		"nothingToExport": "Nada para exportar — a linha do tempo está vazia."
+		"nothingToExport": "Nada para exportar — a linha do tempo está vazia.",
+		"youtubeLoudness": "Volume do YouTube (−14 LUFS)",
+		"youtubeLoudnessHint": "O YouTube toca todos os vídeos a −14 LUFS. Desligado, a exportação fica nos −16 LUFS em que a voz é nivelada e toca 2 dB mais baixo lá."
 	},
 	"inspector": {
 		"resetFocusPoint": "Redefinir ponto de foco",
@@ -431,7 +442,8 @@
 		"addVideoBeforeExport": "Adicione um vídeo ao projeto antes de exportar.",
 		"regionPasted": "Região colada",
 		"regionCopied": "Região copiada",
-		"cameraCheckFailed": "Não foi possível procurar uma gravação de câmera junto de {{name}}"
+		"cameraCheckFailed": "Não foi possível procurar uma gravação de câmera junto de {{name}}",
+		"sensitiveBlurred": "{{count}} áreas sensíveis foram desfocadas automaticamente. Confira na timeline."
 	},
 	"exportPipeline": {
 		"quality1440p": "1440p",
@@ -458,5 +470,13 @@
 		"replanDone": "Zooms automáticos planejados: {{count}}",
 		"replanNone": "Nenhum momento para zoom automático foi encontrado",
 		"replanFailed": "Não foi possível planejar os zooms automáticos"
+	},
+	"youtubeChapters": {
+		"title": "Capítulos do YouTube",
+		"copy": "Copiar capítulos",
+		"copied": "Capítulos copiados — cole na descrição do vídeo",
+		"copyFailed": "Não foi possível copiar os capítulos",
+		"needThree": "O YouTube só mostra capítulos a partir de 3. Use marcadores (Ctrl+Shift+F8) durante a gravação.",
+		"fallbackTitle": "Capítulo {{index}}"
 	}
 }

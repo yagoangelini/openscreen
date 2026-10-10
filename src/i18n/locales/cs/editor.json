@@ -57,7 +57,11 @@
 		"diskSpaceLow": "Málo místa na disku: vejde se asi {{minutes}} minut nahrávky.",
 		"crashProtectionOff": "Ochrana proti pádu je pro tuto nahrávku vypnutá: pokud se aplikace nečekaně zavře, záznam nepůjde obnovit.",
 		"takeStoppedDiskFull": "Nahrávání bylo zastaveno, protože je disk téměř plný. Vše dosud nahrané bylo uloženo.",
-		"saveFailedFileKept": "Nahrávku se nepodařilo otevřít v editoru, ale její soubor zůstal ve složce nahrávek."
+		"saveFailedFileKept": "Nahrávku se nepodařilo otevřít v editoru, ale její soubor zůstal ve složce nahrávek.",
+		"audioDeviceLostMicrophone": "Mikrofon se během nahrávání odpojil a nevrátil se: zbytek záznamu je bez hlasu.",
+		"audioDeviceLostSystemAudio": "Systémové zvukové zařízení se během nahrávání odpojilo a nevrátilo se: zbytek záznamu je bez zvuku počítače.",
+		"audioDeviceBackMicrophone": "Mikrofon se odpojil a znovu připojil: asi {{seconds}} s záznamu je bez hlasu.",
+		"audioDeviceBackSystemAudio": "Systémové zvukové zařízení se odpojilo a znovu připojilo: asi {{seconds}} s záznamu je bez zvuku počítače."
 	},
 	"emptyState": {
 		"title": "Žádný projekt není otevřen",
@@ -150,7 +154,10 @@
 		"defaultRecordingsFolder": "Použít výchozí",
 		"countdown": "Odpočet",
 		"countdownNone": "Žádný",
-		"countdownSeconds": "{{seconds}} s"
+		"countdownSeconds": "{{seconds}} s",
+		"doNotDisturb": "Nerušit",
+		"doNotDisturbHint": "Zapněte před nahráváním, aby se oznámení z Teams a Outlooku nedostala do videa.",
+		"openNotificationSettings": "Otevřít nastavení"
 	},
 	"mediaStage": {
 		"openProjectFirst": "Nejprve otevřete projekt",
@@ -182,7 +189,9 @@
 		"noAudioTrack": "Žádná zvuková stopa",
 		"noAudioTrackHint": "Toto médium nemá zvukovou stopu, takže není co přepisovat.",
 		"noSpeechDetected": "Žádná řeč nezjištěna",
-		"autoTranscribe": "Automaticky přepisovat nové nahrávky při otevření editoru"
+		"autoTranscribe": "Automaticky přepisovat nové nahrávky při otevření editoru",
+		"autoRedact": "Rozmazat citlivá data v nových nahrávkách",
+		"autoRedactHint": "Po nahrání najde OCR na obrazovce e-maily, domény tenantu, GUID, tajné klíče a telefonní čísla a rozmaže je. Každé rozmazání je běžná anotace, kterou můžete ponechat nebo smazat. Funguje offline."
 	},
 	"exportDialog": {
 		"title": "Export",
@@ -222,7 +231,9 @@
 		"exportFailed": "Export selhal",
 		"failedToWriteFile": "Nepodařilo se zapsat soubor",
 		"qualityUpscaleWarning": "Zvýšení rozlišení",
-		"nothingToExport": "Není co exportovat, časová osa je prázdná."
+		"nothingToExport": "Není co exportovat, časová osa je prázdná.",
+		"youtubeLoudness": "Hlasitost pro YouTube (−14 LUFS)",
+		"youtubeLoudnessHint": "YouTube přehrává každé video na −14 LUFS. Vypnuto zůstane export na −16 LUFS hlasu a zní tam o 2 dB tišeji."
 	},
 	"inspector": {
 		"resetFocusPoint": "Obnovit bod zaostření",
@@ -431,7 +442,8 @@
 		"addVideoBeforeExport": "Add a video to the project before exporting.",
 		"regionPasted": "Region pasted",
 		"regionCopied": "Region copied",
-		"cameraCheckFailed": "Could not check for a camera recording near {{name}}"
+		"cameraCheckFailed": "Could not check for a camera recording near {{name}}",
+		"sensitiveBlurred": "Automaticky rozmazáno {{count}} citlivých oblastí. Zkontrolujte je na časové ose."
 	},
 	"exportPipeline": {
 		"quality1440p": "1440p",
@@ -458,5 +470,13 @@
 		"replanDone": "Naplánováno automatických zoomů: {{count}}",
 		"replanNone": "Nenalezen žádný okamžik pro automatický zoom",
 		"replanFailed": "Automatické zoomy se nepodařilo naplánovat"
+	},
+	"youtubeChapters": {
+		"title": "Kapitoly YouTube",
+		"copy": "Kopírovat kapitoly",
+		"copied": "Kapitoly zkopírovány — vložte je do popisu videa",
+		"copyFailed": "Kapitoly se nepodařilo zkopírovat",
+		"needThree": "YouTube zobrazí kapitoly jen od 3. Při nahrávání přidávejte značky (Ctrl+Shift+F8).",
+		"fallbackTitle": "Kapitola {{index}}"
 	}
 }

@@ -53,6 +53,7 @@ import {
 	ownsItsUpdates,
 	platformOwnsUpdates,
 } from "./install-channel";
+import { exportJobs } from "./ipc/gifExportJobs";
 import {
 	exportDiagnosticFile,
 	getSelectedDesktopSource,
@@ -1080,6 +1081,8 @@ function updateTrayMenu(recording: boolean = false) {
 let editorHasUnsavedChanges = false;
 let isForceClosing = false;
 let isCloseConfirmInFlight = false;
+/** The user already agreed, for this close, that it may cancel the running export. */
+let exportCloseConfirmed = false;
 
 ipcMain.on("set-has-unsaved-changes", (_, hasChanges: boolean) => {
 	editorHasUnsavedChanges = hasChanges;
@@ -1123,6 +1126,48 @@ function createEditorWindowWrapper() {
 	}
 
 	mainWindow.on("close", (event) => {
+		const closingWindow = mainWindow;
+		// Closing the editor cancels its export (the job table cancels on
+		// `destroyed`), so a stray click could throw away a half-hour render. Ask
+		// first; the unsaved-changes question, if any, comes after.
+		if (
+			!isForceClosing &&
+			!isCloseConfirmInFlight &&
+			!exportCloseConfirmed &&
+			closingWindow &&
+			!closingWindow.isDestroyed() &&
+			exportJobs.isRunning(closingWindow.webContents.id)
+		) {
+			event.preventDefault();
+			isCloseConfirmInFlight = true;
+			showMessageBoxOver(closingWindow, {
+				type: "warning",
+				title: mainT("dialogs", "exportRunning.title") || "Export in progress",
+				message: mainT("dialogs", "exportRunning.message") || "An export is still running.",
+				detail:
+					mainT("dialogs", "exportRunning.detail") ||
+					"Closing the editor cancels it, and the video will not be saved.",
+				buttons: [
+					mainT("dialogs", "exportRunning.keep") || "Keep exporting",
+					mainT("dialogs", "exportRunning.cancelAndClose") || "Cancel export and close",
+				],
+				defaultId: 0,
+				cancelId: 0,
+				noLink: true,
+			})
+				.then(({ response }) => {
+					isCloseConfirmInFlight = false;
+					if (response !== 1 || closingWindow.isDestroyed()) return;
+					exportCloseConfirmed = true;
+					closingWindow.close();
+				})
+				.catch((error) => {
+					isCloseConfirmInFlight = false;
+					console.error("[editor] export-close dialog failed", error);
+				});
+			return;
+		}
+		exportCloseConfirmed = false;
 		if (isForceClosing || !editorHasUnsavedChanges || isCloseConfirmInFlight) return;
 
 		event.preventDefault();

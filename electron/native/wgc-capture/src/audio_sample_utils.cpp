@@ -8,7 +8,9 @@
 #include <numeric>
 #include <cstddef>
 #include <cstring>
+#include <iostream>
 #include <limits>
+#include <string>
 
 namespace {
 
@@ -478,6 +480,143 @@ void mixAudioInPlace(
     }
 }
 
+namespace {
+
+// Long-run level: a 1.5 s time constant, so a pause in speech does not flip the
+// decision, while plugging the mic into the other input settles within seconds.
+constexpr double kChannelEnergySeconds = 1.5;
+// Below this the loudest channel is room noise, not a voice: decide nothing.
+constexpr double kLiveChannelFloor = 1e-5;  // -50 dBFS, as mean square
+// A channel this far under the loudest one is taken as unconnected...
+constexpr double kDeadChannelRatio = 1e-3;  // -30 dB
+// ...and given back its own signal only once it climbs within 20 dB again.
+constexpr double kRevivedChannelRatio = 1e-2;  // -20 dB
+
+}  // namespace
+
+void MicrophoneChannelPicker::reset() {
+    energy_.clear();
+    liveChannel_ = -1;
+}
+
+int MicrophoneChannelPicker::process(BYTE* data, DWORD byteCount, const AudioInputFormat& format) {
+    if (!data || format.channels < 2 || format.blockAlign == 0 || format.sampleRate == 0) {
+        return -1;
+    }
+    const size_t frames = byteCount / format.blockAlign;
+    if (frames == 0) {
+        return liveChannel_;
+    }
+    if (energy_.size() != format.channels) {
+        energy_.assign(format.channels, 0.0);
+        liveChannel_ = -1;
+    }
+
+    const double alpha =
+        1.0 - std::exp(-static_cast<double>(frames) / (kChannelEnergySeconds * format.sampleRate));
+    for (UINT32 channel = 0; channel < format.channels; ++channel) {
+        double sumSquares = 0.0;
+        for (size_t frame = 0; frame < frames; ++frame) {
+            const double v = readSampleAsDouble(data, format, frame, channel);
+            sumSquares += v * v;
+        }
+        energy_[channel] += alpha * (sumSquares / static_cast<double>(frames) - energy_[channel]);
+    }
+
+    UINT32 loudest = 0;
+    for (UINT32 channel = 1; channel < format.channels; ++channel) {
+        if (energy_[channel] > energy_[loudest]) {
+            loudest = channel;
+        }
+    }
+    const double loud = energy_[loudest];
+    if (loud >= kLiveChannelFloor) {
+        // While copying, the others must come back to -20 dB to be trusted again;
+        // while not, they must fall to -30 dB first. The gap is the hysteresis.
+        const double ratio = liveChannel_ >= 0 ? kRevivedChannelRatio : kDeadChannelRatio;
+        bool othersDead = true;
+        for (UINT32 channel = 0; channel < format.channels; ++channel) {
+            if (channel != loudest && energy_[channel] >= loud * ratio) {
+                othersDead = false;
+                break;
+            }
+        }
+        liveChannel_ = othersDead ? static_cast<int>(loudest) : -1;
+    }
+
+    if (liveChannel_ >= 0) {
+        const auto live = static_cast<UINT32>(liveChannel_);
+        for (size_t frame = 0; frame < frames; ++frame) {
+            const double v = readSampleAsDouble(data, format, frame, live);
+            for (UINT32 channel = 0; channel < format.channels; ++channel) {
+                if (channel != live) {
+                    writeSampleFromDouble(data, format, frame, channel, v);
+                }
+            }
+        }
+    }
+    return liveChannel_;
+}
+
+void PeakLimiter::process(double* interleaved, size_t frames, UINT32 channels, UINT32 sampleRate) {
+    if (!interleaved || channels == 0 || sampleRate == 0) {
+        return;
+    }
+    const double release = 1.0 - std::exp(-1.0 / (0.150 * sampleRate));
+    for (size_t frame = 0; frame < frames; ++frame) {
+        double* samples = interleaved + frame * channels;
+        double peak = 0.0;
+        for (UINT32 channel = 0; channel < channels; ++channel) {
+            peak = std::max(peak, std::abs(samples[channel]));
+        }
+        const double needed = peak > kCeiling ? kCeiling / peak : 1.0;
+        // Recover towards unity, but never past what this frame needs.
+        gain_ = std::min(needed, gain_ + (1.0 - gain_) * release);
+        if (gain_ < 1.0) {
+            for (UINT32 channel = 0; channel < channels; ++channel) {
+                samples[channel] *= gain_;
+            }
+        }
+    }
+}
+
+void accumulateAudio(
+    std::vector<double>& sum,
+    const BYTE* source,
+    DWORD byteCount,
+    const AudioInputFormat& format,
+    double gain) {
+    if (!source || format.blockAlign == 0 || format.channels == 0) {
+        return;
+    }
+    const size_t frames =
+        std::min(static_cast<size_t>(byteCount / format.blockAlign), sum.size() / format.channels);
+    for (size_t frame = 0; frame < frames; ++frame) {
+        for (UINT32 channel = 0; channel < format.channels; ++channel) {
+            sum[frame * format.channels + channel] +=
+                readSampleAsDouble(source, format, frame, channel) * gain;
+        }
+    }
+}
+
+void writeAudioFromDoubles(
+    const std::vector<double>& samples,
+    const AudioInputFormat& format,
+    std::vector<BYTE>& destination) {
+    if (format.blockAlign == 0 || format.channels == 0) {
+        destination.clear();
+        return;
+    }
+    const size_t frames = samples.size() / format.channels;
+    destination.assign(frames * format.blockAlign, 0);
+    for (size_t frame = 0; frame < frames; ++frame) {
+        for (UINT32 channel = 0; channel < format.channels; ++channel) {
+            writeSampleFromDouble(
+                destination.data(), format, frame, channel, samples[frame * format.channels + channel]);
+        }
+    }
+}
+
 AudioMixer::AudioMixer(
     const AudioInputFormat& format,
     const AudioInputFormat& systemFormat,
@@ -509,6 +648,8 @@ bool AudioMixer::start() {
     paused_ = false;
     systemDecimator_.reset();
     microphoneDecimator_.reset();
+    microphoneChannels_.reset();
+    limiter_.reset();
     thread_ = std::thread([this] {
         mixLoop();
     });
@@ -581,7 +722,20 @@ void AudioMixer::pushMicrophone(const BYTE* data, DWORD byteCount) {
         // in: the queue would hold a flat-topped signal and the mix would add
         // further distortion on top of it, with whatever headroom the opposite
         // polarity of the system stream offered already destroyed.
-        append(microphoneQueue_, data, byteCount, microphoneFormat_, 1.0, microphoneDecimator_);
+        const int liveBefore = microphoneChannels_.liveChannel();
+        microphoneScratch_.assign(data, data + byteCount);
+        const int live = microphoneChannels_.process(
+            microphoneScratch_.data(), byteCount, microphoneFormat_);
+        if (live != liveBefore) {
+            std::cerr << "[mic-channels] "
+                      << (live >= 0 ? "only channel " + std::to_string(live + 1) +
+                                          " carries the microphone; copying it to every channel"
+                                    : std::string("every channel carries the microphone; kept as recorded"))
+                      << std::endl;
+        }
+        append(
+            microphoneQueue_, microphoneScratch_.data(), byteCount, microphoneFormat_, 1.0,
+            microphoneDecimator_);
     }
     cv_.notify_all();
 }
@@ -640,6 +794,7 @@ void AudioMixer::mixLoop() {
     const size_t chunkBytes = static_cast<size_t>(chunkFrames) * format_.blockAlign;
     std::vector<BYTE> mixedChunk;
     std::vector<BYTE> sourceChunk;
+    std::vector<double> mixSum;
     std::chrono::steady_clock::time_point audioClockStart;
     bool audioClockAnchored = false;
 
@@ -686,18 +841,23 @@ void AudioMixer::mixLoop() {
                 if (stopRequested_ || !timelineStarted_ || paused_) {
                     break;
                 }
-                mixedChunk.assign(chunkBytes, 0);
+                // Summed in doubles and limited once, at the end: the gain rides in
+                // the sum, so a boosted mic over loud system audio is brought under
+                // the ceiling as a whole rather than clipped per source.
+                mixSum.assign(static_cast<size_t>(chunkFrames) * format_.channels, 0.0);
                 if (includeSystem_) {
                     pop(systemQueue_, sourceChunk, chunkBytes);
-                    mixAudioInPlace(mixedChunk, sourceChunk.data(), static_cast<DWORD>(sourceChunk.size()), format_);
+                    accumulateAudio(mixSum, sourceChunk.data(), static_cast<DWORD>(sourceChunk.size()), format_, 1.0);
                 }
                 if (includeMicrophone_) {
                     pop(microphoneQueue_, sourceChunk, chunkBytes);
-                    mixAudioInPlace(
-                        mixedChunk, sourceChunk.data(), static_cast<DWORD>(sourceChunk.size()), format_,
+                    accumulateAudio(
+                        mixSum, sourceChunk.data(), static_cast<DWORD>(sourceChunk.size()), format_,
                         microphoneGain_);
                 }
             }
+            limiter_.process(mixSum.data(), chunkFrames, format_.channels, format_.sampleRate);
+            writeAudioFromDoubles(mixSum, format_, mixedChunk);
 
             const int64_t timestampHns =
                 static_cast<int64_t>((emittedFrames_ * HnsPerSecond) / format_.sampleRate);

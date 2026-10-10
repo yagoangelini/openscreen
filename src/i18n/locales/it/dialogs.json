@@ -98,5 +98,12 @@
 		"later": "Non ora",
 		"forget": "Dimentica",
 		"takeInterrupted": "La registrazione si è interrotta prima per un errore. Tutto ciò che è stato registrato fino a quel momento è stato salvato."
+	},
+	"exportRunning": {
+		"title": "Esportazione in corso",
+		"message": "Un'esportazione è ancora in corso.",
+		"detail": "Chiudere l'editor la annulla e il video non verrà salvato.",
+		"keep": "Continua a esportare",
+		"cancelAndClose": "Annulla esportazione e chiudi"
 	}
 }

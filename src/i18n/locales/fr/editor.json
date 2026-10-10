@@ -55,7 +55,11 @@
 		"diskSpaceLow": "Espace disque faible : environ {{minutes}} minutes d'enregistrement possibles.",
 		"crashProtectionOff": "La protection contre les plantages est désactivée pour cet enregistrement : si l'app se ferme brusquement, la prise ne pourra pas être récupérée.",
 		"takeStoppedDiskFull": "L'enregistrement a été arrêté car le disque est presque plein. Tout ce qui a été enregistré a été conservé.",
-		"saveFailedFileKept": "L'enregistrement n'a pas pu s'ouvrir dans l'éditeur, mais son fichier a été conservé dans le dossier des enregistrements."
+		"saveFailedFileKept": "L'enregistrement n'a pas pu s'ouvrir dans l'éditeur, mais son fichier a été conservé dans le dossier des enregistrements.",
+		"audioDeviceLostMicrophone": "Le micro s'est déconnecté pendant l'enregistrement et n'est pas revenu : le reste de la prise n'a pas de voix.",
+		"audioDeviceLostSystemAudio": "Le périphérique audio système s'est déconnecté pendant l'enregistrement et n'est pas revenu : le reste de la prise n'a pas le son de l'ordinateur.",
+		"audioDeviceBackMicrophone": "Le micro s'est déconnecté puis est revenu : environ {{seconds}} s de la prise n'ont pas de voix.",
+		"audioDeviceBackSystemAudio": "Le périphérique audio système s'est déconnecté puis est revenu : environ {{seconds}} s de la prise n'ont pas le son de l'ordinateur."
 	},
 	"loadingVideo": "Chargement de la vidéo...",
 	"loadingEditor": "Chargement de l'éditeur...",
@@ -150,7 +154,10 @@
 		"defaultRecordingsFolder": "Par défaut",
 		"countdown": "Compte à rebours",
 		"countdownNone": "Aucun",
-		"countdownSeconds": "{{seconds}} s"
+		"countdownSeconds": "{{seconds}} s",
+		"doNotDisturb": "Ne pas déranger",
+		"doNotDisturbHint": "Activez-le avant d'enregistrer pour que les notifications de Teams et Outlook n'apparaissent pas dans la vidéo.",
+		"openNotificationSettings": "Ouvrir les paramètres"
 	},
 	"mediaStage": {
 		"openProjectFirst": "Ouvrez d'abord un projet",
@@ -182,7 +189,9 @@
 		"noAudioTrack": "Aucune piste audio",
 		"noAudioTrackHint": "Ce média n'a pas de piste audio — il n'y a rien à transcrire.",
 		"noSpeechDetected": "Aucune parole détectée",
-		"autoTranscribe": "Transcrire automatiquement les nouveaux enregistrements à l'ouverture de l'éditeur"
+		"autoTranscribe": "Transcrire automatiquement les nouveaux enregistrements à l'ouverture de l'éditeur",
+		"autoRedact": "Flouter les données sensibles des nouveaux enregistrements",
+		"autoRedactHint": "Après une prise, l'OCR repère les e-mails, domaines de tenant, GUID, secrets et numéros de téléphone à l'écran et les floute. Chaque flou est une annotation ordinaire à garder ou supprimer. Fonctionne hors ligne."
 	},
 	"exportDialog": {
 		"title": "Exporter",
@@ -222,7 +231,9 @@
 		"exportFailed": "Échec de l'export",
 		"failedToWriteFile": "Échec de l'écriture du fichier",
 		"qualityUpscaleWarning": "Upscaling",
-		"nothingToExport": "Rien à exporter — la timeline est vide."
+		"nothingToExport": "Rien à exporter — la timeline est vide.",
+		"youtubeLoudness": "Volume YouTube (−14 LUFS)",
+		"youtubeLoudnessHint": "YouTube lit toutes les vidéos à −14 LUFS. Désactivé, l'export garde les −16 LUFS de la voix et sonne 2 dB plus bas là-bas."
 	},
 	"inspector": {
 		"resetFocusPoint": "Réinitialiser le point de focus",
@@ -431,7 +442,8 @@
 		"addVideoBeforeExport": "Ajoutez une vidéo au projet avant d'exporter.",
 		"regionPasted": "Région collée",
 		"regionCopied": "Région copiée",
-		"cameraCheckFailed": "Impossible de chercher un enregistrement caméra près de {{name}}"
+		"cameraCheckFailed": "Impossible de chercher un enregistrement caméra près de {{name}}",
+		"sensitiveBlurred": "{{count}} zones sensibles ont été floutées automatiquement. Vérifiez-les sur la timeline."
 	},
 	"exportPipeline": {
 		"quality1440p": "1440p",
@@ -458,5 +470,13 @@
 		"replanDone": "Zooms automatiques planifiés : {{count}}",
 		"replanNone": "Aucun moment pour un zoom automatique n'a été trouvé",
 		"replanFailed": "Impossible de planifier les zooms automatiques"
+	},
+	"youtubeChapters": {
+		"title": "Chapitres YouTube",
+		"copy": "Copier les chapitres",
+		"copied": "Chapitres copiés — collez-les dans la description",
+		"copyFailed": "Impossible de copier les chapitres",
+		"needThree": "YouTube n'affiche les chapitres qu'à partir de 3. Ajoutez des repères (Ctrl+Shift+F8) pendant l'enregistrement.",
+		"fallbackTitle": "Chapitre {{index}}"
 	}
 }

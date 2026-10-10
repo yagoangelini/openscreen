@@ -31,7 +31,8 @@
 		"imageItem": "이미지",
 		"emptyText": "빈 텍스트",
 		"cameraFullscreen": "전체 화면 카메라",
-		"cameraFullscreenItem": "전체 화면 카메라 {{index}}"
+		"cameraFullscreenItem": "전체 화면 카메라 {{index}}",
+		"marker": "{{time}} 마커"
 	},
 	"emptyState": {
 		"noVideo": "불러온 비디오 없음",

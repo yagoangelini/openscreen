@@ -31,7 +31,8 @@
 		"imageItem": "圖片",
 		"emptyText": "空文字",
 		"cameraFullscreen": "全螢幕攝影機",
-		"cameraFullscreenItem": "全螢幕攝影機 {{index}}"
+		"cameraFullscreenItem": "全螢幕攝影機 {{index}}",
+		"marker": "{{time}} 的標記"
 	},
 	"emptyState": {
 		"noVideo": "未載入影片",

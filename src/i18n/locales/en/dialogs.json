@@ -98,5 +98,12 @@
 		"later": "Not now",
 		"forget": "Forget it",
 		"takeInterrupted": "The recording stopped early because of an error. Everything recorded up to that point was saved."
+	},
+	"exportRunning": {
+		"title": "Export in progress",
+		"message": "An export is still running.",
+		"detail": "Closing the editor cancels it, and the video will not be saved.",
+		"keep": "Keep exporting",
+		"cancelAndClose": "Cancel export and close"
 	}
 }

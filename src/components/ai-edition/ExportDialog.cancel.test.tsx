@@ -11,7 +11,7 @@ vi.mock("@/native", () => ({
 	useIsCpuCompositor: () => false,
 }));
 vi.mock("@/native/sceneDescription", () => ({
-	buildSceneDescription: () => ({ speedRegions: [] }),
+	buildSceneDescription: () => ({ speedRegions: [], audio: { gainDb: 0 } }),
 	resolveVisibleClips: (doc: AxcutDocument) => doc.timeline.clips,
 }));
 

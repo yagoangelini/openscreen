@@ -1,4 +1,5 @@
 import {
+	BellOff,
 	Camera,
 	CameraOff,
 	ChevronDown,
@@ -613,6 +614,28 @@ export function RecStage({
 							))}
 						</div>
 					</div>
+
+					{window.electronAPI?.getPlatform?.() === "win32" ? (
+						<div className={styles.recRow}>
+							<div className={styles.recRowLabel} title={t("rec.doNotDisturbHint")}>
+								<BellOff size={15} />
+								<span style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
+									{t("rec.doNotDisturb")}
+									<span style={{ fontSize: 11, color: "var(--muted)" }}>
+										{t("rec.doNotDisturbHint")}
+									</span>
+								</span>
+							</div>
+							<button
+								type="button"
+								data-testid="rec-open-notification-settings"
+								className={styles.recToggleBtn}
+								onClick={() => void window.electronAPI?.openNotificationSettings?.()}
+							>
+								{t("rec.openNotificationSettings")}
+							</button>
+						</div>
+					) : null}
 
 					<RecordingsFolderRow
 						chosenFolder={prefs.recordingsFolder}

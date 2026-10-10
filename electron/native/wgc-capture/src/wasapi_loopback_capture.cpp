@@ -170,6 +170,9 @@ bool WasapiLoopbackCapture::initializeMicrophone(const std::wstring& deviceId, c
 }
 
 bool WasapiLoopbackCapture::initialize(WasapiCaptureEndpoint endpoint, const std::wstring& deviceId, const std::wstring& deviceName) {
+    endpoint_ = endpoint;
+    requestedDeviceId_ = deviceId;
+    requestedDeviceName_ = deviceName;
     HRESULT hr = CoCreateInstance(
         __uuidof(MMDeviceEnumerator),
         nullptr,
@@ -243,6 +246,9 @@ bool WasapiLoopbackCapture::initialize(WasapiCaptureEndpoint endpoint, const std
         std::cerr << "ERROR: Unsupported WASAPI loopback mix format" << std::endl;
         return false;
     }
+    if (!initialized_) {
+        inputFormat_ = deviceFormat_;
+    }
 
     const DWORD streamFlags =
         endpoint == WasapiCaptureEndpoint::SystemLoopback ? AUDCLNT_STREAMFLAGS_LOOPBACK : 0;
@@ -262,6 +268,37 @@ bool WasapiLoopbackCapture::initialize(WasapiCaptureEndpoint endpoint, const std
         return false;
     }
 
+    initialized_ = true;
+    return true;
+}
+
+void WasapiLoopbackCapture::releaseEndpoint() {
+    if (audioClient_) {
+        audioClient_->Stop();
+    }
+    captureClient_.Reset();
+    audioClient_.Reset();
+    device_.Reset();
+    deviceEnumerator_.Reset();
+    if (mixFormat_) {
+        CoTaskMemFree(mixFormat_);
+        mixFormat_ = nullptr;
+    }
+}
+
+bool WasapiLoopbackCapture::reopen() {
+    releaseEndpoint();
+    if (!initialize(endpoint_, requestedDeviceId_, requestedDeviceName_)) {
+        releaseEndpoint();
+        return false;
+    }
+    if (FAILED(audioClient_->Start())) {
+        releaseEndpoint();
+        return false;
+    }
+    hasLastDevicePosition_ = false;
+    lastDevicePositionEnd_ = 0;
+    convertDecimator_.reset();
     return true;
 }
 
@@ -326,13 +363,13 @@ bool WasapiLoopbackCapture::resolveInputFormat(WAVEFORMATEX* mixFormat) {
         return false;
     }
 
-    inputFormat_.subtype = subtype;
-    inputFormat_.sampleRate = mixFormat->nSamplesPerSec;
-    inputFormat_.channels = mixFormat->nChannels;
-    inputFormat_.bitsPerSample = mixFormat->wBitsPerSample;
-    inputFormat_.blockAlign = mixFormat->nBlockAlign;
-    inputFormat_.avgBytesPerSec = mixFormat->nAvgBytesPerSec;
-    return inputFormat_.sampleRate > 0 && inputFormat_.channels > 0 && inputFormat_.blockAlign > 0;
+    deviceFormat_.subtype = subtype;
+    deviceFormat_.sampleRate = mixFormat->nSamplesPerSec;
+    deviceFormat_.channels = mixFormat->nChannels;
+    deviceFormat_.bitsPerSample = mixFormat->wBitsPerSample;
+    deviceFormat_.blockAlign = mixFormat->nBlockAlign;
+    deviceFormat_.avgBytesPerSec = mixFormat->nAvgBytesPerSec;
+    return deviceFormat_.sampleRate > 0 && deviceFormat_.channels > 0 && deviceFormat_.blockAlign > 0;
 }
 
 bool WasapiLoopbackCapture::start(AudioCallback callback) {
@@ -376,20 +413,69 @@ const std::wstring& WasapiLoopbackCapture::selectedDeviceName() const {
 }
 
 void WasapiLoopbackCapture::captureLoop() {
+    // Reopening creates COM objects on this thread.
+    const HRESULT comInit = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    const bool comInitialized = SUCCEEDED(comInit);
+
+    // Packets arrive in the device's format; the consumer was promised the one
+    // the take started with. They only differ after a reopen onto another device.
+    auto deliver = [&](const BYTE* data, DWORD byteCount, int64_t timestampHns, int64_t durationHns) {
+        if (sameAudioFormatForMixing(deviceFormat_, inputFormat_)) {
+            callback_(data, byteCount, timestampHns, durationHns);
+            return;
+        }
+        convertAudioWithGain(data, byteCount, deviceFormat_, inputFormat_, 1.0, convertBuffer_, convertDecimator_);
+        if (!convertBuffer_.empty()) {
+            callback_(convertBuffer_.data(), static_cast<DWORD>(convertBuffer_.size()), timestampHns, durationHns);
+        }
+    };
+
     auto emitSilenceFrames = [&](uint64_t frames, int64_t timestampHns) {
         constexpr uint64_t MaxSilenceChunkFrames = 4800;
         uint64_t remainingFrames = frames;
         int64_t currentTimestampHns = timestampHns;
         while (remainingFrames > 0 && !stopRequested_) {
             const uint64_t chunkFrames = std::min<uint64_t>(remainingFrames, MaxSilenceChunkFrames);
-            const DWORD chunkBytes = static_cast<DWORD>(chunkFrames * inputFormat_.blockAlign);
+            const DWORD chunkBytes = static_cast<DWORD>(chunkFrames * deviceFormat_.blockAlign);
             const int64_t chunkDurationHns =
-                static_cast<int64_t>((chunkFrames * HnsPerSecond) / inputFormat_.sampleRate);
+                static_cast<int64_t>((chunkFrames * HnsPerSecond) / deviceFormat_.sampleRate);
             silenceBuffer_.assign(chunkBytes, 0);
-            callback_(silenceBuffer_.data(), chunkBytes, currentTimestampHns, chunkDurationHns);
+            deliver(silenceBuffer_.data(), chunkBytes, currentTimestampHns, chunkDurationHns);
             remainingFrames -= chunkFrames;
             currentTimestampHns += chunkDurationHns;
         }
+    };
+
+    const char* const sourceLabel =
+        endpoint_ == WasapiCaptureEndpoint::Microphone ? "microphone" : "system-audio";
+
+    // The endpoint died under us -- unplugged, a Bluetooth headset that dropped,
+    // a driver reset. The take carries on (the mixer runs on the clock and fills
+    // the gap with silence); this keeps trying to get the device back, once a
+    // second, for as long as the recording lasts.
+    auto recoverEndpoint = [&](HRESULT failure) {
+        std::cerr << "{\"event\":\"warning\",\"code\":\"audio-device-lost\",\"source\":\""
+                  << sourceLabel << "\",\"hr\":\"0x" << std::hex << static_cast<unsigned long>(failure)
+                  << std::dec << "\"}" << std::endl;
+        const auto lostAt = std::chrono::steady_clock::now();
+        while (!stopRequested_) {
+            for (int slice = 0; slice < 20 && !stopRequested_; slice += 1) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            }
+            if (stopRequested_) {
+                return false;
+            }
+            if (reopen()) {
+                const auto silentMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::steady_clock::now() - lostAt).count();
+                std::cerr << "{\"event\":\"warning\",\"code\":\"audio-device-reopened\",\"source\":\""
+                          << sourceLabel << "\",\"silentMs\":" << silentMs << "}" << std::endl;
+                std::wcerr << L"[audio-reopen] " << sourceLabel << L" now on: " << selectedDeviceName_
+                           << std::endl;
+                return true;
+            }
+        }
+        return false;
     };
 
     while (!stopRequested_) {
@@ -398,8 +484,13 @@ void WasapiLoopbackCapture::captureLoop() {
         if (FAILED(hr)) {
             std::cerr << "ERROR: IAudioCaptureClient::GetNextPacketSize failed (hr=0x" << std::hex
                       << hr << std::dec << ")" << std::endl;
+            if (recoverEndpoint(hr)) {
+                continue;
+            }
             break;
         }
+        bool endpointFailed = false;
+        HRESULT endpointFailure = S_OK;
 
         while (packetFrames > 0 && !stopRequested_) {
             BYTE* data = nullptr;
@@ -412,6 +503,8 @@ void WasapiLoopbackCapture::captureLoop() {
             if (FAILED(hr)) {
                 std::cerr << "ERROR: IAudioCaptureClient::GetBuffer failed (hr=0x" << std::hex
                           << hr << std::dec << ")" << std::endl;
+                endpointFailed = true;
+                endpointFailure = hr;
                 break;
             }
 
@@ -420,24 +513,24 @@ void WasapiLoopbackCapture::captureLoop() {
                 const uint64_t gapFrames = devicePosition - lastDevicePositionEnd_;
                 if ((flags & AUDCLNT_BUFFERFLAGS_DATA_DISCONTINUITY) != 0 || gapFrames > framesAvailable) {
                     const int64_t gapTimestampHns =
-                        static_cast<int64_t>((lastDevicePositionEnd_ * HnsPerSecond) / inputFormat_.sampleRate);
+                        static_cast<int64_t>((lastDevicePositionEnd_ * HnsPerSecond) / deviceFormat_.sampleRate);
                     emitSilenceFrames(gapFrames, gapTimestampHns);
                 }
             }
 
-            const DWORD byteCount = framesAvailable * inputFormat_.blockAlign;
+            const DWORD byteCount = framesAvailable * deviceFormat_.blockAlign;
             const int64_t timestampHns =
-                static_cast<int64_t>((devicePosition * HnsPerSecond) / inputFormat_.sampleRate);
+                static_cast<int64_t>((devicePosition * HnsPerSecond) / deviceFormat_.sampleRate);
             const int64_t durationHns =
                 static_cast<int64_t>((static_cast<uint64_t>(framesAvailable) * HnsPerSecond) /
-                                     inputFormat_.sampleRate);
+                                     deviceFormat_.sampleRate);
 
             if (byteCount > 0) {
                 if ((flags & AUDCLNT_BUFFERFLAGS_SILENT) != 0 || !data) {
                     silenceBuffer_.assign(byteCount, 0);
-                    callback_(silenceBuffer_.data(), byteCount, timestampHns, durationHns);
+                    deliver(silenceBuffer_.data(), byteCount, timestampHns, durationHns);
                 } else {
-                    callback_(data, byteCount, timestampHns, durationHns);
+                    deliver(data, byteCount, timestampHns, durationHns);
                 }
             }
 
@@ -451,11 +544,24 @@ void WasapiLoopbackCapture::captureLoop() {
                 std::cerr << "ERROR: IAudioCaptureClient::GetNextPacketSize failed (hr=0x"
                           << std::hex << hr << std::dec << ")" << std::endl;
                 packetFrames = 0;
+                endpointFailed = true;
+                endpointFailure = hr;
                 break;
             }
         }
 
+        if (endpointFailed) {
+            if (recoverEndpoint(endpointFailure)) {
+                continue;
+            }
+            break;
+        }
+
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
+
+    if (comInitialized) {
+        CoUninitialize();
     }
 
 }

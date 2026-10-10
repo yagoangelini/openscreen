@@ -57,7 +57,11 @@
 		"diskSpaceLow": "磁碟空間不足：約可錄製 {{minutes}} 分鐘。",
 		"crashProtectionOff": "本次錄製的當機保護已關閉：若應用程式意外關閉，錄製將無法復原。",
 		"takeStoppedDiskFull": "由於磁碟快滿了，錄製已停止。目前錄製的內容皆已儲存。",
-		"saveFailedFileKept": "無法在編輯器中開啟錄製，但其檔案已保留在錄製資料夾中。"
+		"saveFailedFileKept": "無法在編輯器中開啟錄製，但其檔案已保留在錄製資料夾中。",
+		"audioDeviceLostMicrophone": "錄製期間麥克風中斷且未恢復：之後的內容沒有人聲。",
+		"audioDeviceLostSystemAudio": "錄製期間系統音訊裝置中斷且未恢復：之後的內容沒有電腦聲音。",
+		"audioDeviceBackMicrophone": "麥克風中斷後已恢復：約 {{seconds}} 秒沒有人聲。",
+		"audioDeviceBackSystemAudio": "系統音訊裝置中斷後已恢復：約 {{seconds}} 秒沒有電腦聲音。"
 	},
 	"emptyState": {
 		"title": "未開啟任何專案",
@@ -150,7 +154,10 @@
 		"defaultRecordingsFolder": "使用預設",
 		"countdown": "倒數計時",
 		"countdownNone": "無",
-		"countdownSeconds": "{{seconds}} 秒"
+		"countdownSeconds": "{{seconds}} 秒",
+		"doNotDisturb": "勿擾模式",
+		"doNotDisturbHint": "錄製前開啟，避免 Teams 與 Outlook 通知出現在影片中。",
+		"openNotificationSettings": "開啟設定"
 	},
 	"mediaStage": {
 		"openProjectFirst": "請先開啟專案",
@@ -182,7 +189,9 @@
 		"noAudioTrack": "無音訊軌道",
 		"noAudioTrackHint": "此媒體沒有音訊軌道，沒有可轉錄的內容。",
 		"noSpeechDetected": "未偵測到語音",
-		"autoTranscribe": "開啟編輯器時自動轉錄新錄製"
+		"autoTranscribe": "開啟編輯器時自動轉錄新錄製",
+		"autoRedact": "模糊新錄製中的敏感資料",
+		"autoRedactHint": "錄製後，OCR 會找出螢幕上的電子郵件、租用戶網域、GUID、密鑰與電話號碼並加以模糊。每處模糊都是一般註解，可保留或刪除。離線執行。"
 	},
 	"exportDialog": {
 		"title": "匯出",
@@ -222,7 +231,9 @@
 		"failedToWriteFile": "寫入檔案失敗",
 		"qualityUpscaleWarning": "放大",
 		"exportedVideoOf": "的影片已匯出，耗時",
-		"nothingToExport": "沒有可匯出的內容 — 時間軸為空。"
+		"nothingToExport": "沒有可匯出的內容 — 時間軸為空。",
+		"youtubeLoudness": "YouTube 響度 (−14 LUFS)",
+		"youtubeLoudnessHint": "YouTube 以 −14 LUFS 播放所有影片。關閉時匯出維持人聲的 −16 LUFS，在 YouTube 上會小 2 dB。"
 	},
 	"inspector": {
 		"resetFocusPoint": "重設焦點",
@@ -431,7 +442,8 @@
 		"addVideoBeforeExport": "Add a video to the project before exporting.",
 		"regionPasted": "Region pasted",
 		"regionCopied": "Region copied",
-		"cameraCheckFailed": "Could not check for a camera recording near {{name}}"
+		"cameraCheckFailed": "Could not check for a camera recording near {{name}}",
+		"sensitiveBlurred": "已自動模糊 {{count}} 處敏感區域，請在時間軸上檢查。"
 	},
 	"exportPipeline": {
 		"quality1440p": "1440p",
@@ -458,5 +470,13 @@
 		"replanDone": "已規劃 {{count}} 個自動縮放",
 		"replanNone": "找不到適合自動縮放的時刻",
 		"replanFailed": "無法規劃自動縮放"
+	},
+	"youtubeChapters": {
+		"title": "YouTube 章節",
+		"copy": "複製章節",
+		"copied": "章節已複製——貼到影片說明中",
+		"copyFailed": "無法複製章節",
+		"needThree": "YouTube 至少需要 3 個章節才會顯示。錄製時以 Ctrl+Shift+F8 加入標記。",
+		"fallbackTitle": "第 {{index}} 章"
 	}
 }

@@ -601,6 +601,10 @@ pub struct SceneCursor {
     /// `#[serde(default)]` : l'app omet la clé quand elle est fausse.
     #[serde(default)]
     pub click_impact: bool,
+    /// Click highlight: the impact's ring at every click, under the FLAT cursor too (the
+    /// modelled one always draws it). `#[serde(default)]`: the app omits the key when false.
+    #[serde(default)]
+    pub click_ring: bool,
     pub clip_to_bounds: bool,
     /// id du thème (jeu de sprites) — informatif ici : le natif consomme `cursor_sprites`.
     pub theme: String,

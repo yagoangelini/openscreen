@@ -49,7 +49,11 @@
 		"diskSpaceLow": "Disk alanı az: yaklaşık {{minutes}} dakikalık kayıt sığar.",
 		"crashProtectionOff": "Bu kayıtta çökme koruması kapalı: uygulama beklenmedik şekilde kapanırsa kayıt kurtarılamaz.",
 		"takeStoppedDiskFull": "Disk neredeyse dolu olduğu için kayıt durduruldu. Şimdiye kadar kaydedilen her şey saklandı.",
-		"saveFailedFileKept": "Kayıt düzenleyicide açılamadı, ancak dosyası kayıtlar klasöründe tutuldu."
+		"saveFailedFileKept": "Kayıt düzenleyicide açılamadı, ancak dosyası kayıtlar klasöründe tutuldu.",
+		"audioDeviceLostMicrophone": "Mikrofon kayıt sırasında bağlantıyı kaybetti ve geri gelmedi: kaydın geri kalanında ses yok.",
+		"audioDeviceLostSystemAudio": "Sistem ses aygıtı kayıt sırasında bağlantıyı kaybetti ve geri gelmedi: kaydın geri kalanında bilgisayar sesi yok.",
+		"audioDeviceBackMicrophone": "Mikrofonun bağlantısı kesildi ve geri geldi: kaydın yaklaşık {{seconds}} sn'si sessiz.",
+		"audioDeviceBackSystemAudio": "Sistem ses aygıtının bağlantısı kesildi ve geri geldi: kaydın yaklaşık {{seconds}} sn'sinde bilgisayar sesi yok."
 	},
 	"loadingVideo": "Video yükleniyor...",
 	"loadingEditor": "Editör yükleniyor...",
@@ -150,7 +154,10 @@
 		"defaultRecordingsFolder": "Varsayılanı kullan",
 		"countdown": "Geri sayım",
 		"countdownNone": "Yok",
-		"countdownSeconds": "{{seconds}} sn"
+		"countdownSeconds": "{{seconds}} sn",
+		"doNotDisturb": "Rahatsız etmeyin",
+		"doNotDisturbHint": "Teams ve Outlook bildirimleri videoya girmesin diye kayıttan önce açın.",
+		"openNotificationSettings": "Ayarları aç"
 	},
 	"mediaStage": {
 		"openProjectFirst": "Önce bir proje açın",
@@ -182,7 +189,9 @@
 		"noAudioTrack": "Ses parçası yok",
 		"noAudioTrackHint": "Bu medyada ses parçası yok — metne dökülecek bir şey bulunmuyor.",
 		"noSpeechDetected": "Konuşma algılanmadı",
-		"autoTranscribe": "Düzenleyici açıldığında yeni kayıtları otomatik olarak yazıya dök"
+		"autoTranscribe": "Düzenleyici açıldığında yeni kayıtları otomatik olarak yazıya dök",
+		"autoRedact": "Yeni kayıtlarda hassas verileri bulanıklaştır",
+		"autoRedactHint": "Kayıttan sonra OCR ekrandaki e-postaları, tenant alan adlarını, GUID'leri, gizli anahtarları ve telefon numaralarını bulup bulanıklaştırır. Her bulanıklık, tutabileceğiniz veya silebileceğiniz normal bir nottur. Çevrimdışı çalışır."
 	},
 	"exportDialog": {
 		"title": "Dışa Aktar",
@@ -222,7 +231,9 @@
 		"failedToWriteFile": "Dosya yazılamadı",
 		"qualityUpscaleWarning": "Upscale",
 		"exportedVideoOf": "video şu sürede dışa aktarıldı:",
-		"nothingToExport": "Dışa aktarılacak bir şey yok — zaman çizelgesi boş."
+		"nothingToExport": "Dışa aktarılacak bir şey yok — zaman çizelgesi boş.",
+		"youtubeLoudness": "YouTube ses düzeyi (−14 LUFS)",
+		"youtubeLoudnessHint": "YouTube her videoyu −14 LUFS'ta oynatır. Kapalıyken dışa aktarma sesin −16 LUFS düzeyinde kalır ve orada 2 dB daha kısık çalar."
 	},
 	"inspector": {
 		"resetFocusPoint": "Odak noktasını sıfırla",
@@ -431,7 +442,8 @@
 		"addVideoBeforeExport": "Add a video to the project before exporting.",
 		"regionPasted": "Region pasted",
 		"regionCopied": "Region copied",
-		"cameraCheckFailed": "Could not check for a camera recording near {{name}}"
+		"cameraCheckFailed": "Could not check for a camera recording near {{name}}",
+		"sensitiveBlurred": "{{count}} hassas alan otomatik olarak bulanıklaştırıldı. Zaman çizelgesinde kontrol edin."
 	},
 	"exportPipeline": {
 		"quality1440p": "1440p",
@@ -458,5 +470,13 @@
 		"replanDone": "Planlanan otomatik yakınlaştırma: {{count}}",
 		"replanNone": "Otomatik yakınlaştırma için an bulunamadı",
 		"replanFailed": "Otomatik yakınlaştırmalar planlanamadı"
+	},
+	"youtubeChapters": {
+		"title": "YouTube bölümleri",
+		"copy": "Bölümleri kopyala",
+		"copied": "Bölümler kopyalandı — video açıklamasına yapıştırın",
+		"copyFailed": "Bölümler kopyalanamadı",
+		"needThree": "YouTube bölümleri en az 3 olduğunda gösterir. Kayıt sırasında işaret ekleyin (Ctrl+Shift+F8).",
+		"fallbackTitle": "Bölüm {{index}}"
 	}
 }

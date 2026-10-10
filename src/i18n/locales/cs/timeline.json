@@ -31,7 +31,8 @@
 		"imageItem": "Obrázek",
 		"emptyText": "Prázdný text",
 		"cameraFullscreen": "Celá kamera",
-		"cameraFullscreenItem": "Celá kamera {{index}}"
+		"cameraFullscreenItem": "Celá kamera {{index}}",
+		"marker": "Značka v {{time}}"
 	},
 	"emptyState": {
 		"noVideo": "Žádné video nenačteno",

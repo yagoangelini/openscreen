@@ -428,7 +428,9 @@
 		"autoHide": "Hareketsizken gizle",
 		"bounceNone": "Yok",
 		"bounceLight": "Hafif",
-		"bounceStrong": "Belirgin"
+		"bounceStrong": "Belirgin",
+		"showKeystrokes": "Ekranda kısayollar",
+		"clickRing": "Tıklama vurgusu"
 	},
 	"export": {
 		"gifButton": "GIF Olarak Dışa Aktar",

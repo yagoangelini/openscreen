@@ -34,6 +34,7 @@ import { ZOOM_DEPTH_SCALES } from "@/components/video-editor/types";
 import { useScopedT } from "@/contexts/I18nContext";
 import { useShortcuts } from "@/contexts/ShortcutsContext";
 import { useAudioPeaks } from "@/hooks/useAudioPeaks";
+import { sourceSpanToTimelineSpans } from "@/lib/ai-edition/captions/cues";
 import {
 	AUDIO_LANE_PAD_PX,
 	AUDIO_ROW_GAP_PX,
@@ -708,6 +709,17 @@ export function V4Timeline({
 		[clips],
 	);
 	const pctOf = useCallback((sec: number) => (sec / total) * 100, [total]);
+	// The marker shortcut's marks, placed wherever the clips play those moments:
+	// a cut-out mark disappears, a duplicated clip shows its mark twice.
+	const markerSecs = useMemo(
+		() =>
+			tl.assets.flatMap((asset) =>
+				(asset.markersSec ?? []).flatMap((sec) =>
+					sourceSpanToTimelineSpans(asset.id, sec, sec + 0.001, clips).map((span) => span.startSec),
+				),
+			),
+		[tl.assets, clips],
+	);
 	/** Stored raw seconds → a percentage of the expanded ruler. */
 	const pctAt = pctOf;
 	const showLanes = variant === "edit";
@@ -2053,6 +2065,15 @@ export function V4Timeline({
 				<div className={styles.tlRulerRow} onPointerDown={startScrub}>
 					<div className={styles.tlCanvas} style={canvasStyle}>
 						<div className={styles.tlRuler}>
+							{markerSecs.map((sec, index) => (
+								<div
+									key={`marker-${index}-${sec}`}
+									data-testid="timeline-marker"
+									className={styles.tlMarker}
+									style={{ left: `${pctAt(sec)}%` }}
+									title={t("labels.marker", { time: fmtTick(sec, 1) })}
+								/>
+							))}
 							{rulerTicks.ticks.map((tick) => (
 								<div
 									key={tick.sec}

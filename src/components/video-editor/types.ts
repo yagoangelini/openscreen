@@ -304,6 +304,10 @@ export interface CursorVisualSettings {
 	 */
 	clickImpact: boolean;
 	autoHide?: boolean;
+	/** The shortcuts pressed while recording, shown as plates (`lib/ai-edition/keystrokes.ts`). */
+	showKeystrokes?: boolean;
+	/** A ring at every click, so the viewer sees where it landed (`SceneCursor::click_ring`). */
+	clickRing?: boolean;
 }
 
 // The project defaults, under the names the legacy editor reads: one value, not two to keep in sync.
@@ -420,7 +424,7 @@ export interface AnnotationRegion {
 	style: AnnotationTextStyle;
 	zIndex: number;
 	/** When set, layout/style edits on one region can sync to all auto-caption siblings. */
-	annotationSource?: "auto-caption";
+	annotationSource?: "auto-caption" | "auto-redact";
 	figureData?: FigureData;
 	blurData?: BlurData;
 }

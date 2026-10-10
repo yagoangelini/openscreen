@@ -1,5 +1,6 @@
 #pragma once
 
+#include "audio_sample_utils.h"
 #include "mf_encoder.h"
 
 #include <Windows.h>
@@ -42,13 +43,26 @@ private:
     bool resolveMicrophoneByName(const std::wstring& deviceName);
     void captureLoop();
     bool resolveInputFormat(WAVEFORMATEX* mixFormat);
+    // Drops the dead endpoint and opens it again (the same microphone if it came
+    // back, otherwise the default one), started and ready to read.
+    bool reopen();
+    void releaseEndpoint();
 
     Microsoft::WRL::ComPtr<IMMDeviceEnumerator> deviceEnumerator_;
     Microsoft::WRL::ComPtr<IMMDevice> device_;
     Microsoft::WRL::ComPtr<IAudioClient> audioClient_;
     Microsoft::WRL::ComPtr<IAudioCaptureClient> captureClient_;
     WAVEFORMATEX* mixFormat_ = nullptr;
+    // What the consumer was told at start and keeps receiving. A reopened device
+    // can have another format; its packets are converted into this one.
     AudioInputFormat inputFormat_{};
+    AudioInputFormat deviceFormat_{};
+    bool initialized_ = false;
+    WasapiCaptureEndpoint endpoint_ = WasapiCaptureEndpoint::SystemLoopback;
+    std::wstring requestedDeviceId_;
+    std::wstring requestedDeviceName_;
+    std::vector<BYTE> convertBuffer_;
+    AudioDecimatorState convertDecimator_;
     std::wstring selectedDeviceName_;
     AudioCallback callback_;
     std::thread thread_;

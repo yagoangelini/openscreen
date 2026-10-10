@@ -101,6 +101,29 @@ target_link_libraries(cursor-sampler PRIVATE
   oleaut32
 )
 
+# Reads the text on screen in a recording (Windows.Media.Ocr), for the editor's privacy blur.
+add_executable(ocr-scan
+  src/ocr-scan.cpp
+)
+
+target_compile_definitions(ocr-scan PRIVATE
+  NOMINMAX
+  WIN32_LEAN_AND_MEAN
+  _WIN32_WINNT=0x0A00
+)
+
+target_compile_options(ocr-scan PRIVATE /EHsc /W4 /utf-8)
+
+target_link_libraries(ocr-scan PRIVATE
+  mf
+  mfplat
+  mfreadwrite
+  mfuuid
+  propsys
+  runtimeobject
+  windowsapp
+)
+
 # The pure half of the sampler's input signals (chord names, AltGr, double clicks, hook
 # timestamps). Run by scripts/build-windows-wgc-helper.mjs after the build.
 add_executable(input_signals_test

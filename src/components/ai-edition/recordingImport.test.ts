@@ -7,6 +7,7 @@ import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
 import { undo } from "@/lib/ai-edition/store/undo";
 import { clearHistory, past } from "@/lib/ai-edition/store/undoStack";
 import {
+	applyFreshRecordingRedactions,
 	applyPendingFreshRecordingAutoZooms,
 	consumeFreshRecordingAutoZoomPending,
 	importPendingRecording,
@@ -304,6 +305,67 @@ function documentWithClip(durationSec = 10): AxcutDocument {
 		},
 	};
 }
+
+describe("fresh-recording privacy blur", () => {
+	const scanWithEmail = async () => ({
+		success: true,
+		output: [
+			'{"type":"info","width":1920,"height":1080,"durationSec":10,"language":"pt-BR"}',
+			'{"type":"frame","t":0.0,"words":[],"lines":[]}',
+			'{"type":"frame","t":2.0,"words":[[0.4,0.38,0.1,0.02,"ana@contoso.com"]],"lines":[[0,1]]}',
+			'{"type":"frame","t":4.0,"words":[],"lines":[]}',
+		].join("\n"),
+	});
+
+	beforeEach(() => {
+		vi.clearAllMocks();
+	});
+
+	it("adds one undoable blur per address the take shows, marked as automatic", async () => {
+		const saveDocument = vi.fn(async (next: AxcutDocument) => {
+			useProjectStore.setState({ document: next });
+			return true;
+		});
+		useProjectStore.setState({ document: documentWithClip(), saveDocument });
+		const count = await applyFreshRecordingRedactions(RECORDING_PATH, {
+			scan: scanWithEmail,
+			createId: (prefix) => `${prefix}_test`,
+			waitTimeoutMs: 50,
+		});
+		expect(count).toBe(1);
+		expect(saveDocument).toHaveBeenCalledWith(expect.anything(), { history: true });
+		const [blur] = useProjectStore.getState().document?.annotations ?? [];
+		expect(blur).toMatchObject({
+			type: "blur",
+			annotationSource: "auto-redact",
+			startMs: 0,
+			endMs: 4000,
+		});
+		useProjectStore.setState({ saveDocument: realActions.saveDocument });
+	});
+
+	it("adds nothing for a take with nothing to hide, or one that is already blurred", async () => {
+		const saveDocument = vi.fn(async () => true);
+		useProjectStore.setState({ document: documentWithClip(), saveDocument });
+		expect(
+			await applyFreshRecordingRedactions(RECORDING_PATH, {
+				scan: async () => ({
+					success: true,
+					output: '{"type":"frame","t":0,"words":[],"lines":[]}',
+				}),
+				waitTimeoutMs: 50,
+			}),
+		).toBe(0);
+		expect(
+			await applyFreshRecordingRedactions(RECORDING_PATH, {
+				scan: async () => ({ success: false }),
+				waitTimeoutMs: 50,
+			}),
+		).toBe(0);
+		expect(saveDocument).not.toHaveBeenCalled();
+		useProjectStore.setState({ saveDocument: realActions.saveDocument });
+	});
+});
 
 describe("fresh-recording auto-zoom", () => {
 	beforeEach(() => {
