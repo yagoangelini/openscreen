@@ -147,7 +147,10 @@ A finished transcript goes through `applyGlossary`
 seeded with `DEFAULT_GLOSSARY` — M365, Copilot and Power Platform names that Whisper mishears
 in Portuguese; the term itself always matches, which fixes casing). The STT server takes no
 prompt, so this runs after recognition: a multi-word match folds into its first word, which
-spans to the last one's end, so timing is kept. A take recorded with stems is transcribed from its voice stem
+spans to the last one's end, so timing is kept. A glossary edited later reaches the
+transcripts already in a project through *Apply to this project's transcripts* (one undoable
+edit, `applyGlossary(..., { keepEditedWords: true })`), which never touches a word the user
+corrected or typed in. A take recorded with stems is transcribed from its voice stem
 (`asset.audioStems.voicePath`, `document/transcribe.ts`), so the computer's sound does not
 reach the recogniser; the wait finder (`timeline/waits.ts`) reads the same file.
 

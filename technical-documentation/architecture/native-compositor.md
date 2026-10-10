@@ -304,7 +304,8 @@ so A/V stays locked to the independently retimed video.
 The live preview does not use this path. `live.rs`
 ([`crates/compositor/src/live.rs`](../../crates/compositor/src/live.rs)) only handles video;
 audio is decoded and mixed by `audio.rs` for the export run and not for the
-on-screen view, so editing playback is silent against the exported file.
+on-screen view; what plays while editing is the renderer's own audio (see
+[preview.md](preview.md#known-gaps)).
 
 ## Build
 

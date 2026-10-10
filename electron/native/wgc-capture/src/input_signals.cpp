@@ -29,6 +29,16 @@ void applyModifier(Modifiers& mods, uint32_t vk, bool down) {
     }
 }
 
+Modifiers heldModifiers(const Modifiers& tracked, const Modifiers& physical) {
+    Modifiers held;
+    held.ctrl = tracked.ctrl && physical.ctrl;
+    held.alt = tracked.alt && physical.alt;
+    held.shift = tracked.shift && physical.shift;
+    held.win = tracked.win && physical.win;
+    held.rightAlt = tracked.rightAlt && physical.rightAlt;
+    return held;
+}
+
 static std::string keyName(uint32_t vk, uint32_t baseChar) {
     if (vk >= 'A' && vk <= 'Z') return std::string(1, static_cast<char>(vk));
     if (vk >= '0' && vk <= '9') return std::string(1, static_cast<char>(vk));

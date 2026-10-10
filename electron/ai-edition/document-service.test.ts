@@ -411,12 +411,27 @@ describe("DocumentService", () => {
 			expect(updated.assets[0]?.markersSec).toEqual([5.532, 20.11]);
 		});
 
+		/** The boxes of a finished M4A: what the helper's writer leaves once it finalizes. */
+		const finishedM4a = () => {
+			const box = (type: string, payload: Buffer) => {
+				const header = Buffer.alloc(8);
+				header.writeUInt32BE(8 + payload.length, 0);
+				header.write(type, 4, "latin1");
+				return Buffer.concat([header, payload]);
+			};
+			return Buffer.concat([
+				box("ftyp", Buffer.from("M4A ")),
+				box("mdat", Buffer.alloc(32)),
+				box("moov", Buffer.alloc(8)),
+			]);
+		};
+
 		it("links a take's voice and computer stems when both are there", async () => {
 			const doc = await service.createProject("P");
 			const videoPath = path.join(mediaDir, "recording-stems.mp4");
 			await fs.writeFile(videoPath, "");
-			await fs.writeFile(path.join(mediaDir, "recording-stems.voice.m4a"), "aac");
-			await fs.writeFile(path.join(mediaDir, "recording-stems.system.m4a"), "aac");
+			await fs.writeFile(path.join(mediaDir, "recording-stems.voice.m4a"), finishedM4a());
+			await fs.writeFile(path.join(mediaDir, "recording-stems.system.m4a"), finishedM4a());
 			const updated = await service.addAsset(doc.project.id, { path: videoPath });
 			expect(updated.assets[0]?.audioStems).toEqual({
 				voicePath: path.join(mediaDir, "recording-stems.voice.m4a"),
@@ -428,8 +443,20 @@ describe("DocumentService", () => {
 			const doc = await service.createProject("P");
 			const videoPath = path.join(mediaDir, "recording-half.mp4");
 			await fs.writeFile(videoPath, "");
-			await fs.writeFile(path.join(mediaDir, "recording-half.voice.m4a"), "aac");
+			await fs.writeFile(path.join(mediaDir, "recording-half.voice.m4a"), finishedM4a());
 			await fs.writeFile(path.join(mediaDir, "recording-half.system.m4a"), "");
+			const updated = await service.addAsset(doc.project.id, { path: videoPath });
+			expect(updated.assets[0]).not.toHaveProperty("audioStems");
+		});
+
+		it("leaves a take recovered after a crash on its mixed track: its stems have no index", async () => {
+			const doc = await service.createProject("P");
+			const videoPath = path.join(mediaDir, "recording-crashed.mp4");
+			await fs.writeFile(videoPath, "");
+			// Samples written, index never: the writer died before it finalized.
+			const unfinished = finishedM4a().subarray(0, 48);
+			await fs.writeFile(path.join(mediaDir, "recording-crashed.voice.m4a"), unfinished);
+			await fs.writeFile(path.join(mediaDir, "recording-crashed.system.m4a"), unfinished);
 			const updated = await service.addAsset(doc.project.id, { path: videoPath });
 			expect(updated.assets[0]).not.toHaveProperty("audioStems");
 		});

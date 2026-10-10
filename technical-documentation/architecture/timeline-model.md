@@ -185,6 +185,9 @@ wide before it may zoom in again is the `minWideSec` setting (2.5 s calm, or 1.5
 only act through *Replan*. On Windows the planner also sees the menus a web page draws, which
 no window event reports: `framePopups.ts` asks `ocr-scan.exe --popups` to compare the frame
 150 ms before each click with the frame 600 ms after it, and treats a changed box as a popup.
+That scan can take most of a minute on a long take, so it starts at import
+(`prefetchFreshRecordingTelemetry`) and is waited for off the editor's write queue; only
+the write that places the zooms queues behind the user's edits.
 
 ### The same ambiguity in the transcript pane
 

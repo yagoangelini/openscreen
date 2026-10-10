@@ -415,4 +415,32 @@ describe("VirtualPreview with audio stems", () => {
 			"file:///tmp/take.system.m4a",
 		);
 	});
+
+	it("falls back to the video's own track when a stem will not load", () => {
+		const sources: VideoSource[] = [
+			{
+				id: "a1",
+				src: "file:///tmp/take.mp4",
+				label: "take",
+				stems: {
+					voicePath: "/tmp/take.voice.m4a",
+					voiceSrc: "file:///tmp/take.voice.m4a",
+					systemSrc: "file:///tmp/take.system.m4a",
+				},
+			},
+		];
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+		const { getByTestId, queryByTestId } = render(
+			<VirtualPreview
+				videoSources={sources}
+				clips={[clip("c1", "a1", 0, 10, 0)]}
+				onTimeChange={vi.fn()}
+			/>,
+		);
+		// The computer stem was moved away: the take plays as it was recorded, mixed.
+		fireEvent.error(getByTestId("preview-audio-supplemental"));
+		expect(getByTestId("preview-audio-primary")).toHaveAttribute("src", "file:///tmp/take.mp4");
+		expect(queryByTestId("preview-audio-supplemental")).toBeNull();
+		warn.mockRestore();
+	});
 });

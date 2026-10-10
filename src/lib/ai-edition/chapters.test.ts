@@ -128,6 +128,63 @@ describe("buildChapters", () => {
 	});
 });
 
+describe("buildChapters on the exported video's clock", () => {
+	const trim = (startSec: number, endSec: number) => ({
+		id: `trim_${startSec}`,
+		assetId: "asset_1",
+		startSec,
+		endSec,
+		reason: "",
+		origin: "user" as const,
+	});
+	const withTrims = (doc: AxcutDocument, trims: ReturnType<typeof trim>[]): AxcutDocument => ({
+		...doc,
+		timeline: { ...doc.timeline, trimRanges: trims },
+	});
+
+	it("pulls a marker earlier by the stretch trimmed before it", () => {
+		const doc = withTrims(documentWith({ durationSec: 120, markersSec: [60] }), [trim(10, 30)]);
+		expect(buildChapters(doc, { fallbackTitle }).map((c) => c.startSec)).toEqual([0, 40]);
+	});
+
+	it("pulls a marker earlier by what a speed region saves before it", () => {
+		const doc = {
+			...documentWith({ durationSec: 120, markersSec: [60] }),
+			legacyEditor: { speedRegions: [{ id: "sp", startMs: 0, endMs: 40_000, speed: 4 }] },
+		} as AxcutDocument;
+		expect(buildChapters(doc, { fallbackTitle }).map((c) => c.startSec)).toEqual([0, 30]);
+	});
+
+	it("titles a chapter only with words the export still plays", () => {
+		const doc = withTrims(
+			documentWith({
+				durationSec: 120,
+				markersSec: [60],
+				words: [
+					[60.2, "primeiro"],
+					[61, "cortado"],
+					[63, "depois"],
+				],
+			}),
+			[trim(60.8, 62)],
+		);
+		expect(buildChapters(doc, { fallbackTitle })[1].title).toBe("Primeiro depois");
+	});
+
+	it("does not split on a pause the user trimmed short", () => {
+		const words: Array<[number, string]> = [
+			[0, "olá"],
+			[15, "fim"],
+			[30, "agora"],
+			[31, "vamos"],
+		];
+		const untrimmed = documentWith({ durationSec: 60, words });
+		expect(buildChapters(untrimmed, { fallbackTitle }).map((c) => c.startSec)).toEqual([0, 15, 30]);
+		const trimmed = withTrims(untrimmed, [trim(16, 29)]);
+		expect(buildChapters(trimmed, { fallbackTitle }).map((c) => c.startSec)).toEqual([0, 15]);
+	});
+});
+
 describe("formatting for YouTube", () => {
 	it("writes m:ss, and h:mm:ss past an hour", () => {
 		expect(formatChapterTime(0)).toBe("0:00");

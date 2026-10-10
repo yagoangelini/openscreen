@@ -1,4 +1,5 @@
 import { sourceSpanToTimelineSpans } from "./captions/cues";
+import { projectRawTimelineSecToPlayback, readSpeedRegions } from "./document/timeline";
 import type { AxcutDocument } from "./schema";
 import { findAssetTranscript } from "./transcription/status";
 
@@ -12,6 +13,11 @@ import { findAssetTranscript } from "./transcription/status";
  *
  * YouTube's own rules shape the output: the first chapter starts at 0:00 and none
  * is shorter than 10 seconds.
+ *
+ * Every time here is on the EXPORTED video's clock, like the .srt beside it: the clips
+ * place words and markers on the raw ruler, and the export then drops the trims and
+ * plays the speed regions faster, so a chapter read off the raw ruler would point past
+ * its moment by everything cut or sped up before it.
  */
 
 /** YouTube ignores a chapter list with a chapter under this. */
@@ -34,29 +40,59 @@ interface TimedWord {
 	text: string;
 }
 
-/** Every transcribed word of the timeline, in the order and at the time it plays. */
+/** Raw-ruler seconds to the exported video's, through its trims and speed regions. */
+function playbackClock(document: AxcutDocument): (rawSec: number) => number {
+	const { clips, trimRanges } = document.timeline;
+	const speedRegions = readSpeedRegions(document);
+	return (rawSec) => projectRawTimelineSecToPlayback(clips, trimRanges, rawSec, speedRegions);
+}
+
+/** How long the exported video runs. */
+function playbackDurationSec(document: AxcutDocument): number {
+	const rawEnd = document.timeline.clips.reduce(
+		(max, clip) => Math.max(max, clip.timelineEndSec),
+		0,
+	);
+	return rawEnd > 0 ? playbackClock(document)(rawEnd) : 0;
+}
+
+/** A word the export cut away collapses to (almost) nothing on its clock. */
+const TRIMMED_WORD_SEC = 0.01;
+
+/** Every transcribed word the export plays, in order, at the time it plays there. */
 function timelineWords(document: AxcutDocument): TimedWord[] {
 	const clips = document.timeline.clips;
+	const toPlayback = playbackClock(document);
 	const words: TimedWord[] = [];
 	for (const asset of document.assets) {
 		const transcript = findAssetTranscript(document, asset.id);
 		if (!transcript) continue;
 		for (const word of transcript.words) {
 			for (const span of sourceSpanToTimelineSpans(asset.id, word.startSec, word.endSec, clips)) {
-				words.push({ sec: span.startSec, endSec: span.endSec, text: word.text });
+				const sec = toPlayback(span.startSec);
+				const endSec = toPlayback(span.endSec);
+				if (endSec - sec < TRIMMED_WORD_SEC) continue;
+				words.push({ sec, endSec, text: word.text });
 			}
 		}
 	}
 	return words.sort((a, b) => a.sec - b.sec);
 }
 
-/** Every marker of the timeline, at the time it plays. */
+/**
+ * Every marker of the timeline, at the time the export plays it. A marker inside a
+ * trimmed stretch lands where the kept content resumes, which is where the section
+ * it opened now starts.
+ */
 function timelineMarkers(document: AxcutDocument): number[] {
 	const clips = document.timeline.clips;
+	const toPlayback = playbackClock(document);
 	return document.assets
 		.flatMap((asset) =>
 			(asset.markersSec ?? []).flatMap((sec) =>
-				sourceSpanToTimelineSpans(asset.id, sec, sec + 0.001, clips).map((span) => span.startSec),
+				sourceSpanToTimelineSpans(asset.id, sec, sec + 0.001, clips).map((span) =>
+					toPlayback(span.startSec),
+				),
 			),
 		)
 		.sort((a, b) => a - b);
@@ -88,10 +124,7 @@ export function buildChapters(
 	document: AxcutDocument,
 	options: { fallbackTitle: (index: number) => string },
 ): Chapter[] {
-	const totalSec = document.timeline.clips.reduce(
-		(max, clip) => Math.max(max, clip.timelineEndSec),
-		0,
-	);
+	const totalSec = playbackDurationSec(document);
 	if (totalSec <= 0) return [];
 	const words = timelineWords(document);
 	const markers = timelineMarkers(document);
@@ -135,10 +168,7 @@ export function chapterTranscripts(
 	maxChars = 400,
 ): string[] {
 	const words = timelineWords(document);
-	const totalSec = document.timeline.clips.reduce(
-		(max, clip) => Math.max(max, clip.timelineEndSec),
-		0,
-	);
+	const totalSec = playbackDurationSec(document);
 	return chapters.map((chapter, index) => {
 		const endSec = chapters[index + 1]?.startSec ?? totalSec;
 		const text = words

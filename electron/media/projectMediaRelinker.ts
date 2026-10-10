@@ -11,6 +11,7 @@
 // footage, which is worse than opening it with a missing-media placeholder.
 
 import fs from "node:fs/promises";
+import { audioStemPathsFor } from "../../src/lib/recordingSession";
 import {
 	findMediaLinksByFingerprint,
 	findRelocatedMediaByStoredPath,
@@ -81,10 +82,24 @@ async function resolveAssetMedia(
 		nextCameraTrack = { ...cameraTrack, sourcePath: links.webcamVideoPath };
 	}
 
+	// The voice and computer stems sit beside the screen video under its name, so they move
+	// with it: found next to the relinked screen, they follow it. Left alone otherwise -- the
+	// old paths may still hold them, and a missing stem only costs the take its separate
+	// volumes, never its sound (the preview and the export fall back to the mixed track).
+	let nextStems: { voicePath: string; systemPath: string } | null = null;
+	if (isRecord(asset.audioStems) && links.screenVideoPath !== originalPath) {
+		const moved = audioStemPathsFor(links.screenVideoPath);
+		if ((await fileExists(moved.voicePath)) && (await fileExists(moved.systemPath))) {
+			console.log(`[media-relink] audio stems -> ${moved.voicePath}, ${moved.systemPath}`);
+			nextStems = moved;
+		}
+	}
+
 	return {
 		...asset,
 		originalPath: links.screenVideoPath,
 		...(nextCameraTrack === cameraTrack ? {} : { cameraTrack: nextCameraTrack }),
+		...(nextStems ? { audioStems: nextStems } : {}),
 	};
 }
 

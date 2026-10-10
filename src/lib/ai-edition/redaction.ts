@@ -38,6 +38,11 @@ export interface OcrScan {
 	durationSec: number;
 	intervalSec: number;
 	samples: OcrSample[];
+	/**
+	 * `false`: the scanner never said it was done (a timeout, or a kill), so nothing
+	 * after the last sample was looked at. Absent means a whole scan.
+	 */
+	complete?: boolean;
 }
 
 export interface Detection {
@@ -55,6 +60,7 @@ export interface RedactionSpan extends Detection {
 export function parseOcrScan(ndjson: string, intervalSec = 2): OcrScan {
 	const samples: OcrSample[] = [];
 	let durationSec = 0;
+	let complete = false;
 	for (const line of ndjson.split(/\r?\n/)) {
 		if (!line.trim()) continue;
 		let event: Record<string, unknown>;
@@ -65,6 +71,8 @@ export function parseOcrScan(ndjson: string, intervalSec = 2): OcrScan {
 		}
 		if (event.type === "info" && typeof event.durationSec === "number") {
 			durationSec = event.durationSec;
+		} else if (event.type === "done") {
+			complete = true;
 		} else if (event.type === "same" && typeof event.t === "number") {
 			samples.push({ t: event.t, same: true });
 		} else if (
@@ -89,7 +97,13 @@ export function parseOcrScan(ndjson: string, intervalSec = 2): OcrScan {
 		}
 	}
 	samples.sort((a, b) => a.t - b.t);
-	return { durationSec, intervalSec, samples };
+	return { durationSec, intervalSec, samples, complete };
+}
+
+/** How far into the take a scan looked: all of it, or up to its last sample. */
+export function scannedUpToSec(scan: OcrScan): number {
+	const last = scan.samples.at(-1)?.t ?? 0;
+	return scan.complete === false ? last : Math.max(scan.durationSec, last);
 }
 
 /**
@@ -97,10 +111,13 @@ export function parseOcrScan(ndjson: string, intervalSec = 2): OcrScan {
  * at a time, its words joined by single spaces.
  */
 const PATTERNS: Array<{ kind: SensitiveKind; re: RegExp }> = [
-	// Before the e-mail: the tenant is the part a viewer can do the most with.
+	// Before the e-mail: the tenant is the part a viewer can do the most with. Only hosts
+	// that are a tenant's own: make.powerapps.com, apps.powerapps.com and their kind are
+	// the same for everyone, and blurring them would hide the address bar of every Power
+	// Apps tutorial for its whole length.
 	{
 		kind: "tenant",
-		re: /\b[a-z0-9-]+(?:-my)?\.(?:onmicrosoft|sharepoint|crm\d{0,2}\.dynamics|powerappsportals|powerapps)\.com\b/gi,
+		re: /\b[a-z0-9-]+\.(?:onmicrosoft|sharepoint|crm\d{0,2}\.dynamics|powerappsportals)\.com\b/gi,
 	},
 	{ kind: "email", re: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g },
 	{
@@ -113,10 +130,13 @@ const PATTERNS: Array<{ kind: SensitiveKind; re: RegExp }> = [
 		kind: "secret",
 		re: /\beyJ[A-Za-z0-9_-]{10,}(?:\.[A-Za-z0-9_-]+){0,2}|\b(?:sk-|ghp_|gho_|xox[abp]-|AKIA)[A-Za-z0-9_-]{12,}|\b(?=[A-Za-z0-9+/_-]*[0-9])(?=[A-Za-z0-9+/_-]*[a-z])(?=[A-Za-z0-9+/_-]*[A-Z])[A-Za-z0-9+/_-]{28,}={0,2}/g,
 	},
-	// Brazilian and international numbers: (11) 91234-5678, +55 11 91234 5678, 11 3456-7890.
+	// Brazilian and international numbers: +55 11 91234 5678, (11) 91234-5678, 11 3456-7890,
+	// 91234-5678. A number has to LOOK like a phone -- a country code, a bracketed area
+	// code, or its groups apart -- and stand on its own: a bare run of ten digits or more
+	// is far more often an ID, a run number or a timestamp in a table.
 	{
 		kind: "phone",
-		re: /(?:\+\d{1,3}[\s.-]?)?\(?\d{2,3}\)?[\s.-]?9?\d{4}[\s.-]?\d{4}\b/g,
+		re: /(?<![\w+])(?:\+\d{1,3}[\s.-]?\(?\d{2,3}\)?[\s.-]?9?\d{4}[\s.-]?\d{4}|\(\d{2,3}\)\s?9?\d{4}[\s.-]?\d{4}|\d{2,3}[\s.-]9?\d{4}[\s.-]\d{4}|9\d{4}-\d{4})(?!\w)/g,
 	},
 ];
 
@@ -218,7 +238,12 @@ export function trackDetections(scan: OcrScan): RedactionSpan[] {
 			closed.push({ ...span, endSec: sample.t });
 		}
 	});
-	const end = Math.max(scan.durationSec, scan.samples.at(-1)?.t ?? 0);
+	// Still on screen when the scan ended: to the end of the take, or -- when the scan was
+	// cut short -- one interval past where it stopped looking, never the hour it did not see.
+	const end =
+		scan.complete === false
+			? (scan.samples.at(-1)?.t ?? 0) + scan.intervalSec
+			: Math.max(scan.durationSec, scan.samples.at(-1)?.t ?? 0);
 	for (const { lastSeenIndex: _, ...span } of open) {
 		closed.push({ ...span, endSec: end });
 	}

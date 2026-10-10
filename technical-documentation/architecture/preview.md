@@ -293,12 +293,12 @@ was thrown away.
 
 ## Known gaps
 
-- **Live preview is video-only.** `crates/compositor/src/live.rs` (1628 lines) handles only
+- **The compositor's live view is video-only.** `crates/compositor/src/live.rs` handles only
   the video packet stream; audio is decoded and mixed in
   [`audio.rs::decode_clip_audio`](../../crates/compositor/src/audio.rs) for the export
-  path and not for the live view. Editing playback is therefore silent against
-  the exported file; users hear audio only when the export runs. There is no
-  flag in this branch that re-routes live audio.
+  path and not for the live view. What plays while editing is the renderer's own audio
+  (`VirtualPreview`'s `<audio>` elements through Web Audio, at the loudness gain the
+  compositor measures for the export), so the two paths can only be compared by ear.
 - **Long-recording scrub drift.** `useNativePlaybackSync:18` documents the
   accepted-at-fixture-time drift between the app's rAF playhead and the addon's
   free-run clock as a known limitation; a pause re-aligns them. A scrub further

@@ -62,6 +62,38 @@ describe("relinkProjectMedia", () => {
 		expect(logged.join("\n")).toContain(currentWebcamPath);
 	});
 
+	it("moves a take's voice and computer stems along with its screen video", async () => {
+		const currentScreenPath = path.join(tempDir, "recording-43.mp4");
+		await fs.writeFile(currentScreenPath, "screen bytes");
+		await fs.writeFile(path.join(tempDir, "recording-43.voice.m4a"), "voice");
+		await fs.writeFile(path.join(tempDir, "recording-43.system.m4a"), "system");
+		const cursorPath = `${currentScreenPath}.cursor.json`;
+		await fs.writeFile(cursorPath, "{}");
+		await registerMediaLinks(tempDir, currentScreenPath, { cursorTelemetryPath: cursorPath });
+
+		const project = {
+			assets: [
+				{
+					id: "asset-1",
+					originalPath: "C:\\Users\\demo\\recording-43.mp4",
+					sizeBytes: Buffer.byteLength("screen bytes"),
+					cameraTrack: null,
+					audioStems: {
+						voicePath: "C:\\Users\\demo\\recording-43.voice.m4a",
+						systemPath: "C:\\Users\\demo\\recording-43.system.m4a",
+					},
+				},
+			],
+		};
+
+		const relinked = (await relinkProjectMedia(project, tempDir)) as typeof project;
+		expect(relinked.assets[0].audioStems).toEqual({
+			voicePath: path.join(tempDir, "recording-43.voice.m4a"),
+			systemPath: path.join(tempDir, "recording-43.system.m4a"),
+		});
+		expect(project.assets[0].audioStems.voicePath).toBe("C:\\Users\\demo\\recording-43.voice.m4a");
+	});
+
 	it("refuses to relink an asset the document recorded no size for", async () => {
 		// A same-named recording exists and is registered with its webcam, so a
 		// basename match would resolve — that is exactly what must not happen. The

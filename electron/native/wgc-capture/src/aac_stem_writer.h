@@ -25,14 +25,20 @@ public:
     // `format` is the PCM the mixer emits (16-bit, the encoder's rate and channel count).
     bool open(const std::wstring& path, const AudioInputFormat& format);
     bool write(const BYTE* data, DWORD byteCount, int64_t timestampHns, int64_t durationHns);
+    // False when the file is not the whole take: Finalize failed, or a write failed earlier
+    // and the mixer dropped this stem. A stem that stops at minute ten of an hour would
+    // play silence for the other fifty in place of the mixed track, which has all of it.
     bool finalize();
     bool isOpen() const { return writer_ != nullptr; }
 
 private:
+    bool writeSampleLocked(const BYTE* data, DWORD byteCount, int64_t timestampHns, int64_t durationHns);
+
     std::mutex mutex_;
     Microsoft::WRL::ComPtr<IMFSinkWriter> writer_;
     DWORD stream_ = 0;
     bool started_ = false;
     bool finalized_ = false;
+    bool failed_ = false;
     bool mfStarted_ = false;
 };

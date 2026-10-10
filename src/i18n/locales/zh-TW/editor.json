@@ -193,7 +193,10 @@
 		"autoRedact": "模糊新錄製中的敏感資料",
 		"autoRedactHint": "錄製後，OCR 會找出螢幕上的電子郵件、租用戶網域、GUID、密鑰與電話號碼並加以模糊。每處模糊都是一般註解，可保留或刪除。離線執行。",
 		"glossary": "術語表",
-		"glossaryHint": "逐字稿中要更正的名稱，每行一個：術語: 誤聽1, 誤聽2。適用於新的逐字稿。"
+		"glossaryHint": "逐字稿中要更正的名稱，每行一個：術語: 誤聽1, 誤聽2。適用於新的逐字稿。",
+		"glossaryApply": "套用到此專案的逐字稿",
+		"glossaryApplied": "已套用詞彙表：{{count}} 處更正。按 Ctrl+Z 復原。",
+		"glossaryNothingToFix": "無需更正：逐字稿已符合詞彙表。"
 	},
 	"exportDialog": {
 		"title": "匯出",
@@ -449,7 +452,9 @@
 		"regionPasted": "Region pasted",
 		"regionCopied": "Region copied",
 		"cameraCheckFailed": "Could not check for a camera recording near {{name}}",
-		"sensitiveBlurred": "已自動模糊的敏感區域：{{count}}。請在時間軸上檢查。"
+		"sensitiveBlurred": "已自動模糊的敏感區域：{{count}}。請在時間軸上檢查。",
+		"sensitiveScanFailed": "此錄製未執行自動模糊，因此畫面上沒有任何內容被模糊。",
+		"sensitiveScanPartial": "自動模糊只檢查到此錄製的 {{covered}}。請手動檢查其餘部分。"
 	},
 	"exportPipeline": {
 		"quality1440p": "1440p",

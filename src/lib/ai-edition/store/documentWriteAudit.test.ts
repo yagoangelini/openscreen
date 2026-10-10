@@ -150,6 +150,8 @@ const DECLARED: WritePath[] = [
 	w("src/components/ai-edition/v4/AutoZoomSettings.tsx", "replanAutoZooms", "save", "gesture"),
 	// "Speed up the picked ones" under Auto-enhance > Speed up waits: the user ticked which.
 	w("src/components/ai-edition/v4/V4Timeline.tsx", "applyWaitSpeedUps", "save", "gesture"),
+	// "Apply to this project's transcripts" under the glossary: the user clicked it.
+	w("src/components/ai-edition/v4/MediaStage.tsx", "applyGlossaryToTranscripts", "save", "gesture"),
 	// Renaming the project from the title field.
 	w("src/components/ai-edition/NewEditorShell.tsx", "handleRenameProject", "save", "gesture"),
 	// Ctrl+S / File > Save.

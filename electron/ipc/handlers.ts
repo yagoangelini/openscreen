@@ -1483,7 +1483,12 @@ async function stopCursorRecording() {
 async function writePendingCursorTelemetry(videoPath: string) {
 	const telemetryPath = `${videoPath}.cursor.json`;
 	if (pendingCursorRecordingData && pendingCursorRecordingData.samples.length > 0) {
-		await fs.writeFile(telemetryPath, JSON.stringify(pendingCursorRecordingData, null, 2), "utf-8");
+		// Written beside it and renamed into place: an hour of samples is tens of MB, and a
+		// crash halfway through a direct write left a truncated file that recovery took for
+		// the real one, deleting the complete checkpoint it should have rebuilt from.
+		const partialPath = `${telemetryPath}.partial`;
+		await fs.writeFile(partialPath, JSON.stringify(pendingCursorRecordingData, null, 2), "utf-8");
+		await fs.rename(partialPath, telemetryPath);
 	}
 	pendingCursorRecordingData = null;
 }
@@ -3741,6 +3746,10 @@ export function registerIpcHandlers(
 						"[native-wgc] could not write the cursor telemetry; saving without it",
 						error,
 					);
+				} finally {
+					// The take is over either way: no more checkpoints for it. The file stays
+					// when the write failed -- it is then the only copy of the samples.
+					stopCursorCheckpointTimer();
 				}
 			}
 			let webcamVideoPath: string | undefined;

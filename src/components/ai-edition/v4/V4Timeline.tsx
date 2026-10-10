@@ -1628,12 +1628,19 @@ export function V4Timeline({
 		}
 		setAutoBusy(true);
 		try {
-			const [peaks, telemetry] = await Promise.all([
+			const durationSec = asset.durationSec;
+			const peaksOf = (filePath: string) =>
 				window.electronAPI
-					// A wait is quiet speech: the voice stem says it without the computer's sound.
-					?.getAudioPeaks?.(asset.audioStems?.voicePath ?? asset.originalPath, asset.durationSec)
+					?.getAudioPeaks?.(filePath, durationSec)
 					.then((r) => r.peaks ?? null)
-					.catch(() => null) ?? Promise.resolve(null),
+					.catch(() => null) ?? Promise.resolve(null);
+			const voicePath = asset.audioStems?.voicePath;
+			const [peaks, telemetry] = await Promise.all([
+				// A wait is quiet speech: the voice stem says it without the computer's sound. A
+				// stem that has gone missing leaves the take's own track, which holds the voice too.
+				(voicePath ? peaksOf(voicePath) : Promise.resolve(null)).then(
+					(stemPeaks) => stemPeaks ?? peaksOf(asset.originalPath),
+				),
 				nativeBridgeClient.cursor.getTelemetry(asset.originalPath).catch(() => null),
 			]);
 			const waits = findWaits({

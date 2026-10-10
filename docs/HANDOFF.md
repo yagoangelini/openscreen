@@ -31,7 +31,7 @@ As decisões e o porquê de cada fase estão em [`PLANO-FORK.md`](PLANO-FORK.md)
 
 ## Estado atual
 
-`main` do fork = **v1.19.0**, publicada e marcada como Latest. O histórico do fork, em ordem:
+`main` do fork = **v1.19.1**, publicada e marcada como Latest. O histórico do fork, em ordem:
 
 | Versão | Como entrou | Conteúdo |
 |---|---|---|
@@ -41,6 +41,7 @@ As decisões e o porquê de cada fase estão em [`PLANO-FORK.md`](PLANO-FORK.md)
 | 1.17.0 | PR yagoangelini/openscreen#2 | sugestões para acelerar esperas, títulos de capítulo com IA, `.srt` ao lado do export |
 | 1.18.0 | PR yagoangelini/openscreen#3 | decisões da manhã (lista abaixo) |
 | 1.19.0 | PR yagoangelini/openscreen#4 | voz e som do computador gravados à parte, com dois volumes |
+| 1.19.1 | PR yagoangelini/openscreen#6 | correções dos recursos do fork achadas na análise de 10/10 ([`ANALISE-MELHORIAS.md`](ANALISE-MELHORIAS.md) §2) |
 
 **O que a 1.16.0 trouxe:**
 
@@ -214,6 +215,8 @@ O app instalado oferece a atualização a partir do `latest.yml`. O feed está e
 - **Kaspersky.** Ele coloca em quarentena um gravador que fica parado esperando no stdin (o "início armado"). Esse modo foi revertido; não reintroduza sem a exclusão do usuário.
 
 ## Pendências
+
+**Plano em andamento** (decidido em 10/10 à tarde, `PLANO-FORK.md`): depois da 1.19.1 vem o **merge do OpenScreen 2.0** (2.1.0), descrito em `ANALISE-MELHORIAS.md` §1 com os conflitos e as decisões a preservar. Depois vêm câmera e vinheta (2.2.0) e, por fim, os extras aprovados.
 
 **Esperando o usuário:**
 

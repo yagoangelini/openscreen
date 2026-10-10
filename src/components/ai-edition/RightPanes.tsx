@@ -1183,6 +1183,9 @@ const TranscriptClipBlock = memo(function TranscriptClipBlock({
 		},
 		[busy, clip.assetId, words, toRawSpan, onTrimTimelineSpan, onRemoveWords],
 	);
+	// A silence chip is cut like a word: with breath kept next to the speech on each side,
+	// or the words it sat between come out glued together.
+	const skipSilence = useCallback((cw: ClipWord) => skipWordRange([cw]), [skipWordRange]);
 
 	const removeTrimRun = useCallback(
 		(run: TrimRun) => {
@@ -1525,9 +1528,8 @@ const TranscriptClipBlock = memo(function TranscriptClipBlock({
 									isCue={cw.id === cueWordId}
 									editable={!busy}
 									assetId={clip.assetId}
-									toRawSpan={toRawSpan}
 									onRestore={removeTrimRun}
-									onTrimTimelineSpan={onTrimTimelineSpan}
+									onSkipSilence={skipSilence}
 									onSetWordText={onSetWordText}
 									onRemoveWords={onRemoveWords}
 								/>
@@ -1565,9 +1567,8 @@ const TranscriptWord = memo(function TranscriptWord({
 	isCue,
 	editable,
 	assetId,
-	toRawSpan,
 	onRestore,
-	onTrimTimelineSpan,
+	onSkipSilence,
 	onSetWordText,
 	onRemoveWords,
 }: {
@@ -1577,10 +1578,9 @@ const TranscriptWord = memo(function TranscriptWord({
 	 *  about to be replaced, so an edit typed into them would be thrown away. */
 	editable: boolean;
 	assetId: string;
-	/** Clamped source→raw for this word's placement — see `toRawSpan` above. */
-	toRawSpan: (startSec: number, endSec: number) => [number, number];
 	onRestore: (run: TrimRun) => void;
-	onTrimTimelineSpan: (startSec: number, endSec: number, reason: string) => void;
+	/** Cuts this silence chip, breath and all (`skipWordRange`). */
+	onSkipSilence: (cw: ClipWord) => void;
 	onSetWordText: (assetId: string, wordId: string, text: string) => void;
 	onRemoveWords: (assetId: string, wordIds: string[]) => void;
 }) {
@@ -1678,10 +1678,7 @@ const TranscriptWord = memo(function TranscriptWord({
 				aria-label={ts("transcript.trimSilence", { duration })}
 				onClick={(e) => {
 					e.stopPropagation();
-					onTrimTimelineSpan(
-						...toRawSpan(cw.word.startSec, cw.word.endSec),
-						`Skip silence ${formatMs(cw.word.startSec * 1000)}-${formatMs(cw.word.endSec * 1000)}.`,
-					);
+					onSkipSilence(cw);
 				}}
 				style={{
 					display: "inline-flex",
