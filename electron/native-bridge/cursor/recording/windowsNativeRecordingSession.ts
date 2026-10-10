@@ -242,6 +242,10 @@ export class WindowsNativeRecordingSession implements CursorRecordingSession {
 		};
 	}
 
+	peek() {
+		return { samples: this.samples, assets: [...this.assets.values()] };
+	}
+
 	private handleStdoutChunk(chunk: string) {
 		this.lineBuffer += chunk;
 		const lines = this.lineBuffer.split(/\r?\n/);

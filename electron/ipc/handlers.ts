@@ -44,7 +44,6 @@ import {
 } from "../../src/lib/recordingSession";
 import type {
 	CursorRecordingData,
-	CursorRecordingSample,
 	ProjectFileResult,
 	ProjectPathResult,
 } from "../../src/native/contracts";
@@ -100,6 +99,14 @@ import {
 } from "../native-bridge/screen/macPickerSession";
 import { CompositorViewService } from "../native-bridge/services/compositorViewService";
 import { getMacPermissions, showPermissionsWindow } from "../permissions";
+import {
+	CURSOR_CHECKPOINT_INTERVAL_MS,
+	CURSOR_CHECKPOINT_SUFFIX,
+	CursorCheckpointWriter,
+	compactCursorPauseRanges,
+	recoverCursorCheckpoint,
+	shiftCursorTelemetry,
+} from "../recording/cursorCheckpoint";
 import { scoreDeviceNameMatch } from "../recording/deviceNameMatching";
 import { assessFreeSpace, readFreeBytes, STOP_RECORDING_FREE_BYTES } from "../recording/diskSpace";
 import {
@@ -761,6 +768,39 @@ const MAX_CURSOR_SAMPLES = Number.POSITIVE_INFINITY;
 
 let cursorRecordingSession: CursorRecordingSession | null = null;
 let pendingCursorRecordingData: CursorRecordingData | null = null;
+let cursorCheckpoint: CursorCheckpointWriter | null = null;
+let cursorCheckpointTimer: NodeJS.Timeout | null = null;
+
+/** Starts appending the take's cursor telemetry next to its video, every few seconds. */
+function startCursorCheckpoint(screenVideoPath: string, cursorOffsetMs: number) {
+	stopCursorCheckpointTimer();
+	const writer = new CursorCheckpointWriter(`${screenVideoPath}${CURSOR_CHECKPOINT_SUFFIX}`);
+	writer.meta(cursorOffsetMs);
+	cursorCheckpoint = writer;
+	const flush = () => {
+		const live = cursorRecordingSession?.peek?.();
+		if (live && cursorCheckpoint === writer) {
+			void writer.flush(live);
+		}
+	};
+	flush();
+	cursorCheckpointTimer = setInterval(flush, CURSOR_CHECKPOINT_INTERVAL_MS);
+}
+
+function stopCursorCheckpointTimer() {
+	if (cursorCheckpointTimer) {
+		clearInterval(cursorCheckpointTimer);
+		cursorCheckpointTimer = null;
+	}
+}
+
+/** The stop wrote the real cursor file (or the take is gone): the checkpoint has served. */
+async function discardCursorCheckpoint() {
+	stopCursorCheckpointTimer();
+	const writer = cursorCheckpoint;
+	cursorCheckpoint = null;
+	await writer?.discard();
+}
 let nativeWindowsCaptureProcess: ChildProcessWithoutNullStreams | null = null;
 let nativeWindowsCaptureOutput = "";
 let nativeWindowsCaptureTargetPath: string | null = null;
@@ -859,6 +899,19 @@ async function removeNativeWindowsCaptureOutputs(
 		webcamVideoPath,
 		screenVideoPath ? `${screenVideoPath}.cursor.json` : null,
 	];
+	// The checkpoint follows the video: kept for as long as the take it would
+	// restore the cursor of might still be recovered.
+	const removeCheckpointIfVideoGone = async () => {
+		if (!screenVideoPath || !isInRecordingDirs(screenVideoPath)) {
+			return;
+		}
+		const videoLeft = await fs.stat(screenVideoPath).catch(() => null);
+		if (!videoLeft) {
+			await fs
+				.rm(`${screenVideoPath}${CURSOR_CHECKPOINT_SUFFIX}`, { force: true })
+				.catch(() => undefined);
+		}
+	};
 
 	for (const target of targets) {
 		if (!target || !isInRecordingDirs(target)) {
@@ -881,6 +934,7 @@ async function removeNativeWindowsCaptureOutputs(
 			console.warn("[native-wgc] could not remove leftover capture output:", target, error);
 		}
 	}
+	await removeCheckpointIfVideoGone();
 }
 let nativeMacCaptureProcess: ChildProcessWithoutNullStreams | null = null;
 /**
@@ -1452,19 +1506,10 @@ async function registerRecordingMediaLinks(
 }
 
 function shiftPendingCursorTelemetry(offsetMs: number) {
-	if (!pendingCursorRecordingData || !Number.isFinite(offsetMs) || offsetMs <= 0) {
+	if (!pendingCursorRecordingData) {
 		return;
 	}
-
-	pendingCursorRecordingData = {
-		...pendingCursorRecordingData,
-		samples: pendingCursorRecordingData.samples
-			.map((sample) => ({
-				...sample,
-				timeMs: Math.max(0, sample.timeMs - offsetMs),
-			}))
-			.sort((a, b) => a.timeMs - b.timeMs),
-	};
+	pendingCursorRecordingData = shiftCursorTelemetry(pendingCursorRecordingData, offsetMs);
 }
 
 function compactPendingCursorTelemetryPauseRanges(
@@ -1473,42 +1518,7 @@ function compactPendingCursorTelemetryPauseRanges(
 	if (!pendingCursorRecordingData || ranges.length === 0) {
 		return;
 	}
-
-	const normalizedRanges = ranges
-		.map((range) => ({
-			startMs: Math.max(0, Math.min(range.startMs, range.endMs)),
-			endMs: Math.max(0, Math.max(range.startMs, range.endMs)),
-		}))
-		.filter((range) => Number.isFinite(range.startMs) && Number.isFinite(range.endMs))
-		.filter((range) => range.endMs > range.startMs)
-		.sort((a, b) => a.startMs - b.startMs);
-
-	if (normalizedRanges.length === 0) {
-		return;
-	}
-
-	pendingCursorRecordingData = {
-		...pendingCursorRecordingData,
-		samples: pendingCursorRecordingData.samples
-			.map((sample) => {
-				let pausedBeforeSampleMs = 0;
-				for (const range of normalizedRanges) {
-					if (sample.timeMs >= range.startMs && sample.timeMs <= range.endMs) {
-						return null;
-					}
-					if (sample.timeMs > range.endMs) {
-						pausedBeforeSampleMs += range.endMs - range.startMs;
-					}
-				}
-
-				return {
-					...sample,
-					timeMs: Math.max(0, sample.timeMs - pausedBeforeSampleMs),
-				};
-			})
-			.filter((sample): sample is CursorRecordingSample => Boolean(sample))
-			.sort((a, b) => a.timeMs - b.timeMs),
-	};
+	pendingCursorRecordingData = compactCursorPauseRanges(pendingCursorRecordingData, ranges);
 }
 
 function completeNativeMacCursorPauseRange(endMs = Date.now()) {
@@ -1528,10 +1538,12 @@ function completeNativeWindowsCursorPauseRange(endMs = Date.now()) {
 		return;
 	}
 
-	nativeWindowsPauseRanges.push({
+	const range = {
 		startMs: Math.max(0, nativeWindowsPauseStartedAtMs - nativeWindowsCursorRecordingStartMs),
 		endMs: Math.max(0, endMs - nativeWindowsCursorRecordingStartMs),
-	});
+	};
+	nativeWindowsPauseRanges.push(range);
+	cursorCheckpoint?.pause(range);
 	nativeWindowsPauseStartedAtMs = null;
 }
 
@@ -3084,6 +3096,9 @@ export function registerIpcHandlers(
 					cursorCaptureMode === "editable-overlay"
 						? Math.max(0, captureStartedAtMs - cursorStartTimeMs)
 						: 0;
+				if (cursorCaptureMode === "editable-overlay" && cursorRecordingSession) {
+					startCursorCheckpoint(outputPath, nativeWindowsCursorOffsetMs);
+				}
 				const webcamFormat = readWebcamFormat(nativeWindowsCaptureOutput);
 				const encoderSelection = readNativeWindowsEncoderSelection(nativeWindowsCaptureOutput);
 				// Captured now because stop may have no helper left to ask. A helper
@@ -3677,6 +3692,7 @@ export function registerIpcHandlers(
 					compactPendingCursorTelemetryPauseRanges(nativeWindowsPauseRanges);
 					shiftPendingCursorTelemetry(nativeWindowsCursorOffsetMs);
 					await writePendingCursorTelemetry(screenVideoPath);
+					await discardCursorCheckpoint();
 				} catch (error) {
 					console.warn(
 						"[native-wgc] could not write the cursor telemetry; saving without it",
@@ -3875,6 +3891,10 @@ export function registerIpcHandlers(
 		if (response !== 0 || nativeWindowsCaptureProcess) {
 			return;
 		}
+		// The stop that would have written the cursor file never ran; the
+		// checkpoint written during the take stands in for it.
+		const cursorRecovered = await recoverCursorCheckpoint(take.screenVideoPath).catch(() => false);
+		console.info("[recovery] reopening a take", { path: take.screenVideoPath, cursorRecovered });
 		const session = normalizeRecordingSession({
 			screenVideoPath: take.screenVideoPath,
 			webcamVideoPath: take.webcamVideoPath,
