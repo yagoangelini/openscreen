@@ -150,7 +150,10 @@
 		"defaultRecordingsFolder": "Varsayılanı kullan",
 		"countdown": "Geri sayım",
 		"countdownNone": "Yok",
-		"countdownSeconds": "{{seconds}} sn"
+		"countdownSeconds": "{{seconds}} sn",
+		"doNotDisturb": "Rahatsız etmeyin",
+		"doNotDisturbHint": "Teams ve Outlook bildirimleri videoya girmesin diye kayıttan önce açın.",
+		"openNotificationSettings": "Ayarları aç"
 	},
 	"mediaStage": {
 		"openProjectFirst": "Önce bir proje açın",

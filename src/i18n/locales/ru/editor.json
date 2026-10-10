@@ -150,7 +150,10 @@
 		"defaultRecordingsFolder": "По умолчанию",
 		"countdown": "Обратный отсчёт",
 		"countdownNone": "Нет",
-		"countdownSeconds": "{{seconds}} с"
+		"countdownSeconds": "{{seconds}} с",
+		"doNotDisturb": "Не беспокоить",
+		"doNotDisturbHint": "Включите перед записью, чтобы уведомления Teams и Outlook не попали в видео.",
+		"openNotificationSettings": "Открыть параметры"
 	},
 	"mediaStage": {
 		"openProjectFirst": "Сначала откройте проект",

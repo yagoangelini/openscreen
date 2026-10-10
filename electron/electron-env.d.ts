@@ -73,6 +73,8 @@ interface Window {
 		onAutoStartRecording: (callback: () => void) => () => void;
 		/** The folder new takes are written to, resolved; `isDefault` when none was chosen. */
 		getRecordingsFolder: () => Promise<{ folder: string; isDefault: boolean }>;
+		/** Opens Windows' notification settings (Do not disturb). Windows only. */
+		openNotificationSettings: () => Promise<{ success: boolean }>;
 		chooseRecordingsFolder: () => Promise<{ canceled: true } | { canceled: false; folder: string }>;
 		openRecordingsFolder: () => Promise<{ success: boolean }>;
 		/** The pause shortcut, pressed while another app had focus. Returns an unsubscribe. */

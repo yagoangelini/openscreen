@@ -150,7 +150,10 @@
 		"defaultRecordingsFolder": "استخدام الافتراضي",
 		"countdown": "العد التنازلي",
 		"countdownNone": "بدون",
-		"countdownSeconds": "{{seconds}} ث"
+		"countdownSeconds": "{{seconds}} ث",
+		"doNotDisturb": "عدم الإزعاج",
+		"doNotDisturbHint": "فعّله قبل التسجيل كي لا تظهر إشعارات Teams وOutlook في الفيديو.",
+		"openNotificationSettings": "فتح الإعدادات"
 	},
 	"mediaStage": {
 		"openProjectFirst": "افتح مشروعًا أولاً",

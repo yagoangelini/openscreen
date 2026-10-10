@@ -150,7 +150,10 @@
 		"defaultRecordingsFolder": "既定に戻す",
 		"countdown": "カウントダウン",
 		"countdownNone": "なし",
-		"countdownSeconds": "{{seconds}} 秒"
+		"countdownSeconds": "{{seconds}} 秒",
+		"doNotDisturb": "応答不可",
+		"doNotDisturbHint": "Teams や Outlook の通知が動画に入らないよう、録画前にオンにしてください。",
+		"openNotificationSettings": "設定を開く"
 	},
 	"mediaStage": {
 		"openProjectFirst": "先にプロジェクトを開いてください",

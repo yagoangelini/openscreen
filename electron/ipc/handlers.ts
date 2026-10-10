@@ -4392,6 +4392,23 @@ export function registerIpcHandlers(
 	// premise to skip this. http/https/mailto is everything the app actually opens.
 	const EXTERNAL_URL_PROTOCOLS = new Set(["http:", "https:", "mailto:"]);
 
+	// Windows' notification settings, where Do not disturb lives -- so a Teams or
+	// Outlook toast does not land in the middle of a take. A fixed URI on purpose:
+	// the renderer names no target, so this cannot widen the allowlist above. There
+	// is no public API to toggle Do not disturb itself, and the app does not try.
+	ipcMain.handle("open-notification-settings", async () => {
+		if (process.platform !== "win32") {
+			return { success: false };
+		}
+		try {
+			await shell.openExternal("ms-settings:notifications");
+			return { success: true };
+		} catch (error) {
+			console.warn("Could not open the notification settings:", error);
+			return { success: false };
+		}
+	});
+
 	ipcMain.handle("open-external-url", async (_, url: string) => {
 		try {
 			const parsed = new URL(url);

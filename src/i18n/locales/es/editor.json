@@ -150,7 +150,10 @@
 		"defaultRecordingsFolder": "Usar predeterminada",
 		"countdown": "Cuenta atrás",
 		"countdownNone": "Ninguna",
-		"countdownSeconds": "{{seconds}} s"
+		"countdownSeconds": "{{seconds}} s",
+		"doNotDisturb": "No molestar",
+		"doNotDisturbHint": "Actívalo antes de grabar para que las notificaciones de Teams y Outlook no salgan en el vídeo.",
+		"openNotificationSettings": "Abrir configuración"
 	},
 	"mediaStage": {
 		"openProjectFirst": "Abre un proyecto primero",

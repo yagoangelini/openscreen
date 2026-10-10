@@ -150,7 +150,10 @@
 		"defaultRecordingsFolder": "Dùng mặc định",
 		"countdown": "Đếm ngược",
 		"countdownNone": "Không",
-		"countdownSeconds": "{{seconds}} giây"
+		"countdownSeconds": "{{seconds}} giây",
+		"doNotDisturb": "Không làm phiền",
+		"doNotDisturbHint": "Bật trước khi ghi để thông báo Teams và Outlook không xuất hiện trong video.",
+		"openNotificationSettings": "Mở cài đặt"
 	},
 	"mediaStage": {
 		"openProjectFirst": "Hãy mở một dự án trước",

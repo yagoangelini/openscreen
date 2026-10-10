@@ -308,6 +308,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
 		ipcRenderer.on("stop-recording-from-tray", listener);
 		return () => ipcRenderer.removeListener("stop-recording-from-tray", listener);
 	},
+	openNotificationSettings: () => {
+		return ipcRenderer.invoke("open-notification-settings");
+	},
 	openExternalUrl: (url: string) => {
 		return ipcRenderer.invoke("open-external-url", url);
 	},

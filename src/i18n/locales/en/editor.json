@@ -150,7 +150,10 @@
 		"defaultRecordingsFolder": "Use default",
 		"countdown": "Countdown",
 		"countdownNone": "None",
-		"countdownSeconds": "{{seconds}} s"
+		"countdownSeconds": "{{seconds}} s",
+		"doNotDisturb": "Do not disturb",
+		"doNotDisturbHint": "Turn it on before recording so Teams and Outlook notifications stay out of the video.",
+		"openNotificationSettings": "Open settings"
 	},
 	"mediaStage": {
 		"openProjectFirst": "Open a project first",

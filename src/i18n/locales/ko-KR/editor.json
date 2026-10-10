@@ -150,7 +150,10 @@
 		"defaultRecordingsFolder": "기본값 사용",
 		"countdown": "카운트다운",
 		"countdownNone": "없음",
-		"countdownSeconds": "{{seconds}}초"
+		"countdownSeconds": "{{seconds}}초",
+		"doNotDisturb": "방해 금지",
+		"doNotDisturbHint": "Teams와 Outlook 알림이 영상에 나오지 않도록 녹화 전에 켜세요.",
+		"openNotificationSettings": "설정 열기"
 	},
 	"mediaStage": {
 		"openProjectFirst": "먼저 프로젝트를 여세요",

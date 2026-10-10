@@ -150,7 +150,10 @@
 		"defaultRecordingsFolder": "Použít výchozí",
 		"countdown": "Odpočet",
 		"countdownNone": "Žádný",
-		"countdownSeconds": "{{seconds}} s"
+		"countdownSeconds": "{{seconds}} s",
+		"doNotDisturb": "Nerušit",
+		"doNotDisturbHint": "Zapněte před nahráváním, aby se oznámení z Teams a Outlooku nedostala do videa.",
+		"openNotificationSettings": "Otevřít nastavení"
 	},
 	"mediaStage": {
 		"openProjectFirst": "Nejprve otevřete projekt",

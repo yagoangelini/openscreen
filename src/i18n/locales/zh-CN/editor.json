@@ -150,7 +150,10 @@
 		"defaultRecordingsFolder": "使用默认",
 		"countdown": "倒计时",
 		"countdownNone": "无",
-		"countdownSeconds": "{{seconds}} 秒"
+		"countdownSeconds": "{{seconds}} 秒",
+		"doNotDisturb": "勿扰模式",
+		"doNotDisturbHint": "录制前开启，避免 Teams 和 Outlook 通知出现在视频中。",
+		"openNotificationSettings": "打开设置"
 	},
 	"mediaStage": {
 		"openProjectFirst": "请先打开一个项目",
