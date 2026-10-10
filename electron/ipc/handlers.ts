@@ -2030,6 +2030,20 @@ export async function exportDiagnosticFile(payload: {
 	const HELPER_OUTPUT_MAX_BYTES = 64 * 1024;
 	const tail = (s: string, max: number) => (s.length <= max ? s : s.slice(s.length - max));
 
+	// Which GPU did what: on a hybrid laptop "the export used the integrated GPU"
+	// is the first question, and neither log answers it on its own. The
+	// compositor's adapter (preview and export) and Chromium's view of the GPUs
+	// (the editor window) can differ, which is itself the finding.
+	let compositorGpu: unknown = null;
+	try {
+		compositorGpu = new CompositorViewService().gpuAdapterInfo();
+	} catch (error) {
+		compositorGpu = { error: String(error) };
+	}
+	const chromiumGpu = await app
+		.getGPUInfo("basic")
+		.catch((error: unknown) => ({ error: String(error) }));
+
 	const diagnostic = {
 		timestamp: new Date().toISOString(),
 		appVersion: app.getVersion(),
@@ -2053,6 +2067,7 @@ export async function exportDiagnosticFile(payload: {
 			windows: tail(nativeWindowsCaptureOutput, HELPER_OUTPUT_MAX_BYTES),
 			mac: tail(nativeMacCaptureOutput, HELPER_OUTPUT_MAX_BYTES),
 		},
+		gpu: { compositor: compositorGpu, chromium: chromiumGpu },
 		mainProcessLogs: mainLogBuffer.snapshot(),
 	};
 
