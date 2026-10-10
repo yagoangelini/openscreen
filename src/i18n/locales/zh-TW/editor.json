@@ -191,7 +191,9 @@
 		"noSpeechDetected": "未偵測到語音",
 		"autoTranscribe": "開啟編輯器時自動轉錄新錄製",
 		"autoRedact": "模糊新錄製中的敏感資料",
-		"autoRedactHint": "錄製後，OCR 會找出螢幕上的電子郵件、租用戶網域、GUID、密鑰與電話號碼並加以模糊。每處模糊都是一般註解，可保留或刪除。離線執行。"
+		"autoRedactHint": "錄製後，OCR 會找出螢幕上的電子郵件、租用戶網域、GUID、密鑰與電話號碼並加以模糊。每處模糊都是一般註解，可保留或刪除。離線執行。",
+		"glossary": "術語表",
+		"glossaryHint": "逐字稿中要更正的名稱，每行一個：術語: 誤聽1, 誤聽2。適用於新的逐字稿。"
 	},
 	"exportDialog": {
 		"title": "匯出",

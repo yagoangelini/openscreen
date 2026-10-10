@@ -57,6 +57,7 @@ export function MediaStage({
 	const t = useScopedT("editor");
 	const [autoTranscribe, setAutoTranscribe] = useState(() => loadUserPreferences().autoTranscribe);
 	const [autoRedact, setAutoRedact] = useState(() => loadUserPreferences().autoRedact);
+	const [glossary, setGlossary] = useState(() => loadUserPreferences().glossary);
 	const { locale } = useI18n();
 	const projectId = useProjectStore((s) => s.projectId);
 	const document = useProjectStore((s) => s.document);
@@ -484,6 +485,30 @@ export function MediaStage({
 									/>
 									{t("mediaStage.autoRedact")}
 								</label>
+								<details style={{ marginTop: 8, fontSize: 12.5, color: "var(--fg-2)" }}>
+									<summary style={{ cursor: "pointer" }}>{t("mediaStage.glossary")}</summary>
+									<p style={{ margin: "6px 0", color: "var(--muted)" }}>
+										{t("mediaStage.glossaryHint")}
+									</p>
+									<textarea
+										data-testid="media-stage-glossary"
+										value={glossary}
+										spellCheck={false}
+										rows={8}
+										onChange={(event) => setGlossary(event.target.value)}
+										onBlur={() => saveUserPreferences({ glossary })}
+										style={{
+											width: "100%",
+											resize: "vertical",
+											padding: "8px 10px",
+											borderRadius: 9,
+											border: "1px solid var(--border)",
+											background: "var(--surface-2)",
+											color: "var(--fg)",
+											font: "500 12px var(--font-mono)",
+										}}
+									/>
+								</details>
 							</div>
 
 							<div

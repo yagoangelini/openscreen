@@ -191,7 +191,9 @@
 		"noSpeechDetected": "Keine Sprache erkannt",
 		"autoTranscribe": "Neue Aufnahmen beim Öffnen des Editors automatisch transkribieren",
 		"autoRedact": "Sensible Daten in neuen Aufnahmen verwischen",
-		"autoRedactHint": "Nach einer Aufnahme findet die Texterkennung E-Mails, Tenant-Domains, GUIDs, Geheimnisse und Telefonnummern auf dem Bildschirm und verwischt sie. Jede Unschärfe ist eine normale Anmerkung zum Behalten oder Löschen. Läuft offline."
+		"autoRedactHint": "Nach einer Aufnahme findet die Texterkennung E-Mails, Tenant-Domains, GUIDs, Geheimnisse und Telefonnummern auf dem Bildschirm und verwischt sie. Jede Unschärfe ist eine normale Anmerkung zum Behalten oder Löschen. Läuft offline.",
+		"glossary": "Glossar",
+		"glossaryHint": "Namen, auf die das Transkript korrigiert wird, einer pro Zeile: Begriff: falsch 1, falsch 2. Gilt für neue Transkripte."
 	},
 	"exportDialog": {
 		"title": "Export",

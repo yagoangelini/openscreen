@@ -191,7 +191,9 @@
 		"noSpeechDetected": "未检测到语音",
 		"autoTranscribe": "打开编辑器时自动转录新录制",
 		"autoRedact": "模糊新录制中的敏感信息",
-		"autoRedactHint": "录制后，OCR 会找出屏幕上的邮箱、租户域名、GUID、密钥和电话号码并将其模糊。每处模糊都是普通标注，可保留或删除。离线运行。"
+		"autoRedactHint": "录制后，OCR 会找出屏幕上的邮箱、租户域名、GUID、密钥和电话号码并将其模糊。每处模糊都是普通标注，可保留或删除。离线运行。",
+		"glossary": "术语表",
+		"glossaryHint": "转录中要更正的名称，每行一个：术语: 误听1, 误听2。适用于新的转录。"
 	},
 	"exportDialog": {
 		"title": "导出",

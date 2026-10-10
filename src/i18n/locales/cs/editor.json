@@ -191,7 +191,9 @@
 		"noSpeechDetected": "Žádná řeč nezjištěna",
 		"autoTranscribe": "Automaticky přepisovat nové nahrávky při otevření editoru",
 		"autoRedact": "Rozmazat citlivá data v nových nahrávkách",
-		"autoRedactHint": "Po nahrání najde OCR na obrazovce e-maily, domény tenantu, GUID, tajné klíče a telefonní čísla a rozmaže je. Každé rozmazání je běžná anotace, kterou můžete ponechat nebo smazat. Funguje offline."
+		"autoRedactHint": "Po nahrání najde OCR na obrazovce e-maily, domény tenantu, GUID, tajné klíče a telefonní čísla a rozmaže je. Každé rozmazání je běžná anotace, kterou můžete ponechat nebo smazat. Funguje offline.",
+		"glossary": "Glosář",
+		"glossaryHint": "Názvy, na které se přepis opraví, jeden na řádek: Výraz: chybně 1, chybně 2. Platí pro nové přepisy."
 	},
 	"exportDialog": {
 		"title": "Export",

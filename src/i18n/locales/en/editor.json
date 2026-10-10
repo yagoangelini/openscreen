@@ -191,7 +191,9 @@
 		"noSpeechDetected": "No speech detected",
 		"autoTranscribe": "Transcribe new recordings automatically when the editor opens",
 		"autoRedact": "Blur sensitive data in new recordings",
-		"autoRedactHint": "After a take, OCR finds e-mails, tenant domains, GUIDs, secrets and phone numbers on screen and blurs them. Each blur is a regular annotation you can keep or delete. Runs offline."
+		"autoRedactHint": "After a take, OCR finds e-mails, tenant domains, GUIDs, secrets and phone numbers on screen and blurs them. Each blur is a regular annotation you can keep or delete. Runs offline.",
+		"glossary": "Glossary",
+		"glossaryHint": "Names the transcription is corrected to, one per line: Term: misheard 1, misheard 2. Applies to new transcriptions."
 	},
 	"exportDialog": {
 		"title": "Export",

@@ -30,6 +30,7 @@ import { loadUserPreferences } from "@/lib/userPreferences";
 import { transcribeAsset } from "../document/transcribe";
 import { carryOverWordEdits, withTranscript } from "../document/transcript";
 import type { AxcutDocument } from "../schema";
+import { applyGlossary, parseGlossary } from "../transcription/glossary";
 import {
 	type AssetTranscriptionView,
 	assetCanCarrySpeech,
@@ -421,9 +422,11 @@ async function runJob(assetId: string, job: TranscriptionJob): Promise<void> {
 		// strictly, so nothing is invented (see `carryOverWordEdits`). What could not be
 		// carried is lost; telling the user so is the UI's job, and there is no surface
 		// for it yet.
+		// The glossary first, so a correction the user made by hand still wins over it.
+		const corrected = applyGlossary(transcript, parseGlossary(loadUserPreferences().glossary));
 		const merged = carryOverWordEdits(
 			current.transcripts.find((t) => t.assetId === assetId),
-			transcript,
+			corrected.transcript,
 		);
 		if (merged.dropped > 0) {
 			console.warn(

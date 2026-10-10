@@ -191,7 +191,9 @@
 		"noSpeechDetected": "No se detectó voz",
 		"autoTranscribe": "Transcribir automáticamente las grabaciones nuevas al abrir el editor",
 		"autoRedact": "Difuminar datos sensibles en las nuevas grabaciones",
-		"autoRedactHint": "Tras grabar, el OCR encuentra correos, dominios de tenant, GUID, secretos y teléfonos en pantalla y los difumina. Cada difuminado es una anotación normal que puedes conservar o borrar. Funciona sin conexión."
+		"autoRedactHint": "Tras grabar, el OCR encuentra correos, dominios de tenant, GUID, secretos y teléfonos en pantalla y los difumina. Cada difuminado es una anotación normal que puedes conservar o borrar. Funciona sin conexión.",
+		"glossary": "Glosario",
+		"glossaryHint": "Nombres que la transcripción corrige, uno por línea: Término: mal oído 1, mal oído 2. Se aplica a las nuevas transcripciones."
 	},
 	"exportDialog": {
 		"title": "Exportar",

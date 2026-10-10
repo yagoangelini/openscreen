@@ -191,7 +191,9 @@
 		"noSpeechDetected": "Không phát hiện giọng nói",
 		"autoTranscribe": "Tự động chép lời bản ghi mới khi mở trình chỉnh sửa",
 		"autoRedact": "Làm mờ dữ liệu nhạy cảm trong bản ghi mới",
-		"autoRedactHint": "Sau khi ghi, OCR tìm email, tên miền tenant, GUID, khóa bí mật và số điện thoại trên màn hình rồi làm mờ. Mỗi vùng mờ là một chú thích thông thường, bạn có thể giữ hoặc xóa. Chạy ngoại tuyến."
+		"autoRedactHint": "Sau khi ghi, OCR tìm email, tên miền tenant, GUID, khóa bí mật và số điện thoại trên màn hình rồi làm mờ. Mỗi vùng mờ là một chú thích thông thường, bạn có thể giữ hoặc xóa. Chạy ngoại tuyến.",
+		"glossary": "Bảng thuật ngữ",
+		"glossaryHint": "Các tên được sửa trong bản ghi, mỗi dòng một tên: Thuật ngữ: nghe nhầm 1, nghe nhầm 2. Áp dụng cho bản ghi mới."
 	},
 	"exportDialog": {
 		"title": "Xuất",

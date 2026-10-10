@@ -2,6 +2,7 @@ import {
 	DEFAULT_EDITOR_LAYOUT_SETTINGS,
 	DEFAULT_EXPORT_SETTINGS,
 } from "@/components/video-editor/editorDefaults";
+import { DEFAULT_GLOSSARY } from "@/lib/ai-edition/transcription/glossary";
 import type { ExportFormat, ExportQuality } from "@/lib/exporter";
 import { type AspectRatio, isAspectRatio } from "@/utils/aspectRatioUtils";
 
@@ -36,6 +37,8 @@ export interface UserPreferences {
 	youtubeLoudness: boolean;
 	/** After a take, blur the e-mails, tenant domains, GUIDs, secrets and phones it shows. */
 	autoRedact: boolean;
+	/** Terms the transcription is corrected to, one per line (`transcription/glossary.ts`). */
+	glossary: string;
 }
 
 export const DEFAULT_PREFS: UserPreferences = {
@@ -51,6 +54,7 @@ export const DEFAULT_PREFS: UserPreferences = {
 	autoTranscribe: false,
 	youtubeLoudness: true,
 	autoRedact: true,
+	glossary: DEFAULT_GLOSSARY,
 };
 
 /** Parses stored preferences without throwing on malformed JSON. */
@@ -119,6 +123,7 @@ export function loadUserPreferences(): UserPreferences {
 				? raw.youtubeLoudness
 				: DEFAULT_PREFS.youtubeLoudness,
 		autoRedact: typeof raw.autoRedact === "boolean" ? raw.autoRedact : DEFAULT_PREFS.autoRedact,
+		glossary: typeof raw.glossary === "string" ? raw.glossary : DEFAULT_PREFS.glossary,
 	};
 }
 

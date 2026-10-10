@@ -191,7 +191,9 @@
 		"noSpeechDetected": "Aucune parole détectée",
 		"autoTranscribe": "Transcrire automatiquement les nouveaux enregistrements à l'ouverture de l'éditeur",
 		"autoRedact": "Flouter les données sensibles des nouveaux enregistrements",
-		"autoRedactHint": "Après une prise, l'OCR repère les e-mails, domaines de tenant, GUID, secrets et numéros de téléphone à l'écran et les floute. Chaque flou est une annotation ordinaire à garder ou supprimer. Fonctionne hors ligne."
+		"autoRedactHint": "Après une prise, l'OCR repère les e-mails, domaines de tenant, GUID, secrets et numéros de téléphone à l'écran et les floute. Chaque flou est une annotation ordinaire à garder ou supprimer. Fonctionne hors ligne.",
+		"glossary": "Glossaire",
+		"glossaryHint": "Noms corrigés dans la transcription, un par ligne : Terme : mal entendu 1, mal entendu 2. S'applique aux nouvelles transcriptions."
 	},
 	"exportDialog": {
 		"title": "Exporter",

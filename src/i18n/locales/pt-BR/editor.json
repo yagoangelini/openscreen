@@ -191,7 +191,9 @@
 		"noSpeechDetected": "Nenhuma fala detectada",
 		"autoTranscribe": "Transcrever novas gravações automaticamente ao abrir o editor",
 		"autoRedact": "Desfocar dados sensíveis nas novas gravações",
-		"autoRedactHint": "Depois de gravar, o OCR encontra e-mails, domínios de tenant, GUIDs, segredos e telefones na tela e os desfoca. Cada desfoque é uma anotação comum, que você mantém ou apaga. Funciona offline."
+		"autoRedactHint": "Depois de gravar, o OCR encontra e-mails, domínios de tenant, GUIDs, segredos e telefones na tela e os desfoca. Cada desfoque é uma anotação comum, que você mantém ou apaga. Funciona offline.",
+		"glossary": "Glossário",
+		"glossaryHint": "Nomes que a transcrição corrige, um por linha: Termo: errado 1, errado 2. Vale para as próximas transcrições."
 	},
 	"exportDialog": {
 		"title": "Exportar",
