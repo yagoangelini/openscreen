@@ -2,6 +2,7 @@ import { documentSchema } from "../../../src/lib/ai-edition/schema";
 import type {
 	AiEditionAssetResult,
 	AiEditionCaptionTranslateResult,
+	AiEditionChapterTitlesResult,
 	AiEditionChatBudget,
 	AiEditionChatCompactResult,
 	AiEditionChatMessage,
@@ -19,6 +20,7 @@ import {
 	type CaptionTranslateSegment,
 	translateCaptionSegments,
 } from "../../ai-edition/caption-translate";
+import { improveChapterTitles } from "../../ai-edition/chapter-titles";
 import type { ChatEventSink } from "../../ai-edition/chat-service";
 import type { DocumentService } from "../../ai-edition/document-service";
 import type { LlmConfigStore, LlmCredential } from "../../ai-edition/llm-config-store";
@@ -356,6 +358,32 @@ export class AiEditionService {
 	 * `segmentId → text` map: the caller writes it into the document's caption
 	 * translation layer, so nothing here can touch the transcript SSOT.
 	 */
+	async chaptersImproveTitles(input: {
+		chapters: Array<{ id: string; draft: string; transcript: string }>;
+		language?: string;
+	}): Promise<AiEditionChapterTitlesResult> {
+		const config = this.llmConfig.getConfig();
+		if (!config) {
+			return {
+				success: false,
+				titles: {},
+				error: "No AI provider is configured. Connect one in the agent settings first.",
+			};
+		}
+		const def = PROVIDER_DEFINITIONS.find((d) => d.id === config.provider);
+		const credential = def ? this.llmConfig.getCredential(def.id, def.envKeys) : null;
+		const result = await improveChapterTitles({
+			chapters: input.chapters,
+			language: input.language,
+			provider: config.provider,
+			model: config.model,
+			apiKey: credential?.value ?? "",
+			baseUrl: config.baseUrl,
+			reasoningEffort: config.reasoningEffort,
+		});
+		return { ...result, model: config.model };
+	}
+
 	async captionsTranslate(input: {
 		segments: CaptionTranslateSegment[];
 		targetLanguage: string;

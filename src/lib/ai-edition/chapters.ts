@@ -127,3 +127,25 @@ export function formatChaptersForYouTube(chapters: Chapter[]): string {
 		.map((chapter) => `${formatChapterTime(chapter.startSec)} ${chapter.title}`)
 		.join("\n");
 }
+
+/** What is said during each chapter, for writing its title: up to `maxChars` of it. */
+export function chapterTranscripts(
+	document: AxcutDocument,
+	chapters: Chapter[],
+	maxChars = 400,
+): string[] {
+	const words = timelineWords(document);
+	const totalSec = document.timeline.clips.reduce(
+		(max, clip) => Math.max(max, clip.timelineEndSec),
+		0,
+	);
+	return chapters.map((chapter, index) => {
+		const endSec = chapters[index + 1]?.startSec ?? totalSec;
+		const text = words
+			.filter((word) => word.sec >= chapter.startSec - 0.05 && word.sec < endSec)
+			.map((word) => word.text.trim())
+			.filter(Boolean)
+			.join(" ");
+		return text.length > maxChars ? `${text.slice(0, maxChars)}…` : text;
+	});
+}

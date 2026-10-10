@@ -477,6 +477,9 @@
 		"copied": "チャプターをコピーしました。動画の説明欄に貼り付けてください",
 		"copyFailed": "チャプターをコピーできませんでした",
 		"needThree": "YouTube のチャプターは 3 つ以上で表示されます。録画中にマーカー (Ctrl+Shift+F8) を追加してください。",
-		"fallbackTitle": "チャプター {{index}}"
+		"fallbackTitle": "チャプター {{index}}",
+		"improveWithAi": "AI でタイトルを改善",
+		"aiHint": "各チャプターの文字起こしを、エージェントに設定した AI プロバイダーに送信します",
+		"aiFailed": "タイトルを改善できませんでした"
 	}
 }

@@ -477,6 +477,9 @@
 		"copied": "Capitoli copiati: incollali nella descrizione",
 		"copyFailed": "Impossibile copiare i capitoli",
 		"needThree": "YouTube mostra i capitoli solo se sono almeno 3. Aggiungi marcatori (Ctrl+Maiusc+F8) mentre registri.",
-		"fallbackTitle": "Capitolo {{index}}"
+		"fallbackTitle": "Capitolo {{index}}",
+		"improveWithAi": "Migliora i titoli con l'IA",
+		"aiHint": "Invia la trascrizione di ogni capitolo al provider IA configurato nell'agente",
+		"aiFailed": "Impossibile migliorare i titoli"
 	}
 }

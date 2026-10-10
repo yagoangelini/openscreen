@@ -477,6 +477,9 @@
 		"copied": "Chapters copied — paste them into the video description",
 		"copyFailed": "Could not copy the chapters",
 		"needThree": "YouTube shows chapters only with at least 3. Add markers (Ctrl+Shift+F8) while recording.",
-		"fallbackTitle": "Chapter {{index}}"
+		"fallbackTitle": "Chapter {{index}}",
+		"improveWithAi": "Improve titles with AI",
+		"aiHint": "Sends each chapter's transcript to the AI provider configured in the agent settings",
+		"aiFailed": "Could not improve the titles"
 	}
 }

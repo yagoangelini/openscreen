@@ -477,6 +477,9 @@
 		"copied": "Bölümler kopyalandı — video açıklamasına yapıştırın",
 		"copyFailed": "Bölümler kopyalanamadı",
 		"needThree": "YouTube bölümleri en az 3 olduğunda gösterir. Kayıt sırasında işaret ekleyin (Ctrl+Shift+F8).",
-		"fallbackTitle": "Bölüm {{index}}"
+		"fallbackTitle": "Bölüm {{index}}",
+		"improveWithAi": "Başlıkları yapay zekâyla iyileştir",
+		"aiHint": "Her bölümün dökümünü ajanda ayarlı yapay zekâ sağlayıcısına gönderir",
+		"aiFailed": "Başlıklar iyileştirilemedi"
 	}
 }

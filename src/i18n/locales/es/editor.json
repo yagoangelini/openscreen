@@ -477,6 +477,9 @@
 		"copied": "Capítulos copiados: pégalos en la descripción del vídeo",
 		"copyFailed": "No se pudieron copiar los capítulos",
 		"needThree": "YouTube solo muestra capítulos si hay al menos 3. Añade marcadores (Ctrl+Shift+F8) al grabar.",
-		"fallbackTitle": "Capítulo {{index}}"
+		"fallbackTitle": "Capítulo {{index}}",
+		"improveWithAi": "Mejorar títulos con IA",
+		"aiHint": "Envía la transcripción de cada capítulo al proveedor de IA configurado en el agente",
+		"aiFailed": "No se pudieron mejorar los títulos"
 	}
 }

@@ -1,6 +1,7 @@
 import {
 	type AiEditionAssetResult,
 	type AiEditionCaptionTranslateResult,
+	type AiEditionChapterTitlesResult,
 	type AiEditionChatBudget,
 	type AiEditionChatCompactResult,
 	type AiEditionChatResult,
@@ -336,6 +337,17 @@ export const nativeBridgeClient = {
 		/** Translate transcript segments for the caption layer through the
 		 *  configured chat provider. Returns segmentId → translated text; the
 		 *  caller stores it in the caption translation layer. */
+		/** Rewrites the local chapter titles from what is said in each chapter, through the
+		 *  configured chat provider. Returns chapter id -> title. */
+		improveChapterTitles: (input: {
+			chapters: Array<{ id: string; draft: string; transcript: string }>;
+			language?: string;
+		}) =>
+			requireNativeBridgeData<AiEditionChapterTitlesResult>({
+				domain: "aiEdition",
+				action: "chapters.improveTitles",
+				payload: input,
+			}),
 		translateCaptions: (input: {
 			segments: Array<{ id: string; text: string }>;
 			targetLanguage: string;

@@ -477,6 +477,9 @@
 		"copied": "Kapitel kopiert — in die Videobeschreibung einfügen",
 		"copyFailed": "Kapitel konnten nicht kopiert werden",
 		"needThree": "YouTube zeigt Kapitel erst ab 3 an. Setze beim Aufnehmen Markierungen (Strg+Umschalt+F8).",
-		"fallbackTitle": "Kapitel {{index}}"
+		"fallbackTitle": "Kapitel {{index}}",
+		"improveWithAi": "Titel mit KI verbessern",
+		"aiHint": "Sendet das Transkript jedes Kapitels an den im Agenten eingerichteten KI-Anbieter",
+		"aiFailed": "Die Titel konnten nicht verbessert werden"
 	}
 }

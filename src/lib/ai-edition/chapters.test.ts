@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { buildChapters, formatChaptersForYouTube, formatChapterTime } from "./chapters";
+import {
+	buildChapters,
+	chapterTranscripts,
+	formatChaptersForYouTube,
+	formatChapterTime,
+} from "./chapters";
 import { type AxcutDocument, createEmptyDocument } from "./schema";
 
 function documentWith(options: {
@@ -137,5 +142,25 @@ describe("formatting for YouTube", () => {
 				{ startSec: 65, title: "Criando o fluxo" },
 			]),
 		).toBe("0:00 Introdução\n1:05 Criando o fluxo");
+	});
+});
+
+describe("chapterTranscripts", () => {
+	it("gives each chapter the words spoken in it, trimmed", () => {
+		const document = documentWith({
+			durationSec: 60,
+			markersSec: [30],
+			words: [
+				[1, "abrir"],
+				[2, "o"],
+				[3, "SharePoint"],
+				[31, "criar"],
+				[32, "a"],
+				[33, "lista"],
+			],
+		});
+		const chapters = buildChapters(document, { fallbackTitle });
+		expect(chapterTranscripts(document, chapters)).toEqual(["abrir o SharePoint", "criar a lista"]);
+		expect(chapterTranscripts(document, chapters, 5)[0]).toBe("abrir…");
 	});
 });

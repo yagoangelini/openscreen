@@ -477,6 +477,9 @@
 		"copied": "章节已复制——粘贴到视频说明中",
 		"copyFailed": "无法复制章节",
 		"needThree": "YouTube 至少需要 3 个章节才会显示。录制时用 Ctrl+Shift+F8 添加标记。",
-		"fallbackTitle": "第 {{index}} 章"
+		"fallbackTitle": "第 {{index}} 章",
+		"improveWithAi": "用 AI 优化标题",
+		"aiHint": "将每章的转录发送给在智能体中配置的 AI 服务商",
+		"aiFailed": "无法优化标题"
 	}
 }
