@@ -29,6 +29,7 @@
 
 pub mod audio;
 pub mod audio_jobs;
+pub mod audio_stream;
 pub mod camera;
 pub mod config;
 pub mod cursor;

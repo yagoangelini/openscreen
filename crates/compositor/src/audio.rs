@@ -16,7 +16,9 @@ use std::time::SystemTime;
 
 pub const AUDIO_OUTPUT_SAMPLE_RATE: i32 = 48_000;
 pub const AUDIO_OUTPUT_CHANNELS: usize = 2;
-pub const AUDIO_BITRATE: i64 = 128_000;
+/// 320 kb/s: the AAC rate a YouTube upload keeps without a second generation of loss being
+/// audible (the fork's export decision, 2026-10-09). 128 kb/s was the old default.
+pub const AUDIO_BITRATE: i64 = 320_000;
 pub const AUDIO_BOUNDARY_FADE_SAMPLES: usize = 240;
 
 // Valeurs partagées : `AVERROR(EAGAIN)` dépend de la plateforme (-11 vs -35), et ce
@@ -76,12 +78,12 @@ pub fn finish_audio(mut pcm: PlanarPcm, settings: SceneAudio) -> PlanarPcm {
 /// −1 dBTP delivery limit.
 pub const LIMITER_CEILING: f32 = 0.841_395_1;
 /// How early the gain starts to come down before a peak, as a straight ramp: 5 ms.
-const LIMITER_LOOKAHEAD: usize = 240;
+pub(crate) const LIMITER_LOOKAHEAD: usize = 240;
 /// Time constant of the recovery once a peak has passed.
-const LIMITER_RELEASE_SEC: f32 = 0.08;
+pub(crate) const LIMITER_RELEASE_SEC: f32 = 0.08;
 
 /// Gain that brings sample `index` of every channel under the ceiling, 1 when it already is.
-fn gain_to_ceiling(pcm: &[Vec<f32>], index: usize) -> f32 {
+pub(crate) fn gain_to_ceiling(pcm: &[Vec<f32>], index: usize) -> f32 {
     let peak = pcm.iter().fold(0.0f32, |peak, channel| peak.max(channel[index].abs()));
     if peak > LIMITER_CEILING {
         LIMITER_CEILING / peak
@@ -98,7 +100,7 @@ fn gain_to_ceiling(pcm: &[Vec<f32>], index: usize) -> f32 {
 /// exceeds what the sample needs: the ceiling holds exactly, and the gain still reaches each
 /// peak as a straight 5 ms ramp instead of a step. The recovery after it is exponential, and
 /// a signal that never crosses the ceiling passes through untouched.
-fn limit_peaks(pcm: &mut PlanarPcm) {
+pub(crate) fn limit_peaks(pcm: &mut PlanarPcm) {
     let len = pcm.first().map(Vec::len).unwrap_or(0);
     let window = LIMITER_LOOKAHEAD as isize;
     let release = 1.0 - (-1.0 / (LIMITER_RELEASE_SEC * AUDIO_OUTPUT_SAMPLE_RATE as f32)).exp();
@@ -323,7 +325,7 @@ extern "C" {
     fn sn_fmt_nb_streams(s: *mut AVFormatContext) -> u32;
 }
 
-fn averr(ret: i32, ctx: &str) -> Result<()> {
+pub(crate) fn averr(ret: i32, ctx: &str) -> Result<()> {
     if ret < 0 {
         // Surtout pas `[0i8; 256]` : `c_char` est signé sur x86_64 mais NON SIGNÉ sur
         // aarch64, donc un i8 en dur fait du `*mut c_char` d'av_strerror une erreur de
@@ -336,13 +338,13 @@ fn averr(ret: i32, ctx: &str) -> Result<()> {
     Ok(())
 }
 
-struct AudioResampler {
+pub(crate) struct AudioResampler {
     ctx: *mut SwrContext,
     input_rate: i32,
 }
 
 impl AudioResampler {
-    unsafe fn from_frame(frame: *mut AVFrame, dctx: *mut AVCodecContext) -> Result<Self> {
+    pub(crate) unsafe fn from_frame(frame: *mut AVFrame, dctx: *mut AVCodecContext) -> Result<Self> {
         let mut output_layout = AVChannelLayout::default();
         av_channel_layout_default(&mut output_layout, AUDIO_OUTPUT_CHANNELS as i32);
 
@@ -388,7 +390,7 @@ impl AudioResampler {
         Ok(Self { ctx, input_rate })
     }
 
-    unsafe fn push(&mut self, frame: *mut AVFrame, output: &mut PlanarPcm) -> Result<()> {
+    pub(crate) unsafe fn push(&mut self, frame: *mut AVFrame, output: &mut PlanarPcm) -> Result<()> {
         let out_capacity = swr_get_out_samples(self.ctx, (*frame).nb_samples).max(1) as usize;
         let mut planes = vec![vec![0.0f32; out_capacity]; AUDIO_OUTPUT_CHANNELS];
         let mut output_ptrs: Vec<*mut u8> = planes
@@ -411,7 +413,7 @@ impl AudioResampler {
         Ok(())
     }
 
-    unsafe fn flush(&mut self, output: &mut PlanarPcm) -> Result<()> {
+    pub(crate) unsafe fn flush(&mut self, output: &mut PlanarPcm) -> Result<()> {
         loop {
             let delay = swr_get_delay(self.ctx, self.input_rate as i64);
             if delay <= 0 {
@@ -681,7 +683,7 @@ unsafe fn decode_clip_audio_inner(
 /// décalages de départ entre pistes, si bien que le mixage lui-même n'est qu'une somme.
 ///
 /// Séparé du décodage pour être testable sans ffmpeg.
-fn mix_aligned_tracks(
+pub(crate) fn mix_aligned_tracks(
     tracks: &[(f64, &PlanarPcm)],
     source_start_sec: f64,
     target_samples: usize,
@@ -1030,7 +1032,7 @@ impl WsolaTimeStretcher {
     }
 }
 
-fn stretch_pcm_to_length(pcm: &[Vec<f32>], target_samples: usize) -> PlanarPcm {
+pub(crate) fn stretch_pcm_to_length(pcm: &[Vec<f32>], target_samples: usize) -> PlanarPcm {
     if target_samples == 0 {
         return vec![Vec::new(); AUDIO_OUTPUT_CHANNELS];
     }
@@ -1658,7 +1660,27 @@ pub fn assemble_concatenated_pcm(
 /// Voiceovers go in first, because they are part of what the music ducks under: once they
 /// are summed, the programme IS the voice — the recording's own audio plus every take — and
 /// `duck_curve` reads it to lower each music bed while someone speaks.
-pub fn mix_external_tracks(mut programme: PlanarPcm, tracks: &[SceneAudioTrack]) -> PlanarPcm {
+pub fn mix_external_tracks(programme: PlanarPcm, tracks: &[SceneAudioTrack]) -> PlanarPcm {
+    mix_external_tracks_with(
+        programme,
+        tracks,
+        &|path, start, end| decode_clip_audio(path, start, end).ok().flatten(),
+        &loudness_gain_db,
+    )
+}
+
+/// The decode and the loudness measurement this mix needs, injected. Production passes
+/// `decode_clip_audio` and `loudness_gain_db`; the tests that pin the streamed export
+/// (`audio_stream.rs`) against this whole-buffer reference pass in-memory ones.
+pub(crate) type TrackDecoder<'a> = &'a dyn Fn(&str, f64, f64) -> Option<PlanarPcm>;
+pub(crate) type TrackLoudness<'a> = &'a dyn Fn(&str) -> f32;
+
+pub(crate) fn mix_external_tracks_with(
+    mut programme: PlanarPcm,
+    tracks: &[SceneAudioTrack],
+    decode: TrackDecoder,
+    loudness: TrackLoudness,
+) -> PlanarPcm {
     if programme.first().map_or(true, Vec::is_empty) {
         return programme;
     }
@@ -1666,19 +1688,25 @@ pub fn mix_external_tracks(mut programme: PlanarPcm, tracks: &[SceneAudioTrack])
         .iter()
         .partition(|track| track.kind == SceneAudioTrackKind::Voiceover);
     for track in voice {
-        overlay_external_track(&mut programme, track, &[]);
+        overlay_external_track(&mut programme, track, &[], decode, loudness);
     }
     if !music.is_empty() {
         let duck = duck_curve(&programme);
         for track in music {
-            overlay_external_track(&mut programme, track, &duck);
+            overlay_external_track(&mut programme, track, &duck, decode, loudness);
         }
     }
     programme
 }
 
 /// One entry of `mix_external_tracks`: decode its window, level it, sum it in under `duck`.
-fn overlay_external_track(programme: &mut PlanarPcm, track: &SceneAudioTrack, duck: &[f32]) {
+fn overlay_external_track(
+    programme: &mut PlanarPcm,
+    track: &SceneAudioTrack,
+    duck: &[f32],
+    decode: TrackDecoder,
+    loudness: TrackLoudness,
+) {
     let programme_len = programme.first().map(Vec::len).unwrap_or(0);
     let offset = (track.start_sec.max(0.0) * AUDIO_OUTPUT_SAMPLE_RATE as f64).round() as usize;
     // A track that starts at or past the programme end contributes nothing —
@@ -1707,16 +1735,15 @@ fn overlay_external_track(programme: &mut PlanarPcm, track: &SceneAudioTrack, du
     if trim_end <= trim_start {
         return;
     }
-    let decoded = match decode_clip_audio(&track.path, trim_start, trim_end) {
-        Ok(Some(pcm)) => pcm,
-        _ => return,
+    let Some(decoded) = decode(&track.path, trim_start, trim_end) else {
+        return;
     };
     // The app's own range is -60..+12 dB (the inspector slider); clamping at
     // -12 here floored every quiet bed at a tenth of the attenuation asked for.
     // A voiceover is voice, levelled like the recording (see `loudness_gain_db`); its
     // own gain then trims from there, exactly as the preview applies it.
     let normalisation = match track.kind {
-        SceneAudioTrackKind::Voiceover => loudness_gain_db(&track.path),
+        SceneAudioTrackKind::Voiceover => loudness(&track.path),
         SceneAudioTrackKind::Music => 0.0,
     };
     let gain = 10.0f32.powf((track.gain_db.clamp(-60.0, 12.0) + normalisation) / 20.0);
@@ -1737,21 +1764,21 @@ pub const DUCK_DEPTH_DB: f32 = -10.0;
 /// A 10 ms stretch of the voice counts as speech above this RMS level. The voice is already
 /// loudness-normalised here, so speech sits well above it, and a room's noise floor — even
 /// raised by the normalisation's full boost — well below.
-const DUCK_THRESHOLD_DBFS: f32 = -35.0;
+pub(crate) const DUCK_THRESHOLD_DBFS: f32 = -35.0;
 /// Pauses shorter than this keep the music down: the gaps between words and phrases.
-const DUCK_HOLD_SEC: f64 = 0.5;
+pub(crate) const DUCK_HOLD_SEC: f64 = 0.5;
 /// The dip starts this long before the voice does, so the first syllable is already clear.
-const DUCK_ATTACK_SEC: f64 = 0.25;
+pub(crate) const DUCK_ATTACK_SEC: f64 = 0.25;
 /// And takes this long to come back up once a pause outlasts the hold.
-const DUCK_RELEASE_SEC: f64 = 0.6;
+pub(crate) const DUCK_RELEASE_SEC: f64 = 0.6;
 /// Resolution of the envelope: 10 ms.
-const DUCK_BLOCK: usize = AUDIO_OUTPUT_SAMPLE_RATE as usize / 100;
+pub(crate) const DUCK_BLOCK: usize = AUDIO_OUTPUT_SAMPLE_RATE as usize / 100;
 
 /// The gain a music bed takes under `voice`, one linear value per `DUCK_BLOCK` of the
 /// programme: 1 in the clear, `DUCK_DEPTH_DB` while someone speaks, with straight ramps in dB
 /// between. The export holds the whole voice, so it looks ahead: the dip is already complete
 /// when the first word starts.
-fn duck_curve(voice: &PlanarPcm) -> Vec<f32> {
+pub(crate) fn duck_curve(voice: &PlanarPcm) -> Vec<f32> {
     let len = voice.first().map(Vec::len).unwrap_or(0);
     let blocks = len.div_ceil(DUCK_BLOCK);
     let threshold = 10.0f32.powf(DUCK_THRESHOLD_DBFS / 10.0);
@@ -1808,7 +1835,7 @@ fn duck_curve(voice: &PlanarPcm) -> Vec<f32> {
 
 /// `duck_curve` at one programme sample, interpolated between its blocks so the level never
 /// steps. An empty curve is no ducking at all.
-fn duck_gain_at(curve: &[f32], sample: usize) -> f32 {
+pub(crate) fn duck_gain_at(curve: &[f32], sample: usize) -> f32 {
     let block = sample / DUCK_BLOCK;
     let Some(&from) = curve.get(block).or(curve.last()) else {
         return 1.0;
@@ -1867,7 +1894,7 @@ fn overlay_track_pcm(
 /// independently: clamping each to the length first would turn an asymmetric pair
 /// into a symmetric one, losing the shape asked for. Kept identical to the app's
 /// `resolveFadeSecs` so the preview and the render agree.
-fn resolve_fade_samples(len: usize, fade_in_sec: f64, fade_out_sec: f64) -> (usize, usize) {
+pub(crate) fn resolve_fade_samples(len: usize, fade_in_sec: f64, fade_out_sec: f64) -> (usize, usize) {
     if len == 0 {
         return (0, 0);
     }
@@ -1884,7 +1911,7 @@ fn resolve_fade_samples(len: usize, fade_in_sec: f64, fade_out_sec: f64) -> (usi
 }
 
 /// Linear ramp factor at sample `k` of a `len`-sample track.
-fn fade_envelope(k: usize, len: usize, fade_in: usize, fade_out: usize) -> f32 {
+pub(crate) fn fade_envelope(k: usize, len: usize, fade_in: usize, fade_out: usize) -> f32 {
     let mut v = 1.0f32;
     if fade_in > 0 && k < fade_in {
         v = v.min(k as f32 / fade_in as f32);
@@ -1904,6 +1931,10 @@ pub(crate) struct AacEncoder {
     context: *mut AVCodecContext,
     stream: *mut AVStream,
     packet: *mut AVPacket,
+    /// Samples handed to `encode_stream` that do not fill a whole encoder frame yet.
+    pending: PlanarPcm,
+    /// Samples already sent to the encoder: the next frame's pts.
+    sent: usize,
 }
 
 impl AacEncoder {
@@ -1937,49 +1968,118 @@ impl AacEncoder {
         if packet.is_null() {
             bail!("aac av_packet_alloc");
         }
-        Ok(Self { context, stream, packet })
+        Ok(Self {
+            context,
+            stream,
+            packet,
+            pending: vec![Vec::new(); AUDIO_OUTPUT_CHANNELS],
+            sent: 0,
+        })
     }
 
+    /// The whole programme at once: `encode_stream` then `finish_stream`. Same frames, same
+    /// pts, so the packets are those of the streamed export. The macOS and Linux pipelines
+    /// still build the programme whole and call this; Windows streams.
+    #[cfg_attr(windows, allow(dead_code))]
     pub(crate) unsafe fn encode(&mut self, pcm: &[Vec<f32>], output: *mut AVFormatContext) -> Result<()> {
-        let total_samples = pcm.first().map(|channel| channel.len()).unwrap_or(0);
-        let frame_size = if (*self.context).frame_size > 0 {
-            (*self.context).frame_size as usize
+        self.encode_stream(pcm, output)?;
+        self.finish_stream(output)
+    }
+
+    fn frame_size(&self) -> usize {
+        let size = unsafe { (*self.context).frame_size };
+        if size > 0 {
+            size as usize
         } else {
             1024
-        };
+        }
+    }
+
+    /// Appends `pcm` to the stream and encodes every whole encoder frame it completes. What is
+    /// left waits for the next call, or for `finish_stream`. The packets go through the
+    /// muxer's interleaver, so audio fed while the video is being encoded lands interleaved
+    /// with it in the file.
+    pub(crate) unsafe fn encode_stream(
+        &mut self,
+        pcm: &[Vec<f32>],
+        output: *mut AVFormatContext,
+    ) -> Result<()> {
+        // The first plane sets the length; a missing or short plane is silence, as `encode`
+        // always treated it.
+        let incoming = pcm.first().map(Vec::len).unwrap_or(0);
+        for channel in 0..AUDIO_OUTPUT_CHANNELS {
+            let target = self.pending[channel].len() + incoming;
+            if let Some(source) = pcm.get(channel) {
+                self.pending[channel].extend_from_slice(&source[..incoming.min(source.len())]);
+            }
+            self.pending[channel].resize(target, 0.0);
+        }
+        let frame_size = self.frame_size();
+        let whole = self.pending[0].len() / frame_size * frame_size;
         let mut offset = 0usize;
-        while offset < total_samples {
-            let sample_count = frame_size.min(total_samples - offset);
-            let mut frame = av_frame_alloc();
-            if frame.is_null() {
-                bail!("aac av_frame_alloc");
+        while offset < whole {
+            self.send_frame(offset, frame_size, output)?;
+            offset += frame_size;
+        }
+        if offset > 0 {
+            for plane in self.pending.iter_mut() {
+                plane.drain(..offset);
             }
-            (*frame).format = (*self.context).sample_fmt as i32;
-            (*frame).sample_rate = AUDIO_OUTPUT_SAMPLE_RATE;
-            (*frame).nb_samples = sample_count as i32;
-            averr(
-                av_channel_layout_copy(&mut (*frame).ch_layout, &(*self.context).ch_layout),
-                "aac channel_layout_copy",
-            )?;
-            averr(av_frame_get_buffer(frame, 0), "aac frame_get_buffer")?;
-            averr(av_frame_make_writable(frame), "aac frame_make_writable")?;
-            for channel in 0..AUDIO_OUTPUT_CHANNELS {
-                let destination = *(*frame).extended_data.add(channel) as *mut f32;
-                ptr::write_bytes(destination, 0, sample_count);
-                if let Some(source) = pcm.get(channel) {
-                    let available = source.len().saturating_sub(offset).min(sample_count);
-                    if available > 0 {
-                        ptr::copy_nonoverlapping(source.as_ptr().add(offset), destination, available);
-                    }
-                }
+        }
+        Ok(())
+    }
+
+    /// Encodes the last, partial frame and flushes the encoder.
+    pub(crate) unsafe fn finish_stream(&mut self, output: *mut AVFormatContext) -> Result<()> {
+        let left = self.pending[0].len();
+        if left > 0 {
+            self.send_frame(0, left, output)?;
+            for plane in self.pending.iter_mut() {
+                plane.clear();
             }
-            (*frame).pts = offset as i64;
-            averr(avcodec_send_frame(self.context, frame), "aac send_frame")?;
-            self.drain(output)?;
-            av_frame_free(&mut frame);
-            offset += sample_count;
         }
         averr(avcodec_send_frame(self.context, ptr::null()), "aac flush")?;
+        self.drain(output)
+    }
+
+    /// Sends `pending[offset..offset + sample_count]` as one frame.
+    unsafe fn send_frame(
+        &mut self,
+        offset: usize,
+        sample_count: usize,
+        output: *mut AVFormatContext,
+    ) -> Result<()> {
+        struct OwnedFrame(*mut AVFrame);
+        impl Drop for OwnedFrame {
+            fn drop(&mut self) {
+                unsafe { av_frame_free(&mut self.0) };
+            }
+        }
+        let frame = OwnedFrame(av_frame_alloc());
+        if frame.0.is_null() {
+            bail!("aac av_frame_alloc");
+        }
+        let frame_ptr = frame.0;
+        (*frame_ptr).format = (*self.context).sample_fmt as i32;
+        (*frame_ptr).sample_rate = AUDIO_OUTPUT_SAMPLE_RATE;
+        (*frame_ptr).nb_samples = sample_count as i32;
+        averr(
+            av_channel_layout_copy(&mut (*frame_ptr).ch_layout, &(*self.context).ch_layout),
+            "aac channel_layout_copy",
+        )?;
+        averr(av_frame_get_buffer(frame_ptr, 0), "aac frame_get_buffer")?;
+        averr(av_frame_make_writable(frame_ptr), "aac frame_make_writable")?;
+        for channel in 0..AUDIO_OUTPUT_CHANNELS {
+            let destination = *(*frame_ptr).extended_data.add(channel) as *mut f32;
+            ptr::copy_nonoverlapping(
+                self.pending[channel].as_ptr().add(offset),
+                destination,
+                sample_count,
+            );
+        }
+        (*frame_ptr).pts = self.sent as i64;
+        averr(avcodec_send_frame(self.context, frame_ptr), "aac send_frame")?;
+        self.sent += sample_count;
         self.drain(output)
     }
 
