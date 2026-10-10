@@ -26,6 +26,7 @@ import { useEffect, useMemo } from "react";
 import { toast } from "sonner";
 import { create } from "zustand";
 import { toastText as translateToast } from "@/i18n/toastText";
+import { loadUserPreferences } from "@/lib/userPreferences";
 import { transcribeAsset } from "../document/transcribe";
 import { carryOverWordEdits, withTranscript } from "../document/transcript";
 import type { AxcutDocument } from "../schema";
@@ -127,7 +128,11 @@ export const useTranscriptionStore = create<TranscriptionState>((set, get) => ({
 			if (!assetIds.has(assetId)) delete patch()[assetId];
 		}
 
-		if (hasLocalSttEngine()) {
+		// Only when the user asked for it. Transcribing on its own at editor open
+		// ran an inference nobody requested, on the GPU drawing the preview, right
+		// when the take was first played back. The manual transcribe buttons work
+		// either way.
+		if (hasLocalSttEngine() && loadUserPreferences().autoTranscribe) {
 			for (const asset of document.assets) {
 				if (jobs[asset.id]) continue;
 				if (findAssetTranscript(document, asset.id)) continue;

@@ -174,7 +174,8 @@
 		"detectedLanguage": "Lingua rilevata: {{language}}",
 		"noAudioTrack": "Nessuna traccia audio",
 		"noAudioTrackHint": "Questo contenuto non ha una traccia audio: non c'è nulla da trascrivere.",
-		"noSpeechDetected": "Nessun parlato rilevato"
+		"noSpeechDetected": "Nessun parlato rilevato",
+		"autoTranscribe": "Trascrivi automaticamente le nuove registrazioni all'apertura dell'editor"
 	},
 	"exportDialog": {
 		"title": "Esporta",

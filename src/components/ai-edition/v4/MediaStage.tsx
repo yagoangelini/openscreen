@@ -18,6 +18,7 @@ import {
 	type AssetTranscriptionView,
 	isSilentFailure,
 } from "@/lib/ai-edition/transcription/status";
+import { loadUserPreferences, saveUserPreferences } from "@/lib/userPreferences";
 import { formatBytes } from "@/utils/formatBytes";
 import {
 	TranscriptionProgressBar,
@@ -54,6 +55,7 @@ export function MediaStage({
 	onAddToTimeline: (assetId: string) => Promise<void>;
 }) {
 	const t = useScopedT("editor");
+	const [autoTranscribe, setAutoTranscribe] = useState(() => loadUserPreferences().autoTranscribe);
 	const { locale } = useI18n();
 	const projectId = useProjectStore((s) => s.projectId);
 	const document = useProjectStore((s) => s.document);
@@ -434,6 +436,29 @@ export function MediaStage({
 										<RotateCw size={14} className={selectedBusy ? "animate-spin" : undefined} />
 									</button>
 								</div>
+								<label
+									style={{
+										display: "flex",
+										alignItems: "center",
+										gap: 8,
+										marginTop: 10,
+										fontSize: 12.5,
+										color: "var(--fg-2)",
+										cursor: "pointer",
+									}}
+								>
+									<input
+										type="checkbox"
+										data-testid="media-stage-auto-transcribe"
+										checked={autoTranscribe}
+										onChange={(event) => {
+											const enabled = event.target.checked;
+											setAutoTranscribe(enabled);
+											saveUserPreferences({ autoTranscribe: enabled });
+										}}
+									/>
+									{t("mediaStage.autoTranscribe")}
+								</label>
 							</div>
 
 							<div

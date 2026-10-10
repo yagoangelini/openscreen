@@ -174,7 +174,8 @@
 		"detectedLanguage": "Detected language: {{language}}",
 		"noAudioTrack": "No audio track",
 		"noAudioTrackHint": "This media has no audio track — there is nothing to transcribe.",
-		"noSpeechDetected": "No speech detected"
+		"noSpeechDetected": "No speech detected",
+		"autoTranscribe": "Transcribe new recordings automatically when the editor opens"
 	},
 	"exportDialog": {
 		"title": "Export",

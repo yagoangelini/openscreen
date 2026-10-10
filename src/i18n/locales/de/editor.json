@@ -174,7 +174,8 @@
 		"detectedLanguage": "Erkannte Sprache: {{language}}",
 		"noAudioTrack": "Keine Audiospur",
 		"noAudioTrackHint": "Dieses Medium hat keine Audiospur — es gibt nichts zu transkribieren.",
-		"noSpeechDetected": "Keine Sprache erkannt"
+		"noSpeechDetected": "Keine Sprache erkannt",
+		"autoTranscribe": "Neue Aufnahmen beim Öffnen des Editors automatisch transkribieren"
 	},
 	"exportDialog": {
 		"title": "Export",

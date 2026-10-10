@@ -174,7 +174,8 @@
 		"detectedLanguage": "Algılanan dil: {{language}}",
 		"noAudioTrack": "Ses parçası yok",
 		"noAudioTrackHint": "Bu medyada ses parçası yok — metne dökülecek bir şey bulunmuyor.",
-		"noSpeechDetected": "Konuşma algılanmadı"
+		"noSpeechDetected": "Konuşma algılanmadı",
+		"autoTranscribe": "Düzenleyici açıldığında yeni kayıtları otomatik olarak yazıya dök"
 	},
 	"exportDialog": {
 		"title": "Dışa Aktar",

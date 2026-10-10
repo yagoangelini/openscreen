@@ -174,7 +174,8 @@
 		"detectedLanguage": "Zjištěný jazyk: {{language}}",
 		"noAudioTrack": "Žádná zvuková stopa",
 		"noAudioTrackHint": "Toto médium nemá zvukovou stopu, takže není co přepisovat.",
-		"noSpeechDetected": "Žádná řeč nezjištěna"
+		"noSpeechDetected": "Žádná řeč nezjištěna",
+		"autoTranscribe": "Automaticky přepisovat nové nahrávky při otevření editoru"
 	},
 	"exportDialog": {
 		"title": "Export",

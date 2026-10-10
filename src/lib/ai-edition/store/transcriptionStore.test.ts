@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { toastText } from "@/i18n/toastText";
+import { saveUserPreferences } from "@/lib/userPreferences";
 import type { AxcutDocument, AxcutTranscript } from "../schema";
 import { useProjectStore } from "./projectStore";
 import { useTranscriptionStore, whenTranscriptionIdle } from "./transcriptionStore";
@@ -119,12 +120,27 @@ describe("useTranscriptionStore", () => {
 		toastMocks.info.mockReset();
 		// biome-ignore lint/suspicious/noExplicitAny: test-only stub of the preload bridge
 		(window as any).electronAPI = { stt: { transcribe: vi.fn() } };
+		// These tests exercise the background queue, which only runs when the user
+		// turned automatic transcription on. The default-off case has its own test.
+		localStorage.clear();
+		saveUserPreferences({ autoTranscribe: true });
 	});
 
 	afterEach(() => {
 		vi.clearAllMocks();
 		// biome-ignore lint/suspicious/noExplicitAny: test-only stub of the preload bridge
 		delete (window as any).electronAPI;
+	});
+
+	it("transcribes nothing on its own while automatic transcription is off", async () => {
+		localStorage.clear();
+		loadDocument(makeDoc(["asset_1"]));
+
+		useTranscriptionStore.getState().sync(useProjectStore.getState().document);
+		await whenTranscriptionIdle();
+
+		expect(transcribeMocks.transcribeAsset).not.toHaveBeenCalled();
+		expect(useTranscriptionStore.getState().jobs).toEqual({});
 	});
 
 	it("transcribes every asset that has no transcript, one at a time", async () => {

@@ -174,7 +174,8 @@
 		"detectedLanguage": "Обнаруженный язык: {{language}}",
 		"noAudioTrack": "Нет аудиодорожки",
 		"noAudioTrackHint": "В этом медиафайле нет аудиодорожки — расшифровывать нечего.",
-		"noSpeechDetected": "Речь не обнаружена"
+		"noSpeechDetected": "Речь не обнаружена",
+		"autoTranscribe": "Автоматически расшифровывать новые записи при открытии редактора"
 	},
 	"exportDialog": {
 		"title": "Экспорт",

@@ -26,6 +26,12 @@ export interface UserPreferences {
 	preferSoftwareEncoder: boolean;
 	/** Stop showing the notice that recording fell back to software encoding */
 	hideSoftwareEncoderFallbackNotice: boolean;
+	/**
+	 * Transcribe every new recording as soon as the editor opens. Off by default:
+	 * an unrequested inference competed with the preview for the GPU right when
+	 * the user wanted to watch the take, and not every video needs captions.
+	 */
+	autoTranscribe: boolean;
 }
 
 export const DEFAULT_PREFS: UserPreferences = {
@@ -38,6 +44,7 @@ export const DEFAULT_PREFS: UserPreferences = {
 	trayLayout: "horizontal",
 	preferSoftwareEncoder: false,
 	hideSoftwareEncoderFallbackNotice: false,
+	autoTranscribe: false,
 };
 
 /** Parses stored preferences without throwing on malformed JSON. */
@@ -99,6 +106,8 @@ export function loadUserPreferences(): UserPreferences {
 			typeof raw.hideSoftwareEncoderFallbackNotice === "boolean"
 				? raw.hideSoftwareEncoderFallbackNotice
 				: DEFAULT_PREFS.hideSoftwareEncoderFallbackNotice,
+		autoTranscribe:
+			typeof raw.autoTranscribe === "boolean" ? raw.autoTranscribe : DEFAULT_PREFS.autoTranscribe,
 	};
 }
 
