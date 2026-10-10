@@ -415,5 +415,19 @@
 	"cpuCompositor": {
 		"notice": "対応 GPU がないため CPU で描画しています。再生が遅くなります。",
 		"exportWarning": "対応 GPU がありません。この書き出しは CPU で実行されるため、通常よりはるかに時間がかかります。"
+	},
+	"shellToasts": {
+		"recordingAddedToNewProject": "Recording added to a new project",
+		"autoCreateProjectFailed": "Could not auto-create project from recording",
+		"loadProjectFailed": "Could not load project",
+		"openProjectFailed": "Could not open project",
+		"createProjectFailed": "Could not create project",
+		"projectDeleted": "Project deleted",
+		"deleteProjectFailed": "Could not delete project",
+		"projectSaved": "Project saved",
+		"addVideoBeforeExport": "Add a video to the project before exporting.",
+		"regionPasted": "Region pasted",
+		"regionCopied": "Region copied",
+		"cameraCheckFailed": "Could not check for a camera recording near {{name}}"
 	}
 }

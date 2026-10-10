@@ -415,5 +415,19 @@
 	"cpuCompositor": {
 		"notice": "Sem GPU compatível — a renderização ocorre na CPU, então a reprodução fica mais lenta.",
 		"exportWarning": "Sem GPU compatível: esta exportação roda na CPU e vai demorar muito mais que o normal."
+	},
+	"shellToasts": {
+		"recordingAddedToNewProject": "Gravação adicionada a um novo projeto",
+		"autoCreateProjectFailed": "Não foi possível criar o projeto a partir da gravação",
+		"loadProjectFailed": "Não foi possível carregar o projeto",
+		"openProjectFailed": "Não foi possível abrir o projeto",
+		"createProjectFailed": "Não foi possível criar o projeto",
+		"projectDeleted": "Projeto excluído",
+		"deleteProjectFailed": "Não foi possível excluir o projeto",
+		"projectSaved": "Projeto salvo",
+		"addVideoBeforeExport": "Adicione um vídeo ao projeto antes de exportar.",
+		"regionPasted": "Região colada",
+		"regionCopied": "Região copiada",
+		"cameraCheckFailed": "Não foi possível procurar uma gravação de câmera junto de {{name}}"
 	}
 }

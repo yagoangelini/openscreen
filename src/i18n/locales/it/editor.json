@@ -415,5 +415,19 @@
 	"cpuCompositor": {
 		"notice": "Nessuna GPU compatibile: il rendering avviene sulla CPU, quindi la riproduzione è più lenta.",
 		"exportWarning": "Nessuna GPU compatibile: questa esportazione viene eseguita sulla CPU e richiederà molto più tempo del solito."
+	},
+	"shellToasts": {
+		"recordingAddedToNewProject": "Registrazione aggiunta a un nuovo progetto",
+		"autoCreateProjectFailed": "Impossibile creare il progetto dalla registrazione",
+		"loadProjectFailed": "Impossibile caricare il progetto",
+		"openProjectFailed": "Impossibile aprire il progetto",
+		"createProjectFailed": "Impossibile creare il progetto",
+		"projectDeleted": "Progetto eliminato",
+		"deleteProjectFailed": "Impossibile eliminare il progetto",
+		"projectSaved": "Progetto salvato",
+		"addVideoBeforeExport": "Aggiungi un video al progetto prima di esportare.",
+		"regionPasted": "Regione incollata",
+		"regionCopied": "Regione copiata",
+		"cameraCheckFailed": "Impossibile cercare una registrazione della fotocamera vicino a {{name}}"
 	}
 }

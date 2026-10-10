@@ -5,6 +5,7 @@ import { toFileUrl } from "@/components/video-editor/projectPersistence";
 import { useEditorDialogActions } from "@/contexts/EditorDialogsContext";
 import { useScopedT } from "@/contexts/I18nContext";
 import { useShortcuts } from "@/contexts/ShortcutsContext";
+import { toastText } from "@/i18n/toastText";
 import {
 	AUDIO_ROW_EXPANSION_PX,
 	computeAudioRowCount,
@@ -384,11 +385,11 @@ export function NewEditorShell() {
 			if (!window.electronAPI) return;
 			try {
 				if (await importPendingRecording((warning) => toast.warning(warning))) {
-					toast.success("Recording added to a new project");
+					toast.success(toastText("editor", "shellToasts.recordingAddedToNewProject"));
 					return;
 				}
 			} catch (err) {
-				toast.error("Could not auto-create project from recording", {
+				toast.error(toastText("editor", "shellToasts.autoCreateProjectFailed"), {
 					description: err instanceof Error ? err.message : String(err),
 				});
 				return;
@@ -667,7 +668,7 @@ export function NewEditorShell() {
 				toast.error(saved.error ?? "Failed to open project");
 			}
 		} catch (err) {
-			toast.error("Could not load project", {
+			toast.error(toastText("editor", "shellToasts.loadProjectFailed"), {
 				description: err instanceof Error ? err.message : String(err),
 			});
 		}
@@ -832,7 +833,7 @@ export function NewEditorShell() {
 			try {
 				await loadProject(id);
 			} catch (err) {
-				toast.error("Could not open project", {
+				toast.error(toastText("editor", "shellToasts.openProjectFailed"), {
 					description: err instanceof Error ? err.message : String(err),
 				});
 			}
@@ -848,7 +849,7 @@ export function NewEditorShell() {
 				await createProject(title);
 				setMode(startingPoint === "screen-recording" ? "rec" : "media");
 			} catch (err) {
-				toast.error("Could not create project", {
+				toast.error(toastText("editor", "shellToasts.createProjectFailed"), {
 					description: err instanceof Error ? err.message : String(err),
 				});
 			}
@@ -869,9 +870,9 @@ export function NewEditorShell() {
 			if (useProjectStore.getState().projectId === id) {
 				useProjectStore.getState().clear();
 			}
-			toast.success("Project deleted");
+			toast.success(toastText("editor", "shellToasts.projectDeleted"));
 		} catch (err) {
-			toast.error("Could not delete project", {
+			toast.error(toastText("editor", "shellToasts.deleteProjectFailed"), {
 				description: err instanceof Error ? err.message : String(err),
 			});
 		}
@@ -880,7 +881,8 @@ export function NewEditorShell() {
 	const handleSave = useCallback(async () => {
 		const doc = useProjectStore.getState().document;
 		if (!doc) return;
-		if (await saveDocument(doc, { history: true })) toast.success("Project saved");
+		if (await saveDocument(doc, { history: true }))
+			toast.success(toastText("editor", "shellToasts.projectSaved"));
 	}, [saveDocument]);
 
 	// Native File menu (electron/main.ts) → v4 actions. The menu is shown via
@@ -966,7 +968,7 @@ export function NewEditorShell() {
 
 	const handleExport = useCallback(() => {
 		if (!hasAsset) {
-			toast.info("Add a video to the project before exporting.");
+			toast.info(toastText("editor", "shellToasts.addVideoBeforeExport"));
 			return;
 		}
 		setExportOpen(true);
@@ -1055,7 +1057,7 @@ export function NewEditorShell() {
 		// resolves the timeline span down to the carrying clip's source time).
 		if (snapshot.kind === "trim") {
 			await tl.addTrim(snapshot.region.durationSec);
-			toast.success("Region pasted");
+			toast.success(toastText("editor", "shellToasts.regionPasted"));
 			return;
 		}
 
@@ -1099,7 +1101,7 @@ export function NewEditorShell() {
 			const next = placeAudioTrackInDocument(doc, track, () => createId("audio"), "create");
 			if (next === doc) return;
 			await saveDocument(next, { history: true });
-			toast.success("Region pasted");
+			toast.success(toastText("editor", "shellToasts.regionPasted"));
 			return;
 		}
 		const pasted = {
@@ -1147,7 +1149,7 @@ export function NewEditorShell() {
 				{ history: true },
 			);
 		}
-		toast.success("Region pasted");
+		toast.success(toastText("editor", "shellToasts.regionPasted"));
 		// `tl` belongs here now that the trim branch calls tl.addTrim: useTimeline
 		// returns a fresh object each render, so memoizing on saveDocument alone
 		// would paste through a callback holding a stale document.
@@ -1175,7 +1177,7 @@ export function NewEditorShell() {
 			if (!group) return;
 			copyRegion({ kind: "trim", region: { durationSec: group.end - group.start } });
 			setCopiedClipId(null);
-			toast.success("Region copied");
+			toast.success(toastText("editor", "shellToasts.regionCopied"));
 			return;
 		}
 
@@ -1191,7 +1193,7 @@ export function NewEditorShell() {
 			if (!pill) return;
 			copyRegion({ kind: "audio", region: pill as unknown as Record<string, unknown> });
 			setCopiedClipId(null);
-			toast.success("Region copied");
+			toast.success(toastText("editor", "shellToasts.regionCopied"));
 			return;
 		}
 
@@ -1208,7 +1210,7 @@ export function NewEditorShell() {
 		copyRegion({ kind: sel.kind, region: region as unknown as Record<string, unknown> });
 		// One clipboard wins at a time: a copied pill retires the copied clip.
 		setCopiedClipId(null);
-		toast.success("Region copied");
+		toast.success(toastText("editor", "shellToasts.regionCopied"));
 	}, [tl]);
 
 	useEffect(() => {

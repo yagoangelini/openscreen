@@ -424,7 +424,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 				console.warn("[project] camera auto-link failed:", err);
 				const name = addedAsset.originalPath.split(/[\\/]/).pop() ?? addedAsset.originalPath;
 				void import("sonner").then(({ toast }) =>
-					toast.error(`Could not check for a camera recording near ${name}`, {
+					toast.error(toastText("editor", "shellToasts.cameraCheckFailed", { name }), {
 						description: err instanceof Error ? err.message : String(err),
 					}),
 				);

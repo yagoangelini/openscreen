@@ -415,5 +415,19 @@
 	"cpuCompositor": {
 		"notice": "没有兼容的 GPU，正在使用 CPU 渲染，因此播放较慢。",
 		"exportWarning": "没有兼容的 GPU：本次导出将在 CPU 上运行，耗时会比平常长很多。"
+	},
+	"shellToasts": {
+		"recordingAddedToNewProject": "Recording added to a new project",
+		"autoCreateProjectFailed": "Could not auto-create project from recording",
+		"loadProjectFailed": "Could not load project",
+		"openProjectFailed": "Could not open project",
+		"createProjectFailed": "Could not create project",
+		"projectDeleted": "Project deleted",
+		"deleteProjectFailed": "Could not delete project",
+		"projectSaved": "Project saved",
+		"addVideoBeforeExport": "Add a video to the project before exporting.",
+		"regionPasted": "Region pasted",
+		"regionCopied": "Region copied",
+		"cameraCheckFailed": "Could not check for a camera recording near {{name}}"
 	}
 }

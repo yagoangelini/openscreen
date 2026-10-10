@@ -415,5 +415,19 @@
 	"cpuCompositor": {
 		"notice": "호환되는 GPU가 없어 CPU로 렌더링합니다. 재생이 느려집니다.",
 		"exportWarning": "호환되는 GPU가 없습니다. 이 내보내기는 CPU에서 실행되며 평소보다 훨씬 오래 걸립니다."
+	},
+	"shellToasts": {
+		"recordingAddedToNewProject": "Recording added to a new project",
+		"autoCreateProjectFailed": "Could not auto-create project from recording",
+		"loadProjectFailed": "Could not load project",
+		"openProjectFailed": "Could not open project",
+		"createProjectFailed": "Could not create project",
+		"projectDeleted": "Project deleted",
+		"deleteProjectFailed": "Could not delete project",
+		"projectSaved": "Project saved",
+		"addVideoBeforeExport": "Add a video to the project before exporting.",
+		"regionPasted": "Region pasted",
+		"regionCopied": "Region copied",
+		"cameraCheckFailed": "Could not check for a camera recording near {{name}}"
 	}
 }
