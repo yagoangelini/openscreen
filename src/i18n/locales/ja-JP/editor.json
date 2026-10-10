@@ -461,5 +461,13 @@
 		"replanDone": "自動ズームを {{count}} 件計画しました",
 		"replanNone": "自動ズームに適した場面が見つかりませんでした",
 		"replanFailed": "自動ズームを計画できませんでした"
+	},
+	"youtubeChapters": {
+		"title": "YouTube チャプター",
+		"copy": "チャプターをコピー",
+		"copied": "チャプターをコピーしました。動画の説明欄に貼り付けてください",
+		"copyFailed": "チャプターをコピーできませんでした",
+		"needThree": "YouTube のチャプターは 3 つ以上で表示されます。録画中にマーカー (Ctrl+Shift+F8) を追加してください。",
+		"fallbackTitle": "チャプター {{index}}"
 	}
 }

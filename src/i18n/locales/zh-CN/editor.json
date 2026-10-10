@@ -461,5 +461,13 @@
 		"replanDone": "已规划 {{count}} 个自动缩放",
 		"replanNone": "没有找到适合自动缩放的时刻",
 		"replanFailed": "无法规划自动缩放"
+	},
+	"youtubeChapters": {
+		"title": "YouTube 章节",
+		"copy": "复制章节",
+		"copied": "章节已复制——粘贴到视频说明中",
+		"copyFailed": "无法复制章节",
+		"needThree": "YouTube 至少需要 3 个章节才会显示。录制时用 Ctrl+Shift+F8 添加标记。",
+		"fallbackTitle": "第 {{index}} 章"
 	}
 }

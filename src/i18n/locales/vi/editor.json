@@ -461,5 +461,13 @@
 		"replanDone": "Số lần thu phóng tự động đã lập: {{count}}",
 		"replanNone": "Không tìm thấy thời điểm nào để thu phóng tự động",
 		"replanFailed": "Không thể lập kế hoạch thu phóng tự động"
+	},
+	"youtubeChapters": {
+		"title": "Chương YouTube",
+		"copy": "Sao chép chương",
+		"copied": "Đã sao chép chương — dán vào mô tả video",
+		"copyFailed": "Không thể sao chép chương",
+		"needThree": "YouTube chỉ hiển thị chương khi có ít nhất 3. Thêm điểm đánh dấu (Ctrl+Shift+F8) khi ghi.",
+		"fallbackTitle": "Chương {{index}}"
 	}
 }

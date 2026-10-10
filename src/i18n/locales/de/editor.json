@@ -461,5 +461,13 @@
 		"replanDone": "Geplante automatische Zooms: {{count}}",
 		"replanNone": "Kein Moment für einen automatischen Zoom gefunden",
 		"replanFailed": "Die automatischen Zooms konnten nicht geplant werden"
+	},
+	"youtubeChapters": {
+		"title": "YouTube-Kapitel",
+		"copy": "Kapitel kopieren",
+		"copied": "Kapitel kopiert — in die Videobeschreibung einfügen",
+		"copyFailed": "Kapitel konnten nicht kopiert werden",
+		"needThree": "YouTube zeigt Kapitel erst ab 3 an. Setze beim Aufnehmen Markierungen (Strg+Umschalt+F8).",
+		"fallbackTitle": "Kapitel {{index}}"
 	}
 }

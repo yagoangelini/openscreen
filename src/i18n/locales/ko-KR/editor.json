@@ -461,5 +461,13 @@
 		"replanDone": "자동 확대 {{count}}개를 계획했습니다",
 		"replanNone": "자동 확대할 순간을 찾지 못했습니다",
 		"replanFailed": "자동 확대를 계획하지 못했습니다"
+	},
+	"youtubeChapters": {
+		"title": "YouTube 챕터",
+		"copy": "챕터 복사",
+		"copied": "챕터를 복사했습니다 — 동영상 설명에 붙여넣으세요",
+		"copyFailed": "챕터를 복사할 수 없습니다",
+		"needThree": "YouTube는 챕터가 3개 이상일 때만 표시합니다. 녹화 중 마커(Ctrl+Shift+F8)를 추가하세요.",
+		"fallbackTitle": "챕터 {{index}}"
 	}
 }

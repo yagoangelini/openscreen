@@ -48,6 +48,7 @@ import { buildSceneDescription, resolveVisibleClips } from "@/native/sceneDescri
 import { ModalShell } from "./Modals";
 import styles from "./NewEditorShell.module.css";
 import { Toggle } from "./RightPanes";
+import { YouTubeChapters } from "./YouTubeChapters";
 
 type Phase = "idle" | "configuring" | "rendering" | "writing" | "done" | "error";
 
@@ -747,6 +748,8 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 							.catch((err) => console.warn("[export] could not record the star answer:", err));
 					}}
 				/>
+
+				{phase === "done" && document ? <YouTubeChapters document={document} /> : null}
 
 				{cpuCompositor && phase !== "done" && (
 					// Placed next to the export button, not in a toast: it has to land while

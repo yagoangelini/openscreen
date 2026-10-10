@@ -461,5 +461,13 @@
 		"replanDone": "التكبيرات التلقائية المخططة: {{count}}",
 		"replanNone": "لم يُعثر على لحظة للتكبير التلقائي",
 		"replanFailed": "تعذر تخطيط التكبير التلقائي"
+	},
+	"youtubeChapters": {
+		"title": "فصول YouTube",
+		"copy": "نسخ الفصول",
+		"copied": "تم نسخ الفصول — الصقها في وصف الفيديو",
+		"copyFailed": "تعذّر نسخ الفصول",
+		"needThree": "لا يعرض YouTube الفصول إلا إذا كانت 3 على الأقل. أضف علامات (Ctrl+Shift+F8) أثناء التسجيل.",
+		"fallbackTitle": "الفصل {{index}}"
 	}
 }

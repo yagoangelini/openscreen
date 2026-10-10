@@ -461,5 +461,13 @@
 		"replanDone": "Automatic zooms planned: {{count}}",
 		"replanNone": "No moment for an automatic zoom was found",
 		"replanFailed": "Could not plan the automatic zooms"
+	},
+	"youtubeChapters": {
+		"title": "YouTube chapters",
+		"copy": "Copy chapters",
+		"copied": "Chapters copied — paste them into the video description",
+		"copyFailed": "Could not copy the chapters",
+		"needThree": "YouTube shows chapters only with at least 3. Add markers (Ctrl+Shift+F8) while recording.",
+		"fallbackTitle": "Chapter {{index}}"
 	}
 }

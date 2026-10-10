@@ -461,5 +461,13 @@
 		"replanDone": "Naplánováno automatických zoomů: {{count}}",
 		"replanNone": "Nenalezen žádný okamžik pro automatický zoom",
 		"replanFailed": "Automatické zoomy se nepodařilo naplánovat"
+	},
+	"youtubeChapters": {
+		"title": "Kapitoly YouTube",
+		"copy": "Kopírovat kapitoly",
+		"copied": "Kapitoly zkopírovány — vložte je do popisu videa",
+		"copyFailed": "Kapitoly se nepodařilo zkopírovat",
+		"needThree": "YouTube zobrazí kapitoly jen od 3. Při nahrávání přidávejte značky (Ctrl+Shift+F8).",
+		"fallbackTitle": "Kapitola {{index}}"
 	}
 }

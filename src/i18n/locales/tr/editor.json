@@ -461,5 +461,13 @@
 		"replanDone": "Planlanan otomatik yakınlaştırma: {{count}}",
 		"replanNone": "Otomatik yakınlaştırma için an bulunamadı",
 		"replanFailed": "Otomatik yakınlaştırmalar planlanamadı"
+	},
+	"youtubeChapters": {
+		"title": "YouTube bölümleri",
+		"copy": "Bölümleri kopyala",
+		"copied": "Bölümler kopyalandı — video açıklamasına yapıştırın",
+		"copyFailed": "Bölümler kopyalanamadı",
+		"needThree": "YouTube bölümleri en az 3 olduğunda gösterir. Kayıt sırasında işaret ekleyin (Ctrl+Shift+F8).",
+		"fallbackTitle": "Bölüm {{index}}"
 	}
 }
