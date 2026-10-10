@@ -256,10 +256,10 @@ Ancorado como `release-local`. A ordem:
 5. Publique:
 
    ```bash
-   gh release create vX.Y.Z --repo yagoangelini/openscreen --target main --title "OpenScreen X.Y.Z (fork)" release/X.Y.Z/Openscreen.Setup.X.Y.Z.exe release/X.Y.Z/Openscreen.Setup.X.Y.Z.exe.blockmap release/X.Y.Z/latest.yml
+   gh release create vX.Y.Z --repo yagoangelini/openscreen --target main --title "OpenScreen X.Y.Z (fork)" release/X.Y.Z/Openscreen.Setup.X.Y.Z-x64.exe release/X.Y.Z/Openscreen.Setup.X.Y.Z-x64.exe.blockmap release/X.Y.Z/latest.yml
    ```
 
-O app instalado oferece a atualização a partir do `latest.yml`. O feed está em `electron-builder.json5` → `publish` (owner `yagoangelini`).
+Desde a 2.1.0 o instalador tem o sufixo `-x64` (configuração do upstream); confira o nome em `release/X.Y.Z/latest.yml` antes de publicar. O app instalado oferece a atualização a partir do `latest.yml`. O feed está em `electron-builder.json5` → `publish` (owner `yagoangelini`).
 
 ## Sincronizar com o upstream
 
