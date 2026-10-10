@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { formatKeystroke, keystrokesFromCursorSamples, keystrokeTextRegions } from "./keystrokes";
+import { keystrokeTextRegions } from "./keystrokeRegions";
+import { formatKeystroke, keystrokesFromCursorSamples } from "./keystrokes";
 import { type AxcutDocument, createEmptyDocument } from "./schema";
 
 const key = (timeMs: number, combo?: string) => ({

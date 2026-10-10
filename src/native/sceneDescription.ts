@@ -40,7 +40,7 @@ import {
 	readSpeedRegions,
 	resolvePlaybackSegments,
 } from "@/lib/ai-edition/document/timeline";
-import { keystrokeTextRegions } from "@/lib/ai-edition/keystrokes";
+import { keystrokeTextRegions } from "@/lib/ai-edition/keystrokeRegions";
 import type { AxcutAudioTrack, AxcutClip, AxcutDocument } from "@/lib/ai-edition/schema";
 import { getEditorSettings } from "@/lib/ai-edition/store/editorSettings";
 import { assetCameraSource } from "@/lib/ai-edition/timeline/camera";
