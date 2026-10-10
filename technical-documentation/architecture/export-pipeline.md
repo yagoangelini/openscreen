@@ -85,9 +85,10 @@ and **one** encoder + muxer pair:
   arithmetic is the whole-buffer path's — the tests hold the two against each
   other to the bit — and what changed is what stays in memory: a few seconds per
   stage plus one stretch chunk (a stretched segment over 30 s is rendered in
-  overlapping, crossfaded chunks). A 30-minute export measured in the notes of
-  the commit that introduced it. macOS and Linux still build the programme
-  whole, as the bullets below describe.
+  overlapping, crossfaded chunks). Measured on a 30-minute 720p30 export with
+  one audio track, from plain Node: peak RSS 2338 MB with the whole-buffer
+  addon, 229 MB with the streamed one, same loudness in the output. macOS and
+  Linux still build the programme whole, as the bullets below describe.
 
 - **The stretch runs beside the encode, not inside it** (macOS, Linux).
   `walk_composited_timeline`'s `on_clip_end` callback fires once per clip,
