@@ -300,6 +300,39 @@ describe("DocumentService", () => {
 			expect(summaries.map((s) => s.id)).toEqual([a.project.id]);
 		});
 
+		it("restores a damaged project from its last good save instead of hiding it", async () => {
+			const created = await service.createProject("Kept");
+			// A second save, so the first one becomes the backup.
+			await service.saveProject(created);
+			const filePath = path.join(tempDir, `${created.project.id}.openscreen`);
+			await fs.writeFile(filePath, "{ truncated", "utf8");
+
+			const summaries = await service.listProjects();
+			expect(summaries.map((s) => s.id)).toEqual([created.project.id]);
+			expect(JSON.parse(await fs.readFile(filePath, "utf8")).project.title).toBe("Kept");
+			const damaged = (await fs.readdir(tempDir)).filter((name) => name.includes(".damaged-"));
+			expect(damaged).toHaveLength(1);
+		});
+
+		it("opens a damaged project from its backup", async () => {
+			const created = await service.createProject("Opened");
+			await service.saveProject(created);
+			await fs.writeFile(path.join(tempDir, `${created.project.id}.openscreen`), "[]", "utf8");
+
+			await expect(service.getProject(created.project.id)).resolves.toMatchObject({
+				project: { id: created.project.id, title: "Opened" },
+			});
+		});
+
+		it("removes the backup along with the project", async () => {
+			const created = await service.createProject("Gone");
+			await service.saveProject(created);
+			await service.deleteProject(created.project.id);
+			expect(
+				(await fs.readdir(tempDir)).filter((name) => name.startsWith(created.project.id)),
+			).toEqual([]);
+		});
+
 		it("migrates a legacy .axcut project to .openscreen on access", async () => {
 			// A project written by an older build: same document bytes, `.axcut` name.
 			const created = await service.createProject("Legacy");

@@ -452,6 +452,11 @@ export function NewEditorShell() {
 			void (async () => {
 				const choice = await promptUnsaved("close");
 				if (choice === "discard") {
+					// Clean first. Main answers "discard" by closing this window, and the
+					// beforeunload guard above cancels any close while the store is dirty
+					// -- so a document left dirty by a failed save (full disk, read-only
+					// folder) made Discard do nothing, and the app could not be quit.
+					useProjectStore.getState().markClean();
 					window.electronAPI.sendCloseConfirmResponse("discard");
 				} else if (choice === "save") {
 					window.electronAPI.sendCloseConfirmResponse("save");

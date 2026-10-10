@@ -152,6 +152,9 @@ async function renameWithRetry(from: string, to: string): Promise<void> {
 	}
 }
 
+/** The previous save, kept beside each project file. */
+export const PROJECT_BACKUP_SUFFIX = ".bak";
+
 export class DocumentService {
 	private readonly projectsRoot: string;
 	private readonly mediaRegistryDir: string;
@@ -258,12 +261,42 @@ export class DocumentService {
 			try {
 				documents.push(parseLoadedDocument(await fs.readFile(filePath, "utf8")));
 			} catch (error) {
-				// ponytail: skip unreadable files rather than failing the whole list.
-				// A future migration pass can recover them.
-				console.warn(`[ai-edition] failed to read ${filePath}:`, error);
+				// A damaged project used to vanish from the list without a word. Its last
+				// good save is kept beside it (see writeProjectNow), so bring that back.
+				const restored = await this.restoreFromBackup(filePath, error);
+				if (restored) {
+					documents.push(parseLoadedDocument(restored));
+				}
 			}
 		}
 		return documents;
+	}
+
+	/**
+	 * Puts a project's last good save back in place of a file that no longer
+	 * parses, keeping the damaged file beside it (`.damaged-<time>`) rather than
+	 * deleting anything. Returns the restored JSON, or null when there is no
+	 * usable backup -- the file is then left exactly as it was.
+	 */
+	private async restoreFromBackup(filePath: string, cause: unknown): Promise<string | null> {
+		const backupPath = `${filePath}${PROJECT_BACKUP_SUFFIX}`;
+		let backup: string;
+		try {
+			backup = await fs.readFile(backupPath, "utf8");
+			parseLoadedDocument(backup);
+		} catch {
+			console.warn(`[ai-edition] failed to read ${filePath} and it has no usable backup:`, cause);
+			return null;
+		}
+		try {
+			await fs.copyFile(filePath, `${filePath}.damaged-${Date.now()}`).catch(() => undefined);
+			await fs.writeFile(filePath, backup, "utf8");
+		} catch (error) {
+			// Still answer with the backup: opening it now is worth more than the repair.
+			console.warn(`[ai-edition] could not write the restored ${filePath}:`, error);
+		}
+		console.warn(`[ai-edition] ${filePath} was damaged; restored its last good save`, cause);
+		return backup;
 	}
 
 	/**
@@ -319,7 +352,17 @@ export class DocumentService {
 		// the upgraded JSON so `documentSchema.parse` still validates what we hand
 		// back, and it is not persisted from here: the renderer saves the document
 		// it was given, as it does for any other load-time repair.
-		const migrated = migrateRawDocumentToCurrent(JSON.parse(raw));
+		let migrated: unknown;
+		try {
+			migrated = migrateRawDocumentToCurrent(JSON.parse(raw));
+			documentSchema.parse(migrated);
+		} catch (error) {
+			const restored = await this.restoreFromBackup(this.fileFor(projectId), error);
+			if (!restored) {
+				throw error;
+			}
+			migrated = migrateRawDocumentToCurrent(JSON.parse(restored));
+		}
 		const document = documentSchema.parse(
 			await relinkProjectMedia(migrated, this.mediaRegistryDir),
 		);
@@ -356,7 +399,11 @@ export class DocumentService {
 
 	async deleteProject(projectId: string): Promise<void> {
 		// Remove the canonical file and any lingering legacy `.axcut` for this id.
-		for (const filePath of [this.fileFor(projectId), this.legacyFileFor(projectId)]) {
+		for (const filePath of [
+			this.fileFor(projectId),
+			this.legacyFileFor(projectId),
+			`${this.fileFor(projectId)}${PROJECT_BACKUP_SUFFIX}`,
+		]) {
 			try {
 				await fs.unlink(filePath);
 			} catch (error) {
@@ -519,6 +566,12 @@ export class DocumentService {
 			);
 		}
 		await handle.close();
+
+		// Keep the previous save as the backup a damaged file is restored from. A
+		// copy, not a rename: the project file must exist at every moment, or a crash
+		// between two renames would leave none. The suffix follows the extension, so
+		// listings never mistake it for a project.
+		await fs.copyFile(filePath, `${filePath}${PROJECT_BACKUP_SUFFIX}`).catch(() => undefined);
 
 		try {
 			await renameWithRetry(tempPath, filePath);
