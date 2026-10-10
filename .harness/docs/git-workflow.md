@@ -1,5 +1,7 @@
 # Git Workflow for OpenScreen
 
+> **This checkout is the fork `yagoangelini/openscreen`.** Its rules win over this file: PRs and pushes go to the fork only (`gh pr create --repo yagoangelini/openscreen`), GitHub Actions are off there (no CI runs, no `prerelease.yml`/`promote.yml`), and releases are built locally. Read [`docs/HANDOFF.md`](../../docs/HANDOFF.md) first.
+
 Conventions for the Mavis reins when working in this repo.
 
 ## Branches
