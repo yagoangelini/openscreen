@@ -320,19 +320,18 @@ bool WebcamCapture::start() {
 void WebcamCapture::stop() {
     directShowCapture_.stop();
     stopRequested_ = true;
-    // Shut the source down BEFORE joining. captureLoop() sits in a synchronous
-    // ReadSample(), and a camera that stopped delivering (unplugged, claimed by
-    // another app, a driver that stalled) never returns from it on its own.
-    // Joining first meant waiting on that call until the helper's stop
-    // watchdog killed the whole process -- before the screen encoder had been
-    // finalized, which is the step that makes the screen file playable. A shut
-    // down source fails the pending read with MF_E_SHUTDOWN, the loop sees
-    // stopRequested_, and the join returns.
-    if (mediaSource_) {
-        mediaSource_->Shutdown();
-    }
+    // Join BEFORE shutting the source down. Shutting it down first looks like
+    // it should fail the pending synchronous ReadSample() with MF_E_SHUTDOWN,
+    // but measured on an Integrated Webcam it does the opposite: the read
+    // never returns, the join hangs, and the helper's 8 s stop watchdog kills
+    // the process before the screen encoder is finalized -- every take lost
+    // its last fragment and its index. A live camera returns from the read
+    // within one frame, so joining first ends the loop promptly.
     if (thread_.joinable()) {
         thread_.join();
+    }
+    if (mediaSource_) {
+        mediaSource_->Shutdown();
     }
     sourceReader_.Reset();
     mediaSource_.Reset();
