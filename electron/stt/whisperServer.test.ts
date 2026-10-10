@@ -5,7 +5,13 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { STT_VAD_UNAVAILABLE } from "./transcriptionContract";
 import { writeSamplesAsWav } from "./wav";
-import { MAX_VAD_CHUNK_SAMPLES, mergeVadIntervals, WhisperServerManager } from "./whisperServer";
+import {
+	MAX_VAD_CHUNK_SAMPLES,
+	mergeVadIntervals,
+	pickDedicatedVulkanDevice,
+	WhisperServerManager,
+	whisperThreadCount,
+} from "./whisperServer";
 
 vi.mock("node:child_process", async (importOriginal) => {
 	// `node:child_process` is CJS, so the ESM namespace also carries a `default`
@@ -899,5 +905,50 @@ describe("WhisperServerManager", () => {
 		} finally {
 			vi.unstubAllGlobals();
 		}
+	});
+});
+
+// The device list as ggml_vulkan printed it on a Dell G15 (Intel UHD + RTX 3060 Laptop).
+const HYBRID_LAPTOP_DEVICES = [
+	"ggml_vulkan: Found 2 Vulkan devices:",
+	"ggml_vulkan: 0 = Intel(R) UHD Graphics (Intel Corporation) | uma: 1 | fp16: 1 | bf16: 0 | warp size: 32",
+	"ggml_vulkan: 1 = NVIDIA GeForce RTX 3060 Laptop GPU (NVIDIA) | uma: 0 | fp16: 1 | bf16: 0 | warp size: 32",
+].join("\n");
+
+describe("pickDedicatedVulkanDevice", () => {
+	it("moves off an integrated device 0 onto the dedicated GPU", () => {
+		expect(pickDedicatedVulkanDevice(HYBRID_LAPTOP_DEVICES)).toBe(1);
+	});
+
+	it("keeps ggml's choice when device 0 is already dedicated", () => {
+		expect(
+			pickDedicatedVulkanDevice(
+				"ggml_vulkan: 0 = NVIDIA GeForce RTX 3060 Laptop GPU (NVIDIA) | uma: 0 | fp16: 1",
+			),
+		).toBeNull();
+	});
+
+	it("keeps ggml's choice on a machine with only an integrated GPU", () => {
+		expect(
+			pickDedicatedVulkanDevice(
+				"ggml_vulkan: 0 = Intel(R) UHD Graphics (Intel Corporation) | uma: 1",
+			),
+		).toBeNull();
+	});
+
+	it("keeps ggml's choice when no Vulkan device was listed", () => {
+		expect(pickDedicatedVulkanDevice("whisper_backend_init_gpu: no GPU found")).toBeNull();
+	});
+});
+
+describe("whisperThreadCount", () => {
+	it("caps a GPU backend at four threads", () => {
+		expect(whisperThreadCount(false, 16)).toBe(4);
+		expect(whisperThreadCount(false, 2)).toBe(2);
+	});
+
+	it("gives the CPU fallback half the cores, never zero", () => {
+		expect(whisperThreadCount(true, 16)).toBe(8);
+		expect(whisperThreadCount(true, 1)).toBe(1);
 	});
 });

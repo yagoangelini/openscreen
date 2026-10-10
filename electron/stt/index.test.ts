@@ -343,6 +343,20 @@ describe("SttManager", () => {
 		expect(fakeWhisperServer.start.mock.calls.length).toBeGreaterThan(1);
 	});
 
+	it("does not re-run a chunk the DTW guardrail rejected", async () => {
+		fakeWhisperServer.transcribe.mockRejectedValue(
+			new Error(
+				'whisper-stt-server /inference HTTP 500: {"error":"DTW guardrail failed: non-monotonic t_dtw"}',
+			),
+		);
+		const mgr = new SttManager();
+		await mgr.init({ modelsBaseDir: "/tmp/fake-stt-models" });
+		await expect(mgr.transcribe({ samples: new Float32Array(16000) })).rejects.toThrow(
+			/DTW guardrail failed/,
+		);
+		expect(fakeWhisperServer.transcribe).toHaveBeenCalledTimes(1);
+	});
+
 	it("fails the request when a chunk never succeeds, saying how far it got", async () => {
 		fakeWhisperServer.transcribe.mockRejectedValue(new Error("helper wedged"));
 		const mgr = new SttManager();

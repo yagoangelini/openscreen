@@ -117,8 +117,47 @@ interface WhisperJsonResponse {
 	timing?: WhisperJsonTiming;
 }
 
+/**
+ * Threads for whisper.cpp's CPU work. On a GPU backend the GPU does the
+ * inference and ggml's CPU workers mostly spin waiting on it: every logical core
+ * busy-waiting starved the editor -- the preview froze while a take transcribed
+ * -- and made the GPU path slower, not faster (measured on a 19 s take: 83 s at
+ * 16 threads, 1.8 s at 4, same RTX 3060). On the CPU fallback threads do the
+ * work, so it gets half the cores and leaves the rest to the app.
+ */
+export function whisperThreadCount(forceCpu: boolean, cpuCount: number): number {
+	const cores = Math.max(1, cpuCount);
+	return forceCpu ? Math.max(1, Math.floor(cores / 2)) : Math.min(4, cores);
+}
+
+/**
+ * The Vulkan device to pin whisper to, read off the device list ggml prints at
+ * startup, or null to keep its choice. ggml takes device 0, which on a hybrid
+ * laptop is the integrated GPU -- the same one drawing the editor's preview, so
+ * a transcription froze the editor for as long as it ran, at a fraction of the
+ * dedicated GPU's speed. Only moves off an integrated (uma: 1) device 0 onto a
+ * dedicated (uma: 0) one; a machine with one GPU, or a dedicated device 0, is
+ * left alone.
+ */
+export function pickDedicatedVulkanDevice(startupLog: string): number | null {
+	const devices = [...startupLog.matchAll(/ggml_vulkan: (\d+) = [^\n]*?\| uma: (\d)/g)].map(
+		(match) => ({ index: Number(match[1]), integrated: match[2] === "1" }),
+	);
+	const first = devices.find((device) => device.index === 0);
+	if (!first?.integrated) {
+		return null;
+	}
+	return devices.find((device) => !device.integrated)?.index ?? null;
+}
+
 export class WhisperServerManager {
 	private process: WhisperChild | null = null;
+	/**
+	 * The Vulkan device chosen for this session, as GGML_VK_VISIBLE_DEVICES.
+	 * Undefined until the first launch has listed the devices; null when ggml's
+	 * own choice is kept.
+	 */
+	private vulkanDevice: string | null | undefined = undefined;
 	private shuttingDown = false;
 	private port: number | null = null;
 	private backend: SttBackend | null = null;
@@ -296,13 +335,18 @@ export class WhisperServerManager {
 				"--host",
 				"127.0.0.1",
 				"--threads",
-				String(Math.max(1, os.cpus().length)),
+				String(whisperThreadCount(forceCpu, os.cpus().length)),
 			];
 			if (options.vadModelPath && existsSync(options.vadModelPath)) {
 				args.push("--vad-model", options.vadModelPath);
 			}
 			if (forceCpu) args.push("--cpu");
-			const child = spawn(binaryPath, args, { stdio: ["ignore", "pipe", "pipe"] });
+			// A device set by the user's own environment wins over ours.
+			const env =
+				!forceCpu && this.vulkanDevice && process.env.GGML_VK_VISIBLE_DEVICES === undefined
+					? { ...process.env, GGML_VK_VISIBLE_DEVICES: this.vulkanDevice }
+					: process.env;
+			const child = spawn(binaryPath, args, { stdio: ["ignore", "pipe", "pipe"], env });
 			const activeBackend: SttBackend = forceCpu ? "whispercpp-cpu" : resolved.backend;
 
 			this.process = child;
@@ -389,7 +433,19 @@ export class WhisperServerManager {
 		};
 
 		try {
-			return await launch(false);
+			const launched = await launch(false);
+			if (this.vulkanDevice === undefined && process.env.GGML_VK_VISIBLE_DEVICES === undefined) {
+				const dedicated = pickDedicatedVulkanDevice(this.stderrTail);
+				this.vulkanDevice = dedicated === null ? null : String(dedicated);
+				if (dedicated !== null) {
+					process.stderr.write(
+						`[whisper-stt-server] moving to dedicated Vulkan device ${dedicated}\n`,
+					);
+					await this.stop();
+					return await launch(false);
+				}
+			}
+			return launched;
 		} catch (err) {
 			const startupLog = `${err instanceof Error ? err.message : String(err)} ${this.stderrTail}`;
 			const startupLines = startupLog.split(/\r?\n/);

@@ -1401,7 +1401,7 @@
 	flex-shrink: 0;
 	padding: var(--playhead-head-clear) 20px 0;
 	overflow: hidden;
-	cursor: text;
+	cursor: pointer;
 }
 .tlTracks {
 	position: relative;
@@ -1427,7 +1427,7 @@
 	   scrollable — which is why the lanes couldn't be reached before. */
 	display: flex;
 	flex-direction: column-reverse;
-	cursor: text;
+	cursor: default;
 }
 .tlTracks::-webkit-scrollbar {
 	display: none;

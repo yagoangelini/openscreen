@@ -56,6 +56,11 @@ const SAMPLE_RATE = 16_000;
 /** Attempts per chunk before the whole transcription fails. */
 const CHUNK_ATTEMPTS = 3;
 
+/** A deterministic rejection from the helper's DTW guardrail (HTTP 500), not a transient failure. */
+export function isGuardrailRejection(error: unknown): boolean {
+	return error instanceof Error && error.message.includes("DTW guardrail failed");
+}
+
 /**
  * `AbortError` by name so the renderer's `isAbortError` recognizes it as "the
  * user asked for this" rather than an engine failure worth a toast.
@@ -243,6 +248,11 @@ export class SttManager {
 				lastError = error;
 				if (this.shuttingDown) throw cancelledError();
 				if (attempt === CHUNK_ATTEMPTS) break;
+				// The helper answered, and rejected the result: its DTW guardrail
+				// judged this audio's word timings unusable. The same audio gives the
+				// same verdict, so retrying only re-ran the whole inference twice more
+				// -- minutes of a busy GPU -- before failing the same way.
+				if (isGuardrailRejection(error)) break;
 				if (this.modelPath) {
 					await this.server
 						.start({ modelPath: this.modelPath, vadModelPath: this.vadModelPath })
