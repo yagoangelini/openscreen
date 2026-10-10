@@ -430,7 +430,8 @@
 		"bounceLight": "약하게",
 		"bounceStrong": "강하게",
 		"showKeystrokes": "화면에 단축키 표시",
-		"clickRing": "클릭 강조"
+		"clickRing": "클릭 강조",
+		"spotlight": "스포트라이트"
 	},
 	"export": {
 		"gifButton": "GIF 내보내기",

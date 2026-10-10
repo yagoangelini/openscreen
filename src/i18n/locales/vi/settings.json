@@ -430,7 +430,8 @@
 		"bounceLight": "Nhẹ",
 		"bounceStrong": "Mạnh",
 		"showKeystrokes": "Hiển thị phím tắt",
-		"clickRing": "Làm nổi bật cú nhấp"
+		"clickRing": "Làm nổi bật cú nhấp",
+		"spotlight": "Đèn chiếu"
 	},
 	"export": {
 		"gifButton": "Xuất GIF",

@@ -430,7 +430,8 @@
 		"bounceLight": "Hafif",
 		"bounceStrong": "Belirgin",
 		"showKeystrokes": "Ekranda kısayollar",
-		"clickRing": "Tıklama vurgusu"
+		"clickRing": "Tıklama vurgusu",
+		"spotlight": "Spot ışığı"
 	},
 	"export": {
 		"gifButton": "GIF Olarak Dışa Aktar",

@@ -308,6 +308,8 @@ export interface CursorVisualSettings {
 	showKeystrokes?: boolean;
 	/** A ring at every click, so the viewer sees where it landed (`SceneCursor::click_ring`). */
 	clickRing?: boolean;
+	/** The frame dimmed except around the pointer (`SceneCursor::spotlight`). Off by default. */
+	spotlight?: boolean;
 }
 
 // The project defaults, under the names the legacy editor reads: one value, not two to keep in sync.

@@ -458,6 +458,8 @@ export interface SceneCursor {
 	clickImpact?: true;
 	/** The click highlight: a ring at each click under the flat cursor (`SceneCursor::click_ring`). */
 	clickRing?: true;
+	/** The frame dimmed except around the pointer (`SceneCursor::spotlight`; D3D11 only). */
+	spotlight?: true;
 	clipToBounds: boolean;
 	/** Cursor theme id (sprite set). */
 	theme: string;
@@ -1278,6 +1280,7 @@ export function buildSceneDescription(
 			asArrow: settings.cursor.asArrow,
 			...(settings.cursor.clickImpact ? { clickImpact: true as const } : {}),
 			...(settings.cursor.clickRing ? { clickRing: true as const } : {}),
+			...(settings.cursor.spotlight ? { spotlight: true as const } : {}),
 			// The "Keep inside frame" option is gone: the cursor always overflows into the
 			// background. The field stays because the compositor's scene requires it.
 			clipToBounds: false,

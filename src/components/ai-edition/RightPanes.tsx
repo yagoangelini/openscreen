@@ -3929,6 +3929,17 @@ export function CursorPane() {
 					/>
 				</div>
 			) : null}
+			{settings.cursorShow ? (
+				<div className={styles.paneRow}>
+					<span className={styles.label}>{ts("cursor.spotlight")}</span>
+					<Toggle
+						ariaLabel={ts("cursor.spotlight")}
+						checked={settings.cursor.spotlight === true}
+						disabled={!hasDocument}
+						onChange={(v) => void set({ cursor: { spotlight: v } })}
+					/>
+				</div>
+			) : null}
 			{/* The shortcuts come from the take's cursor file, so they show with the cursor on or off. */}
 			<div className={styles.paneRow}>
 				<span className={styles.label}>{ts("cursor.showKeystrokes")}</span>

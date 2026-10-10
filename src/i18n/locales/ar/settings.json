@@ -430,7 +430,8 @@
 		"bounceLight": "خفيف",
 		"bounceStrong": "قوي",
 		"showKeystrokes": "اختصارات على الشاشة",
-		"clickRing": "إبراز النقرات"
+		"clickRing": "إبراز النقرات",
+		"spotlight": "بقعة ضوء"
 	},
 	"export": {
 		"gifButton": "تصدير GIF",
