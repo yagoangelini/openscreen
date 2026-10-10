@@ -143,8 +143,15 @@ pub(crate) unsafe fn advance_decoder_to(
 /// truncation bug happened.
 ///
 /// `on_frame` runs after `compose_frame` with the running output index;
-/// `on_clip_end` runs once per clip with its clamped source window, the frames
-/// it produced, and the speed segments used (MP4 needs those for audio).
+/// `on_clip_start` runs once per clip the walk actually renders, before its first frame, with
+/// its clamped source window end and its speed segments (the MP4 export starts streaming that
+/// clip's audio there); `on_clip_end` runs once per such clip with the same window, the frames
+/// it produced, and the speed segments used.
+///
+/// Decoders are closed as soon as no later clip reads their file, so a long multi-source
+/// timeline does not keep every decoder's D3D11VA surface pool resident to the end. A clip
+/// without a camera samples the screen frame for the webcam slot instead of opening a second
+/// decoder on the same file: the PiP is not drawn for it, so the stand-in only has to exist.
 #[allow(clippy::too_many_arguments)]
 pub(crate) unsafe fn walk_composited_timeline(
     clips: &[ClipSource],
@@ -156,8 +163,10 @@ pub(crate) unsafe fn walk_composited_timeline(
     screen_decs: &mut HashMap<String, Decoder>,
     webcam_decs: &mut HashMap<String, Decoder>,
     on_frame: &mut dyn FnMut(u64) -> Result<()>,
+    on_clip_start: &mut dyn FnMut(usize, f64, &[SpeedSegment]) -> Result<()>,
     on_clip_end: &mut dyn FnMut(usize, f64, u64, &[SpeedSegment]) -> Result<()>,
 ) -> Result<u64> {
+    let (last_screen_use, last_webcam_use) = decoder_last_use(clips);
     // La piste se charge même curseur MASQUÉ : le focus auto des zooms la suit, comme en preview
     // (qui la charge toujours). Sans elle, un zoom auto suivait en preview et restait figé à
     // l'export. Ce qui ne doit rien voir d'un curseur masqué a sa propre porte sur `cursor.show` :
@@ -178,6 +187,11 @@ pub(crate) unsafe fn walk_composited_timeline(
     comp.set_segmentation_deterministic(true);
 
     for (clip_index, clip) in clips.iter().enumerate() {
+        // Every clip before this one is done: release what none of the rest will read.
+        screen_decs
+            .retain(|path, _| last_screen_use.get(path).is_some_and(|&last| last >= clip_index));
+        webcam_decs
+            .retain(|path, _| last_webcam_use.get(path).is_some_and(|&last| last >= clip_index));
         // Le preset de layout est GLOBAL (un seul panneau pour toute la timeline) mais la
         // caméra est PAR CLIP : un projet mélange sans problème un enregistrement avec webcam
         // et un import qui n'en a pas. Le preset ne doit donc s'appliquer qu'aux clips qui ont
@@ -205,18 +219,26 @@ pub(crate) unsafe fn walk_composited_timeline(
         //    serait recopié dans sa propre vignette.
         let has_camera = webcam_is_real(&clip.webcam, &clip.screen);
         comp.set_has_webcam(has_camera);
-        let webcam_key = if has_camera { &clip.webcam } else { &clip.screen };
         if !screen_decs.contains_key(&clip.screen) {
             screen_decs.insert(clip.screen.clone(), Decoder::open_for_export(&clip.screen, gpu)?);
         }
-        if !webcam_decs.contains_key(webcam_key) {
-            webcam_decs.insert(webcam_key.clone(), Decoder::open_for_export(webcam_key, gpu)?);
+        if has_camera && !webcam_decs.contains_key(&clip.webcam) {
+            webcam_decs.insert(clip.webcam.clone(), Decoder::open_for_export(&clip.webcam, gpu)?);
         }
-        let sdec = screen_decs.get_mut(&clip.screen).unwrap();
-        let wdec = webcam_decs.get_mut(webcam_key).unwrap();
+        let Some(sdec) = screen_decs.get_mut(&clip.screen) else {
+            anyhow::bail!("screen decoder for clip #{clip_index} vanished");
+        };
+        // No camera: no webcam decoder at all. The webcam slot is fed the screen's own frame
+        // below, which is what the stand-in decoder (a second decoder on the screen file)
+        // produced anyway, minus its surface pool.
+        let mut wdec = if has_camera { webcam_decs.get_mut(&clip.webcam) } else { None };
 
         let screen_available_duration = sdec.available_duration_sec();
-        let webcam_available_duration = wdec.available_duration_sec();
+        let webcam_available_duration = match wdec.as_ref() {
+            Some(wdec) => wdec.available_duration_sec(),
+            // The stand-in decoder read the screen file: same duration, same clamp as before.
+            None => screen_available_duration,
+        };
         if screen_available_duration.is_none() || webcam_available_duration.is_none() {
             eprintln!(
                 "[pipeline] warning: clip #{}: durée de flux indéterminée (screen={}, webcam={}); la borne demandée {:.3}s ne peut pas être entièrement validée",
@@ -277,11 +299,13 @@ pub(crate) unsafe fn walk_composited_timeline(
         if sdec.seek_to(clip.source_start_sec)?.is_null() {
             continue; // clip vide / au-delà de la source
         }
-        if wdec
-            .seek_to((clip.source_start_sec - clip.webcam_offset_sec).max(0.0))?
-            .is_null()
-        {
-            continue;
+        if let Some(wdec) = wdec.as_mut() {
+            if wdec
+                .seek_to((clip.source_start_sec - clip.webcam_offset_sec).max(0.0))?
+                .is_null()
+            {
+                continue;
+            }
         }
 
         if cursor_enabled {
@@ -305,6 +329,7 @@ pub(crate) unsafe fn walk_composited_timeline(
             }
         }
 
+        on_clip_start(clip_index, source_end_sec, &speed_segments)?;
         let frames_before_clip = frames;
         'clip_frames: for segment in &speed_segments {
             for segment_frame in 0..segment.frame_count {
@@ -316,14 +341,17 @@ pub(crate) unsafe fn walk_composited_timeline(
                         break 'clip_frames;
                     }
                 }
-                {
+                if let Some(wdec) = wdec.as_mut() {
                     let _p = crate::export_probe::scope(crate::export_probe::Stage::DecodeWebcam);
                     if !advance_decoder_to(wdec, target_source_time, clip.webcam_offset_sec)? {
                         break 'clip_frames;
                     }
                 }
                 let sf = sdec.cur_frame();
-                let wf = wdec.cur_frame();
+                let wf = match wdec.as_ref() {
+                    Some(wdec) => wdec.cur_frame(),
+                    None => sf,
+                };
                 if sf.is_null() || wf.is_null() {
                     break 'clip_frames;
                 }
@@ -361,9 +389,55 @@ pub(crate) unsafe fn walk_composited_timeline(
     Ok(frames)
 }
 
+/// The index of the last clip that reads each file, as a screen and as a camera. A decoder
+/// whose file no clip at or after the current one reads is closed (see
+/// `walk_composited_timeline`).
+pub(crate) fn decoder_last_use(
+    clips: &[ClipSource],
+) -> (HashMap<String, usize>, HashMap<String, usize>) {
+    let mut screen = HashMap::new();
+    let mut webcam = HashMap::new();
+    for (index, clip) in clips.iter().enumerate() {
+        screen.insert(clip.screen.clone(), index);
+        if webcam_is_real(&clip.webcam, &clip.screen) {
+            webcam.insert(clip.webcam.clone(), index);
+        }
+    }
+    (screen, webcam)
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{frame_step, FrameStep, NextFrameTime};
+    use super::{decoder_last_use, frame_step, FrameStep, NextFrameTime};
+    use crate::pipeline::ClipSource;
+
+    fn clip(screen: &str, webcam: &str) -> ClipSource {
+        ClipSource {
+            screen: screen.into(),
+            webcam: webcam.into(),
+            source_start_sec: 0.0,
+            source_end_sec: 1.0,
+            webcam_offset_sec: 0.0,
+            has_audio: true,
+        }
+    }
+
+    #[test]
+    fn a_decoder_lives_until_the_last_clip_that_reads_its_file() {
+        let clips = [
+            clip("a.mp4", "a-cam.mp4"),
+            clip("b.mp4", ""),
+            clip("a.mp4", "a-cam.mp4"),
+            clip("c.mp4", "c.mp4"),
+        ];
+        let (screen, webcam) = decoder_last_use(&clips);
+        assert_eq!(screen["a.mp4"], 2);
+        assert_eq!(screen["b.mp4"], 1);
+        assert_eq!(screen["c.mp4"], 3);
+        assert_eq!(webcam["a-cam.mp4"], 2);
+        // No camera (empty, or the screen itself): no webcam decoder to keep alive.
+        assert_eq!(webcam.len(), 1);
+    }
 
     /// La cadence de lecture, en une phrase : à 24 fps, une seconde réelle doit adopter 24
     /// frames et pas une de plus. Le bug d'origine (un pas fixe de 1/60 s, une frame par

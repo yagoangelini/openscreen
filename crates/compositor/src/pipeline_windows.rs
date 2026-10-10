@@ -2,12 +2,11 @@
 //! Aucun composite. Mesuré au plus extérieur (§10) : Instant (mappe QPC) autour de
 //! tout le run, deux lectures seulement. Rien dans la boucle ne peut fausser le fps.
 
-use crate::audio::{
-    assemble_concatenated_pcm, build_audio_concat_plan, finish_audio, mix_external_tracks,
-    AacEncoder, PlanarPcm,
-};
-use crate::audio_jobs::{decode_and_stretch_clip_audio, ClipAudioJobs};
+use crate::audio::{AacEncoder, PlanarPcm};
+use crate::audio_stream::ProgrammeAudio;
 use crate::compositor::{Compositor, OUT_H, OUT_W};
+pub use crate::gif_export_control::{ExportControl, ExportProgress};
+use crate::gif_export_control::with_staged_output;
 use crate::config::Cfg;
 use crate::cpu_frames::CpuFrames;
 use crate::cursor::CursorTrack;
@@ -22,6 +21,7 @@ use crate::timeline_walk::{walk_composited_timeline, NextFrameTime};
 use anyhow::{anyhow, bail, Result};
 use std::collections::HashMap;
 use std::ffi::{c_void, CString};
+use std::path::Path;
 use std::ptr;
 use std::time::Instant;
 use windows::core::Interface;
@@ -189,6 +189,7 @@ extern "C" {
     fn sn_fmt_set_pb(s: *mut AVFormatContext, p: *mut AVIOContext);
 }
 
+#[derive(Debug)]
 pub struct Stats {
     pub frames: u64,
     pub wall_s: f64,
@@ -398,6 +399,14 @@ unsafe fn attach_d3d11va(dctx: *mut AVCodecContext, gpu: &Gpu) -> Result<*mut AV
     Ok(hwdev)
 }
 
+/// D3D11VA surfaces per decoder. ffmpeg sizes its own pools for H.264 at 4 + 16 (the largest
+/// DPB the level allows) when it allocates them (`ff_dxva2_common_frame_params`); this crate
+/// allocates the pool itself (to add `BIND_SHADER_RESOURCE`), and `Decoder` holds two more
+/// surfaces at a time (`frame` and the `peek_frame` lookahead). 24 covers that with two to spare.
+/// It was 32: eight surfaces too many per decoder, ~100 MB at 4K for the screen decoder alone
+/// on a 6 GB card that also holds the encoder's pool and the compositor's targets.
+const DECODER_POOL_SIZE: i32 = 24;
+
 // D3D11_TEXTURE2D_DESC.BindFlags (valeurs SDK)
 const D3D11_BIND_SHADER_RESOURCE: u32 = 0x8;
 const D3D11_BIND_DECODER: u32 = 0x200;
@@ -422,7 +431,7 @@ unsafe extern "C" fn get_hw_format(
             (*fc).sw_format = AVPixelFormat::AV_PIX_FMT_NV12;
             (*fc).width = (*ctx).coded_width;
             (*fc).height = (*ctx).coded_height;
-            (*fc).initial_pool_size = 32; // DPB H.264 (refs) + frames en vol
+            (*fc).initial_pool_size = DECODER_POOL_SIZE;
             let d3dfc = (*fc).hwctx as *mut AVD3D11VAFramesContext;
             (*d3dfc).BindFlags = D3D11_BIND_DECODER | D3D11_BIND_SHADER_RESOURCE;
             if av_hwframe_ctx_init(frames) < 0 {
@@ -733,6 +742,11 @@ pub(crate) struct Decoder {
     peek_frame: *mut AVFrame,
     /// `true` si `peek_frame` porte une frame décodée en attente de `commit_peek`.
     has_peek: bool,
+    /// A frame has come out of this decoder at least once. Past that point a read error is
+    /// the damaged tail of a recovered recording, not an unreadable file (see `receive_into`).
+    decoded_any: bool,
+    /// Packets the decoder rejected as corrupt and that were skipped; logged once.
+    corrupt_packets: u32,
 }
 
 /// Owns the FFmpeg resources allocated while `Decoder::open` is still fallible.
@@ -851,6 +865,8 @@ impl Decoder {
             cpu,
             peek_frame: av_frame_alloc(),
             has_peek: false,
+            decoded_any: false,
+            corrupt_packets: 0,
         })
     }
 
@@ -1039,14 +1055,26 @@ impl Decoder {
 
     /// Décode dans `into` (buffer courant ou de lookahead) jusqu'à obtenir une frame ou
     /// l'EOF — cf. `pipeline_macos::Decoder::receive_into` pour la justification.
+    ///
+    /// A recording recovered after a crash ends on a partial fragment: the demuxer or the
+    /// decoder chokes on its last packets. That used to fail the whole export. Now, once a
+    /// frame has been decoded, a read error is the end of the file, and a packet the decoder
+    /// rejects as invalid data is skipped — the export keeps every good frame and holds the
+    /// last one, exactly as at a clean EOF. A file that fails before its first frame still
+    /// fails: that is an unreadable file, not a damaged tail.
     unsafe fn receive_into(&mut self, into: *mut AVFrame) -> Result<bool> {
         loop {
             let r = avcodec_receive_frame(self.dctx, into);
             if r == 0 {
+                self.decoded_any = true;
                 return Ok(true);
             }
             if r == AVERROR_EOF {
                 return Ok(false);
+            }
+            if r == AVERROR_INVALIDDATA && self.decoded_any {
+                self.note_corrupt_packet();
+                continue;
             }
             if r != AVERROR_EAGAIN {
                 averr(r, "receive_frame")?;
@@ -1055,17 +1083,37 @@ impl Decoder {
                 return Ok(false);
             }
             let rr = av_read_frame(self.fmt, self.pkt);
-            if rr == AVERROR_EOF {
+            if rr == AVERROR_EOF || (rr < 0 && self.decoded_any) {
+                if rr != AVERROR_EOF {
+                    let mut buf = [0i8; 128];
+                    av_strerror(rr, buf.as_mut_ptr(), buf.len());
+                    eprintln!(
+                        "[pipeline] read error {rr} ({}) after the last good frame; treated as the end of the file",
+                        std::ffi::CStr::from_ptr(buf.as_ptr()).to_string_lossy()
+                    );
+                }
                 avcodec_send_packet(self.dctx, ptr::null_mut());
                 self.sent_eof = true;
             } else {
                 averr(rr, "read_frame")?;
                 if (*self.pkt).stream_index == self.vidx {
-                    averr(avcodec_send_packet(self.dctx, self.pkt), "send_packet")?;
+                    let sent = avcodec_send_packet(self.dctx, self.pkt);
+                    if sent == AVERROR_INVALIDDATA {
+                        self.note_corrupt_packet();
+                    } else {
+                        averr(sent, "send_packet")?;
+                    }
                 }
                 av_packet_unref(self.pkt);
             }
         }
+    }
+
+    fn note_corrupt_packet(&mut self) {
+        if self.corrupt_packets == 0 {
+            eprintln!("[pipeline] corrupt video packet skipped (further ones are skipped silently)");
+        }
+        self.corrupt_packets += 1;
     }
 
     /// Décode la prochaine frame dans le buffer de lookahead et renvoie son temps.
@@ -1128,8 +1176,29 @@ impl Drop for Decoder {
 /// coûte moins cher que de jeter l'état du décodeur et redécoder depuis la clé précédente.
 const SEEK_FORWARD_MAX_SEC: f64 = 0.5;
 
-unsafe fn make_enc_frames(gpu: &Gpu, w: i32, h: i32) -> Result<(*mut AVBufferRef, *mut AVBufferRef)> {
-    let hwdev = av_hwdevice_ctx_alloc(AVHWDeviceType::AV_HWDEVICE_TYPE_D3D11VA);
+/// The encoder's D3D11 surface pool and the device context it hangs off, released together.
+/// An owner rather than two raw pointers, so an export that fails or is cancelled halfway gives
+/// its surfaces back to the GPU instead of leaking them for the life of the process.
+struct EncoderPool {
+    hwdev: *mut AVBufferRef,
+    frames: *mut AVBufferRef,
+}
+
+impl Drop for EncoderPool {
+    fn drop(&mut self) {
+        unsafe {
+            av_buffer_unref(&mut self.frames);
+            av_buffer_unref(&mut self.hwdev);
+        }
+    }
+}
+
+unsafe fn make_enc_frames(gpu: &Gpu, w: i32, h: i32) -> Result<EncoderPool> {
+    let mut pool = EncoderPool { hwdev: av_hwdevice_ctx_alloc(AVHWDeviceType::AV_HWDEVICE_TYPE_D3D11VA), frames: ptr::null_mut() };
+    let hwdev = pool.hwdev;
+    if hwdev.is_null() {
+        bail!("enc av_hwdevice_ctx_alloc");
+    }
     let hwdc = (*hwdev).data as *mut AVHWDeviceContext;
     let d3dctx = (*hwdc).hwctx as *mut AVD3D11VADeviceContext;
     let dev_clone = gpu.device.clone();
@@ -1137,7 +1206,11 @@ unsafe fn make_enc_frames(gpu: &Gpu, w: i32, h: i32) -> Result<(*mut AVBufferRef
     std::mem::forget(dev_clone);
     averr(av_hwdevice_ctx_init(hwdev), "enc hwdevice init")?;
 
-    let frames = av_hwframe_ctx_alloc(hwdev);
+    pool.frames = av_hwframe_ctx_alloc(hwdev);
+    let frames = pool.frames;
+    if frames.is_null() {
+        bail!("enc av_hwframe_ctx_alloc");
+    }
     let fc = (*frames).data as *mut AVHWFramesContext;
     (*fc).format = AVPixelFormat::AV_PIX_FMT_D3D11;
     (*fc).sw_format = AVPixelFormat::AV_PIX_FMT_NV12;
@@ -1150,7 +1223,7 @@ unsafe fn make_enc_frames(gpu: &Gpu, w: i32, h: i32) -> Result<(*mut AVBufferRef
     let d3dfc = (*fc).hwctx as *mut AVD3D11VAFramesContext;
     (*d3dfc).BindFlags = D3D11_BIND_DECODER | D3D11_BIND_SHADER_RESOURCE;
     averr(av_hwframe_ctx_init(frames), "enc frames init")?;
-    Ok((hwdev, frames))
+    Ok(pool)
 }
 
 /// C1..C8 (§9) : composite 2 sources → encode, effets gatés par `cfg`. Mesuré au plus extérieur (§10).
@@ -1182,7 +1255,8 @@ unsafe fn run_c1_inner(
 ) -> Result<Stats> {
     let mut sdec = Decoder::open(screen, gpu)?;
     let mut wdec = Decoder::open(webcam, gpu)?;
-    let (mut enc_hwdev, mut enc_frames) = make_enc_frames(gpu, OUT_W as i32, OUT_H as i32)?;
+    let pool = make_enc_frames(gpu, OUT_W as i32, OUT_H as i32)?;
+    let enc_frames = pool.frames;
 
     let mut enc = VideoEncoder::open(
         &ExportCodec::H264,
@@ -1195,21 +1269,22 @@ unsafe fn run_c1_inner(
     )?;
     let ectx = enc.ctx;
 
-    let mut octx: *mut AVFormatContext = ptr::null_mut();
-    let outc = CString::new(out)?;
-    averr(
-        avformat_alloc_output_context2(&mut octx, ptr::null(), ptr::null(), outc.as_ptr()),
-        "alloc_output_context2",
-    )?;
+    let mut mux = MuxOutput::new(out)?;
+    let octx = mux.octx;
     let ostream = avformat_new_stream(octx, ptr::null());
+    if ostream.is_null() {
+        bail!("avformat_new_stream");
+    }
     averr(avcodec_parameters_from_context((*ostream).codecpar, ectx), "params_from_ctx")?;
     (*ostream).time_base = (*ectx).time_base;
-    let mut pb: *mut AVIOContext = ptr::null_mut();
-    averr(avio_open(&mut pb, outc.as_ptr(), AVIO_FLAG_WRITE as i32), "avio_open")?;
-    sn_fmt_set_pb(octx, pb);
+    mux.open(out)?;
     averr(avformat_write_header(octx, ptr::null_mut()), "write_header")?;
 
-    let opkt = av_packet_alloc();
+    let packet = PacketGuard(av_packet_alloc());
+    if packet.0.is_null() {
+        bail!("av_packet_alloc");
+    }
+    let opkt = packet.0;
     let mut frames: u64 = 0;
 
     let t0 = Instant::now();
@@ -1224,15 +1299,13 @@ unsafe fn run_c1_inner(
         }
         comp.compose_frame(sf, wf, frames as f32, cfg)?;
 
-        let outf = av_frame_alloc();
-        averr(av_hwframe_get_buffer(enc_frames, outf, 0), "hwframe_get_buffer")?;
-        let out_tex = (*outf).data[0] as *mut c_void;
-        let out_slice = (*outf).data[1] as u32;
+        let outf = encoder_surface(enc_frames)?;
+        let out_tex = (*outf.0).data[0] as *mut c_void;
+        let out_slice = (*outf.0).data[1] as u32;
         comp.rgb_to_nv12(out_tex, out_slice)?;
-        (*outf).pts = frames as i64;
-        enc.send(outf)?;
+        (*outf.0).pts = frames as i64;
+        enc.send(outf.0)?;
         drain_encoder(ectx, octx, ostream, opkt)?;
-        av_frame_free(&mut (outf as *mut _));
         frames += 1;
         progress(frames);
     }
@@ -1240,20 +1313,10 @@ unsafe fn run_c1_inner(
     enc.send(ptr::null_mut())?;
     drain_encoder(ectx, octx, ostream, opkt)?;
     averr(av_write_trailer(octx), "write_trailer")?;
+    mux.close()?;
 
     let wall_s = t0.elapsed().as_secs_f64();
-
-    av_packet_free(&mut (opkt as *mut _));
-    let mut pb2 = sn_fmt_get_pb(octx);
-    if !pb2.is_null() {
-        avio_closep(&mut pb2);
-        sn_fmt_set_pb(octx, ptr::null_mut());
-    }
-    avformat_free_context(octx);
-    // `enc` est libéré par son Drop en fin de portée (voir run_multi_inner).
-    av_buffer_unref(&mut enc_frames);
-    av_buffer_unref(&mut enc_hwdev);
-
+    // `enc`, `pool`, `mux` and `packet` are released by their Drop at the end of the scope.
     let fps = frames as f64 / wall_s;
     Ok(Stats { frames, wall_s, fps, video_duration_s: frames as f64 / 60.0 })
 }
@@ -1282,8 +1345,45 @@ pub fn run_composited_multi(
     params: &ExportParams,
     progress: &mut dyn FnMut(u64),
 ) -> Result<Stats> {
-    discard_partial_output(out, unsafe {
-        run_multi_inner(clips, out, gpu, comp, cfg, params, progress)
+    run_composited_multi_controlled(
+        clips,
+        out,
+        gpu,
+        comp,
+        cfg,
+        params,
+        &mut |step| {
+            if let ExportProgress::Frames(frames) = step {
+                progress(frames)
+            }
+        },
+        &ExportControl::default(),
+    )
+}
+
+/// `run_composited_multi`, cancellable, and reporting the phase after the last frame.
+///
+/// The file is written to a `.partial` staging file next to `out` and renamed over it only
+/// once the trailer is written (`with_staged_output`): a cancelled or failed export leaves the
+/// user's existing `out` untouched, and the staging file is removed. `control` is checked at
+/// every frame, at every clip boundary and between the finishing steps; a cancellation that
+/// arrives after the rename has started loses (`ExportControl::cancel` returns `false`).
+#[allow(clippy::too_many_arguments)]
+pub fn run_composited_multi_controlled(
+    clips: &[ClipSource],
+    out: &str,
+    gpu: &Gpu,
+    comp: &Compositor,
+    cfg: &Cfg,
+    params: &ExportParams,
+    progress: &mut dyn FnMut(ExportProgress),
+    control: &ExportControl,
+) -> Result<Stats> {
+    with_staged_output(Path::new(out), control, "mp4", |staging| {
+        let staging = staging
+            .to_str()
+            .ok_or_else(|| anyhow!("export path is not valid Unicode: {}", staging.display()))?;
+        unsafe { run_multi_inner(clips, out, staging, gpu, comp, cfg, params, progress, control) }
     })
 }
 
@@ -1640,21 +1740,67 @@ impl Default for ExportParams {
 }
 
 
+/// Audio is handed to the encoder every this many video frames: half a second at 60 fps.
+/// Small enough that audio and video interleave finely in the file, large enough that the
+/// per-call overhead (a reader turn, an encoder frame or two) stays out of the frame loop.
+const AUDIO_PRODUCE_EVERY_FRAMES: u64 = 30;
+
+/// Measures each voice file's loudness on its own thread while the video starts, so the first
+/// clip does not wait for a whole-file decode on the render thread. `loudness_gain_db` caches
+/// per file, so the clip that needs the gain picks up the measurement (or waits on the one in
+/// flight). The threads are joined on drop — they may not outlive the addon call.
+struct LoudnessPrewarm(Vec<std::thread::JoinHandle<()>>);
+
+impl LoudnessPrewarm {
+    fn spawn(paths: impl IntoIterator<Item = String>) -> Self {
+        let mut unique: Vec<String> = paths.into_iter().collect();
+        unique.sort();
+        unique.dedup();
+        Self(
+            unique
+                .into_iter()
+                .map(|path| {
+                    std::thread::spawn(move || {
+                        crate::audio::loudness_gain_db(&path);
+                    })
+                })
+                .collect(),
+        )
+    }
+}
+
+impl Drop for LoudnessPrewarm {
+    fn drop(&mut self) {
+        for handle in self.0.drain(..) {
+            let _ = handle.join();
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
 unsafe fn run_multi_inner(
     clips: &[ClipSource],
-    out: &str,
+    target: &str,
+    staging: &str,
     gpu: &Gpu,
     comp: &Compositor,
     cfg: &Cfg,
     params: &ExportParams,
-    progress: &mut dyn FnMut(u64),
+    progress: &mut dyn FnMut(ExportProgress),
+    control: &ExportControl,
 ) -> Result<Stats> {
     if clips.is_empty() {
         bail!("aucun clip à exporter");
     }
+    if params.fps == Some(0) {
+        bail!("export frame rate must be at least 1 fps");
+    }
+    if params.width < 2 || params.height < 2 {
+        bail!("export size {}x{} is too small", params.width, params.height);
+    }
     let (out_w, out_h) = (params.width, params.height);
     // décodeurs ouverts une fois par chemin, réutilisés entre clips (screen ≠ webcam → 2 maps
-    // pour deux &mut indépendants).
+    // pour deux &mut indépendants). La marche ferme ceux qu'aucun clip suivant ne lit.
     let mut screen_decs: HashMap<String, Decoder> = HashMap::new();
     let mut webcam_decs: HashMap<String, Decoder> = HashMap::new();
 
@@ -1682,11 +1828,12 @@ unsafe fn run_multi_inner(
     // écarte alors les candidats zéro-copie et le compositeur alimente l'encodeur en
     // mémoire système via `send_composited`.
     let software_frames = gpu.backend == Backend::Cpu;
-    let (mut enc_hwdev, mut enc_frames) = if software_frames {
-        (ptr::null_mut(), ptr::null_mut())
+    let pool = if software_frames {
+        None
     } else {
-        make_enc_frames(gpu, out_w as i32, out_h as i32)?
+        Some(make_enc_frames(gpu, out_w as i32, out_h as i32)?)
     };
+    let enc_frames = pool.as_ref().map_or(ptr::null_mut(), |pool| pool.frames);
     // Le débit vient de l'app, qui le calcule d'après la taille ET la cadence. Le repli
     // (8Mbps @ 1920x1080 quelle que soit la cadence, plancher 2Mbps) ne sert plus qu'au banc et
     // aux tests : c'est lui qui affamait un export 1080p60, deux fois plus d'images au même débit.
@@ -1704,29 +1851,49 @@ unsafe fn run_multi_inner(
     )?;
     let ectx = enc.ctx;
 
-    let mut octx: *mut AVFormatContext = ptr::null_mut();
-    let outc = CString::new(out)?;
-    averr(
-        avformat_alloc_output_context2(&mut octx, ptr::null(), ptr::null(), outc.as_ptr()),
-        "alloc_output_context2",
-    )?;
+    // The container is chosen from the TARGET's name; the bytes go to the staging file.
+    let mut mux = MuxOutput::new(target)?;
+    let octx = mux.octx;
     let ostream = avformat_new_stream(octx, ptr::null());
     if ostream.is_null() {
         bail!("video avformat_new_stream");
     }
     averr(avcodec_parameters_from_context((*ostream).codecpar, ectx), "params_from_ctx")?;
     (*ostream).time_base = (*ectx).time_base;
-    // Les deux streams doivent exister avant le header MP4 ; l'AAC reste ouvert pendant le
-    // rendu puis reçoit le PCM assemblé à partir des comptes de frames réellement produits.
-    let mut audio_encoder = AacEncoder::open(octx)?;
-    let mut pb: *mut AVIOContext = ptr::null_mut();
-    averr(avio_open(&mut pb, outc.as_ptr(), AVIO_FLAG_WRITE as i32), "avio_open")?;
-    sn_fmt_set_pb(octx, pb);
+    // Les deux streams doivent exister avant le header MP4. L'audio est ensuite produit au fil
+    // de la vidéo (`ProgrammeAudio`) et passe par le même interleaver.
+    let audio_encoder = std::cell::RefCell::new(AacEncoder::open(octx)?);
+    mux.open(staging)?;
     averr(avformat_write_header(octx, ptr::null_mut()), "write_header")?;
 
-    let opkt = av_packet_alloc();
-    let mut clip_frame_counts = vec![0u64; clips.len()];
-    let mut audio_jobs: ClipAudioJobs<Option<PlanarPcm>> = ClipAudioJobs::new(clips.len());
+    let packet = PacketGuard(av_packet_alloc());
+    if packet.0.is_null() {
+        bail!("av_packet_alloc");
+    }
+    let opkt = packet.0;
+
+    let audio = std::cell::RefCell::new(ProgrammeAudio::for_export(
+        clips.len(),
+        out_fps as f64,
+        audio_settings,
+        &audio_tracks,
+    ));
+    let _prewarm = LoudnessPrewarm::spawn(
+        clips
+            .iter()
+            .filter(|clip| clip.has_audio)
+            .map(|clip| clip.screen.clone())
+            .chain(
+                audio_tracks
+                    .iter()
+                    .filter(|track| track.kind == crate::scene::SceneAudioTrackKind::Voiceover)
+                    .map(|track| track.path.clone()),
+            ),
+    );
+    let audio_sink = |pcm: &PlanarPcm| -> Result<()> {
+        audio_encoder.borrow_mut().encode_stream(pcm, octx)
+    };
+    let frames_done = std::cell::Cell::new(0u64);
     let t0 = Instant::now();
 
     let frames = walk_composited_timeline(
@@ -1739,6 +1906,7 @@ unsafe fn run_multi_inner(
         &mut screen_decs,
         &mut webcam_decs,
         &mut |frame_index| {
+            control.check()?;
             // Backend CPU (WARP) : la frame composée descend en mémoire système via
             // `send_composited` (le compositeur relit son NV12 interne vers un AVFrame
             // YUV420P / NV12 et l'encodeur le consomme directement). Pas de hw_frames_ctx,
@@ -1749,43 +1917,47 @@ unsafe fn run_multi_inner(
             } else {
                 // Hardware path: the composed texture goes straight into an NV12
                 // encoder frame, so nothing ever descends to system memory.
-                let outf = av_frame_alloc();
-                averr(av_hwframe_get_buffer(enc_frames, outf, 0), "hwframe_get_buffer")?;
-                let out_tex = (*outf).data[0] as *mut c_void;
-                let out_slice = (*outf).data[1] as u32;
+                let outf = encoder_surface(enc_frames)?;
+                let out_tex = (*outf.0).data[0] as *mut c_void;
+                let out_slice = (*outf.0).data[1] as u32;
                 comp.rgb_to_nv12_scaled(out_w, out_h, out_tex, out_slice)?;
-                (*outf).pts = frame_index as i64;
-                enc.send(outf)?;
+                (*outf.0).pts = frame_index as i64;
+                enc.send(outf.0)?;
                 drain_encoder(ectx, octx, ostream, opkt)?;
-                av_frame_free(&mut (outf as *mut _));
             }
-            progress(frame_index + 1);
+            let done = frame_index + 1;
+            frames_done.set(done);
+            progress(ExportProgress::Frames(done));
+            if done % AUDIO_PRODUCE_EVERY_FRAMES == 0 {
+                audio.borrow_mut().produce(done, &mut |pcm| audio_sink(pcm))?;
+            }
             Ok(())
         },
-        &mut |clip_index, source_end_sec, frames_in_clip, speed_segments| {
-            clip_frame_counts[clip_index] = frames_in_clip;
+        &mut |clip_index, source_end_sec, speed_segments| {
+            control.check()?;
             let clip = &clips[clip_index];
-            if clip.has_audio && frames_in_clip > 0 {
-                // L'audio d'un clip ne dépend que de ce clip : le décoder et l'étirer ici,
-                // sur le thread de rendu, immobilisait la barre d'export pour toute sa durée
-                // — rien n'appelle `progress()` entre deux clips. Le travail part sur un
-                // thread et se recouvre avec la composition du clip suivant ; les résultats
-                // sont récupérés après le parcours, rangés par index de clip.
-                let path = clip.screen.clone();
-                let source_start_sec = clip.source_start_sec;
-                let segments = speed_segments.to_vec();
-                audio_jobs.spawn(clip_index, move || {
-                    decode_and_stretch_clip_audio(
-                        clip_index,
-                        &path,
-                        source_start_sec,
-                        source_end_sec,
-                        &segments,
-                        out_fps as f64,
-                    )
-                });
-            }
+            // L'audio d'un clip ne dépend que de ce clip ; il est décodé et étiré au fil de
+            // ses frames, une fenêtre à la fois, au lieu d'être tenu entier en mémoire.
+            let source = if clip.has_audio {
+                ProgrammeAudio::clip_source(
+                    clip_index,
+                    &clip.screen,
+                    clip.source_start_sec,
+                    source_end_sec,
+                    speed_segments,
+                    out_fps as f64,
+                )
+            } else {
+                None
+            };
+            audio.borrow_mut().begin_clip(clip_index, frames_done.get(), source);
             Ok(())
+        },
+        &mut |clip_index, _source_end_sec, frames_in_clip, _speed_segments| {
+            control.check()?;
+            let mut audio = audio.borrow_mut();
+            audio.end_clip(clip_index, frames_in_clip);
+            audio.produce(frames_done.get(), &mut |pcm| audio_sink(pcm))
         },
     )?;
 
@@ -1793,48 +1965,106 @@ unsafe fn run_multi_inner(
     comp.set_timeline_time(None);
     comp.set_scene(scene);
 
+    if frames == 0 {
+        bail!(
+            "the export produced no video frames: every clip on the timeline is empty or starts past the end of its recording"
+        );
+    }
+
+    // Everything after the last frame — the encoder's queue, the audio's tail, the trailer —
+    // is reported as one phase, so the bar does not sit at 100 % without a word.
+    progress(ExportProgress::Finalizing);
+    // The walk is over: no decoder is read again, give their surface pools back now rather
+    // than after the trailer.
+    screen_decs.clear();
+    webcam_decs.clear();
+
     enc.send(ptr::null_mut())?;
     drain_encoder(ectx, octx, ostream, opkt)?;
+    control.check()?;
 
-    // Récupération des jobs audio lancés pendant le parcours. `spawn` en admet quatre avant
-    // d'en collecter un, donc il en reste au plus quatre à attendre ici — bornés par le plus
-    // lent, pas par leur somme ; tous les autres se sont recouverts avec l'encodage.
-    let clip_pcm: Vec<Option<PlanarPcm>> = audio_jobs
-        .into_results()
-        .into_iter()
-        .map(|slot| slot.flatten())
-        .collect();
-
-    let declared_audio: Vec<bool> = clips.iter().map(|clip| clip.has_audio).collect();
-    let audio_plan = build_audio_concat_plan(
-        &clip_frame_counts,
-        &declared_audio,
-        out_fps as f64,
-    );
-    let assembled_audio = finish_audio(
-        mix_external_tracks(assemble_concatenated_pcm(&clip_pcm, &audio_plan), &audio_tracks),
-        audio_settings,
-    );
-    audio_encoder.encode(&assembled_audio, octx)?;
+    audio.borrow_mut().finish(&mut |pcm| audio_sink(pcm))?;
+    audio_encoder.borrow_mut().finish_stream(octx)?;
+    control.check()?;
 
     averr(av_write_trailer(octx), "write_trailer")?;
+    mux.close()?;
     let wall_s = t0.elapsed().as_secs_f64();
 
-    // teardown (les décodeurs du cache sont droppés en fin de scope).
-    av_packet_free(&mut (opkt as *mut _));
-    let mut pb2 = sn_fmt_get_pb(octx);
-    if !pb2.is_null() {
-        avio_closep(&mut pb2);
-        sn_fmt_set_pb(octx, ptr::null_mut());
-    }
-    avformat_free_context(octx);
-    // `enc` (donc le contexte encodeur) est libéré par son Drop en fin de portée — après
-    // ces unref, ce qui est l'ordre voulu : il garde sa propre référence sur le pool.
-    av_buffer_unref(&mut enc_frames);
-    av_buffer_unref(&mut enc_hwdev);
-
+    // `enc` frees the encoder context on drop; it holds its own reference on `pool`, which goes
+    // after it. `mux` and `packet` are released by their Drop as well, on this path and on
+    // every `?` above.
     let fps = frames as f64 / wall_s;
     Ok(Stats { frames, wall_s, fps, video_duration_s: frames as f64 / out_fps as f64 })
+}
+
+/// RAII owner of an output `AVFormatContext` and its `AVIOContext`.
+///
+/// Every exit of an export — success, error, cancellation — closes the file handle before the
+/// staging file is renamed or deleted (Windows refuses both on an open file) and frees the
+/// muxer, including its private state when the trailer was never written.
+struct MuxOutput {
+    octx: *mut AVFormatContext,
+}
+
+impl MuxOutput {
+    /// A muxer for the container `name_hint` names by its extension; MP4 when it names none.
+    unsafe fn new(name_hint: &str) -> Result<Self> {
+        let hint = CString::new(name_hint)?;
+        let mut octx: *mut AVFormatContext = ptr::null_mut();
+        if avformat_alloc_output_context2(&mut octx, ptr::null(), ptr::null(), hint.as_ptr()) < 0
+            || octx.is_null()
+        {
+            let mp4 = CString::new("mp4")?;
+            octx = ptr::null_mut();
+            averr(
+                avformat_alloc_output_context2(&mut octx, ptr::null(), mp4.as_ptr(), hint.as_ptr()),
+                "alloc_output_context2",
+            )?;
+        }
+        if octx.is_null() {
+            bail!("alloc_output_context2: no context");
+        }
+        Ok(Self { octx })
+    }
+
+    unsafe fn open(&mut self, path: &str) -> Result<()> {
+        let cpath = CString::new(path)?;
+        let mut pb: *mut AVIOContext = ptr::null_mut();
+        averr(avio_open(&mut pb, cpath.as_ptr(), AVIO_FLAG_WRITE as i32), "avio_open")?;
+        sn_fmt_set_pb(self.octx, pb);
+        Ok(())
+    }
+
+    /// Closes the file and reports what the final flush says: a full disk shows up here.
+    unsafe fn close(&mut self) -> Result<()> {
+        let mut pb = sn_fmt_get_pb(self.octx);
+        if pb.is_null() {
+            return Ok(());
+        }
+        sn_fmt_set_pb(self.octx, ptr::null_mut());
+        averr(avio_closep(&mut pb), "avio_close")
+    }
+}
+
+impl Drop for MuxOutput {
+    fn drop(&mut self) {
+        unsafe {
+            let _ = self.close();
+            avformat_free_context(self.octx);
+        }
+    }
+}
+
+/// One surface from the encoder's pool, owned: returned to the pool when dropped, whether the
+/// frame was sent or an error interrupted it.
+unsafe fn encoder_surface(pool: *mut AVBufferRef) -> Result<FrameGuard> {
+    let frame = FrameGuard(av_frame_alloc());
+    if frame.0.is_null() {
+        bail!("av_frame_alloc (encoder surface)");
+    }
+    averr(av_hwframe_get_buffer(pool, frame.0, 0), "hwframe_get_buffer")?;
+    Ok(frame)
 }
 
 #[cfg(test)]

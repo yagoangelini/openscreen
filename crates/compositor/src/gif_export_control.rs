@@ -1,4 +1,9 @@
-//! Cooperative GIF cancellation and publication of a completed output only.
+//! Cooperative export cancellation and publication of a completed output only.
+//!
+//! Born for the GIF export, now shared with the MP4 one: both render into a staging file next
+//! to the target and rename it over the target only once everything — the last frame, the
+//! audio, the trailer — has been written, so a cancelled or failed export never touches a file
+//! the user already had.
 
 use anyhow::{bail, Context, Result};
 use std::fs::{self, File, OpenOptions};
@@ -11,20 +16,37 @@ const CANCELLED: u8 = 1;
 const COMMITTING: u8 = 2;
 
 #[derive(Clone, Default)]
-pub struct GifExportControl(Arc<AtomicU8>);
+pub struct ExportControl(Arc<AtomicU8>);
+
+/// What an export reports while it runs.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ExportProgress {
+    /// Frames composed and handed to the encoder so far.
+    Frames(u64),
+    /// Every frame is out; the encoder's queue, the audio's tail and the container's index
+    /// are being written. Seconds, not minutes, but enough that a bar parked at 100 % with no
+    /// word looks like a hang.
+    Finalizing,
+}
+
+/// The GIF export's name for it, from before the MP4 export shared it.
+pub type GifExportControl = ExportControl;
 
 #[derive(Debug)]
-pub struct GifExportCancelled;
+pub struct ExportCancelled;
 
-impl std::fmt::Display for GifExportCancelled {
+/// See `GifExportControl`.
+pub type GifExportCancelled = ExportCancelled;
+
+impl std::fmt::Display for ExportCancelled {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("GIF export cancelled")
+        f.write_str("export cancelled")
     }
 }
 
-impl std::error::Error for GifExportCancelled {}
+impl std::error::Error for ExportCancelled {}
 
-impl GifExportControl {
+impl ExportControl {
     /// False means publication has already won the race. Repeated cancellation
     /// of the same pending job is harmless.
     pub fn cancel(&self) -> bool {
@@ -36,7 +58,7 @@ impl GifExportControl {
 
     pub fn check(&self) -> Result<()> {
         if self.0.load(Ordering::Acquire) == CANCELLED {
-            return Err(GifExportCancelled.into());
+            return Err(ExportCancelled.into());
         }
         Ok(())
     }
@@ -44,20 +66,20 @@ impl GifExportControl {
     fn begin_commit(&self) -> Result<()> {
         match self.0.compare_exchange(RUNNING, COMMITTING, Ordering::AcqRel, Ordering::Acquire) {
             Ok(_) => Ok(()),
-            Err(CANCELLED) => Err(GifExportCancelled.into()),
-            Err(_) => bail!("GIF export control has already been used"),
+            Err(CANCELLED) => Err(ExportCancelled.into()),
+            Err(_) => bail!("export control has already been used"),
         }
     }
 }
 
 static NEXT_OUTPUT: AtomicU64 = AtomicU64::new(0);
 
-struct StagedGif {
+struct StagedOutput {
     path: PathBuf,
     published: bool,
 }
 
-impl Drop for StagedGif {
+impl Drop for StagedOutput {
     fn drop(&mut self) {
         if !self.published {
             let _ = fs::remove_file(&self.path);
@@ -72,21 +94,53 @@ pub(crate) fn with_gif_output<T>(
     control: &GifExportControl,
     render: impl FnOnce(File, &Path) -> Result<T>,
 ) -> Result<T> {
+    with_staged_file(target, control, "gif", render)
+}
+
+/// `with_gif_output` for a writer that opens the staging path itself (libavformat's
+/// `avio_open`). The staging file is reserved — created empty, exclusively — before `render`
+/// runs, so two exports to one folder can never share it; `render` must have closed every
+/// handle on it by the time it returns, or Windows refuses the rename and the cleanup.
+pub fn with_staged_output<T>(
+    target: &Path,
+    control: &ExportControl,
+    kind: &str,
+    render: impl FnOnce(&Path) -> Result<T>,
+) -> Result<T> {
+    with_staged_file(target, control, kind, |file, path| {
+        drop(file);
+        render(path)
+    })
+}
+
+/// The staging path for `target`: hidden-by-convention, next to it (same volume, so the final
+/// rename is atomic), and suffixed `.partial` so a crash leaves something recognisable.
+fn staging_path(parent: &Path, kind: &str, nonce: u64) -> PathBuf {
+    parent.join(format!(".openscreen-{kind}-{}-{nonce}.partial", std::process::id()))
+}
+
+fn with_staged_file<T>(
+    target: &Path,
+    control: &ExportControl,
+    kind: &str,
+    render: impl FnOnce(File, &Path) -> Result<T>,
+) -> Result<T> {
     control.check()?;
     let parent = target.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(Path::new("."));
     fs::create_dir_all(parent)?;
     let (mut staged, file) = loop {
         let nonce = NEXT_OUTPUT.fetch_add(1, Ordering::Relaxed);
-        let path = parent.join(format!(".openscreen-gif-{}-{nonce}.partial", std::process::id()));
+        let path = staging_path(parent, kind, nonce);
         match OpenOptions::new().write(true).create_new(true).open(&path) {
-            Ok(file) => break (StagedGif { path, published: false }, file),
+            Ok(file) => break (StagedOutput { path, published: false }, file),
             Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
-            Err(e) => return Err(e).context("creating temporary GIF output"),
+            Err(e) => return Err(e).with_context(|| format!("creating temporary {kind} output")),
         }
     };
     let result = render(file, &staged.path).and_then(|stats| {
         control.begin_commit()?;
-        fs::rename(&staged.path, target).context("publishing completed GIF output")?;
+        fs::rename(&staged.path, target)
+            .with_context(|| format!("publishing completed {kind} output"))?;
         staged.published = true;
         Ok(stats)
     });
@@ -95,7 +149,7 @@ pub(crate) fn with_gif_output<T>(
             if cleanup.kind() != std::io::ErrorKind::NotFound {
                 // A failed cleanup is an error, even if cancellation caused it.
                 // Do not report a clean cancellation while leaving an output.
-                bail!("could not remove partial GIF {}: {cleanup}", staged.path.display());
+                bail!("could not remove partial {kind} {}: {cleanup}", staged.path.display());
             }
         }
     }
@@ -195,6 +249,47 @@ mod tests {
         }).is_err());
         assert!(target.is_dir());
         dir.assert_only("destination-directory");
+    }
+
+    /// The MP4 export's shape: the writer opens the staging path itself.
+    #[test]
+    fn a_path_writer_publishes_on_success_and_never_truncates_the_target_on_failure() {
+        let dir = TestDir::new();
+        let target = dir.0.join("out.mp4");
+        fs::write(&target, b"previous export").unwrap();
+        let control = ExportControl::default();
+        let failed = with_staged_output(&target, &control, "mp4", |path| -> Result<()> {
+            assert_eq!(path.parent(), Some(dir.0.as_path()));
+            assert!(path.to_string_lossy().ends_with(".partial"));
+            fs::write(path, b"half a file")?;
+            bail!("encoder lost")
+        });
+        assert_eq!(failed.unwrap_err().to_string(), "encoder lost");
+        assert_eq!(fs::read(&target).unwrap(), b"previous export");
+        dir.assert_only("out.mp4");
+
+        let control = ExportControl::default();
+        let stats = with_staged_output(&target, &control, "mp4", |path| {
+            fs::write(path, b"new export")?;
+            Ok(3)
+        });
+        assert_eq!(stats.unwrap(), 3);
+        assert_eq!(fs::read(&target).unwrap(), b"new export");
+        dir.assert_only("out.mp4");
+    }
+
+    #[test]
+    fn a_cancelled_path_writer_leaves_no_partial_file() {
+        let dir = TestDir::new();
+        let target = dir.0.join("out.mp4");
+        let control = ExportControl::default();
+        let result = with_staged_output(&target, &control, "mp4", |path| -> Result<()> {
+            fs::write(path, b"frames")?;
+            assert!(control.cancel());
+            control.check()
+        });
+        assert!(result.unwrap_err().is::<ExportCancelled>());
+        assert_eq!(fs::read_dir(&dir.0).unwrap().count(), 0);
     }
 
     #[test]

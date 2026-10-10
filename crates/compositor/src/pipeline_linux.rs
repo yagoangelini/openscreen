@@ -1115,6 +1115,7 @@ pub fn run_composited_multi(
                 progress(n + 1);
                 Ok(())
             },
+            &mut |_, _, _| Ok(()),
             &mut |clip_index, source_end_sec, frames_in_clip, speed_segments| {
                 clip_frame_counts[clip_index] = frames_in_clip;
                 let clip = &clips[clip_index];
