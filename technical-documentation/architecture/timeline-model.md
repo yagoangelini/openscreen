@@ -178,7 +178,13 @@ pan, which `regions.rs` plays as a connected pan between the two regions. The zo
 writes carry `source: "auto"` and no focus mode of their own: how they move (camera mode,
 ramp length and easing, pan) is the project's auto-zoom settings, resolved at render time
 by `resolveZoomRendering` (`zoom-motion.ts`) into each region's `motion` and focus mode, so
-one setting switches them all. Zooms drawn by hand keep the classic motion.
+one setting switches them all. Zooms drawn by hand take the same motion, and the project's
+camera mode unless the region sets a focus mode of its own. How long the camera must stay
+wide before it may zoom in again is the `minWideSec` setting (2.5 s calm, or 1.5 s;
+`MIN_WIDE_SEC_OPTIONS`), carried into the planner as `PlanContext.minWideMs`. The sliders
+only act through *Replan*. On Windows the planner also sees the menus a web page draws, which
+no window event reports: `framePopups.ts` asks `ocr-scan.exe --popups` to compare the frame
+150 ms before each click with the frame 600 ms after it, and treats a changed box as a popup.
 
 ### The same ambiguity in the transcript pane
 

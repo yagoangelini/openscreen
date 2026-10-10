@@ -2,6 +2,14 @@
 
 OpenScreen is a free, open-source screen recorder and video editor (Electron + React + TypeScript, with a native Rust compositor) maintained as a continuation of the original v1.5.0 release. This file is the canonical guide for any AI coding agent working in this repo.
 
+## This checkout is a fork: read docs/HANDOFF.md first
+
+This working copy is **yagoangelini/openscreen**, a personal fork tuned for recording pt-BR tutorials on Windows (Dell G15: Intel panel + RTX 3060 on HDMI). Its current state, the feature-to-file map, the pending list and the pitfalls that already cost time are in [`docs/HANDOFF.md`](docs/HANDOFF.md); the decisions behind them are in [`docs/PLANO-FORK.md`](docs/PLANO-FORK.md). Where this file and the fork disagree, the fork wins:
+
+- **PRs and pushes go to `yagoangelini/openscreen` only**, never to the upstream repo (`gh pr create --repo yagoangelini/openscreen`).
+- **GitHub Actions are off on the fork** (no billing). Nothing below that says "CI runs" happens there: run the validation gate locally, and release with the local flow in `docs/HANDOFF.md`, not `prerelease.yml` / `promote.yml`.
+- The user's installed OpenScreen is their daily tool: test with an isolated dev instance (`--user-data-dir`), and never kill a process you did not start.
+
 ## Setup commands
 
 - Install deps: `npm install` (Node 24.15.0, npm 11.12.1 — see `package.json#engines`)
@@ -47,7 +55,7 @@ OpenScreen is a free, open-source screen recorder and video editor (Electron + R
 
 ### When to run what
 
-The full unit suite is ~1670 tests over 140 files and takes over a minute. Running it after
+The full unit suite is ~3850 tests over ~295 files and takes over a minute. Running it after
 every edit is the main way an agent turns a 5-minute task into a 30-minute one, so don't:
 
 - **While you work** — run only what you touched: `npx vitest --run src/lib/foo.test.ts`,
@@ -156,6 +164,8 @@ The other way in is the editor's **Record** mode: the HUD's settings plus *Auto-
 - PR template is in `.github/pull_request_template.md`.
 
 ## Release flow
+
+*(Upstream. The fork releases locally — see [`docs/HANDOFF.md`](docs/HANDOFF.md).)*
 
 Two `workflow_dispatch` workflows: cut an RC, then promote it to stable. **Full operational guide, branch contract, cherry-pick rules, and manual fallback: `technical-documentation/engineering/release-and-secrets.md`.** Read it before touching a release.
 

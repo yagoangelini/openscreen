@@ -28,6 +28,14 @@ flowchart LR
     N --> E["Export"]
 ```
 
+Three optional layers sit on the cursor, all drawn by the compositor in the preview and the export alike:
+
+- **Click ring** (`cursor.clickRing`, editor setting `cursorClickRing`): an expanding ring at each click, laid on an identity plane so it stays round under the 3D camera (`click_ring` in `SceneCursor`, extent `CLICK_RING_EXTENT`). On in new projects. The older *click impact* effect (shader mode 16) is a separate setting and stays off.
+- **Spotlight** (`cursor.spotlight`, `cursorSpotlight`): the whole frame dimmed outside a soft disc on the smoothed pointer (`spotlight_cb`, shader mode 19, drawn first so the rings sit on top). Off by default. **Direct3D 11 only**: the Metal and wgpu shaders have no mode 19, so `frame_geometry.rs` emits it only under `cfg!(target_os = "windows")`.
+- **Shortcut plates** (`cursorShowKeystrokes`): the chords the Windows sampler named (Ctrl/Alt/Win + key; see Input signals) become text plates at the bottom of the frame. `keystrokes.ts` reads them at import (`keystrokesFromCursorSamples`, kept free of `@/` imports because the main process loads it) into `asset.keystrokes`; `keystrokeRegions.ts` turns them into text regions in `buildSceneDescription`. On in new projects.
+
+A crash-safe copy of the samples is kept while recording: `CursorCheckpointWriter` (`electron/recording/cursorCheckpoint.ts`) appends them to `<take>.mp4.cursor.ndjson` every 5 s, and a take recovered at launch rebuilds its telemetry from that file. If the sampler process dies, the session restarts it up to `MAX_HELPER_RESTARTS` (5) times, 500 ms apart (`windowsNativeRecordingSession.ts`); after that it only logs `restart-gave-up` — the app does not tell the user yet.
+
 ## Settings
 
 The cursor settings pane is `CursorPane` in `src/components/ai-edition/RightPanes.tsx`; the current v4 inspector exposes it through the cursor facet in `src/components/ai-edition/v4/FloatingInspector.tsx:57-63,1073`. It controls showing the cursor, clipping it to the canvas, theme, size, smoothing, motion blur, and click bounce. `RightPanes.tsx:1592-1692` binds those controls to editor settings and forwards the rendering parameters to the native compositor. Preview and export both render through that compositor, so a change shows in both.

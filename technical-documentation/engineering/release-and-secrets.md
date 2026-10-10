@@ -4,6 +4,11 @@ OpenScreen's release machinery lives in `.github/workflows/prerelease.yml`, `pro
 
 ## Release flow
 
+> **Fork (yagoangelini/openscreen):** none of the workflows below run there — Actions are off.
+> Its releases are built and published from the developer's machine; the steps are in
+> [`docs/HANDOFF.md`](../../docs/HANDOFF.md#release-local). The installed app updates from the
+> fork's GitHub releases (`publish` in `electron-builder.json5`).
+
 ### Cut a release candidate
 
 Run the `Cut a release candidate` workflow (`prerelease.yml`) with:

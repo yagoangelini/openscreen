@@ -135,7 +135,7 @@ Medido pela investigação: hoje passam cerca de 5 a 8 s entre o clique em grava
 
 ## Decisões da manhã (10/10/2026)
 
-- **Faixas separadas:** gravar mic e sistema em duas faixas no MP4; o editor mostra dois volumes (Voz e Computador) e a exportação mixa com eles.
+- **Faixas separadas:** gravar mic e sistema em duas faixas no MP4; o editor mostra dois volumes (Voz e Computador) e a exportação mixa com eles. *(Implementado como dois `.m4a` ao lado do MP4; ver Status.)*
 - **Redução de ruído:** recomendar o microfone do NVIDIA Broadcast (dica no app quando ele existir). Sem filtro próprio.
 - **Glossário:** dicionário de correção depois da transcrição, com lista padrão editável.
 - **Spotlight:** implementar, opcional na edição (desligado por padrão).
@@ -147,3 +147,127 @@ Medido pela investigação: hoje passam cerca de 5 a 8 s entre o clique em grava
 - **Esc/fechar a janela de exportação** durante um export pergunta antes de cancelar.
 - **Canal do microfone:** Automático mais escolha manual (Esquerdo, Direito, Mix).
 - **Impacto do clique:** continua desligado.
+
+## Status em 10/10/2026
+
+Conferido no código da v1.19.0, item por item. As colunas de status:
+
+- **Feito:** existe e está no código.
+- **Parcial:** existe, mas falta o que está na nota.
+- **Pendente:** não existe.
+
+O que fazer a seguir e como fazer está em [`HANDOFF.md`](HANDOFF.md).
+
+### O que ficou diferente do plano
+
+- **Faixas separadas.** As faixas de voz e de computador **não** estão dentro do MP4. São dois arquivos `.m4a` ao lado da gravação (`<take>.voice.m4a` e `<take>.system.m4a`), e o MP4 continua com a faixa mixada. O resultado para o usuário é o pedido: dois volumes no editor, e o export mixa com eles.
+- **Início armado durante a contagem.** Foi feito e depois **revertido** (commit c956ea4e): o Kaspersky põe em quarentena um gravador que fica esperando no stdin. Volta quando o usuário criar a exclusão.
+- **Modelo padrão da transcrição.** O large-v3-turbo **não** virou o padrão; o padrão continua `ggml-small-q8_0.bin`. Falta espaço em disco e a decisão de quando baixar.
+- **Spotlight.** Só existe no Windows (Direct3D 11). Os shaders Metal e wgpu não têm o modo 19.
+- **Preset "Tutorial".** Não há um seletor de preset com esse nome. O próprio padrão é o preset: 1,5x, transição de 1,1 s e no mínimo 2,5 s parado. Os sliders ajustam esses valores, e "restaurar padrão" volta a eles.
+- **Não incomodar.** É uma linha fixa no modo Record, com um botão que abre as notificações do Windows. Não aparece como aviso antes de cada gravação.
+
+### Fase 1 — Gravação nunca se perde
+
+| Item | Status | Nota |
+|---|---|---|
+| `capture-failed` e queda avisada | Feito | |
+| `recording-stopped` com `truncated`; cursor e sessão como melhor esforço | Feito | |
+| Salvar ao sair, Alt+F4 ou logoff | Feito | |
+| Confirmação no botão Sair do HUD | Pendente | Hoje o app salva ao sair, sem perguntar. |
+| Parar pela bandeja sem o HUD; `render-process-gone` | Feito | |
+| Recuperação de gravações ao abrir | Feito | Inclui o cursor salvo durante a gravação (`.cursor.ndjson`). |
+| Erros WinRT tratados | Parcial | `TryGetNextFrame` está protegido. `CreateFreeThreaded`, `CreateCaptureSession` e o caminho legado `onFrameArrived` não estão (`wgc_session.cpp`). |
+| Webcam travada não bloqueia a tela | Parcial | A tela é finalizada antes da webcam. Mas `webcamCapture.stop()` ainda roda antes, e só o watchdog de 8 s o limita; o MP4 fragmentado salva o take. |
+| GOP fixo | Feito | 2 s (`CODECAPI_AVEncMPVGOPSize`). |
+| Aviso no fallback; MP4 comum com hardware antes de software | Feito | |
+| Espaço em disco antes e durante | Feito | |
+| Pasta de gravações configurável | Feito | Padrão `Vídeos\OpenScreen`. |
+| Reiniciar e Cancelar pedem confirmação após 10 s | Feito | |
+| Modo reserva não apaga o arquivo | Feito | |
+
+### Fase 2 — Export robusto
+
+| Item | Status | Nota |
+|---|---|---|
+| Áudio em janelas, sem estouro de memória | Feito | |
+| `catch_unwind` e "a GPU foi reiniciada" | Feito | |
+| `.partial`, cancelar, fase "finalizando" | Feito | |
+| Menos memória de vídeo | Feito | O pool de decoders caiu de 32 para 24; o de encoder continua em 32. |
+| Pacote corrompido no fim, projeto ilegível ou vazio, fechar durante o export | Feito | |
+
+### Fase 3 — GPU
+
+| Item | Status | Nota |
+|---|---|---|
+| Compositor na GPU de alto desempenho, com variável de ambiente | Feito | |
+| NVENC primeiro, GPU no diagnóstico | Feito | |
+| Captura na GPU do monitor; NVENC/DXGI na RTX por padrão | Feito | |
+| Transcrição na RTX | Feito | |
+| Preferência "Alto desempenho" do Windows | Pendente | |
+
+### Fase 3.5 — Performance
+
+| Item | Status | Nota |
+|---|---|---|
+| Gravador armado durante a contagem | Revertido | Kaspersky. |
+| Leitor do cursor em paralelo | Feito | |
+| Webcam aberta só na contagem | Feito | |
+| Janela da contagem antecipada; cache do `reg.exe` | Feito | |
+| Contagem de 0, 3 ou 5 s | Feito | |
+| Poll do HUD | Pendente | Ainda a cada 32 ms. |
+| Medir a abertura do app | Pendente | |
+| Transcrição automática opcional | Parcial | Desligada por padrão, com opção. O whisper não roda em prioridade baixa e não espera o player parar. |
+
+### Fase 4 — Auto-zoom
+
+| Item | Status | Nota |
+|---|---|---|
+| Foco fixo, pan suave, modo de câmera para todos (inclusive os manuais) | Feito | |
+| Popups por UI Automation e menus de sites por diferença de quadros | Feito | |
+| Hover explicativo | Feito | |
+| Antecipação; digitação, clique direito, duplo e roda; volta a 1x | Feito | |
+| Preset calmo com sliders; abertura em 2,5 s ou 1,5 s | Feito | |
+| Primeira hora do cursor; `DWMWA_EXTENDED_FRAME_BOUNDS` | Feito | |
+
+### Fase 5 — Áudio e cursor
+
+| Item | Status | Nota |
+|---|---|---|
+| Reabrir o dispositivo que cai, com aviso | Feito | |
+| Sincronia pelo `qpcPosition`, fila com limite, compensar a diferença de relógio | Pendente | Fila sem limite (`AudioMixer::append`); `(void)qpcPosition`. |
+| Canal do mic Auto/L/R/Mix e limitador suave | Feito | |
+| Áudio a 320 kbps; voz e sistema separados | Feito | Separados como `.m4a` ao lado do MP4. |
+| Cursor gravado durante a gravação | Feito | |
+| Aviso no app quando o leitor do cursor desiste | Pendente | Hoje só vai para o log. |
+| Tempo limite por inatividade (transcrição e forma de onda) | Feito | |
+
+### Fase 6 — Fork e UX
+
+| Item | Status | Nota |
+|---|---|---|
+| Atualizações do fork; proteção contra downgrade | Feito | |
+| `appId` próprio | Pendente | Trocar muda a pasta de dados; precisa de migração. |
+| Atalhos: F12; dropdown; Caps Lock; fps real | Feito | |
+| Textos em pt-BR | Feito | |
+| Export 1440p; 1080p 16:9 por padrão | Feito | |
+| `.bak` e restauração | Feito | |
+| Projeto danificado na lista | Pendente | |
+
+### Fase 7 — Recursos novos
+
+| Item | Status | Nota |
+|---|---|---|
+| Destaque de clique | Feito | O anel; o "impacto" continua desligado. |
+| Spotlight | Feito | Só Windows. |
+| Atalhos na tela | Feito | |
+| Desfoque por OCR | Feito | |
+| Acelerar esperas (sugestão) | Feito | |
+| Marcador por atalho | Feito | |
+| Atalhos globais | Feito | |
+| Não incomodar | Parcial | Linha fixa no modo Record, não um aviso antes de gravar. |
+| Preset YouTube (−14 LUFS, 320 kbps) | Feito | |
+| Glossário e `.srt` | Feito | |
+| Modelo maior (turbo) | Pendente | |
+| Capítulos, com títulos por IA | Feito | |
+| Redução de ruído | Feito | Por decisão, é a dica do NVIDIA Broadcast, sem filtro próprio. |

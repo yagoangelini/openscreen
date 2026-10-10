@@ -186,6 +186,26 @@ run on the dedicated GPU. `OPENSCREEN_COMPOSITOR_ADAPTER=high-performance |
 minimum-power | default | <hex LUID>` overrides it; every device logs its
 adapter, and `gpuAdapterInfo()` reports it with the last export's encoder.
 
+### Audio: stems, loudness and the delivery extras
+
+The MP4's audio is AAC at 320 kbps (`AUDIO_BITRATE`, `audio.rs`). A clip whose asset has
+`audioStems` (see [recording.md](recording.md#output-files-and-sidecars)) is not read from
+the screen video's mixed track: `clip_source` (`audio_stream.rs`) opens the two stems, gives
+the voice its loudness gain plus `audio.voiceGainDb` and the computer sound only
+`audio.systemGainDb`, and sums them (`SumStream`). If either stem cannot be read, it warns and
+falls back to the mixed track. The preview does the same with Web Audio (`VirtualPreview`: the
+voice stem as the primary source, the system stem through its own gain node), and both gains
+are linear, which is what keeps the scene parity test honest.
+
+`withDeliveryLoudness` (`src/lib/ai-edition/deliveryLoudness.ts`) lifts the output trim by
+2 dB for an MP4 when the *YouTube loudness* option is on (the `youtubeLoudness` preference,
+on by default): voices are normalised to −16 LUFS for the edit, YouTube plays at −14. The
+preview is not touched. When an export finishes, the dialog offers the chapters
+(`chapters.ts`, copyable for a YouTube description, titles optionally rewritten by the
+agent's provider through `chapters.improveTitles`) and a `.srt` written beside the video
+(`documentToSrt` → `write-subtitles-beside`). Closing the dialog during an export asks
+first (`export-confirm-close`), and quitting the app while an export runs is guarded too.
+
 ## Cancellation, staging and failure (Windows)
 
 `exportMulti` takes an optional control (`createExportControl` /
