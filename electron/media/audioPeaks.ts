@@ -4,6 +4,7 @@ import { accessSync, constants as fsConstants, statSync } from "node:fs";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { app } from "electron";
+import { createInactivityTimer } from "./inactivityTimer";
 
 /**
  * Waveform peaks for the timeline, computed in the main process with ffmpeg.
@@ -45,8 +46,8 @@ const PCM_RATE = 16_000;
 const MAX_PEAK_BLOCKS = 24_000;
 const PEAK_BLOCKS_PER_SEC = 200;
 
-/** A recording whose audio takes longer than this to decode is not a recording,
- *  it is a wedged ffmpeg. ~30x the worst measured case. */
+/** This long without output is a wedged ffmpeg, not a recording. An inactivity
+ *  window rather than a total one: a 2-hour take can need longer than this end to end. */
 const DECODE_TIMEOUT_MS = 60_000;
 
 /**
@@ -234,21 +235,24 @@ async function decodePeaks(
 
 	return new Promise<Float32Array>((resolve, reject) => {
 		let stderr = "";
-		const timer = setTimeout(() => {
+		const timer = createInactivityTimer(DECODE_TIMEOUT_MS, () => {
 			child.kill("SIGKILL");
-			reject(new Error(`ffmpeg timed out after ${DECODE_TIMEOUT_MS}ms on ${filePath}`));
-		}, DECODE_TIMEOUT_MS);
+			reject(new Error(`ffmpeg produced no output for ${DECODE_TIMEOUT_MS}ms on ${filePath}`));
+		});
 
-		child.stdout.on("data", (c: Buffer) => folder.push(c));
+		child.stdout.on("data", (c: Buffer) => {
+			timer.touch();
+			folder.push(c);
+		});
 		child.stderr.on("data", (c: Buffer) => {
 			stderr = (stderr + c.toString()).slice(-2048);
 		});
 		child.once("error", (err) => {
-			clearTimeout(timer);
+			timer.clear();
 			reject(err);
 		});
 		child.once("close", (code) => {
-			clearTimeout(timer);
+			timer.clear();
 			// A file with no audio track exits non-zero. That is not an error worth
 			// surfacing — it is a clip that legitimately has no waveform — but it is
 			// the caller's job to decide, so it still rejects, with the reason.

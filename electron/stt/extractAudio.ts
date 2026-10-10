@@ -21,12 +21,14 @@
 
 import { spawn } from "node:child_process";
 import { resolveFfmpeg } from "../media/audioPeaks";
+import { createInactivityTimer } from "../media/inactivityTimer";
 import { STT_NATIVE_EXTRACTION_UNAVAILABLE } from "./transcriptionContract";
 
 /** What whisper.cpp wants, and what `decodePeaks` already asks ffmpeg for. */
 const SAMPLE_RATE = 16_000;
 
-/** Past this, it is not a recording — it is a wedged ffmpeg. Matches the peaks path. */
+/** This long WITHOUT output, it is a wedged ffmpeg. Matches the peaks path. Not a total
+ *  timeout: a long recording legitimately takes longer than this to decode end to end. */
 const EXTRACT_TIMEOUT_MS = 60_000;
 
 /**
@@ -98,17 +100,17 @@ export async function extractMono16kPcm(
 		const finish = (fn: () => void) => {
 			if (settled) return;
 			settled = true;
-			clearTimeout(timer);
+			timer.clear();
 			options.signal?.removeEventListener("abort", onAbort);
 			fn();
 		};
 
-		const timer = setTimeout(() => {
+		const timer = createInactivityTimer(EXTRACT_TIMEOUT_MS, () => {
 			child.kill("SIGKILL");
 			finish(() =>
-				reject(new Error(`ffmpeg timed out after ${EXTRACT_TIMEOUT_MS}ms on ${filePath}`)),
+				reject(new Error(`ffmpeg produced no output for ${EXTRACT_TIMEOUT_MS}ms on ${filePath}`)),
 			);
-		}, EXTRACT_TIMEOUT_MS);
+		});
 
 		const onAbort = () => {
 			child.kill("SIGKILL");
@@ -117,6 +119,7 @@ export async function extractMono16kPcm(
 		options.signal?.addEventListener("abort", onAbort, { once: true });
 
 		child.stdout.on("data", (c: Buffer) => {
+			timer.touch();
 			const buf = carry ? Buffer.concat([carry, c]) : c;
 			const usable = buf.length - (buf.length % 4);
 			if (usable > 0) {
