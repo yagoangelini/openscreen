@@ -88,7 +88,14 @@
 		"smartCutsNoSpeech": "Konuşma algılanmadı",
 		"smartCutsFailed": "Metne dökme başarısız — Medya bölümünden yeniden deneyin",
 		"addAudioTooltip": "Ses ekle",
-		"addedWord": "Eklenen kelime: \"{{word}}\" — arkasında ses yok"
+		"addedWord": "Eklenen kelime: \"{{word}}\" — arkasında ses yok",
+		"speedUpWaits": "Beklemeleri hızlandır",
+		"speedUpWaitsHint": "Sessiz ve hareketsiz bölümleri bulur, hangilerinin hızlanacağını siz seçersiniz",
+		"waitsFound": "Bulunan beklemeler: {{count}}",
+		"waitLength": "{{seconds}} sn",
+		"speedUpPicked": "Seçilenleri hızlandır ({{speed}}×)",
+		"noWaits": "Bu kayıtta uzun bekleme yok",
+		"waitsSpedUp": "Hızlandırılan beklemeler: {{count}}"
 	},
 	"audio": {
 		"addVoiceover": "Seslendirme ekle",

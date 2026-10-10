@@ -443,7 +443,7 @@
 		"regionPasted": "Region pasted",
 		"regionCopied": "Region copied",
 		"cameraCheckFailed": "Could not check for a camera recording near {{name}}",
-		"sensitiveBlurred": "{{count}} hassas alan otomatik olarak bulanıklaştırıldı. Zaman çizelgesinde kontrol edin."
+		"sensitiveBlurred": "Otomatik bulanıklaştırılan hassas alanlar: {{count}}. Zaman çizelgesinde kontrol edin."
 	},
 	"exportPipeline": {
 		"quality1440p": "1440p",
@@ -477,6 +477,14 @@
 		"copied": "Bölümler kopyalandı — video açıklamasına yapıştırın",
 		"copyFailed": "Bölümler kopyalanamadı",
 		"needThree": "YouTube bölümleri en az 3 olduğunda gösterir. Kayıt sırasında işaret ekleyin (Ctrl+Shift+F8).",
-		"fallbackTitle": "Bölüm {{index}}"
+		"fallbackTitle": "Bölüm {{index}}",
+		"improveWithAi": "Başlıkları yapay zekâyla iyileştir",
+		"aiHint": "Her bölümün dökümünü ajanda ayarlı yapay zekâ sağlayıcısına gönderir",
+		"aiFailed": "Başlıklar iyileştirilemedi"
+	},
+	"subtitlesFile": {
+		"save": "Altyazıları kaydet (.srt)",
+		"saved": "Altyazılar kaydedildi: {{path}}",
+		"failed": "Altyazılar kaydedilemedi"
 	}
 }

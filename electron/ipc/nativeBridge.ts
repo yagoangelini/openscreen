@@ -695,6 +695,27 @@ export function registerNativeBridgeHandlers(context: NativeBridgeContext) {
 									request.payload.sessionId,
 								),
 							);
+						case "chapters.improveTitles":
+							return createSuccessResponse(
+								requestId,
+								await aiEditionService.chaptersImproveTitles({
+									chapters: Array.isArray(request.payload?.chapters)
+										? request.payload.chapters
+												.filter(
+													(c) =>
+														c &&
+														typeof c.id === "string" &&
+														typeof c.draft === "string" &&
+														typeof c.transcript === "string",
+												)
+												.slice(0, 100)
+										: [],
+									language:
+										typeof request.payload?.language === "string"
+											? request.payload.language
+											: undefined,
+								}),
+							);
 						case "captions.translate":
 							return createSuccessResponse(
 								requestId,

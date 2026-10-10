@@ -443,7 +443,7 @@
 		"regionPasted": "Region pasted",
 		"regionCopied": "Region copied",
 		"cameraCheckFailed": "Could not check for a camera recording near {{name}}",
-		"sensitiveBlurred": "민감한 영역 {{count}}곳을 자동으로 흐리게 처리했습니다. 타임라인에서 확인하세요."
+		"sensitiveBlurred": "자동으로 흐리게 처리한 민감한 영역: {{count}}. 타임라인에서 확인하세요."
 	},
 	"exportPipeline": {
 		"quality1440p": "1440p",
@@ -477,6 +477,14 @@
 		"copied": "챕터를 복사했습니다 — 동영상 설명에 붙여넣으세요",
 		"copyFailed": "챕터를 복사할 수 없습니다",
 		"needThree": "YouTube는 챕터가 3개 이상일 때만 표시합니다. 녹화 중 마커(Ctrl+Shift+F8)를 추가하세요.",
-		"fallbackTitle": "챕터 {{index}}"
+		"fallbackTitle": "챕터 {{index}}",
+		"improveWithAi": "AI로 제목 다듬기",
+		"aiHint": "각 챕터의 대본을 에이전트에 설정된 AI 제공자에게 보냅니다",
+		"aiFailed": "제목을 다듬을 수 없습니다"
+	},
+	"subtitlesFile": {
+		"save": "자막 저장 (.srt)",
+		"saved": "자막을 저장했습니다: {{path}}",
+		"failed": "자막을 저장할 수 없습니다"
 	}
 }

@@ -443,7 +443,7 @@
 		"regionPasted": "Bereich eingefügt",
 		"regionCopied": "Bereich kopiert",
 		"cameraCheckFailed": "Neben {{name}} konnte keine Kameraaufnahme gesucht werden",
-		"sensitiveBlurred": "{{count}} sensible Bereiche wurden automatisch verwischt. Prüfe sie in der Zeitleiste."
+		"sensitiveBlurred": "Automatisch verwischte sensible Bereiche: {{count}}. Prüfe sie in der Zeitleiste."
 	},
 	"exportPipeline": {
 		"quality1440p": "1440p",
@@ -477,6 +477,14 @@
 		"copied": "Kapitel kopiert — in die Videobeschreibung einfügen",
 		"copyFailed": "Kapitel konnten nicht kopiert werden",
 		"needThree": "YouTube zeigt Kapitel erst ab 3 an. Setze beim Aufnehmen Markierungen (Strg+Umschalt+F8).",
-		"fallbackTitle": "Kapitel {{index}}"
+		"fallbackTitle": "Kapitel {{index}}",
+		"improveWithAi": "Titel mit KI verbessern",
+		"aiHint": "Sendet das Transkript jedes Kapitels an den im Agenten eingerichteten KI-Anbieter",
+		"aiFailed": "Die Titel konnten nicht verbessert werden"
+	},
+	"subtitlesFile": {
+		"save": "Untertitel speichern (.srt)",
+		"saved": "Untertitel gespeichert: {{path}}",
+		"failed": "Untertitel konnten nicht gespeichert werden"
 	}
 }

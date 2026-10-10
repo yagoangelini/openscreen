@@ -443,7 +443,7 @@
 		"regionPasted": "Region pasted",
 		"regionCopied": "Region copied",
 		"cameraCheckFailed": "Could not check for a camera recording near {{name}}",
-		"sensitiveBlurred": "تم تمويه {{count}} منطقة حساسة تلقائيًا. راجعها على المخطط الزمني."
+		"sensitiveBlurred": "المناطق الحساسة التي مُوِّهت تلقائيًا: {{count}}. راجعها على المخطط الزمني."
 	},
 	"exportPipeline": {
 		"quality1440p": "1440p",
@@ -477,6 +477,14 @@
 		"copied": "تم نسخ الفصول — الصقها في وصف الفيديو",
 		"copyFailed": "تعذّر نسخ الفصول",
 		"needThree": "لا يعرض YouTube الفصول إلا إذا كانت 3 على الأقل. أضف علامات (Ctrl+Shift+F8) أثناء التسجيل.",
-		"fallbackTitle": "الفصل {{index}}"
+		"fallbackTitle": "الفصل {{index}}",
+		"improveWithAi": "تحسين العناوين بالذكاء الاصطناعي",
+		"aiHint": "يرسل نص كل فصل إلى مزوّد الذكاء الاصطناعي المضبوط في الوكيل",
+		"aiFailed": "تعذّر تحسين العناوين"
+	},
+	"subtitlesFile": {
+		"save": "حفظ الترجمة (.srt)",
+		"saved": "تم حفظ الترجمة: {{path}}",
+		"failed": "تعذّر حفظ الترجمة"
 	}
 }

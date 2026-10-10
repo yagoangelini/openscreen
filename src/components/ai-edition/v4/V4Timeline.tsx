@@ -2,6 +2,7 @@ import {
 	AudioLines,
 	Clock,
 	Crosshair,
+	FastForward,
 	Loader2,
 	Maximize2,
 	MessageSquare,
@@ -68,6 +69,12 @@ import {
 	resolveTimelineSpanToTrim,
 	ventilateTimelineSpanToTrims,
 } from "@/lib/ai-edition/timeline/trim-mapping";
+import {
+	findWaits,
+	WAIT_SPEED,
+	type WaitSpan,
+	waitSpeedRegions,
+} from "@/lib/ai-edition/timeline/waits";
 import { formatBinding } from "@/lib/shortcuts";
 import { nativeBridgeClient } from "@/native/client";
 import { TransportBar } from "../TransportBar";
@@ -669,6 +676,12 @@ export function V4Timeline({
 	const { settings, set: setSettings } = useEditorSettings();
 
 	const [autoEnhanceOpen, setAutoEnhanceOpen] = useState(false);
+	// The waits found by "Speed up waits", each with whether the user keeps it. Shown in
+	// the auto-enhance menu in place of its rows until applied or dismissed.
+	const [waitPicks, setWaitPicks] = useState<{
+		assetId: string;
+		items: Array<{ wait: WaitSpan; atSec: number; picked: boolean }>;
+	} | null>(null);
 	const [audioMenuOpen, setAudioMenuOpen] = useState(false);
 	const [autoBusy, setAutoBusy] = useState(false);
 	// The AI cut pass reads the transcript, and the transcript is produced in the
@@ -1597,6 +1610,72 @@ export function V4Timeline({
 		}
 	}, [tl, t]);
 
+	// Auto-enhance option 3 -- the waits in the take, found from its audio and cursor and
+	// only ever offered: nothing is sped up until the user says which.
+	const findWaitsInTake = useCallback(async () => {
+		const document = useProjectStore.getState().document;
+		const asset =
+			document?.assets.find((a) => a.id === document.project.primaryAssetId) ??
+			document?.assets.find((a) => a.kind === "video");
+		if (!document || !asset || document.timeline.clips.length === 0 || !asset.durationSec) {
+			toast.error(t("toolbar.importRecordingFirst"));
+			setAutoEnhanceOpen(false);
+			return;
+		}
+		setAutoBusy(true);
+		try {
+			const [peaks, telemetry] = await Promise.all([
+				window.electronAPI
+					?.getAudioPeaks?.(asset.originalPath, asset.durationSec)
+					.then((r) => r.peaks ?? null)
+					.catch(() => null) ?? Promise.resolve(null),
+				nativeBridgeClient.cursor.getTelemetry(asset.originalPath).catch(() => null),
+			]);
+			const waits = findWaits({
+				peaks: peaks ?? null,
+				durationSec: asset.durationSec,
+				telemetry: telemetry ?? null,
+			});
+			const items = waits.flatMap((wait) => {
+				const [span] = sourceSpanToTimelineSpans(
+					asset.id,
+					wait.startSec,
+					wait.endSec,
+					document.timeline.clips,
+				);
+				return span ? [{ wait, atSec: span.startSec, picked: true }] : [];
+			});
+			if (items.length === 0) {
+				setAutoEnhanceOpen(false);
+				toast.info(t("toolbar.noWaits"));
+				return;
+			}
+			setWaitPicks({ assetId: asset.id, items });
+		} finally {
+			setAutoBusy(false);
+		}
+	}, [t]);
+
+	const applyWaitSpeedUps = useCallback(async () => {
+		const picks = waitPicks;
+		setWaitPicks(null);
+		setAutoEnhanceOpen(false);
+		const document = useProjectStore.getState().document;
+		if (!picks || !document) return;
+		const chosen = picks.items.filter((item) => item.picked).map((item) => item.wait);
+		const regions = waitSpeedRegions(document, picks.assetId, chosen, createId);
+		if (regions.length === 0) return;
+		const legacy = (document.legacyEditor as Record<string, unknown>) ?? {};
+		const prev = (legacy.speedRegions as unknown[]) ?? [];
+		const saved = await useProjectStore
+			.getState()
+			.saveDocument(
+				{ ...document, legacyEditor: { ...legacy, speedRegions: [...prev, ...regions] } },
+				{ history: true },
+			);
+		if (saved) toast.success(t("toolbar.waitsSpedUp", { count: regions.length }));
+	}, [waitPicks, t]);
+
 	// Auto-enhance option 2 — hand a generic prompt to the AI agent (smart
 	// zooms + cuts) via the chat prompt-bus. The chat panel owns the outcome
 	// toast: submitting is not the same as being accepted (no usable provider
@@ -1813,7 +1892,13 @@ export function V4Timeline({
 					// know to supply it. Nesting under the root provider is harmless.
 					<TooltipProvider>
 						<div className={styles.tlTools} role="toolbar" aria-label={t("toolbar.timelineTools")}>
-							<Popover open={autoEnhanceOpen} onOpenChange={setAutoEnhanceOpen}>
+							<Popover
+								open={autoEnhanceOpen}
+								onOpenChange={(open) => {
+									setAutoEnhanceOpen(open);
+									if (!open) setWaitPicks(null);
+								}}
+							>
 								<Tooltip content={t("toolbar.autoEnhance")}>
 									<PopoverTrigger asChild>
 										<button
@@ -1836,46 +1921,122 @@ export function V4Timeline({
 									animated={false}
 									className="w-auto border-0 bg-transparent p-0 shadow-none"
 								>
-									<div
-										className={styles.recMenu}
-										style={{ position: "relative", bottom: "auto", width: 244 }}
-									>
-										<button
-											type="button"
-											className={styles.recMenuRow}
-											onClick={() => void runAutoZooms()}
+									{waitPicks ? (
+										<div
+											className={styles.recMenu}
+											style={{ position: "relative", bottom: "auto", width: 260, padding: 10 }}
+											data-testid="wait-picks"
 										>
-											<ZoomIn size={16} style={{ flexShrink: 0 }} />
-											<span style={{ display: "flex", flexDirection: "column", gap: 1 }}>
-												<span style={{ fontWeight: 600 }}>{t("toolbar.automaticZooms")}</span>
-												<span style={{ fontSize: 12, color: "var(--muted)" }}>
-													{t("toolbar.automaticZoomsHint")}
+											<div style={{ fontWeight: 600, marginBottom: 6 }}>
+												{t("toolbar.waitsFound", { count: waitPicks.items.length })}
+											</div>
+											<div style={{ maxHeight: 220, overflowY: "auto" }}>
+												{waitPicks.items.map((item, index) => (
+													<label
+														key={`${item.wait.startSec}`}
+														style={{
+															display: "flex",
+															alignItems: "center",
+															gap: 8,
+															padding: "3px 0",
+															fontSize: 12.5,
+															fontVariantNumeric: "tabular-nums",
+															cursor: "pointer",
+														}}
+													>
+														<input
+															type="checkbox"
+															checked={item.picked}
+															onChange={(event) => {
+																const picked = event.target.checked;
+																setWaitPicks((current) =>
+																	current
+																		? {
+																				...current,
+																				items: current.items.map((it, i) =>
+																					i === index ? { ...it, picked } : it,
+																				),
+																			}
+																		: current,
+																);
+															}}
+														/>
+														{formatSec(item.atSec)} ·{" "}
+														{t("toolbar.waitLength", {
+															seconds: Math.round(item.wait.endSec - item.wait.startSec),
+														})}
+													</label>
+												))}
+											</div>
+											<button
+												type="button"
+												className={styles.recMenuRow}
+												style={{ marginTop: 6, justifyContent: "center", fontWeight: 600 }}
+												disabled={!waitPicks.items.some((item) => item.picked)}
+												onClick={() => void applyWaitSpeedUps()}
+											>
+												<FastForward size={16} />
+												{t("toolbar.speedUpPicked", { speed: WAIT_SPEED })}
+											</button>
+										</div>
+									) : (
+										<div
+											className={styles.recMenu}
+											style={{ position: "relative", bottom: "auto", width: 244 }}
+										>
+											<button
+												type="button"
+												className={styles.recMenuRow}
+												onClick={() => void runAutoZooms()}
+											>
+												<ZoomIn size={16} style={{ flexShrink: 0 }} />
+												<span style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+													<span style={{ fontWeight: 600 }}>{t("toolbar.automaticZooms")}</span>
+													<span style={{ fontSize: 12, color: "var(--muted)" }}>
+														{t("toolbar.automaticZoomsHint")}
+													</span>
 												</span>
-											</span>
-										</button>
-										<button
-											type="button"
-											className={styles.recMenuRow}
-											onClick={runAiEnhance}
-											disabled={smartCutsBlocked}
-											title={
-												transcriptGate.reason === "failed" ? transcriptGate.message : undefined
-											}
-											style={
-												smartCutsBlocked ? { opacity: 0.55, cursor: "not-allowed" } : undefined
-											}
-										>
-											{transcriptGate.state === "pending" ? (
-												<Loader2 size={16} className="animate-spin" style={{ flexShrink: 0 }} />
-											) : (
-												<Sparkles size={16} style={{ flexShrink: 0 }} />
-											)}
-											<span style={{ display: "flex", flexDirection: "column", gap: 1 }}>
-												<span style={{ fontWeight: 600 }}>{t("toolbar.smartZoomsAndCuts")}</span>
-												<span style={{ fontSize: 12, color: "var(--muted)" }}>{smartCutsHint}</span>
-											</span>
-										</button>
-									</div>
+											</button>
+											<button
+												type="button"
+												className={styles.recMenuRow}
+												onClick={runAiEnhance}
+												disabled={smartCutsBlocked}
+												title={
+													transcriptGate.reason === "failed" ? transcriptGate.message : undefined
+												}
+												style={
+													smartCutsBlocked ? { opacity: 0.55, cursor: "not-allowed" } : undefined
+												}
+											>
+												{transcriptGate.state === "pending" ? (
+													<Loader2 size={16} className="animate-spin" style={{ flexShrink: 0 }} />
+												) : (
+													<Sparkles size={16} style={{ flexShrink: 0 }} />
+												)}
+												<span style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+													<span style={{ fontWeight: 600 }}>{t("toolbar.smartZoomsAndCuts")}</span>
+													<span style={{ fontSize: 12, color: "var(--muted)" }}>
+														{smartCutsHint}
+													</span>
+												</span>
+											</button>
+											<button
+												type="button"
+												className={styles.recMenuRow}
+												data-testid="find-waits"
+												onClick={() => void findWaitsInTake()}
+											>
+												<FastForward size={16} style={{ flexShrink: 0 }} />
+												<span style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+													<span style={{ fontWeight: 600 }}>{t("toolbar.speedUpWaits")}</span>
+													<span style={{ fontSize: 12, color: "var(--muted)" }}>
+														{t("toolbar.speedUpWaitsHint")}
+													</span>
+												</span>
+											</button>
+										</div>
+									)}
 								</PopoverContent>
 							</Popover>
 							<span className={styles.tlToolSep} aria-hidden />

@@ -88,7 +88,14 @@
 		"smartCutsNoSpeech": "Речь не обнаружена",
 		"smartCutsFailed": "Не удалось расшифровать — повторите из раздела «Медиа»",
 		"addAudioTooltip": "Добавить аудио",
-		"addedWord": "Добавленное слово: «{{word}}» — за ним нет звука"
+		"addedWord": "Добавленное слово: «{{word}}» — за ним нет звука",
+		"speedUpWaits": "Ускорить ожидания",
+		"speedUpWaitsHint": "Находит тихие участки без движения, а вы выбираете, какие ускорить",
+		"waitsFound": "Найдено ожиданий: {{count}}",
+		"waitLength": "{{seconds}} с",
+		"speedUpPicked": "Ускорить выбранные ({{speed}}×)",
+		"noWaits": "В этой записи нет долгих ожиданий",
+		"waitsSpedUp": "Ускорено ожиданий: {{count}}"
 	},
 	"audio": {
 		"addVoiceover": "Добавить озвучку",

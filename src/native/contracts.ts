@@ -373,6 +373,14 @@ export interface AiEditionCaptionTranslateResult {
 	error?: string;
 }
 
+/** Result of "improve chapter titles": chapter id -> title, for the chapter text box. */
+export interface AiEditionChapterTitlesResult {
+	success: boolean;
+	titles: Record<string, string>;
+	model?: string;
+	error?: string;
+}
+
 // ---- Style presets domain -------------------------------------------------
 // One `<name>.openscreenpreset` file per preset in Documents/OpenScreen Presets. The
 // shape and its validation live in src/lib/ai-edition/stylePresets.ts, shared with main.
@@ -681,6 +689,16 @@ export type NativeBridgeRequest =
 			domain: "aiEdition";
 			action: "chat.compactNow";
 			payload: { projectId: string; sessionId: string };
+			requestId?: string;
+	  }
+	| {
+			domain: "aiEdition";
+			action: "chapters.improveTitles";
+			/** Stateless, like the caption translation: nothing is written to the document. */
+			payload: {
+				chapters: Array<{ id: string; draft: string; transcript: string }>;
+				language?: string;
+			};
 			requestId?: string;
 	  }
 	| {

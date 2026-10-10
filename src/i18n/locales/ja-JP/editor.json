@@ -443,7 +443,7 @@
 		"regionPasted": "Region pasted",
 		"regionCopied": "Region copied",
 		"cameraCheckFailed": "Could not check for a camera recording near {{name}}",
-		"sensitiveBlurred": "{{count}} か所の機密情報を自動でぼかしました。タイムラインで確認してください。"
+		"sensitiveBlurred": "自動でぼかした機密情報: {{count}}。タイムラインで確認してください。"
 	},
 	"exportPipeline": {
 		"quality1440p": "1440p",
@@ -477,6 +477,14 @@
 		"copied": "チャプターをコピーしました。動画の説明欄に貼り付けてください",
 		"copyFailed": "チャプターをコピーできませんでした",
 		"needThree": "YouTube のチャプターは 3 つ以上で表示されます。録画中にマーカー (Ctrl+Shift+F8) を追加してください。",
-		"fallbackTitle": "チャプター {{index}}"
+		"fallbackTitle": "チャプター {{index}}",
+		"improveWithAi": "AI でタイトルを改善",
+		"aiHint": "各チャプターの文字起こしを、エージェントに設定した AI プロバイダーに送信します",
+		"aiFailed": "タイトルを改善できませんでした"
+	},
+	"subtitlesFile": {
+		"save": "字幕を保存 (.srt)",
+		"saved": "字幕を保存しました: {{path}}",
+		"failed": "字幕を保存できませんでした"
 	}
 }

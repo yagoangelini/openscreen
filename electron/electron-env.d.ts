@@ -75,6 +75,11 @@ interface Window {
 		getRecordingsFolder: () => Promise<{ folder: string; isDefault: boolean }>;
 		/** Opens Windows' notification settings (Do not disturb). Windows only. */
 		openNotificationSettings: () => Promise<{ success: boolean }>;
+		/** Writes <video>.srt beside an exported .mp4. */
+		writeSubtitlesBeside?: (
+			videoPath: string,
+			text: string,
+		) => Promise<{ success: boolean; path?: string; error?: string }>;
 		/** OCR over a take, for the privacy blur: `ocr-scan.exe`'s NDJSON. Windows only. */
 		scanRecordingText?: (videoPath: string) => Promise<import("./recording/ocrScan").OcrScanResult>;
 		chooseRecordingsFolder: () => Promise<{ canceled: true } | { canceled: false; folder: string }>;

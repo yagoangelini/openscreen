@@ -443,7 +443,7 @@
 		"regionPasted": "Region pasted",
 		"regionCopied": "Region copied",
 		"cameraCheckFailed": "Could not check for a camera recording near {{name}}",
-		"sensitiveBlurred": "已自動模糊 {{count}} 處敏感區域，請在時間軸上檢查。"
+		"sensitiveBlurred": "已自動模糊的敏感區域：{{count}}。請在時間軸上檢查。"
 	},
 	"exportPipeline": {
 		"quality1440p": "1440p",
@@ -477,6 +477,14 @@
 		"copied": "章節已複製——貼到影片說明中",
 		"copyFailed": "無法複製章節",
 		"needThree": "YouTube 至少需要 3 個章節才會顯示。錄製時以 Ctrl+Shift+F8 加入標記。",
-		"fallbackTitle": "第 {{index}} 章"
+		"fallbackTitle": "第 {{index}} 章",
+		"improveWithAi": "用 AI 改善標題",
+		"aiHint": "將每章的逐字稿傳送給在代理中設定的 AI 服務商",
+		"aiFailed": "無法改善標題"
+	},
+	"subtitlesFile": {
+		"save": "儲存字幕 (.srt)",
+		"saved": "字幕已儲存：{{path}}",
+		"failed": "無法儲存字幕"
 	}
 }

@@ -443,7 +443,7 @@
 		"regionPasted": "Region pasted",
 		"regionCopied": "Region copied",
 		"cameraCheckFailed": "Could not check for a camera recording near {{name}}",
-		"sensitiveBlurred": "Đã tự động làm mờ {{count}} vùng nhạy cảm. Hãy kiểm tra trên dòng thời gian."
+		"sensitiveBlurred": "Vùng nhạy cảm đã tự động làm mờ: {{count}}. Hãy kiểm tra trên dòng thời gian."
 	},
 	"exportPipeline": {
 		"quality1440p": "1440p",
@@ -477,6 +477,14 @@
 		"copied": "Đã sao chép chương — dán vào mô tả video",
 		"copyFailed": "Không thể sao chép chương",
 		"needThree": "YouTube chỉ hiển thị chương khi có ít nhất 3. Thêm điểm đánh dấu (Ctrl+Shift+F8) khi ghi.",
-		"fallbackTitle": "Chương {{index}}"
+		"fallbackTitle": "Chương {{index}}",
+		"improveWithAi": "Cải thiện tiêu đề bằng AI",
+		"aiHint": "Gửi bản ghi của từng chương tới nhà cung cấp AI đã cấu hình trong agent",
+		"aiFailed": "Không thể cải thiện tiêu đề"
+	},
+	"subtitlesFile": {
+		"save": "Lưu phụ đề (.srt)",
+		"saved": "Đã lưu phụ đề: {{path}}",
+		"failed": "Không thể lưu phụ đề"
 	}
 }

@@ -443,7 +443,7 @@
 		"regionPasted": "Region pasted",
 		"regionCopied": "Region copied",
 		"cameraCheckFailed": "Could not check for a camera recording near {{name}}",
-		"sensitiveBlurred": "已自动模糊 {{count}} 处敏感区域，请在时间线上检查。"
+		"sensitiveBlurred": "已自动模糊的敏感区域：{{count}}。请在时间线上检查。"
 	},
 	"exportPipeline": {
 		"quality1440p": "1440p",
@@ -477,6 +477,14 @@
 		"copied": "章节已复制——粘贴到视频说明中",
 		"copyFailed": "无法复制章节",
 		"needThree": "YouTube 至少需要 3 个章节才会显示。录制时用 Ctrl+Shift+F8 添加标记。",
-		"fallbackTitle": "第 {{index}} 章"
+		"fallbackTitle": "第 {{index}} 章",
+		"improveWithAi": "用 AI 优化标题",
+		"aiHint": "将每章的转录发送给在智能体中配置的 AI 服务商",
+		"aiFailed": "无法优化标题"
+	},
+	"subtitlesFile": {
+		"save": "保存字幕 (.srt)",
+		"saved": "字幕已保存：{{path}}",
+		"failed": "无法保存字幕"
 	}
 }

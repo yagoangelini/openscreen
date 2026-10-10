@@ -443,7 +443,7 @@
 		"regionPasted": "Región pegada",
 		"regionCopied": "Región copiada",
 		"cameraCheckFailed": "No se pudo buscar una grabación de cámara junto a {{name}}",
-		"sensitiveBlurred": "Se difuminaron {{count}} áreas sensibles automáticamente. Revísalas en la línea de tiempo."
+		"sensitiveBlurred": "Áreas sensibles difuminadas automáticamente: {{count}}. Revísalas en la línea de tiempo."
 	},
 	"exportPipeline": {
 		"quality1440p": "1440p",
@@ -477,6 +477,14 @@
 		"copied": "Capítulos copiados: pégalos en la descripción del vídeo",
 		"copyFailed": "No se pudieron copiar los capítulos",
 		"needThree": "YouTube solo muestra capítulos si hay al menos 3. Añade marcadores (Ctrl+Shift+F8) al grabar.",
-		"fallbackTitle": "Capítulo {{index}}"
+		"fallbackTitle": "Capítulo {{index}}",
+		"improveWithAi": "Mejorar títulos con IA",
+		"aiHint": "Envía la transcripción de cada capítulo al proveedor de IA configurado en el agente",
+		"aiFailed": "No se pudieron mejorar los títulos"
+	},
+	"subtitlesFile": {
+		"save": "Guardar subtítulos (.srt)",
+		"saved": "Subtítulos guardados: {{path}}",
+		"failed": "No se pudieron guardar los subtítulos"
 	}
 }

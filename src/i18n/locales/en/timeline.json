@@ -88,7 +88,14 @@
 		"smartCutsNoSpeech": "No speech detected",
 		"smartCutsFailed": "Transcription failed — retry it from Media",
 		"addAudioTooltip": "Add audio",
-		"addedWord": "Added word: \"{{word}}\" — no audio behind it"
+		"addedWord": "Added word: \"{{word}}\" — no audio behind it",
+		"speedUpWaits": "Speed up waits",
+		"speedUpWaitsHint": "Find the quiet, still stretches and pick which to play faster",
+		"waitsFound": "Waits found: {{count}}",
+		"waitLength": "{{seconds}} s",
+		"speedUpPicked": "Speed up the picked ones ({{speed}}×)",
+		"noWaits": "No long waits in this take",
+		"waitsSpedUp": "Waits sped up: {{count}}"
 	},
 	"audio": {
 		"addVoiceover": "Add voiceover",
