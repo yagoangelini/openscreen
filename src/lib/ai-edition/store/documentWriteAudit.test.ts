@@ -128,6 +128,14 @@ const DECLARED: WritePath[] = [
 	// It sits in `runLoadedMetadataWrite` rather than the handler because the handler
 	// only puts it on the write queue — the write itself, and its deadline, are there.
 	w("src/components/ai-edition/NewEditorShell.tsx", "runLoadedMetadataWrite", "save", "automatic"),
+	// The privacy blurs the OCR pass suggests for a freshly imported recording. Undoable
+	// for the same reason as the auto-zooms below: a suggestion the user may reject.
+	w(
+		"src/components/ai-edition/recordingImport.ts",
+		"applyFreshRecordingRedactions",
+		"save",
+		"gesture",
+	),
 	// Auto-zoom regions suggested for a freshly imported recording. `history: true`
 	// on purpose: unlike the probed duration above, this is a suggestion the user is
 	// meant to be able to undo.

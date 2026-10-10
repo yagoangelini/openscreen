@@ -3909,23 +3909,23 @@ export function CursorPane() {
 			    cursor has nothing to click with, so the row is not offered then. */}
 			{settings.cursorShow ? (
 				<div className={styles.paneRow}>
-					<span className={styles.label}>{ts("cursor.clickRing")}</span>
-					<Toggle
-						ariaLabel={ts("cursor.clickRing")}
-						checked={settings.cursor.clickRing === true}
-						disabled={!hasDocument}
-						onChange={(v) => void set({ cursor: { clickRing: v } })}
-					/>
-				</div>
-			) : null}
-			{settings.cursorShow ? (
-				<div className={styles.paneRow}>
 					<span className={styles.label}>{ts("cursor.clickImpact")}</span>
 					<Toggle
 						ariaLabel={ts("cursor.clickImpact")}
 						checked={settings.cursor.clickImpact}
 						disabled={!hasDocument}
 						onChange={(v) => void set({ cursor: { clickImpact: v } })}
+					/>
+				</div>
+			) : null}
+			{settings.cursorShow ? (
+				<div className={styles.paneRow}>
+					<span className={styles.label}>{ts("cursor.clickRing")}</span>
+					<Toggle
+						ariaLabel={ts("cursor.clickRing")}
+						checked={settings.cursor.clickRing === true}
+						disabled={!hasDocument}
+						onChange={(v) => void set({ cursor: { clickRing: v } })}
 					/>
 				</div>
 			) : null}
