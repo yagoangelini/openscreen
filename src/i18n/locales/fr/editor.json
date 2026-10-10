@@ -233,7 +233,11 @@
 		"qualityUpscaleWarning": "Upscaling",
 		"nothingToExport": "Rien à exporter — la timeline est vide.",
 		"youtubeLoudness": "Volume YouTube (−14 LUFS)",
-		"youtubeLoudnessHint": "YouTube lit toutes les vidéos à −14 LUFS. Désactivé, l'export garde les −16 LUFS de la voix et sonne 2 dB plus bas là-bas."
+		"youtubeLoudnessHint": "YouTube lit toutes les vidéos à −14 LUFS. Désactivé, l'export garde les −16 LUFS de la voix et sonne 2 dB plus bas là-bas.",
+		"confirmCloseTitle": "Annuler l'export ?",
+		"confirmCloseBody": "Fermer arrête l'export, et la vidéo ne sera pas enregistrée.",
+		"keepExporting": "Continuer l'export",
+		"cancelAndClose": "Annuler et fermer"
 	},
 	"inspector": {
 		"resetFocusPoint": "Réinitialiser le point de focus",

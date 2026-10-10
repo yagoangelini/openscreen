@@ -233,7 +233,11 @@
 		"exportedVideoOf": "video şu sürede dışa aktarıldı:",
 		"nothingToExport": "Dışa aktarılacak bir şey yok — zaman çizelgesi boş.",
 		"youtubeLoudness": "YouTube ses düzeyi (−14 LUFS)",
-		"youtubeLoudnessHint": "YouTube her videoyu −14 LUFS'ta oynatır. Kapalıyken dışa aktarma sesin −16 LUFS düzeyinde kalır ve orada 2 dB daha kısık çalar."
+		"youtubeLoudnessHint": "YouTube her videoyu −14 LUFS'ta oynatır. Kapalıyken dışa aktarma sesin −16 LUFS düzeyinde kalır ve orada 2 dB daha kısık çalar.",
+		"confirmCloseTitle": "Dışa aktarma iptal edilsin mi?",
+		"confirmCloseBody": "Kapatmak dışa aktarmayı durdurur ve video kaydedilmez.",
+		"keepExporting": "Dışa aktarmaya devam et",
+		"cancelAndClose": "İptal et ve kapat"
 	},
 	"inspector": {
 		"resetFocusPoint": "Odak noktasını sıfırla",

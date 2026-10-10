@@ -233,7 +233,11 @@
 		"qualityUpscaleWarning": "Zvýšení rozlišení",
 		"nothingToExport": "Není co exportovat, časová osa je prázdná.",
 		"youtubeLoudness": "Hlasitost pro YouTube (−14 LUFS)",
-		"youtubeLoudnessHint": "YouTube přehrává každé video na −14 LUFS. Vypnuto zůstane export na −16 LUFS hlasu a zní tam o 2 dB tišeji."
+		"youtubeLoudnessHint": "YouTube přehrává každé video na −14 LUFS. Vypnuto zůstane export na −16 LUFS hlasu a zní tam o 2 dB tišeji.",
+		"confirmCloseTitle": "Zrušit export?",
+		"confirmCloseBody": "Zavřením se export zastaví a video se neuloží.",
+		"keepExporting": "Pokračovat v exportu",
+		"cancelAndClose": "Zrušit a zavřít"
 	},
 	"inspector": {
 		"resetFocusPoint": "Obnovit bod zaostření",

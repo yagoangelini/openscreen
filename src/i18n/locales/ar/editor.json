@@ -233,7 +233,11 @@
 		"exportedVideoOf": "من الفيديو تم تصديره في",
 		"nothingToExport": "لا يوجد شيء للتصدير — المخطط الزمني فارغ.",
 		"youtubeLoudness": "مستوى صوت YouTube (‎−14 LUFS)",
-		"youtubeLoudnessHint": "يشغّل YouTube كل فيديو عند ‎−14 LUFS. عند الإيقاف يبقى التصدير عند ‎−16 LUFS للصوت ويُسمع هناك أخفض بمقدار 2 dB."
+		"youtubeLoudnessHint": "يشغّل YouTube كل فيديو عند ‎−14 LUFS. عند الإيقاف يبقى التصدير عند ‎−16 LUFS للصوت ويُسمع هناك أخفض بمقدار 2 dB.",
+		"confirmCloseTitle": "إلغاء التصدير؟",
+		"confirmCloseBody": "الإغلاق يوقف التصدير ولن يُحفظ الفيديو.",
+		"keepExporting": "متابعة التصدير",
+		"cancelAndClose": "إلغاء وإغلاق"
 	},
 	"inspector": {
 		"resetFocusPoint": "إعادة تعيين نقطة التركيز",

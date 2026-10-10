@@ -233,7 +233,11 @@
 		"exportedVideoOf": "的影片已匯出，耗時",
 		"nothingToExport": "沒有可匯出的內容 — 時間軸為空。",
 		"youtubeLoudness": "YouTube 響度 (−14 LUFS)",
-		"youtubeLoudnessHint": "YouTube 以 −14 LUFS 播放所有影片。關閉時匯出維持人聲的 −16 LUFS，在 YouTube 上會小 2 dB。"
+		"youtubeLoudnessHint": "YouTube 以 −14 LUFS 播放所有影片。關閉時匯出維持人聲的 −16 LUFS，在 YouTube 上會小 2 dB。",
+		"confirmCloseTitle": "取消匯出？",
+		"confirmCloseBody": "關閉會停止匯出，影片不會被儲存。",
+		"keepExporting": "繼續匯出",
+		"cancelAndClose": "取消並關閉"
 	},
 	"inspector": {
 		"resetFocusPoint": "重設焦點",

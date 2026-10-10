@@ -233,7 +233,11 @@
 		"exportedVideoOf": "видео экспортировано за",
 		"nothingToExport": "Нечего экспортировать — таймлайн пуст.",
 		"youtubeLoudness": "Громкость YouTube (−14 LUFS)",
-		"youtubeLoudnessHint": "YouTube воспроизводит все видео на −14 LUFS. Если выключено, экспорт остаётся на −16 LUFS голоса и звучит там на 2 дБ тише."
+		"youtubeLoudnessHint": "YouTube воспроизводит все видео на −14 LUFS. Если выключено, экспорт остаётся на −16 LUFS голоса и звучит там на 2 дБ тише.",
+		"confirmCloseTitle": "Отменить экспорт?",
+		"confirmCloseBody": "Если закрыть, экспорт остановится и видео не сохранится.",
+		"keepExporting": "Продолжить экспорт",
+		"cancelAndClose": "Отменить и закрыть"
 	},
 	"inspector": {
 		"resetFocusPoint": "Сбросить точку фокуса",

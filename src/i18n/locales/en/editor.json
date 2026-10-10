@@ -233,7 +233,11 @@
 		"qualityUpscaleWarning": "Upscale",
 		"nothingToExport": "Nothing to export — the timeline is empty.",
 		"youtubeLoudness": "YouTube loudness (−14 LUFS)",
-		"youtubeLoudnessHint": "YouTube plays every video at −14 LUFS. Off, the export keeps the −16 LUFS the voice is levelled to, and plays 2 dB softer there."
+		"youtubeLoudnessHint": "YouTube plays every video at −14 LUFS. Off, the export keeps the −16 LUFS the voice is levelled to, and plays 2 dB softer there.",
+		"confirmCloseTitle": "Cancel the export?",
+		"confirmCloseBody": "Closing stops the export, and the video will not be saved.",
+		"keepExporting": "Keep exporting",
+		"cancelAndClose": "Cancel export and close"
 	},
 	"inspector": {
 		"resetFocusPoint": "Reset focus point",

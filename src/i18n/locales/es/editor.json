@@ -233,7 +233,11 @@
 		"exportedVideoOf": "de vídeo exportado en",
 		"nothingToExport": "Nada que exportar: la línea de tiempo está vacía.",
 		"youtubeLoudness": "Volumen de YouTube (−14 LUFS)",
-		"youtubeLoudnessHint": "YouTube reproduce todos los vídeos a −14 LUFS. Desactivado, la exportación se queda en los −16 LUFS de la voz y suena 2 dB más bajo allí."
+		"youtubeLoudnessHint": "YouTube reproduce todos los vídeos a −14 LUFS. Desactivado, la exportación se queda en los −16 LUFS de la voz y suena 2 dB más bajo allí.",
+		"confirmCloseTitle": "¿Cancelar la exportación?",
+		"confirmCloseBody": "Cerrar detiene la exportación y el vídeo no se guardará.",
+		"keepExporting": "Seguir exportando",
+		"cancelAndClose": "Cancelar y cerrar"
 	},
 	"inspector": {
 		"resetFocusPoint": "Restablecer punto de enfoque",
