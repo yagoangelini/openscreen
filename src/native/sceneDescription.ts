@@ -25,6 +25,7 @@ import type {
 import { DEFAULT_CROP_REGION, getZoomScale } from "@/components/video-editor/types";
 import { annotationFontSizeFraction } from "@/lib/ai-edition/annotationScale";
 import {
+	captionBoxRect,
 	captionCuesToTextRegions,
 	deriveCaptionCues,
 	getCaptionSettings,
@@ -39,6 +40,7 @@ import {
 	readSpeedRegions,
 	resolvePlaybackSegments,
 } from "@/lib/ai-edition/document/timeline";
+import { keystrokeTextRegions } from "@/lib/ai-edition/keystrokes";
 import type { AxcutAudioTrack, AxcutClip, AxcutDocument } from "@/lib/ai-edition/schema";
 import { getEditorSettings } from "@/lib/ai-edition/store/editorSettings";
 import { assetCameraSource } from "@/lib/ai-edition/timeline/camera";
@@ -1000,10 +1002,18 @@ export function buildSceneDescription(
 		captionSettings,
 		captionAspect,
 	);
+	// The shortcut plates join the same way, just over the captions when those show.
+	const keystrokeRegions = settings.cursor.showKeystrokes
+		? keystrokeTextRegions(document, {
+				aboveTopPct:
+					captionRegions.length > 0 ? captionBoxRect(captionSettings, captionAspect).y : null,
+			})
+		: [];
 	const projectedAnnotations = projectRegionsToSource(
 		[
 			...(document.annotations ?? []),
 			...(captionRegions as unknown as NonNullable<AxcutDocument["annotations"]>),
+			...(keystrokeRegions as unknown as NonNullable<AxcutDocument["annotations"]>),
 		],
 		visibleClips,
 		document.timeline.clips,

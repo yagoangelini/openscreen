@@ -304,6 +304,8 @@ export interface CursorVisualSettings {
 	 */
 	clickImpact: boolean;
 	autoHide?: boolean;
+	/** The shortcuts pressed while recording, shown as plates (`lib/ai-edition/keystrokes.ts`). */
+	showKeystrokes?: boolean;
 }
 
 // The project defaults, under the names the legacy editor reads: one value, not two to keep in sync.

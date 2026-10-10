@@ -428,7 +428,8 @@
 		"autoHide": "非アクティブ時に非表示",
 		"bounceNone": "なし",
 		"bounceLight": "弱",
-		"bounceStrong": "強"
+		"bounceStrong": "強",
+		"showKeystrokes": "ショートカットを表示"
 	},
 	"export": {
 		"gifButton": "GIF をエクスポート",

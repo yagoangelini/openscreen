@@ -428,7 +428,8 @@
 		"autoHide": "Nascondi se inattivo",
 		"bounceNone": "Nessuno",
 		"bounceLight": "Leggero",
-		"bounceStrong": "Marcato"
+		"bounceStrong": "Marcato",
+		"showKeystrokes": "Scorciatoie a schermo"
 	},
 	"export": {
 		"gifButton": "Esporta GIF",

@@ -428,7 +428,8 @@
 		"autoHide": "Automaticky skrýt, když je neaktivní",
 		"bounceNone": "Žádný",
 		"bounceLight": "Lehký",
-		"bounceStrong": "Výrazný"
+		"bounceStrong": "Výrazný",
+		"showKeystrokes": "Zkratky na obrazovce"
 	},
 	"export": {
 		"gifButton": "Exportovat GIF",

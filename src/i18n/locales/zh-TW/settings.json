@@ -428,7 +428,8 @@
 		"autoHide": "閒置時隱藏",
 		"bounceNone": "無",
 		"bounceLight": "輕",
-		"bounceStrong": "強"
+		"bounceStrong": "強",
+		"showKeystrokes": "螢幕顯示快捷鍵"
 	},
 	"export": {
 		"gifButton": "匯出 GIF",

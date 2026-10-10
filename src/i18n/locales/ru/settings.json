@@ -428,7 +428,8 @@
 		"autoHide": "Скрывать при неактивности",
 		"bounceNone": "Нет",
 		"bounceLight": "Лёгкий",
-		"bounceStrong": "Сильный"
+		"bounceStrong": "Сильный",
+		"showKeystrokes": "Сочетания клавиш на экране"
 	},
 	"export": {
 		"gifButton": "Экспорт GIF",

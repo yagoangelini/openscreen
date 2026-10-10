@@ -428,7 +428,8 @@
 		"autoHide": "إخفاء عند عدم النشاط",
 		"bounceNone": "بلا",
 		"bounceLight": "خفيف",
-		"bounceStrong": "قوي"
+		"bounceStrong": "قوي",
+		"showKeystrokes": "اختصارات على الشاشة"
 	},
 	"export": {
 		"gifButton": "تصدير GIF",

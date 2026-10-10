@@ -428,7 +428,8 @@
 		"autoHide": "Auto-hide when inactive",
 		"bounceNone": "None",
 		"bounceLight": "Light",
-		"bounceStrong": "Strong"
+		"bounceStrong": "Strong",
+		"showKeystrokes": "On-screen shortcuts"
 	},
 	"export": {
 		"gifButton": "Export GIF",

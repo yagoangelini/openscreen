@@ -428,7 +428,8 @@
 		"autoHide": "Ẩn khi không hoạt động",
 		"bounceNone": "Không",
 		"bounceLight": "Nhẹ",
-		"bounceStrong": "Mạnh"
+		"bounceStrong": "Mạnh",
+		"showKeystrokes": "Hiển thị phím tắt"
 	},
 	"export": {
 		"gifButton": "Xuất GIF",

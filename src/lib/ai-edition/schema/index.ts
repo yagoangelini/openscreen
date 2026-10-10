@@ -194,6 +194,18 @@ export const assetSchema = z.object({
 	// recording, read from the take's .markers.json at import. Additive like
 	// transcriptionFailure: no schema-version bump.
 	markersSec: z.array(z.number().nonnegative()).optional(),
+	// The shortcuts pressed while recording (a chord holding Ctrl, Alt or Win; never
+	// plain typing), read from the take's cursor file at import, for the on-screen
+	// shortcut plates (`lib/ai-edition/keystrokes.ts`). Additive, like markersSec.
+	keystrokes: z
+		.array(
+			z.object({
+				sec: z.number().nonnegative(),
+				combo: z.string().min(1).max(40),
+				count: z.number().int().positive().optional(),
+			}),
+		)
+		.optional(),
 });
 
 // A crop is a sub-rectangle of the source video, expressed as fractions
