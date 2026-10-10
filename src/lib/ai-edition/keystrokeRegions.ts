@@ -1,5 +1,5 @@
 import { sourceSpanToTimelineSpans } from "./captions/cues";
-import { formatKeystroke, KEYSTROKE_DISPLAY_SEC, REPEAT_JOIN_SEC } from "./keystrokes";
+import { formatKeystroke, KEYSTROKE_DISPLAY_SEC, lastPressSec } from "./keystrokes";
 import type { AxcutDocument } from "./schema";
 
 /**
@@ -51,13 +51,13 @@ export function keystrokeTextRegions(
 	const spans = document.assets
 		.flatMap((asset) =>
 			(asset.keystrokes ?? []).flatMap((keystroke) => {
-				const lastPressSec = keystroke.sec + ((keystroke.count ?? 1) - 1) * REPEAT_JOIN_SEC;
+				const heldSec = lastPressSec(keystroke) - keystroke.sec;
 				// Anchored on the press itself, wherever a clip plays it: a chord that was cut
 				// away gets no plate, since it would announce something the viewer never sees.
 				return sourceSpanToTimelineSpans(asset.id, keystroke.sec, keystroke.sec + 0.01, clips).map(
 					(press) => ({
 						startSec: press.startSec,
-						endSec: press.startSec + (lastPressSec - keystroke.sec) + KEYSTROKE_DISPLAY_SEC,
+						endSec: press.startSec + heldSec + KEYSTROKE_DISPLAY_SEC,
 						keystroke,
 					}),
 				);

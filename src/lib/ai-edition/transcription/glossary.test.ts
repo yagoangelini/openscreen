@@ -77,6 +77,45 @@ describe("applyGlossary", () => {
 	});
 });
 
+describe("applyGlossary on a transcript the user already edited", () => {
+	it("never overrules a word the user corrected or typed in", () => {
+		const base = transcriptOf(["abra", "o", "share", "point", "e", "o", "share", "point"]);
+		const edited: AxcutTranscript = {
+			...base,
+			words: base.words.map((word, i) =>
+				// The user rewrote the second "share" by hand: that pair is theirs.
+				i === 6 ? { ...word, text: "share", originalText: "chair" } : word,
+			),
+		};
+		const { transcript, replaced } = applyGlossary(
+			edited,
+			parseGlossary("SharePoint: share point"),
+			{
+				keepEditedWords: true,
+			},
+		);
+		expect(replaced).toBe(1);
+		expect(transcript.words.map((w) => w.text)).toEqual([
+			"abra",
+			"o",
+			"SharePoint",
+			"e",
+			"o",
+			"share",
+			"point",
+		]);
+	});
+
+	it("fixes them like any other word on a fresh transcript", () => {
+		const base = transcriptOf(["share", "point"]);
+		const edited: AxcutTranscript = {
+			...base,
+			words: base.words.map((word) => ({ ...word, originalText: "x" })),
+		};
+		expect(applyGlossary(edited, parseGlossary("SharePoint: share point")).replaced).toBe(1);
+	});
+});
+
 describe("parseGlossary", () => {
 	it("reads terms with or without variants, skipping comments and blanks", () => {
 		const entries = parseGlossary("# meus termos\n\nTenant X: tenante xis\nContoso\n");

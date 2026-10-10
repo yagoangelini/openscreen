@@ -18,6 +18,7 @@ import { useScopedT } from "@/contexts/I18nContext";
 import type { AxcutAsset } from "@/lib/ai-edition/schema";
 import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
 import { probeAudioDuration } from "@/lib/ai-edition/timeline/duration";
+import { voiceoverAudioConstraints } from "@/lib/voiceoverMic";
 import styles from "./EditorShellV4.module.css";
 
 const RECORDER_MIME_PREFERENCES = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"];
@@ -160,8 +161,17 @@ export function AddAudioLayerDialog({
 			return;
 		}
 		try {
+			// Either read may be missing or fail: the default microphone is still a voiceover.
+			const [devices, prefs] = await Promise.all([
+				Promise.resolve()
+					.then(() => navigator.mediaDevices.enumerateDevices?.() ?? [])
+					.catch(() => []),
+				Promise.resolve()
+					.then(() => window.electronAPI?.getRecordingPrefs?.())
+					.catch(() => null),
+			]);
 			const stream = await navigator.mediaDevices.getUserMedia({
-				audio: { echoCancellation: true, noiseSuppression: true },
+				audio: voiceoverAudioConstraints(devices, prefs),
 			});
 			streamRef.current = stream;
 			const mimeType = pickRecorderMimeType();

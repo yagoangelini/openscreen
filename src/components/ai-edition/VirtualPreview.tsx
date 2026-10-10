@@ -391,7 +391,24 @@ export function VirtualPreview({
 	const virtualDurationSec = useMemo(() => totalVirtualDuration(clips), [clips]);
 	const activeSource = videoSources[sourceIndex] ?? null;
 
-	const activeStems = activeSource?.stems;
+	// Stems that would not load here -- moved, deleted, or left unfinished by a crash. The
+	// take then plays its own mixed track, the way the export falls back to it; keyed by
+	// the voice file, so a stem that comes back on a later take is tried again.
+	const [brokenStemVoiceSrcs, setBrokenStemVoiceSrcs] = useState<ReadonlySet<string>>(
+		() => new Set(),
+	);
+	const activeStems =
+		activeSource?.stems && !brokenStemVoiceSrcs.has(activeSource.stems.voiceSrc)
+			? activeSource.stems
+			: undefined;
+	const markActiveStemsBroken = useCallback(() => {
+		const voiceSrc = activeSource?.stems?.voiceSrc;
+		if (!voiceSrc) return;
+		console.warn("[preview] audio stems unreadable, playing the take's own track", voiceSrc);
+		setBrokenStemVoiceSrcs((previous) =>
+			previous.has(voiceSrc) ? previous : new Set(previous).add(voiceSrc),
+		);
+	}, [activeSource?.stems?.voiceSrc]);
 	useEffect(() => {
 		let cancelled = false;
 		setSupplementalAudioSrc(null);
@@ -1622,21 +1639,25 @@ export function VirtualPreview({
 							// handler here is safe.
 						/>
 						<audio
-							key={`${activeSource.id}:primary-audio`}
+							// A new element when the stems give way to the mixed track: the Web Audio
+							// source node is bound to its element for good.
+							key={`${activeSource.id}:primary-audio${activeStems ? ":stem" : ""}`}
 							ref={setPrimaryAudioElement}
-							src={activeSource.stems?.voiceSrc ?? activeSource.src}
+							src={activeStems?.voiceSrc ?? activeSource.src}
 							preload="metadata"
 							aria-hidden="true"
 							data-testid="preview-audio-primary"
+							onError={activeStems ? markActiveStemsBroken : undefined}
 						/>
 						{supplementalAudioSrc ? (
 							<audio
-								key={`${activeSource.id}:supplemental-audio`}
+								key={`${activeSource.id}:supplemental-audio${activeStems ? ":stem" : ""}`}
 								ref={setSupplementalAudioElement}
 								src={supplementalAudioSrc}
 								preload="metadata"
 								aria-hidden="true"
 								data-testid="preview-audio-supplemental"
+								onError={activeStems ? markActiveStemsBroken : undefined}
 							/>
 						) : null}
 						{/* Imported audio tracks (issue #350). One element per track, kept in

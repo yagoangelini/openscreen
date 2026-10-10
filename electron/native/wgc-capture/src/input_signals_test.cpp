@@ -53,6 +53,16 @@ int main() {
     // A modifier on its own is no chord.
     expectEq(comboName(mods(true, false, false, false), VK_LSHIFT, 0), "", "modifier alone");
 
+    // A Ctrl whose key-up the hook never saw (Win+L, UAC) is not held: what is typed after
+    // it is typing again, never "Ctrl+P".
+    const Modifiers stuck = heldModifiers(mods(true, false, false, false), mods(false, false, false, false));
+    expectEq(comboName(stuck, 'P', 0), "", "missed key-up names nothing");
+    const Modifiers real = heldModifiers(mods(true, false, true, false), mods(true, false, true, false));
+    expectEq(comboName(real, 'P', 0), "Ctrl+Shift+P", "both agree: named");
+    // Held on the keyboard but never seen going down by the hook: still not named.
+    const Modifiers unseen = heldModifiers(mods(false, false, false, false), mods(false, false, false, true));
+    expectEq(comboName(unseen, 'D', 0), "", "unseen win names nothing");
+
     Modifiers m;
     applyModifier(m, VK_LCONTROL, true);
     applyModifier(m, VK_RMENU, true);

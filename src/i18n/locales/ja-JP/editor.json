@@ -193,7 +193,10 @@
 		"autoRedact": "新しい録画の機密情報をぼかす",
 		"autoRedactHint": "録画後、OCR が画面上のメールアドレス、テナントのドメイン、GUID、シークレット、電話番号を見つけてぼかします。各ぼかしは通常の注釈なので、残すことも削除することもできます。オフラインで動作します。",
 		"glossary": "用語集",
-		"glossaryHint": "文字起こしで修正する名前を 1 行に 1 つ: 用語: 聞き間違い1, 聞き間違い2。新しい文字起こしに適用されます。"
+		"glossaryHint": "文字起こしで修正する名前を 1 行に 1 つ: 用語: 聞き間違い1, 聞き間違い2。新しい文字起こしに適用されます。",
+		"glossaryApply": "このプロジェクトの文字起こしに適用",
+		"glossaryApplied": "用語集を適用しました: {{count}} 件の修正。Ctrl+Z で元に戻せます。",
+		"glossaryNothingToFix": "修正する箇所はありません。文字起こしはすでに用語集どおりです。"
 	},
 	"exportDialog": {
 		"title": "エクスポート",
@@ -449,7 +452,9 @@
 		"regionPasted": "Region pasted",
 		"regionCopied": "Region copied",
 		"cameraCheckFailed": "Could not check for a camera recording near {{name}}",
-		"sensitiveBlurred": "自動でぼかした機密情報: {{count}}。タイムラインで確認してください。"
+		"sensitiveBlurred": "自動でぼかした機密情報: {{count}}。タイムラインで確認してください。",
+		"sensitiveScanFailed": "この録画では自動ぼかしが実行されなかったため、画面上の何もぼかしていません。",
+		"sensitiveScanPartial": "自動ぼかしはこの録画の {{covered}} までしか確認していません。残りは手動で確認してください。"
 	},
 	"exportPipeline": {
 		"quality1440p": "1440p",

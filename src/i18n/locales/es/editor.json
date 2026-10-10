@@ -193,7 +193,10 @@
 		"autoRedact": "Difuminar datos sensibles en las nuevas grabaciones",
 		"autoRedactHint": "Tras grabar, el OCR encuentra correos, dominios de tenant, GUID, secretos y teléfonos en pantalla y los difumina. Cada difuminado es una anotación normal que puedes conservar o borrar. Funciona sin conexión.",
 		"glossary": "Glosario",
-		"glossaryHint": "Nombres que la transcripción corrige, uno por línea: Término: mal oído 1, mal oído 2. Se aplica a las nuevas transcripciones."
+		"glossaryHint": "Nombres que la transcripción corrige, uno por línea: Término: mal oído 1, mal oído 2. Se aplica a las nuevas transcripciones.",
+		"glossaryApply": "Aplicar a las transcripciones de este proyecto",
+		"glossaryApplied": "Glosario aplicado: {{count}} corrección(es). Deshaz con Ctrl+Z.",
+		"glossaryNothingToFix": "Nada que corregir: las transcripciones ya siguen el glosario."
 	},
 	"exportDialog": {
 		"title": "Exportar",
@@ -449,7 +452,9 @@
 		"regionPasted": "Región pegada",
 		"regionCopied": "Región copiada",
 		"cameraCheckFailed": "No se pudo buscar una grabación de cámara junto a {{name}}",
-		"sensitiveBlurred": "Áreas sensibles difuminadas automáticamente: {{count}}. Revísalas en la línea de tiempo."
+		"sensitiveBlurred": "Áreas sensibles difuminadas automáticamente: {{count}}. Revísalas en la línea de tiempo.",
+		"sensitiveScanFailed": "El difuminado automático no se ejecutó en esta grabación: no se difuminó nada de la pantalla.",
+		"sensitiveScanPartial": "El difuminado automático solo revisó esta grabación hasta {{covered}}. Revisa el resto a mano."
 	},
 	"exportPipeline": {
 		"quality1440p": "1440p",

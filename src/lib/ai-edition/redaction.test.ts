@@ -4,6 +4,7 @@ import {
 	type OcrSample,
 	parseOcrScan,
 	redactionAnnotations,
+	scannedUpToSec,
 	trackDetections,
 } from "./redaction";
 import { type AxcutDocument, createEmptyDocument } from "./schema";
@@ -37,6 +38,29 @@ describe("detectSensitive", () => {
 			"secret",
 		);
 		expect(kinds(line(["Ligue", "(11)", "91234-5678"]))).toEqual([["phone", "(11) 91234-5678"]]);
+	});
+
+	it("reads every common way of writing a phone number", () => {
+		expect(kinds(line(["+55", "11", "91234", "5678"]))).toEqual([["phone", "+55 11 91234 5678"]]);
+		expect(kinds(line(["Fixo:", "11", "3456-7890"]))).toEqual([["phone", "11 3456-7890"]]);
+		expect(kinds(line(["Cel", "91234-5678"]))).toEqual([["phone", "91234-5678"]]);
+	});
+
+	it("blurs a tenant's own hosts, never the public Power Platform ones", () => {
+		expect(kinds(line(["https://make.powerapps.com/environments"]))).toEqual([]);
+		expect(kinds(line(["apps.powerapps.com/play"]))).toEqual([]);
+		expect(kinds(line(["https://org1a2b.crm.dynamics.com/main.aspx"]))).toEqual([
+			["tenant", "org1a2b.crm.dynamics.com"],
+		]);
+		expect(kinds(line(["contoso.powerappsportals.com"]))).toEqual([
+			["tenant", "contoso.powerappsportals.com"],
+		]);
+	});
+
+	it("does not take a long ID or run number for a phone", () => {
+		expect(kinds(line(["Execução", "08585512345678901234"]))).toEqual([]);
+		expect(kinds(line(["ID", "11912345678"]))).toEqual([]);
+		expect(kinds(line(["Criado", "2026-10-10", "12:30"]))).toEqual([]);
 	});
 
 	it("leaves ordinary text alone", () => {
@@ -76,6 +100,27 @@ describe("trackDetections", () => {
 			[2, 9, 0.8],
 		]);
 	});
+
+	it("stops one interval past a scan that was cut short, not at the end of the take", () => {
+		const spans = trackDetections({
+			durationSec: 3600,
+			intervalSec: 2,
+			samples: [blank(0), email(2), email(4)],
+			complete: false,
+		});
+		expect(spans.map((s) => [s.startSec, s.endSec])).toEqual([[0, 6]]);
+	});
+});
+
+describe("scannedUpToSec", () => {
+	it("is the whole take for a finished scan, and the last sample for a cut-short one", () => {
+		const samples = [
+			{ t: 0, same: true },
+			{ t: 2, same: true },
+		];
+		expect(scannedUpToSec({ durationSec: 60, intervalSec: 2, samples })).toBe(60);
+		expect(scannedUpToSec({ durationSec: 60, intervalSec: 2, samples, complete: false })).toBe(2);
+	});
 });
 
 describe("parseOcrScan", () => {
@@ -94,6 +139,17 @@ describe("parseOcrScan", () => {
 			[0, true, undefined],
 			[2, false, 1],
 		]);
+		expect(scan.complete).toBe(true);
+	});
+
+	it("marks a scan with no closing line as cut short", () => {
+		const scan = parseOcrScan(
+			[
+				'{"type":"info","width":1920,"height":1080,"durationSec":3600,"language":"pt-BR"}',
+				'{"type":"same","t":0.0}',
+			].join("\n"),
+		);
+		expect(scan.complete).toBe(false);
 	});
 });
 

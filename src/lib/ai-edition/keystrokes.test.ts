@@ -36,8 +36,25 @@ describe("keystrokesFromCursorSamples", () => {
 			key(4000, "Ctrl+Z"),
 		]);
 		expect(out).toEqual([
-			{ sec: 1, combo: "Ctrl+Z", count: 3 },
+			{ sec: 1, combo: "Ctrl+Z", count: 3, lastSec: 1.9 },
 			{ sec: 4, combo: "Ctrl+Z" },
+		]);
+	});
+
+	it("joins repeats on when they were really pressed, not on a guess", () => {
+		// Five quick presses inside 0.8 s, then one 0.9 s after the last of them: the
+		// count used to assume 0.8 s between presses, and swallowed that sixth one too.
+		const out = keystrokesFromCursorSamples([
+			key(1000, "Ctrl+Z"),
+			key(1200, "Ctrl+Z"),
+			key(1400, "Ctrl+Z"),
+			key(1600, "Ctrl+Z"),
+			key(1800, "Ctrl+Z"),
+			key(2700, "Ctrl+Z"),
+		]);
+		expect(out).toEqual([
+			{ sec: 1, combo: "Ctrl+Z", count: 5, lastSec: 1.8 },
+			{ sec: 2.7, combo: "Ctrl+Z" },
 		]);
 	});
 
@@ -56,7 +73,7 @@ describe("formatKeystroke", () => {
 
 describe("keystrokeTextRegions", () => {
 	const documentWith = (
-		keystrokes: Array<{ sec: number; combo: string; count?: number }>,
+		keystrokes: Array<{ sec: number; combo: string; count?: number; lastSec?: number }>,
 		clipSourceStartSec = 0,
 	): AxcutDocument => {
 		const doc = createEmptyDocument({ projectId: "p", title: "t" });
@@ -117,6 +134,15 @@ describe("keystrokeTextRegions", () => {
 			),
 		);
 		expect(regions.map((r) => [r.startMs, r.content])).toEqual([[30_000, "Alt + Tab"]]);
+	});
+
+	it("stays up from the first press until a beat after the last one", () => {
+		const regions = keystrokeTextRegions(
+			documentWith([{ sec: 1, combo: "Ctrl+Z", count: 5, lastSec: 1.8 }]),
+		);
+		expect(regions).toHaveLength(1);
+		expect(regions[0].startMs).toBeCloseTo(1000, 6);
+		expect(regions[0].endMs).toBeCloseTo(3400, 6);
 	});
 
 	it("sits above the captions when they show", () => {

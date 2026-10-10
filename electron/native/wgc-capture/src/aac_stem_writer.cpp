@@ -70,12 +70,20 @@ bool AacStemWriter::open(const std::wstring& path, const AudioInputFormat& forma
 
 bool AacStemWriter::write(const BYTE* data, DWORD byteCount, int64_t timestampHns, int64_t durationHns) {
     std::scoped_lock lock(mutex_);
-    if (!writer_ || finalized_ || !started_) {
+    if (!writer_ || finalized_ || !started_ || failed_) {
         return false;
     }
     if (!data || byteCount == 0 || durationHns <= 0) {
         return true;
     }
+    if (!writeSampleLocked(data, byteCount, timestampHns, durationHns)) {
+        failed_ = true;
+        return false;
+    }
+    return true;
+}
+
+bool AacStemWriter::writeSampleLocked(const BYTE* data, DWORD byteCount, int64_t timestampHns, int64_t durationHns) {
     Microsoft::WRL::ComPtr<IMFMediaBuffer> buffer;
     if (FAILED(MFCreateMemoryBuffer(byteCount, &buffer))) {
         return false;
@@ -113,5 +121,6 @@ bool AacStemWriter::finalize() {
         MFShutdown();
         mfStarted_ = false;
     }
-    return ok;
+    // Closed either way, so the file is not left open; announced only when it is whole.
+    return ok && !failed_;
 }

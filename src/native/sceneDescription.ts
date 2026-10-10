@@ -1015,11 +1015,15 @@ export function buildSceneDescription(
 		captionSettings,
 		captionAspect,
 	);
-	// The shortcut plates join the same way, just over the captions when those show.
+	// The shortcut plates join the same way, just over the captions when those show at the
+	// bottom, where the plates live. Captions at the top leave the bottom free: lifting the
+	// plates "over" them there put the plates on top of the captions.
 	const keystrokeRegions = settings.cursor.showKeystrokes
 		? keystrokeTextRegions(document, {
 				aboveTopPct:
-					captionRegions.length > 0 ? captionBoxRect(captionSettings, captionAspect).y : null,
+					captionRegions.length > 0 && captionSettings.anchorV === "bottom"
+						? captionBoxRect(captionSettings, captionAspect).y
+						: null,
 			})
 		: [];
 	const projectedAnnotations = projectRegionsToSource(

@@ -193,7 +193,10 @@
 		"autoRedact": "Sensible Daten in neuen Aufnahmen verwischen",
 		"autoRedactHint": "Nach einer Aufnahme findet die Texterkennung E-Mails, Tenant-Domains, GUIDs, Geheimnisse und Telefonnummern auf dem Bildschirm und verwischt sie. Jede Unschärfe ist eine normale Anmerkung zum Behalten oder Löschen. Läuft offline.",
 		"glossary": "Glossar",
-		"glossaryHint": "Namen, auf die das Transkript korrigiert wird, einer pro Zeile: Begriff: falsch 1, falsch 2. Gilt für neue Transkripte."
+		"glossaryHint": "Namen, auf die das Transkript korrigiert wird, einer pro Zeile: Begriff: falsch 1, falsch 2. Gilt für neue Transkripte.",
+		"glossaryApply": "Auf die Transkripte dieses Projekts anwenden",
+		"glossaryApplied": "Glossar angewendet: {{count}} Korrektur(en). Mit Strg+Z rückgängig machen.",
+		"glossaryNothingToFix": "Nichts zu korrigieren: Die Transkripte folgen bereits dem Glossar."
 	},
 	"exportDialog": {
 		"title": "Export",
@@ -449,7 +452,9 @@
 		"regionPasted": "Bereich eingefügt",
 		"regionCopied": "Bereich kopiert",
 		"cameraCheckFailed": "Neben {{name}} konnte keine Kameraaufnahme gesucht werden",
-		"sensitiveBlurred": "Automatisch verwischte sensible Bereiche: {{count}}. Prüfe sie in der Zeitleiste."
+		"sensitiveBlurred": "Automatisch verwischte sensible Bereiche: {{count}}. Prüfe sie in der Zeitleiste.",
+		"sensitiveScanFailed": "Das automatische Verwischen lief bei dieser Aufnahme nicht, auf dem Bildschirm wurde nichts verwischt.",
+		"sensitiveScanPartial": "Das automatische Verwischen hat diese Aufnahme nur bis {{covered}} geprüft. Prüfe den Rest selbst."
 	},
 	"exportPipeline": {
 		"quality1440p": "1440p",

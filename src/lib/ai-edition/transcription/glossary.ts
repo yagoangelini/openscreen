@@ -79,10 +79,15 @@ function leadingPunctuation(text: string): string {
  * The transcript with the glossary applied. A match folds its words into the first
  * one, which takes the term and stretches to the last one's end; the others leave
  * the transcript and their segments. Returns the same object when nothing matched.
+ *
+ * `keepEditedWords`: never touch a word the user corrected or typed in. A fresh
+ * transcript has none (their corrections are carried over after the glossary); an
+ * existing one does, and the glossary is not allowed to overrule them.
  */
 export function applyGlossary(
 	transcript: AxcutTranscript,
 	glossary: Entry[],
+	options: { keepEditedWords?: boolean } = {},
 ): { transcript: AxcutTranscript; replaced: number } {
 	// Longer variants first, so "copilot studio" wins over "copilot".
 	const candidates = glossary
@@ -91,6 +96,9 @@ export function applyGlossary(
 	if (candidates.length === 0) return { transcript, replaced: 0 };
 	const words = transcript.words;
 	const keys = words.map((word) => normalise(word.text));
+	const locked = (word: AxcutTranscript["words"][number]) =>
+		options.keepEditedWords === true &&
+		(word.originalText !== undefined || (word.source !== undefined && word.source !== "asr"));
 	const out: AxcutTranscript["words"] = [];
 	const removed = new Set<string>();
 	let replaced = 0;
@@ -98,7 +106,7 @@ export function applyGlossary(
 		const match = candidates.find(
 			(c) =>
 				i + c.tokens.length <= words.length &&
-				c.tokens.every((token, k) => keys[i + k] === token) &&
+				c.tokens.every((token, k) => keys[i + k] === token && !locked(words[i + k])) &&
 				// Within one segment: a term never straddles two caption lines.
 				words[i + c.tokens.length - 1].segmentId === words[i].segmentId,
 		);

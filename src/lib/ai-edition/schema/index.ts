@@ -203,6 +203,7 @@ export const assetSchema = z.object({
 				sec: z.number().nonnegative(),
 				combo: z.string().min(1).max(40),
 				count: z.number().int().positive().optional(),
+				lastSec: z.number().nonnegative().optional(),
 			}),
 		)
 		.optional(),

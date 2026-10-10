@@ -6,6 +6,7 @@ import { useEditorDialogActions } from "@/contexts/EditorDialogsContext";
 import { useScopedT } from "@/contexts/I18nContext";
 import { useShortcuts } from "@/contexts/ShortcutsContext";
 import { toastText } from "@/i18n/toastText";
+import { formatChapterTime } from "@/lib/ai-edition/chapters";
 import {
 	AUDIO_ROW_EXPANSION_PX,
 	computeAudioRowCount,
@@ -70,7 +71,11 @@ import {
 	type UnsavedChoice,
 } from "./Modals";
 import { Preview } from "./Preview";
-import { importPendingRecording, maybeSaveFreshRecordingAutoZooms } from "./recordingImport";
+import {
+	importPendingRecording,
+	maybeSaveFreshRecordingAutoZooms,
+	prefetchFreshRecordingTelemetry,
+} from "./recordingImport";
 import { AddAudioLayerDialog } from "./v4/AddAudioLayerDialog";
 import v4 from "./v4/EditorShellV4.module.css";
 import { type EditorMode, EditorTopBar } from "./v4/EditorTopBar";
@@ -391,6 +396,18 @@ export function NewEditorShell() {
 							toast.info(toastText("editor", "shellToasts.sensitiveBlurred", { count }), {
 								duration: 12_000,
 							}),
+						(issue) =>
+							issue.kind === "failed"
+								? toast.warning(toastText("editor", "shellToasts.sensitiveScanFailed"), {
+										description: issue.reason,
+										duration: 12_000,
+									})
+								: toast.warning(
+										toastText("editor", "shellToasts.sensitiveScanPartial", {
+											covered: formatChapterTime(issue.scannedUpToSec),
+										}),
+										{ duration: 12_000 },
+									),
 					)
 				) {
 					toast.success(toastText("editor", "shellToasts.recordingAddedToNewProject"));
@@ -538,7 +555,21 @@ export function NewEditorShell() {
 			// The auto-zoom pass goes on the same queued task rather than after it, so a
 			// fresh take's suggestions are serialised against user edits too.
 			void enqueueTimelineWrite(() =>
-				runLoadedMetadataWrite(durationSec, assetId, originatingProjectId),
+				runLoadedMetadataWrite(durationSec, assetId, originatingProjectId, {
+					// The zoom pass needs the take's telemetry, and that waits on a frame scan
+					// for web menus -- up to a minute on a long take. It is waited for HERE, off
+					// the queue, and only the write that places the zooms queues: the user's
+					// first cuts are not held behind the scan. The write rereads the live
+					// document and starts over if an edit lands on it, as it always has.
+					autoZoom: (settled) => {
+						void prefetchFreshRecordingTelemetry().then(() =>
+							enqueueTimelineWrite(() =>
+								maybeSaveFreshRecordingAutoZooms(useProjectStore.getState().document ?? settled),
+							),
+						);
+						return Promise.resolve();
+					},
+				}),
 			);
 		},
 		[setSourceDuration, enqueueTimelineWrite],

@@ -28,6 +28,13 @@ bool isModifierKey(uint32_t vk);
 /// Applies a modifier key's down (`down`) or up to `mods`. No-op for any other key.
 void applyModifier(Modifiers& mods, uint32_t vk, bool down);
 
+/// The modifiers a chord may be named with: those the hook saw go down AND the keyboard
+/// still holds (`physical`, read with GetAsyncKeyState). Tracked from the hook's own events
+/// alone, a key-up it never received -- Win+L, the UAC prompt, an elevated window in front --
+/// left Ctrl "held" for good and named every plain key after it as a shortcut, passwords
+/// included. Both have to agree, so a disagreement names less, never more.
+Modifiers heldModifiers(const Modifiers& tracked, const Modifiers& physical);
+
 /// The chord a key-down under `mods` forms, e.g. "Ctrl+Shift+K", or an empty string when it
 /// is not a shortcut (no Ctrl/Alt/Win, or AltGr). `baseChar` is the key's unshifted character
 /// for punctuation keys (MapVirtualKey(vk, MAPVK_VK_TO_CHAR)); 0 when unknown.

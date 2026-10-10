@@ -32,6 +32,7 @@ import {
 } from "../../src/lib/ai-edition/stylePresets";
 import { audioStemPathsFor, RECORDING_MARKERS_SUFFIX } from "../../src/lib/recordingSession";
 import { ensureDocumentExtensions } from "../media/extensionClip";
+import { hasMp4Index } from "../media/mp4Index";
 import { relinkProjectMedia } from "../media/projectMediaRelinker";
 
 const PROJECT_FILE_EXTENSION = ".openscreen";
@@ -186,18 +187,15 @@ async function readRecordingKeystrokes(videoPath: string) {
 	}
 }
 
-/** The take's audio stems, when both are there and not empty. */
+/**
+ * The take's audio stems, when both are there and finished. A take recovered after a
+ * crash has its stems on disk without their index -- the plain MP4 writes it last --
+ * and adopting those would play the take silent in place of its intact mixed track.
+ */
 async function readRecordingStems(videoPath: string) {
 	const stems = audioStemPathsFor(videoPath);
-	const sizes = await Promise.all(
-		[stems.voicePath, stems.systemPath].map((p) =>
-			fs.stat(p).then(
-				(s) => s.size,
-				() => 0,
-			),
-		),
-	);
-	return sizes.every((size) => size > 0) ? stems : undefined;
+	const finished = await Promise.all([stems.voicePath, stems.systemPath].map(hasMp4Index));
+	return finished.every(Boolean) ? stems : undefined;
 }
 
 /** The previous save, kept beside each project file. */

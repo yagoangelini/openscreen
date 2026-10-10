@@ -1,5 +1,5 @@
 import { ArrowDown, Film, Plus, RotateCw, Search, X } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useI18n, useScopedT } from "@/contexts/I18nContext";
 import type { AxcutAsset, TranscriptLanguageCode } from "@/lib/ai-edition/schema";
@@ -9,6 +9,7 @@ import {
 	useTranscriptionStore,
 } from "@/lib/ai-edition/store/transcriptionStore";
 import { formatSeconds } from "@/lib/ai-edition/timeline/format";
+import { applyGlossary, parseGlossary } from "@/lib/ai-edition/transcription/glossary";
 import {
 	languageLabel,
 	sortedLanguageOptions,
@@ -58,6 +59,29 @@ export function MediaStage({
 	const [autoTranscribe, setAutoTranscribe] = useState(() => loadUserPreferences().autoTranscribe);
 	const [autoRedact, setAutoRedact] = useState(() => loadUserPreferences().autoRedact);
 	const [glossary, setGlossary] = useState(() => loadUserPreferences().glossary);
+	// The glossary runs on each new transcript by itself; this puts the transcripts the
+	// project already has right too, after the list was edited. One undoable edit, and
+	// the words the user corrected by hand are theirs, so it never touches them.
+	const applyGlossaryToTranscripts = useCallback(async () => {
+		saveUserPreferences({ glossary });
+		const current = useProjectStore.getState().document;
+		if (!current) return;
+		const entries = parseGlossary(glossary);
+		let replaced = 0;
+		const transcripts = current.transcripts.map((transcript) => {
+			const result = applyGlossary(transcript, entries, { keepEditedWords: true });
+			replaced += result.replaced;
+			return result.transcript;
+		});
+		if (replaced === 0) {
+			toast.info(t("mediaStage.glossaryNothingToFix"));
+			return;
+		}
+		const saved = await useProjectStore
+			.getState()
+			.saveDocument({ ...current, transcripts }, { history: true });
+		if (saved) toast.success(t("mediaStage.glossaryApplied", { count: replaced }));
+	}, [glossary, t]);
 	const { locale } = useI18n();
 	const projectId = useProjectStore((s) => s.projectId);
 	const document = useProjectStore((s) => s.document);
@@ -508,6 +532,16 @@ export function MediaStage({
 											font: "500 12px var(--font-mono)",
 										}}
 									/>
+									<button
+										type="button"
+										className={styles.ghostBtn}
+										data-testid="media-stage-glossary-apply"
+										disabled={(document?.transcripts.length ?? 0) === 0}
+										onClick={() => void applyGlossaryToTranscripts()}
+										style={{ marginTop: 6 }}
+									>
+										{t("mediaStage.glossaryApply")}
+									</button>
 								</details>
 							</div>
 

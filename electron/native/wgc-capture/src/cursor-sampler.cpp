@@ -240,6 +240,18 @@ static LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lPara
     return CallNextHookEx(g_mouseHook, nCode, wParam, lParam);
 }
 
+// The modifiers the keyboard holds right now, whatever the hook did or did not see.
+static input_signals::Modifiers physicalModifiers() {
+    const auto held = [](int vk) { return (GetAsyncKeyState(vk) & 0x8000) != 0; };
+    input_signals::Modifiers mods;
+    mods.ctrl = held(VK_CONTROL);
+    mods.alt = held(VK_MENU);
+    mods.shift = held(VK_SHIFT);
+    mods.win = held(VK_LWIN) || held(VK_RWIN);
+    mods.rightAlt = held(VK_RMENU);
+    return mods;
+}
+
 static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
     if (nCode >= 0) {
         const auto* info = reinterpret_cast<const KBDLLHOOKSTRUCT*>(lParam);
@@ -250,7 +262,10 @@ static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lP
         } else if (!down) {
             g_keysDown.erase(vk);
         } else if (g_keysDown.insert(vk).second) {
-            // A new key-down (not auto-repeat). Its time always; its name only inside a chord.
+            // A new key-down (not auto-repeat). Its time always; its name only inside a chord,
+            // and only with the modifiers the keyboard really holds: a missed key-up stops here
+            // instead of naming everything typed after it.
+            g_modifiers = input_signals::heldModifiers(g_modifiers, physicalModifiers());
             PendingInput input{};
             input.kind = PendingInput::Key;
             input.timeMs = input_signals::eventTimeMs(nowMs(), GetTickCount(), info->time);

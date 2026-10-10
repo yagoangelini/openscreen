@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { type ChildProcess, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import os from "node:os";
 import { join } from "node:path";
@@ -36,12 +36,42 @@ export function findOcrScanPath(): string | null {
 	return ocrScanCandidates().find((candidate) => existsSync(candidate)) ?? null;
 }
 
+/**
+ * Scans still running. Windows does not take a child down with its parent, and the
+ * kill timer dies with the app, so a scan left behind at quit would read on, unbounded,
+ * holding a file of the install open through an update.
+ */
+const runningScans = new Set<ChildProcess>();
+
+function track(child: ChildProcess): void {
+	runningScans.add(child);
+	child.once("close", () => runningScans.delete(child));
+	child.once("error", () => runningScans.delete(child));
+}
+
+/** Ends every scan still running; called as the app quits. */
+export function killRunningScans(): void {
+	for (const child of runningScans) {
+		try {
+			child.kill();
+		} catch {
+			// Already gone.
+		}
+	}
+	runningScans.clear();
+}
+
 export interface OcrScanResult {
 	success: boolean;
 	output?: string;
 	error?: string;
-	/** The scan was cut short by the timeout; `output` covers the start of the take. */
+	/**
+	 * The scan stopped before the end of the take -- the timeout, or the process killed
+	 * from outside (an antivirus) -- and `output` covers its start only.
+	 */
 	partial?: boolean;
+	/** Not a failure to report: this platform has no scanner at all. */
+	unsupported?: boolean;
 }
 
 export function runOcrScan(
@@ -49,7 +79,11 @@ export function runOcrScan(
 	options: { intervalMs?: number; timeoutMs?: number } = {},
 ): Promise<OcrScanResult> {
 	if (process.platform !== "win32") {
-		return Promise.resolve({ success: false, error: "OCR scan is Windows-only." });
+		return Promise.resolve({
+			success: false,
+			unsupported: true,
+			error: "OCR scan is Windows-only.",
+		});
 	}
 	const helper = findOcrScanPath();
 	if (!helper) {
@@ -61,6 +95,7 @@ export function runOcrScan(
 			stdio: ["ignore", "pipe", "pipe"],
 			windowsHide: true,
 		});
+		track(child);
 		try {
 			// BELOW_NORMAL: the preview and the user come first.
 			if (child.pid) os.setPriority(child.pid, os.constants.priority.PRIORITY_BELOW_NORMAL);
@@ -95,8 +130,13 @@ export function runOcrScan(
 				elapsedMs: Date.now() - startedAt,
 				summary: done ?? null,
 			});
-			if (code === 0 || timedOut) {
-				resolve({ success: true, output, ...(timedOut ? { partial: true } : {}) });
+			// What it read before it stopped is kept, however it stopped: a scan an antivirus
+			// killed at minute 40 still blurs the first 40 minutes. Only the closing line says
+			// the whole take was looked at.
+			const finished = done !== undefined;
+			const readSomething = /"type":"(?:frame|same)"/.test(output);
+			if (code === 0 || timedOut || readSomething) {
+				resolve({ success: true, output, ...(finished ? {} : { partial: true }) });
 				return;
 			}
 			const message = output.match(/"type":"error","message":"([^"]*)"/)?.[1] ?? stderr.trim();
@@ -107,6 +147,7 @@ export function runOcrScan(
 
 export interface FrameChangesResult {
 	success: boolean;
+	unsupported?: boolean;
 	changes?: Array<{ t: number; rect: { x: number; y: number; width: number; height: number } }>;
 	error?: string;
 }
@@ -121,7 +162,11 @@ export function runFrameChangeScan(
 	timeoutMs = 60_000,
 ): Promise<FrameChangesResult> {
 	if (process.platform !== "win32") {
-		return Promise.resolve({ success: false, error: "Frame scan is Windows-only." });
+		return Promise.resolve({
+			success: false,
+			unsupported: true,
+			error: "Frame scan is Windows-only.",
+		});
 	}
 	const helper = findOcrScanPath();
 	if (!helper) return Promise.resolve({ success: false, error: "ocr-scan.exe is not available." });
@@ -132,6 +177,13 @@ export function runFrameChangeScan(
 			stdio: ["ignore", "pipe", "ignore"],
 			windowsHide: true,
 		});
+		track(child);
+		try {
+			// Like the OCR: the preview and the user come first.
+			if (child.pid) os.setPriority(child.pid, os.constants.priority.PRIORITY_BELOW_NORMAL);
+		} catch {
+			// Not fatal: it just runs at normal priority.
+		}
 		let output = "";
 		child.stdout.setEncoding("utf8");
 		child.stdout.on("data", (chunk: string) => {

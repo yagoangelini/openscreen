@@ -271,3 +271,21 @@ O que fazer a seguir e como fazer está em [`HANDOFF.md`](HANDOFF.md).
 | Modelo maior (turbo) | Pendente | |
 | Capítulos, com títulos por IA | Feito | |
 | Redução de ruído | Feito | Por decisão, é a dica do NVIDIA Broadcast, sem filtro próprio. |
+
+## Decisões de 10/10/2026 (tarde)
+
+Tomadas a partir de [`ANALISE-MELHORIAS.md`](ANALISE-MELHORIAS.md).
+
+- **Ordem de trabalho:**
+  1. **1.19.1:** correções dos defeitos confirmados nos recursos do fork (§2 da análise).
+  2. **2.1.0:** merge do OpenScreen 2.0 (upstream), mantendo as decisões do fork (16:9, NVENC na RTX, transcrição automática desligada e as demais).
+  3. **2.2.0:** câmera e vinheta.
+  4. Depois: os extras aprovados.
+- **Câmera durante a gravação:** botão no HUD "Rosto / Tela + câmera" e um atalho global. Tela e câmera são sempre gravadas; o botão só marca os trechos, que chegam ao editor como regiões editáveis.
+- **Câmera na edição:** nova região "Sem câmera", que esconde a câmera com fade.
+- **Vinheta:** entra **só pelo botão** "Inserir vinheta", que divide o clipe no cursor e insere a vinheta ali. Não há inserção automática. Ela toca em tela cheia, sem moldura, cursor, zoom, câmera ou legendas.
+- **Extras aprovados**, todos **sempre opcionais e editáveis**:
+  - aviso de microfone mudo durante a gravação;
+  - palavras sensíveis personalizadas no desfoque, mais um botão para procurar de novo;
+  - retângulo de destaque e passos numerados nas anotações;
+  - remoção de "né", "tipo", "éé" e silêncios longos sem IA, com respiro.

@@ -66,6 +66,7 @@ import {
 	showPermissionsWindow,
 	showPermissionsWindowIfNeeded,
 } from "./permissions";
+import { killRunningScans } from "./recording/ocrScan";
 import { offersStarPrompt, REPO_URL, storeReviewUrl } from "./star-prompt";
 import { registerSttIpc, shutdownStt } from "./stt";
 import { checkLatestRelease } from "./update-checker";
@@ -1311,6 +1312,7 @@ app.on("before-quit", (event) => {
 
 app.on("will-quit", () => {
 	unregisterAllGlobalShortcuts();
+	killRunningScans();
 });
 
 const appReady = !cliCommand && hasSingleInstanceLock ? app.whenReady() : null;

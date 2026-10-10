@@ -193,7 +193,10 @@
 		"autoRedact": "Sfoca i dati sensibili nelle nuove registrazioni",
 		"autoRedactHint": "Dopo una ripresa, l'OCR trova e-mail, domini del tenant, GUID, segreti e numeri di telefono sullo schermo e li sfoca. Ogni sfocatura è una normale annotazione da tenere o eliminare. Funziona offline.",
 		"glossary": "Glossario",
-		"glossaryHint": "Nomi corretti nella trascrizione, uno per riga: Termine: sbagliato 1, sbagliato 2. Vale per le nuove trascrizioni."
+		"glossaryHint": "Nomi corretti nella trascrizione, uno per riga: Termine: sbagliato 1, sbagliato 2. Vale per le nuove trascrizioni.",
+		"glossaryApply": "Applica alle trascrizioni di questo progetto",
+		"glossaryApplied": "Glossario applicato: {{count}} correzione/i. Annulla con Ctrl+Z.",
+		"glossaryNothingToFix": "Niente da correggere: le trascrizioni seguono già il glossario."
 	},
 	"exportDialog": {
 		"title": "Esporta",
@@ -449,7 +452,9 @@
 		"regionPasted": "Regione incollata",
 		"regionCopied": "Regione copiata",
 		"cameraCheckFailed": "Impossibile cercare una registrazione della fotocamera vicino a {{name}}",
-		"sensitiveBlurred": "Aree sensibili sfocate automaticamente: {{count}}. Controllale sulla timeline."
+		"sensitiveBlurred": "Aree sensibili sfocate automaticamente: {{count}}. Controllale sulla timeline.",
+		"sensitiveScanFailed": "La sfocatura automatica non è stata eseguita su questa registrazione: non è stato sfocato nulla.",
+		"sensitiveScanPartial": "La sfocatura automatica ha controllato questa registrazione solo fino a {{covered}}. Controlla il resto a mano."
 	},
 	"exportPipeline": {
 		"quality1440p": "1440p",

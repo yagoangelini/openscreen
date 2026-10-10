@@ -193,7 +193,10 @@
 		"autoRedact": "새 녹화에서 민감한 정보 흐리게 처리",
 		"autoRedactHint": "녹화 후 OCR이 화면의 이메일, 테넌트 도메인, GUID, 비밀 키, 전화번호를 찾아 흐리게 처리합니다. 각 흐림은 일반 주석이라 유지하거나 삭제할 수 있습니다. 오프라인으로 실행됩니다.",
 		"glossary": "용어집",
-		"glossaryHint": "받아쓰기에서 고칠 이름을 한 줄에 하나씩: 용어: 잘못 1, 잘못 2. 새 받아쓰기에 적용됩니다."
+		"glossaryHint": "받아쓰기에서 고칠 이름을 한 줄에 하나씩: 용어: 잘못 1, 잘못 2. 새 받아쓰기에 적용됩니다.",
+		"glossaryApply": "이 프로젝트의 전사에 적용",
+		"glossaryApplied": "용어집 적용: {{count}}개 수정. Ctrl+Z로 되돌릴 수 있습니다.",
+		"glossaryNothingToFix": "수정할 내용이 없습니다. 전사가 이미 용어집을 따릅니다."
 	},
 	"exportDialog": {
 		"title": "내보내기",
@@ -449,7 +452,9 @@
 		"regionPasted": "Region pasted",
 		"regionCopied": "Region copied",
 		"cameraCheckFailed": "Could not check for a camera recording near {{name}}",
-		"sensitiveBlurred": "자동으로 흐리게 처리한 민감한 영역: {{count}}. 타임라인에서 확인하세요."
+		"sensitiveBlurred": "자동으로 흐리게 처리한 민감한 영역: {{count}}. 타임라인에서 확인하세요.",
+		"sensitiveScanFailed": "이 녹화에서는 자동 흐림이 실행되지 않아 화면의 어떤 것도 흐리게 처리되지 않았습니다.",
+		"sensitiveScanPartial": "자동 흐림은 이 녹화를 {{covered}}까지만 확인했습니다. 나머지는 직접 확인하세요."
 	},
 	"exportPipeline": {
 		"quality1440p": "1440p",

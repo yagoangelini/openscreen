@@ -12,9 +12,8 @@ leave the native process. Performance numbers, the bench, and the rejected
 alternatives that drove the design live in
 [engineering/rendering-performance.md](../engineering/rendering-performance.md).
 
-GIF is out of scope here: it has no native encoder yet, so it keeps its own
-dedicated code path in `src/lib/exporter/gifExporter.ts` — the one format
-the document adapter still renders in the renderer.
+GIF goes through the same addon on a path of its own (`exportGif`,
+`gif_export.rs`; see Output formats below), so this page describes the MP4 run.
 
 ```mermaid
 flowchart LR
@@ -195,13 +194,14 @@ the voice its loudness gain plus `audio.voiceGainDb` and the computer sound only
 `audio.systemGainDb`, and sums them (`SumStream`). If either stem cannot be read, it warns and
 falls back to the mixed track. The preview does the same with Web Audio (`VirtualPreview`: the
 voice stem as the primary source, the system stem through its own gain node), and both gains
-are linear, which is what keeps the scene parity test honest.
+are linear, which is what keeps the scene parity test honest. A stem that will not load
+there (moved, deleted) gives way to the take's mixed track, as it does here.
 
 `withDeliveryLoudness` (`src/lib/ai-edition/deliveryLoudness.ts`) lifts the output trim by
 2 dB for an MP4 when the *YouTube loudness* option is on (the `youtubeLoudness` preference,
 on by default): voices are normalised to −16 LUFS for the edit, YouTube plays at −14. The
 preview is not touched. When an export finishes, the dialog offers the chapters
-(`chapters.ts`, copyable for a YouTube description, titles optionally rewritten by the
+(`chapters.ts`, timed on the exported video's clock like the `.srt`, copyable for a YouTube description, titles optionally rewritten by the
 agent's provider through `chapters.improveTitles`) and a `.srt` written beside the video
 (`documentToSrt` → `write-subtitles-beside`). Closing the dialog during an export asks
 first (`export-confirm-close`), and quitting the app while an export runs is guarded too.

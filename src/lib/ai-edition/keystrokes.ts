@@ -17,6 +17,16 @@ export interface RecordedKeystroke {
 	combo: string;
 	/** Times pressed in a row (Ctrl+Z, Ctrl+Z, Ctrl+Z reads "Ctrl + Z ×3"). */
 	count?: number;
+	/** Source seconds of the last of those presses. Absent on takes imported before it was kept. */
+	lastSec?: number;
+}
+
+/**
+ * When a chord was last pressed: the time kept for it, or -- for a take imported before
+ * that was kept -- the latest the presses could have been, one join window apart.
+ */
+export function lastPressSec(keystroke: RecordedKeystroke): number {
+	return keystroke.lastSec ?? keystroke.sec + ((keystroke.count ?? 1) - 1) * REPEAT_JOIN_SEC;
 }
 
 /** Where the switch lives in `legacyEditor`. */
@@ -44,9 +54,11 @@ export function keystrokesFromCursorSamples(samples: unknown): RecordedKeystroke
 		.sort((a, b) => a.sec - b.sec);
 	for (const press of presses) {
 		const last = out[out.length - 1];
-		const lastSeen = last ? last.sec + ((last.count ?? 1) - 1) * REPEAT_JOIN_SEC : 0;
-		if (last && last.combo === press.combo && press.sec - lastSeen <= REPEAT_JOIN_SEC) {
+		// Joined on the real time of the previous press: five quick Ctrl+Z inside a second
+		// are one plate, and a press a second after the last of them starts a new one.
+		if (last && last.combo === press.combo && press.sec - lastPressSec(last) <= REPEAT_JOIN_SEC) {
 			last.count = (last.count ?? 1) + 1;
+			last.lastSec = press.sec;
 			continue;
 		}
 		out.push({ sec: press.sec, combo: press.combo });

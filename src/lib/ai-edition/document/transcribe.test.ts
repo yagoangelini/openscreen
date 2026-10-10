@@ -246,3 +246,55 @@ describe("transcribeAsset timing", () => {
 		]);
 	});
 });
+
+describe("transcribeAsset with voice stems", () => {
+	const docWithStems = (): AxcutDocument => {
+		const doc = makeDoc();
+		return {
+			...doc,
+			assets: [
+				{
+					...doc.assets[0],
+					audioStems: { voicePath: "/tmp/demo.voice.m4a", systemPath: "/tmp/demo.system.m4a" },
+				},
+			],
+		};
+	};
+
+	beforeEach(() => {
+		transcribeMock.mockReset();
+	});
+
+	it("transcribes the voice stem, without the computer's sound", async () => {
+		transcribeMock.mockResolvedValueOnce({
+			segments: [],
+			granularity: "word",
+			detectedLanguage: "pt",
+		});
+		await transcribeAsset(docWithStems(), "asset_1");
+		expect(transcribeMock.mock.calls.map(([path]) => path)).toEqual(["/tmp/demo.voice.m4a"]);
+	});
+
+	it("falls back to the take's own track when the stem cannot be read", async () => {
+		transcribeMock
+			.mockRejectedValueOnce(new Error("ENOENT: /tmp/demo.voice.m4a"))
+			.mockResolvedValueOnce({ segments: [], granularity: "word", detectedLanguage: "pt" });
+		await transcribeAsset(docWithStems(), "asset_1");
+		expect(transcribeMock.mock.calls.map(([path]) => path)).toEqual([
+			"/tmp/demo.voice.m4a",
+			"/tmp/demo.mp4",
+		]);
+	});
+
+	it("does not retry a transcript the user cancelled", async () => {
+		const controller = new AbortController();
+		transcribeMock.mockImplementationOnce(async () => {
+			controller.abort();
+			throw new Error("aborted");
+		});
+		await expect(
+			transcribeAsset(docWithStems(), "asset_1", { signal: controller.signal }),
+		).rejects.toThrow("aborted");
+		expect(transcribeMock).toHaveBeenCalledTimes(1);
+	});
+});

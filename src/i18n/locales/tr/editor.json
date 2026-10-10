@@ -193,7 +193,10 @@
 		"autoRedact": "Yeni kayıtlarda hassas verileri bulanıklaştır",
 		"autoRedactHint": "Kayıttan sonra OCR ekrandaki e-postaları, tenant alan adlarını, GUID'leri, gizli anahtarları ve telefon numaralarını bulup bulanıklaştırır. Her bulanıklık, tutabileceğiniz veya silebileceğiniz normal bir nottur. Çevrimdışı çalışır.",
 		"glossary": "Sözlük",
-		"glossaryHint": "Dökümde düzeltilen adlar, satır başına bir tane: Terim: yanlış 1, yanlış 2. Yeni dökümlere uygulanır."
+		"glossaryHint": "Dökümde düzeltilen adlar, satır başına bir tane: Terim: yanlış 1, yanlış 2. Yeni dökümlere uygulanır.",
+		"glossaryApply": "Bu projenin transkriptlerine uygula",
+		"glossaryApplied": "Sözlük uygulandı: {{count}} düzeltme. Ctrl+Z ile geri alın.",
+		"glossaryNothingToFix": "Düzeltilecek bir şey yok: transkriptler zaten sözlüğe uyuyor."
 	},
 	"exportDialog": {
 		"title": "Dışa Aktar",
@@ -449,7 +452,9 @@
 		"regionPasted": "Region pasted",
 		"regionCopied": "Region copied",
 		"cameraCheckFailed": "Could not check for a camera recording near {{name}}",
-		"sensitiveBlurred": "Otomatik bulanıklaştırılan hassas alanlar: {{count}}. Zaman çizelgesinde kontrol edin."
+		"sensitiveBlurred": "Otomatik bulanıklaştırılan hassas alanlar: {{count}}. Zaman çizelgesinde kontrol edin.",
+		"sensitiveScanFailed": "Otomatik bulanıklaştırma bu kayıtta çalışmadı, ekranda hiçbir şey bulanıklaştırılmadı.",
+		"sensitiveScanPartial": "Otomatik bulanıklaştırma bu kaydı yalnızca {{covered}} anına kadar kontrol etti. Gerisini elle kontrol edin."
 	},
 	"exportPipeline": {
 		"quality1440p": "1440p",

@@ -1818,9 +1818,13 @@ int wmain(int argc, wchar_t* argv[]) {
     beginStopStep("encoder-finalize", shutdownBudgetMs);
     const bool screenFinalized = encoder.finalize();
     logStopStep("encoder-finalize");
-    // After the mixer has stopped, so no chunk is still on its way to them.
-    const bool stemsFinalized =
-        voiceStem.isOpen() && systemStem.isOpen() && voiceStem.finalize() && systemStem.finalize();
+    // After the mixer has stopped, so no chunk is still on its way to them. Both are closed
+    // whatever the other's outcome; only two whole stems are announced, and the app deletes
+    // stems the stop line does not name, so a stem that dropped out mid-take never replaces
+    // the mixed track.
+    const bool voiceStemDone = voiceStem.isOpen() && voiceStem.finalize();
+    const bool systemStemDone = systemStem.isOpen() && systemStem.finalize();
+    const bool stemsFinalized = voiceStemDone && systemStemDone;
     if (!screenFinalized) {
         std::cerr << "ERROR: Failed to finalize the recording" << std::endl;
     }

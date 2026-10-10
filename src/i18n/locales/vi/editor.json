@@ -193,7 +193,10 @@
 		"autoRedact": "Làm mờ dữ liệu nhạy cảm trong bản ghi mới",
 		"autoRedactHint": "Sau khi ghi, OCR tìm email, tên miền tenant, GUID, khóa bí mật và số điện thoại trên màn hình rồi làm mờ. Mỗi vùng mờ là một chú thích thông thường, bạn có thể giữ hoặc xóa. Chạy ngoại tuyến.",
 		"glossary": "Bảng thuật ngữ",
-		"glossaryHint": "Các tên được sửa trong bản ghi, mỗi dòng một tên: Thuật ngữ: nghe nhầm 1, nghe nhầm 2. Áp dụng cho bản ghi mới."
+		"glossaryHint": "Các tên được sửa trong bản ghi, mỗi dòng một tên: Thuật ngữ: nghe nhầm 1, nghe nhầm 2. Áp dụng cho bản ghi mới.",
+		"glossaryApply": "Áp dụng cho bản chép lời của dự án này",
+		"glossaryApplied": "Đã áp dụng bảng thuật ngữ: {{count}} chỗ sửa. Hoàn tác bằng Ctrl+Z.",
+		"glossaryNothingToFix": "Không có gì để sửa: bản chép lời đã theo đúng bảng thuật ngữ."
 	},
 	"exportDialog": {
 		"title": "Xuất",
@@ -449,7 +452,9 @@
 		"regionPasted": "Region pasted",
 		"regionCopied": "Region copied",
 		"cameraCheckFailed": "Could not check for a camera recording near {{name}}",
-		"sensitiveBlurred": "Vùng nhạy cảm đã tự động làm mờ: {{count}}. Hãy kiểm tra trên dòng thời gian."
+		"sensitiveBlurred": "Vùng nhạy cảm đã tự động làm mờ: {{count}}. Hãy kiểm tra trên dòng thời gian.",
+		"sensitiveScanFailed": "Làm mờ tự động không chạy trên bản ghi này nên chưa có gì trên màn hình được làm mờ.",
+		"sensitiveScanPartial": "Làm mờ tự động chỉ kiểm tra bản ghi này đến {{covered}}. Hãy tự kiểm tra phần còn lại."
 	},
 	"exportPipeline": {
 		"quality1440p": "1440p",

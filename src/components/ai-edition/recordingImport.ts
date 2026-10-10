@@ -21,6 +21,7 @@ import {
 	AUTO_REDACT_SOURCE,
 	parseOcrScan,
 	redactionAnnotations,
+	scannedUpToSec,
 	trackDetections,
 } from "@/lib/ai-edition/redaction";
 import type { AxcutDocument } from "@/lib/ai-edition/schema";
@@ -72,7 +73,44 @@ export function consumeFreshRecordingAutoZoomPending(): boolean {
 	clearFreshRecordingAutoZoomPending();
 	appliedFreshRecordingAutoZoomProjectId = null;
 	freshRecordingAutoZoomSaveChain = Promise.resolve();
+	freshTelemetryPrefetch = null;
 	return was;
+}
+
+/**
+ * The fresh take's telemetry, the menus its frames show included, read once. Behind it
+ * is a frame scan (`getTelemetryWithFramePopups`) that can take most of a minute on a
+ * long web tutorial; started at import and waited for off the editor's write queue, it
+ * no longer holds the user's first edits behind it. Keyed by path, so the next take
+ * reads its own.
+ */
+let freshTelemetryPrefetch: { path: string; promise: Promise<CursorTelemetryPoint[]> } | null =
+	null;
+
+function freshRecordingTelemetry(videoPath: string): Promise<CursorTelemetryPoint[]> {
+	if (freshTelemetryPrefetch?.path === videoPath) return freshTelemetryPrefetch.promise;
+	const promise = getTelemetryWithFramePopups(videoPath, (path) =>
+		nativeBridgeClient.cursor.getTelemetry(path),
+	);
+	freshTelemetryPrefetch = { path: videoPath, promise };
+	// A read that failed is not an answer to keep: the next pass for this take tries again.
+	promise.catch(() => {
+		if (freshTelemetryPrefetch?.promise === promise) freshTelemetryPrefetch = null;
+	});
+	return promise;
+}
+
+/**
+ * Starts reading the pending take's telemetry, frame scan and all, and settles once it
+ * is in -- never rejecting: the pass that uses it sees a failure for itself.
+ */
+export function prefetchFreshRecordingTelemetry(): Promise<void> {
+	const path = pendingFreshRecordingAutoZoomPath;
+	if (!pendingFreshRecordingAutoZoom || !path) return Promise.resolve();
+	return freshRecordingTelemetry(path).then(
+		() => undefined,
+		() => undefined,
+	);
 }
 
 export type ApplyFreshRecordingAutoZoomsDeps = {
@@ -194,12 +232,7 @@ export async function applyPendingFreshRecordingAutoZooms(
 	if (markDecoratedIfZoomed(start)) return start;
 	if (!canApplyFreshRecordingAutoZooms(start)) return start;
 
-	const inner =
-		deps.getTelemetry ??
-		((videoPath: string) =>
-			getTelemetryWithFramePopups(videoPath, (path) =>
-				nativeBridgeClient.cursor.getTelemetry(path),
-			));
+	const inner = deps.getTelemetry ?? freshRecordingTelemetry;
 	let telemetryFailed = false;
 	const getTelemetry = async (videoPath: string) => {
 		try {
@@ -334,8 +367,19 @@ export async function maybeSaveFreshRecordingAutoZooms(
  * reopening the most recent project. Throws if the import itself fails, leaving
  * the session in place so a later mount can retry it.
  */
+/** Why a take is less protected than the user may think: say so rather than stay quiet. */
+export type RedactionScanIssue =
+	| { kind: "failed"; reason?: string }
+	| { kind: "partial"; scannedUpToSec: number };
+
 export type FreshRecordingRedactionDeps = {
-	scan?: (videoPath: string) => Promise<{ success: boolean; output?: string } | undefined>;
+	scan?: (
+		videoPath: string,
+	) => Promise<
+		{ success: boolean; output?: string; error?: string; unsupported?: boolean } | undefined
+	>;
+	/** Told when the scan failed or covered only the start of the take. */
+	onScanIssue?: (issue: RedactionScanIssue) => void;
 	createId?: (prefix: string) => string;
 	/** How long to wait for the take's real length before giving up. Tests shorten it. */
 	probeWaitMs?: number;
@@ -359,9 +403,23 @@ export async function applyFreshRecordingRedactions(
 ): Promise<number> {
 	const scan =
 		deps.scan ?? ((videoPath: string) => window.electronAPI?.scanRecordingText?.(videoPath));
-	const result = await Promise.resolve(scan(screenPath)).catch(() => undefined);
-	if (!result?.success || !result.output) return 0;
-	const spans = trackDetections(parseOcrScan(result.output));
+	const result = await Promise.resolve(scan(screenPath)).catch((error: unknown) => ({
+		success: false,
+		output: undefined,
+		error: error instanceof Error ? error.message : String(error),
+		unsupported: false,
+	}));
+	// No scanner in this host at all (the browser shim): nothing was promised.
+	if (!result) return 0;
+	if (!result.success || !result.output) {
+		if (!result.unsupported) deps.onScanIssue?.({ kind: "failed", reason: result.error });
+		return 0;
+	}
+	const parsed = parseOcrScan(result.output);
+	if (parsed.complete === false) {
+		deps.onScanIssue?.({ kind: "partial", scannedUpToSec: scannedUpToSec(parsed) });
+	}
+	const spans = trackDetections(parsed);
 	if (spans.length === 0) return 0;
 
 	const deadline = Date.now() + (deps.probeWaitMs ?? 60_000);
@@ -402,6 +460,8 @@ export async function importPendingRecording(
 	onWarning?: (message: string) => void,
 	/** Called when the privacy pass blurred something, with how many areas. */
 	onRedacted?: (count: number) => void,
+	/** Called when the privacy pass failed, or looked at the start of the take only. */
+	onRedactionIssue?: (issue: RedactionScanIssue) => void,
 ): Promise<boolean> {
 	const api = window.electronAPI;
 	if (!api) return false;
@@ -426,11 +486,17 @@ export async function importPendingRecording(
 	// preference.
 	if (cursorCaptureMode !== "system") {
 		markFreshRecordingAutoZoomPending(screenPath);
+		// A head start on the frame scan the zoom pass will want, if it is going to run.
+		void readAutoZoomPref().then((enabled) => {
+			if (enabled) void prefetchFreshRecordingTelemetry();
+		});
 	}
 	if (loadUserPreferences().autoRedact) {
-		void applyFreshRecordingRedactions(screenPath).then((count) => {
-			if (count > 0) onRedacted?.(count);
-		});
+		void applyFreshRecordingRedactions(screenPath, { onScanIssue: onRedactionIssue }).then(
+			(count) => {
+				if (count > 0) onRedacted?.(count);
+			},
+		);
 	}
 	// Consumed: the recording now lives in a project. Cleared here rather than
 	// after the timeline seed below so a failure down there can't hand the same

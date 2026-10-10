@@ -13,6 +13,7 @@ import {
 	importPendingRecording,
 	markFreshRecordingAutoZoomPending,
 	maybeSaveFreshRecordingAutoZooms,
+	prefetchFreshRecordingTelemetry,
 } from "./recordingImport";
 
 // The first describe stubs the store actions, so the bridge is never reached
@@ -22,7 +23,7 @@ const bridge = vi.hoisted(() => ({
 	create: vi.fn(),
 	addAsset: vi.fn(),
 	save: vi.fn(),
-	getTelemetry: vi.fn(async () => []),
+	getTelemetry: vi.fn(async (): Promise<CursorTelemetryPoint[]> => []),
 }));
 vi.mock("@/native/client", () => ({
 	nativeBridgeClient: {
@@ -314,11 +315,63 @@ describe("fresh-recording privacy blur", () => {
 			'{"type":"frame","t":0.0,"words":[],"lines":[]}',
 			'{"type":"frame","t":2.0,"words":[[0.4,0.38,0.1,0.02,"ana@contoso.com"]],"lines":[[0,1]]}',
 			'{"type":"frame","t":4.0,"words":[],"lines":[]}',
+			'{"type":"done","frames":3,"read":3,"ocrMs":30}',
 		].join("\n"),
 	});
 
 	beforeEach(() => {
 		vi.clearAllMocks();
+	});
+
+	it("says so when the scan failed, but not on a platform that has no scanner", async () => {
+		const saveDocument = vi.fn(async () => true);
+		useProjectStore.setState({ document: documentWithClip(), saveDocument });
+		const onScanIssue = vi.fn();
+		await applyFreshRecordingRedactions(RECORDING_PATH, {
+			scan: async () => ({ success: false, error: "ocr-scan.exe is not available." }),
+			onScanIssue,
+			waitTimeoutMs: 50,
+		});
+		expect(onScanIssue).toHaveBeenCalledWith({
+			kind: "failed",
+			reason: "ocr-scan.exe is not available.",
+		});
+		onScanIssue.mockClear();
+		await applyFreshRecordingRedactions(RECORDING_PATH, {
+			scan: async () => ({ success: false, unsupported: true, error: "Windows-only" }),
+			onScanIssue,
+			waitTimeoutMs: 50,
+		});
+		expect(onScanIssue).not.toHaveBeenCalled();
+		useProjectStore.setState({ saveDocument: realActions.saveDocument });
+	});
+
+	it("says how far a cut-short scan got, and still blurs what it saw", async () => {
+		const saveDocument = vi.fn(async (next: AxcutDocument) => {
+			useProjectStore.setState({ document: next });
+			return true;
+		});
+		useProjectStore.setState({ document: documentWithClip(), saveDocument });
+		const onScanIssue = vi.fn();
+		const count = await applyFreshRecordingRedactions(RECORDING_PATH, {
+			scan: async () => ({
+				success: true,
+				output: [
+					'{"type":"info","width":1920,"height":1080,"durationSec":10,"language":"pt-BR"}',
+					'{"type":"frame","t":0.0,"words":[],"lines":[]}',
+					'{"type":"frame","t":2.0,"words":[[0.4,0.38,0.1,0.02,"ana@contoso.com"]],"lines":[[0,1]]}',
+				].join("\n"),
+			}),
+			onScanIssue,
+			createId: (prefix) => `${prefix}_test`,
+			waitTimeoutMs: 50,
+		});
+		expect(onScanIssue).toHaveBeenCalledWith({ kind: "partial", scannedUpToSec: 2 });
+		expect(count).toBe(1);
+		const [blur] = useProjectStore.getState().document?.annotations ?? [];
+		// Seen at the last sample it read: blurred one interval past it, not to the end.
+		expect(blur).toMatchObject({ startMs: 0, endMs: 4000 });
+		useProjectStore.setState({ saveDocument: realActions.saveDocument });
 	});
 
 	it("adds one undoable blur per address the take shows, marked as automatic", async () => {
@@ -407,6 +460,24 @@ describe("fresh-recording auto-zoom", () => {
 		stubElectronApi("C:\\recordings\\recording-1.mp4", "editable-overlay");
 		await importPendingRecording();
 		expect(consumeFreshRecordingAutoZoomPending()).toBe(true);
+	});
+
+	it("reads the take's telemetry once: the prefetch is what the zoom pass uses", async () => {
+		markFreshRecordingAutoZoomPending(RECORDING_PATH);
+		bridge.getTelemetry.mockResolvedValueOnce(clickAt(4000, 0.4, 0.6));
+		await prefetchFreshRecordingTelemetry();
+		await prefetchFreshRecordingTelemetry();
+		const next = await applyPendingFreshRecordingAutoZooms(documentWithClip(), {
+			enabled: true,
+			createId: (prefix) => `${prefix}_test`,
+		});
+		expect(bridge.getTelemetry).toHaveBeenCalledTimes(1);
+		expect(next.zoomRanges).toHaveLength(1);
+	});
+
+	it("has nothing to prefetch when no take is waiting", async () => {
+		await prefetchFreshRecordingTelemetry();
+		expect(bridge.getTelemetry).not.toHaveBeenCalled();
 	});
 
 	it("applies click zooms once, after duration is known", async () => {

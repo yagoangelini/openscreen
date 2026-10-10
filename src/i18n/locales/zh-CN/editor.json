@@ -193,7 +193,10 @@
 		"autoRedact": "模糊新录制中的敏感信息",
 		"autoRedactHint": "录制后，OCR 会找出屏幕上的邮箱、租户域名、GUID、密钥和电话号码并将其模糊。每处模糊都是普通标注，可保留或删除。离线运行。",
 		"glossary": "术语表",
-		"glossaryHint": "转录中要更正的名称，每行一个：术语: 误听1, 误听2。适用于新的转录。"
+		"glossaryHint": "转录中要更正的名称，每行一个：术语: 误听1, 误听2。适用于新的转录。",
+		"glossaryApply": "应用到此项目的转录",
+		"glossaryApplied": "已应用术语表：{{count}} 处更正。按 Ctrl+Z 撤销。",
+		"glossaryNothingToFix": "无需更正：转录已符合术语表。"
 	},
 	"exportDialog": {
 		"title": "导出",
@@ -449,7 +452,9 @@
 		"regionPasted": "Region pasted",
 		"regionCopied": "Region copied",
 		"cameraCheckFailed": "Could not check for a camera recording near {{name}}",
-		"sensitiveBlurred": "已自动模糊的敏感区域：{{count}}。请在时间线上检查。"
+		"sensitiveBlurred": "已自动模糊的敏感区域：{{count}}。请在时间线上检查。",
+		"sensitiveScanFailed": "此录制未运行自动模糊，因此屏幕上没有任何内容被模糊。",
+		"sensitiveScanPartial": "自动模糊只检查到此录制的 {{covered}}。请手动检查其余部分。"
 	},
 	"exportPipeline": {
 		"quality1440p": "1440p",

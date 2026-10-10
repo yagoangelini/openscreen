@@ -193,7 +193,10 @@
 		"autoRedact": "Blur sensitive data in new recordings",
 		"autoRedactHint": "After a take, OCR finds e-mails, tenant domains, GUIDs, secrets and phone numbers on screen and blurs them. Each blur is a regular annotation you can keep or delete. Runs offline.",
 		"glossary": "Glossary",
-		"glossaryHint": "Names the transcription is corrected to, one per line: Term: misheard 1, misheard 2. Applies to new transcriptions."
+		"glossaryHint": "Names the transcription is corrected to, one per line: Term: misheard 1, misheard 2. Applies to new transcriptions.",
+		"glossaryApply": "Apply to this project's transcripts",
+		"glossaryApplied": "Glossary applied: {{count}} correction(s). Undo with Ctrl+Z.",
+		"glossaryNothingToFix": "Nothing to fix: the transcripts already follow the glossary."
 	},
 	"exportDialog": {
 		"title": "Export",
@@ -449,7 +452,9 @@
 		"regionPasted": "Region pasted",
 		"regionCopied": "Region copied",
 		"cameraCheckFailed": "Could not check for a camera recording near {{name}}",
-		"sensitiveBlurred": "Sensitive areas blurred automatically: {{count}}. Check them on the timeline."
+		"sensitiveBlurred": "Sensitive areas blurred automatically: {{count}}. Check them on the timeline.",
+		"sensitiveScanFailed": "The automatic blur did not run on this take, so nothing on screen was blurred.",
+		"sensitiveScanPartial": "The automatic blur only checked this take up to {{covered}}. Check the rest by hand."
 	},
 	"exportPipeline": {
 		"quality1440p": "1440p",

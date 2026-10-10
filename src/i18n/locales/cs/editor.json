@@ -193,7 +193,10 @@
 		"autoRedact": "Rozmazat citlivá data v nových nahrávkách",
 		"autoRedactHint": "Po nahrání najde OCR na obrazovce e-maily, domény tenantu, GUID, tajné klíče a telefonní čísla a rozmaže je. Každé rozmazání je běžná anotace, kterou můžete ponechat nebo smazat. Funguje offline.",
 		"glossary": "Glosář",
-		"glossaryHint": "Názvy, na které se přepis opraví, jeden na řádek: Výraz: chybně 1, chybně 2. Platí pro nové přepisy."
+		"glossaryHint": "Názvy, na které se přepis opraví, jeden na řádek: Výraz: chybně 1, chybně 2. Platí pro nové přepisy.",
+		"glossaryApply": "Použít na přepisy tohoto projektu",
+		"glossaryApplied": "Glosář použit: opravy {{count}}. Vrátit zpět pomocí Ctrl+Z.",
+		"glossaryNothingToFix": "Není co opravit: přepisy už odpovídají glosáři."
 	},
 	"exportDialog": {
 		"title": "Export",
@@ -449,7 +452,9 @@
 		"regionPasted": "Region pasted",
 		"regionCopied": "Region copied",
 		"cameraCheckFailed": "Could not check for a camera recording near {{name}}",
-		"sensitiveBlurred": "Automaticky rozmazané citlivé oblasti: {{count}}. Zkontrolujte je na časové ose."
+		"sensitiveBlurred": "Automaticky rozmazané citlivé oblasti: {{count}}. Zkontrolujte je na časové ose.",
+		"sensitiveScanFailed": "Automatické rozmazání u této nahrávky neproběhlo, nic na obrazovce nebylo rozmazáno.",
+		"sensitiveScanPartial": "Automatické rozmazání zkontrolovalo tuto nahrávku jen do {{covered}}. Zbytek zkontrolujte ručně."
 	},
 	"exportPipeline": {
 		"quality1440p": "1440p",

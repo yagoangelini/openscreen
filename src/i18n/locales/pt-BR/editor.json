@@ -193,7 +193,10 @@
 		"autoRedact": "Desfocar dados sensíveis nas novas gravações",
 		"autoRedactHint": "Depois de gravar, o OCR encontra e-mails, domínios de tenant, GUIDs, segredos e telefones na tela e os desfoca. Cada desfoque é uma anotação comum, que você mantém ou apaga. Funciona offline.",
 		"glossary": "Glossário",
-		"glossaryHint": "Nomes que a transcrição corrige, um por linha: Termo: errado 1, errado 2. Vale para as próximas transcrições."
+		"glossaryHint": "Nomes que a transcrição corrige, um por linha: Termo: errado 1, errado 2. Vale para as próximas transcrições.",
+		"glossaryApply": "Aplicar às transcrições deste projeto",
+		"glossaryApplied": "Glossário aplicado: {{count}} correção(ões). Desfaça com Ctrl+Z.",
+		"glossaryNothingToFix": "Nada a corrigir: as transcrições já seguem o glossário."
 	},
 	"exportDialog": {
 		"title": "Exportar",
@@ -449,7 +452,9 @@
 		"regionPasted": "Região colada",
 		"regionCopied": "Região copiada",
 		"cameraCheckFailed": "Não foi possível procurar uma gravação de câmera junto de {{name}}",
-		"sensitiveBlurred": "Áreas sensíveis desfocadas automaticamente: {{count}}. Confira na timeline."
+		"sensitiveBlurred": "Áreas sensíveis desfocadas automaticamente: {{count}}. Confira na timeline.",
+		"sensitiveScanFailed": "O desfoque automático não rodou neste take: nada na tela foi desfocado.",
+		"sensitiveScanPartial": "O desfoque automático só verificou este take até {{covered}}. Confira o resto à mão."
 	},
 	"exportPipeline": {
 		"quality1440p": "1440p",
