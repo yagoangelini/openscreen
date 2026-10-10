@@ -49,7 +49,11 @@
 		"diskSpaceLow": "Disk alanı az: yaklaşık {{minutes}} dakikalık kayıt sığar.",
 		"crashProtectionOff": "Bu kayıtta çökme koruması kapalı: uygulama beklenmedik şekilde kapanırsa kayıt kurtarılamaz.",
 		"takeStoppedDiskFull": "Disk neredeyse dolu olduğu için kayıt durduruldu. Şimdiye kadar kaydedilen her şey saklandı.",
-		"saveFailedFileKept": "Kayıt düzenleyicide açılamadı, ancak dosyası kayıtlar klasöründe tutuldu."
+		"saveFailedFileKept": "Kayıt düzenleyicide açılamadı, ancak dosyası kayıtlar klasöründe tutuldu.",
+		"audioDeviceLostMicrophone": "Mikrofon kayıt sırasında bağlantıyı kaybetti ve geri gelmedi: kaydın geri kalanında ses yok.",
+		"audioDeviceLostSystemAudio": "Sistem ses aygıtı kayıt sırasında bağlantıyı kaybetti ve geri gelmedi: kaydın geri kalanında bilgisayar sesi yok.",
+		"audioDeviceBackMicrophone": "Mikrofonun bağlantısı kesildi ve geri geldi: kaydın yaklaşık {{seconds}} sn'si sessiz.",
+		"audioDeviceBackSystemAudio": "Sistem ses aygıtının bağlantısı kesildi ve geri geldi: kaydın yaklaşık {{seconds}} sn'sinde bilgisayar sesi yok."
 	},
 	"loadingVideo": "Video yükleniyor...",
 	"loadingEditor": "Editör yükleniyor...",

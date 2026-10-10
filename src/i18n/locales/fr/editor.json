@@ -55,7 +55,11 @@
 		"diskSpaceLow": "Espace disque faible : environ {{minutes}} minutes d'enregistrement possibles.",
 		"crashProtectionOff": "La protection contre les plantages est désactivée pour cet enregistrement : si l'app se ferme brusquement, la prise ne pourra pas être récupérée.",
 		"takeStoppedDiskFull": "L'enregistrement a été arrêté car le disque est presque plein. Tout ce qui a été enregistré a été conservé.",
-		"saveFailedFileKept": "L'enregistrement n'a pas pu s'ouvrir dans l'éditeur, mais son fichier a été conservé dans le dossier des enregistrements."
+		"saveFailedFileKept": "L'enregistrement n'a pas pu s'ouvrir dans l'éditeur, mais son fichier a été conservé dans le dossier des enregistrements.",
+		"audioDeviceLostMicrophone": "Le micro s'est déconnecté pendant l'enregistrement et n'est pas revenu : le reste de la prise n'a pas de voix.",
+		"audioDeviceLostSystemAudio": "Le périphérique audio système s'est déconnecté pendant l'enregistrement et n'est pas revenu : le reste de la prise n'a pas le son de l'ordinateur.",
+		"audioDeviceBackMicrophone": "Le micro s'est déconnecté puis est revenu : environ {{seconds}} s de la prise n'ont pas de voix.",
+		"audioDeviceBackSystemAudio": "Le périphérique audio système s'est déconnecté puis est revenu : environ {{seconds}} s de la prise n'ont pas le son de l'ordinateur."
 	},
 	"loadingVideo": "Chargement de la vidéo...",
 	"loadingEditor": "Chargement de l'éditeur...",

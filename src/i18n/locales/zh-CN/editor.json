@@ -57,7 +57,11 @@
 		"diskSpaceLow": "磁盘空间不足：约可录制 {{minutes}} 分钟。",
 		"crashProtectionOff": "本次录制的崩溃保护已关闭：如果应用意外关闭，录制将无法恢复。",
 		"takeStoppedDiskFull": "由于磁盘快满了，录制已停止。目前录制的内容均已保存。",
-		"saveFailedFileKept": "无法在编辑器中打开录制，但其文件已保留在录制文件夹中。"
+		"saveFailedFileKept": "无法在编辑器中打开录制，但其文件已保留在录制文件夹中。",
+		"audioDeviceLostMicrophone": "录制期间麦克风断开且未恢复：之后的内容没有人声。",
+		"audioDeviceLostSystemAudio": "录制期间系统音频设备断开且未恢复：之后的内容没有电脑声音。",
+		"audioDeviceBackMicrophone": "麦克风断开后已恢复：约 {{seconds}} 秒没有人声。",
+		"audioDeviceBackSystemAudio": "系统音频设备断开后已恢复：约 {{seconds}} 秒没有电脑声音。"
 	},
 	"emptyState": {
 		"title": "未打开任何项目",

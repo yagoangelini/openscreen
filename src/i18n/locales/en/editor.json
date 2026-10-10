@@ -57,7 +57,11 @@
 		"diskSpaceLow": "Low disk space: room for about {{minutes}} minutes of recording.",
 		"crashProtectionOff": "Crash protection is off for this recording: if the app closes unexpectedly, the take cannot be recovered.",
 		"takeStoppedDiskFull": "The recording was stopped because the disk is almost full. Everything recorded so far was saved.",
-		"saveFailedFileKept": "The recording could not be opened in the editor, but its file was kept in the recordings folder."
+		"saveFailedFileKept": "The recording could not be opened in the editor, but its file was kept in the recordings folder.",
+		"audioDeviceLostMicrophone": "The microphone disconnected during the recording and did not come back: the rest of the take has no voice.",
+		"audioDeviceLostSystemAudio": "The system audio device disconnected during the recording and did not come back: the rest of the take has no computer sound.",
+		"audioDeviceBackMicrophone": "The microphone disconnected and came back: about {{seconds}} s of the take have no voice.",
+		"audioDeviceBackSystemAudio": "The system audio device disconnected and came back: about {{seconds}} s of the take have no computer sound."
 	},
 	"emptyState": {
 		"title": "Start with a recording",

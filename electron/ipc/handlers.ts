@@ -116,6 +116,7 @@ import {
 import {
 	isSalvageableFragmentedCapture,
 	NATIVE_WINDOWS_SALVAGEABLE_OUTPUT_BYTES,
+	readAudioDeviceDrops,
 	readCaptureFailureStage,
 	readMicrophoneDefaulted,
 	readMicrophoneUnavailable,
@@ -3765,6 +3766,7 @@ export function registerIpcHandlers(
 				// unreported, the user would find out in the editor — which is exactly
 				// the silence this change exists to end.
 				webcamDropped: Boolean(preferredWebcamPath) && !webcamVideoPath,
+				audioDrops: readAudioDeviceDrops(nativeWindowsCaptureOutput),
 				message: recovered
 					? "Native Windows recording recovered from a failed stop"
 					: "Native Windows recording session stored successfully",

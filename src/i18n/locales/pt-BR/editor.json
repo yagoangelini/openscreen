@@ -57,7 +57,11 @@
 		"diskSpaceLow": "Pouco espaço em disco: cabe cerca de {{minutes}} minutos de gravação.",
 		"crashProtectionOff": "A proteção contra falhas está desligada nesta gravação: se o app fechar de repente, o take não poderá ser recuperado.",
 		"takeStoppedDiskFull": "A gravação foi parada porque o disco está quase cheio. Tudo o que foi gravado até agora foi salvo.",
-		"saveFailedFileKept": "Não foi possível abrir a gravação no editor, mas o arquivo foi mantido na pasta de gravações."
+		"saveFailedFileKept": "Não foi possível abrir a gravação no editor, mas o arquivo foi mantido na pasta de gravações.",
+		"audioDeviceLostMicrophone": "O microfone desconectou durante a gravação e não voltou: o resto do take ficou sem voz.",
+		"audioDeviceLostSystemAudio": "O dispositivo de áudio do sistema desconectou durante a gravação e não voltou: o resto do take ficou sem o som do computador.",
+		"audioDeviceBackMicrophone": "O microfone desconectou e voltou: cerca de {{seconds}} s do take ficaram sem voz.",
+		"audioDeviceBackSystemAudio": "O dispositivo de áudio do sistema desconectou e voltou: cerca de {{seconds}} s do take ficaram sem o som do computador."
 	},
 	"emptyState": {
 		"title": "Nenhum projeto aberto",

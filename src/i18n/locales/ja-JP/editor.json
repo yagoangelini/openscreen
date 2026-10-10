@@ -57,7 +57,11 @@
 		"diskSpaceLow": "ディスクの空き容量が少なくなっています：約 {{minutes}} 分録画できます。",
 		"crashProtectionOff": "この録画ではクラッシュ保護がオフです。アプリが突然終了すると、録画を復元できません。",
 		"takeStoppedDiskFull": "ディスクがほぼいっぱいのため録画を停止しました。それまでの録画は保存されています。",
-		"saveFailedFileKept": "録画をエディターで開けませんでしたが、ファイルは録画フォルダーに残っています。"
+		"saveFailedFileKept": "録画をエディターで開けませんでしたが、ファイルは録画フォルダーに残っています。",
+		"audioDeviceLostMicrophone": "録画中にマイクが切断され、戻りませんでした。以降の音声は入っていません。",
+		"audioDeviceLostSystemAudio": "録画中にシステム音声デバイスが切断され、戻りませんでした。以降の PC の音は入っていません。",
+		"audioDeviceBackMicrophone": "マイクが切断され、再接続されました。約 {{seconds}} 秒間の音声が入っていません。",
+		"audioDeviceBackSystemAudio": "システム音声デバイスが切断され、再接続されました。約 {{seconds}} 秒間の PC の音が入っていません。"
 	},
 	"emptyState": {
 		"title": "プロジェクトが開かれていません",

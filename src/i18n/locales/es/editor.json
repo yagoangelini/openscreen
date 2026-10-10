@@ -49,7 +49,11 @@
 		"diskSpaceLow": "Poco espacio en disco: caben unos {{minutes}} minutos de grabación.",
 		"crashProtectionOff": "La protección contra fallos está desactivada en esta grabación: si la app se cierra inesperadamente, la toma no podrá recuperarse.",
 		"takeStoppedDiskFull": "La grabación se detuvo porque el disco está casi lleno. Se guardó todo lo grabado hasta ahora.",
-		"saveFailedFileKept": "No se pudo abrir la grabación en el editor, pero su archivo se conservó en la carpeta de grabaciones."
+		"saveFailedFileKept": "No se pudo abrir la grabación en el editor, pero su archivo se conservó en la carpeta de grabaciones.",
+		"audioDeviceLostMicrophone": "El micrófono se desconectó durante la grabación y no volvió: el resto de la toma no tiene voz.",
+		"audioDeviceLostSystemAudio": "El dispositivo de audio del sistema se desconectó durante la grabación y no volvió: el resto de la toma no tiene el sonido del equipo.",
+		"audioDeviceBackMicrophone": "El micrófono se desconectó y volvió: unos {{seconds}} s de la toma no tienen voz.",
+		"audioDeviceBackSystemAudio": "El dispositivo de audio del sistema se desconectó y volvió: unos {{seconds}} s de la toma no tienen el sonido del equipo."
 	},
 	"loadingVideo": "Cargando video...",
 	"loadingEditor": "Cargando editor...",

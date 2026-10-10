@@ -57,7 +57,11 @@
 		"diskSpaceLow": "Poco spazio su disco: circa {{minutes}} minuti di registrazione disponibili.",
 		"crashProtectionOff": "La protezione dai crash è disattivata per questa registrazione: se l'app si chiude all'improvviso, la ripresa non potrà essere recuperata.",
 		"takeStoppedDiskFull": "La registrazione è stata interrotta perché il disco è quasi pieno. Tutto ciò che è stato registrato è stato salvato.",
-		"saveFailedFileKept": "Non è stato possibile aprire la registrazione nell'editor, ma il file è stato conservato nella cartella delle registrazioni."
+		"saveFailedFileKept": "Non è stato possibile aprire la registrazione nell'editor, ma il file è stato conservato nella cartella delle registrazioni.",
+		"audioDeviceLostMicrophone": "Il microfono si è scollegato durante la registrazione e non è tornato: il resto della ripresa non ha voce.",
+		"audioDeviceLostSystemAudio": "Il dispositivo audio di sistema si è scollegato durante la registrazione e non è tornato: il resto della ripresa non ha l'audio del computer.",
+		"audioDeviceBackMicrophone": "Il microfono si è scollegato ed è tornato: circa {{seconds}} s della ripresa non hanno voce.",
+		"audioDeviceBackSystemAudio": "Il dispositivo audio di sistema si è scollegato ed è tornato: circa {{seconds}} s della ripresa non hanno l'audio del computer."
 	},
 	"emptyState": {
 		"title": "Nessun progetto aperto",

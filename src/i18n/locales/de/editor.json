@@ -57,7 +57,11 @@
 		"diskSpaceLow": "Wenig Speicherplatz: Platz für etwa {{minutes}} Minuten Aufnahme.",
 		"crashProtectionOff": "Der Absturzschutz ist für diese Aufnahme aus: Wird die App unerwartet beendet, lässt sich die Aufnahme nicht wiederherstellen.",
 		"takeStoppedDiskFull": "Die Aufnahme wurde beendet, weil der Datenträger fast voll ist. Alles bisher Aufgenommene wurde gespeichert.",
-		"saveFailedFileKept": "Die Aufnahme konnte nicht im Editor geöffnet werden, ihre Datei wurde aber im Aufnahmeordner behalten."
+		"saveFailedFileKept": "Die Aufnahme konnte nicht im Editor geöffnet werden, ihre Datei wurde aber im Aufnahmeordner behalten.",
+		"audioDeviceLostMicrophone": "Das Mikrofon wurde während der Aufnahme getrennt und kam nicht zurück: Der Rest der Aufnahme hat keine Stimme.",
+		"audioDeviceLostSystemAudio": "Das Systemaudiogerät wurde während der Aufnahme getrennt und kam nicht zurück: Dem Rest der Aufnahme fehlt der Computerton.",
+		"audioDeviceBackMicrophone": "Das Mikrofon wurde getrennt und kam zurück: Etwa {{seconds}} s der Aufnahme haben keine Stimme.",
+		"audioDeviceBackSystemAudio": "Das Systemaudiogerät wurde getrennt und kam zurück: Etwa {{seconds}} s der Aufnahme fehlt der Computerton."
 	},
 	"emptyState": {
 		"title": "Kein Projekt geöffnet",

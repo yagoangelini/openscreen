@@ -57,7 +57,11 @@
 		"diskSpaceLow": "디스크 공간 부족: 약 {{minutes}}분 녹화할 수 있습니다.",
 		"crashProtectionOff": "이 녹화는 충돌 보호가 꺼져 있습니다. 앱이 갑자기 종료되면 녹화를 복구할 수 없습니다.",
 		"takeStoppedDiskFull": "디스크가 거의 가득 차서 녹화를 중지했습니다. 지금까지 녹화된 내용은 저장되었습니다.",
-		"saveFailedFileKept": "녹화를 편집기에서 열 수 없지만 파일은 녹화 폴더에 보관되었습니다."
+		"saveFailedFileKept": "녹화를 편집기에서 열 수 없지만 파일은 녹화 폴더에 보관되었습니다.",
+		"audioDeviceLostMicrophone": "녹화 중 마이크 연결이 끊기고 다시 연결되지 않았습니다. 이후 부분에는 음성이 없습니다.",
+		"audioDeviceLostSystemAudio": "녹화 중 시스템 오디오 장치 연결이 끊기고 다시 연결되지 않았습니다. 이후 부분에는 컴퓨터 소리가 없습니다.",
+		"audioDeviceBackMicrophone": "마이크 연결이 끊겼다가 다시 연결되었습니다. 약 {{seconds}}초 동안 음성이 없습니다.",
+		"audioDeviceBackSystemAudio": "시스템 오디오 장치 연결이 끊겼다가 다시 연결되었습니다. 약 {{seconds}}초 동안 컴퓨터 소리가 없습니다."
 	},
 	"emptyState": {
 		"title": "열린 프로젝트 없음",

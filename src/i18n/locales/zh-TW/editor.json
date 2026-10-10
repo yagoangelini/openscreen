@@ -57,7 +57,11 @@
 		"diskSpaceLow": "磁碟空間不足：約可錄製 {{minutes}} 分鐘。",
 		"crashProtectionOff": "本次錄製的當機保護已關閉：若應用程式意外關閉，錄製將無法復原。",
 		"takeStoppedDiskFull": "由於磁碟快滿了，錄製已停止。目前錄製的內容皆已儲存。",
-		"saveFailedFileKept": "無法在編輯器中開啟錄製，但其檔案已保留在錄製資料夾中。"
+		"saveFailedFileKept": "無法在編輯器中開啟錄製，但其檔案已保留在錄製資料夾中。",
+		"audioDeviceLostMicrophone": "錄製期間麥克風中斷且未恢復：之後的內容沒有人聲。",
+		"audioDeviceLostSystemAudio": "錄製期間系統音訊裝置中斷且未恢復：之後的內容沒有電腦聲音。",
+		"audioDeviceBackMicrophone": "麥克風中斷後已恢復：約 {{seconds}} 秒沒有人聲。",
+		"audioDeviceBackSystemAudio": "系統音訊裝置中斷後已恢復：約 {{seconds}} 秒沒有電腦聲音。"
 	},
 	"emptyState": {
 		"title": "未開啟任何專案",
