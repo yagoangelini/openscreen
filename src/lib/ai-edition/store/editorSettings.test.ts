@@ -42,8 +42,8 @@ describe("getEditorSettings", () => {
 	it("returns the defaults when the document has no legacyEditor", () => {
 		const snap = getEditorSettings(baseDoc);
 		expect(snap.wallpaper).toBe(DEFAULT_EDITOR_SETTINGS.wallpaper);
-		// A new project stores no ratio and reads Auto; older documents had 16:9 pinned by v8.
-		expect(snap.aspectRatio).toBe("auto");
+		// A new project stores no ratio and reads 16:9, so its default export is 1920x1080.
+		expect(snap.aspectRatio).toBe("16:9");
 		expect(snap.shadowIntensity).toBe(DEFAULT_EDITOR_SETTINGS.shadowIntensity);
 		expect(snap.backgroundBlur).toBe(0);
 		expect(snap.webcamLayoutPreset).toBe(DEFAULT_WEBCAM_LAYOUT_PRESET);

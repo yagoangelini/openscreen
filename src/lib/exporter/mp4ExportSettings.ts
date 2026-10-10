@@ -1,4 +1,4 @@
-import type { ExportQuality } from "./types";
+import type { ExportQuality, ExportVideoCodec } from "./types";
 
 export interface Mp4ExportSettings {
 	width: number;
@@ -31,7 +31,26 @@ export function wouldUpscale(output: Dims, source: Dims): boolean {
 }
 
 const MEDIUM_SHORT_SIDE = 720;
-const HIGH_SHORT_SIDE = 1080;
+const GOOD_SHORT_SIDE = 1080;
+const HIGH_SHORT_SIDE = 1440;
+
+/**
+ * Largest side an H.264 export may have. Hardware H.264 encoders stop at 4096 (NVENC's limit;
+ * level 5.1/5.2's frame size is 4096x2304), so a "Source" export of a wider-than-4K recording
+ * would fail to open the encoder. H.265 goes to 8192 and is left alone.
+ */
+export const H264_MAX_SIDE = 4096;
+
+/** Scales `dims` down, keeping their ratio and even sizes, until neither side passes `max`. */
+function capLongSide(dims: Dims, max: number): Dims {
+	const long = Math.max(dims.width, dims.height);
+	if (long <= max) return dims;
+	const scale = max / long;
+	return {
+		width: Math.min(max, atLeastEven(Math.round(dims.width * scale))),
+		height: Math.min(max, atLeastEven(Math.round(dims.height * scale))),
+	};
+}
 
 function even(value: number) {
 	return Math.floor(value / 2) * 2;
@@ -134,38 +153,36 @@ function calculateBitrate(width: number, height: number, frameRate: number) {
 	return Math.max(MIN_BITRATE, Math.round(width * height * frameRate * BITS_PER_PIXEL));
 }
 
+/** The short side each fixed tier targets; "source" follows the recording instead. */
+const TIER_SHORT_SIDE: Record<Exclude<ExportQuality, "source">, number> = {
+	medium: MEDIUM_SHORT_SIDE,
+	good: GOOD_SHORT_SIDE,
+	high: HIGH_SHORT_SIDE,
+};
+
 export function calculateMp4ExportSettings({
 	quality,
 	sourceWidth,
 	sourceHeight,
 	aspectRatioValue,
 	frameRate,
+	codec = "h264",
 }: {
 	quality: ExportQuality;
 	sourceWidth: number;
 	sourceHeight: number;
 	aspectRatioValue: number;
 	frameRate: number;
+	/** H.264 caps the long side at `H264_MAX_SIDE`; defaults to H.264, the dialog's default. */
+	codec?: ExportVideoCodec;
 }): Mp4ExportSettings {
-	if (quality === "medium") {
-		const dimensions = calculateDimensionsForShortSide(MEDIUM_SHORT_SIDE, aspectRatioValue);
-		return {
-			...dimensions,
-			bitrate: calculateBitrate(dimensions.width, dimensions.height, frameRate),
-		};
-	}
-
-	if (quality === "good") {
-		const dimensions = calculateDimensionsForShortSide(HIGH_SHORT_SIDE, aspectRatioValue);
-		return {
-			...dimensions,
-			bitrate: calculateBitrate(dimensions.width, dimensions.height, frameRate),
-		};
-	}
-
-	const sourceDimensions = calculateSourceDimensions(sourceWidth, sourceHeight, aspectRatioValue);
+	const uncapped =
+		quality === "source"
+			? calculateSourceDimensions(sourceWidth, sourceHeight, aspectRatioValue)
+			: calculateDimensionsForShortSide(TIER_SHORT_SIDE[quality], aspectRatioValue);
+	const dimensions = codec === "h264" ? capLongSide(uncapped, H264_MAX_SIDE) : uncapped;
 	return {
-		...sourceDimensions,
-		bitrate: calculateBitrate(sourceDimensions.width, sourceDimensions.height, frameRate),
+		...dimensions,
+		bitrate: calculateBitrate(dimensions.width, dimensions.height, frameRate),
 	};
 }

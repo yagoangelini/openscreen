@@ -28,7 +28,9 @@ export interface VideoFrameData {
 	duration: number; // in microseconds
 }
 
-export type ExportQuality = "medium" | "good" | "source";
+/** `medium` 720p, `good` 1080p (the default), `high` 1440p, `source` the recording's own size.
+ *  The fixed tiers name a short side; the long side follows the project's format. */
+export type ExportQuality = "medium" | "good" | "high" | "source";
 
 // GIF Export Types
 export type ExportFormat = "mp4" | "gif";
