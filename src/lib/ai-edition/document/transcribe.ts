@@ -95,12 +95,17 @@ export async function transcribeAsset(
 	// transcribe rather than lose the feature. Only THAT case falls back. "This file
 	// has no audio" is a verdict, and re-deriving it in the renderer would buy the same
 	// answer for the price of the decode this exists to avoid.
-	const result = await transcribeSourceFileToSegments(asset.originalPath, {
-		trimRegions: [],
-		signal: options.signal,
-		language: forcedLanguage,
-		onStatus: forwardStatus,
-	}).catch(async (error: unknown) => {
+	// The voice stem, when the take has one: the words without the computer's sound on top.
+	// Same clock as the video, so the timings need nothing.
+	const result = await transcribeSourceFileToSegments(
+		asset.audioStems?.voicePath ?? asset.originalPath,
+		{
+			trimRegions: [],
+			signal: options.signal,
+			language: forcedLanguage,
+			onStatus: forwardStatus,
+		},
+	).catch(async (error: unknown) => {
 		const message = error instanceof Error ? error.message : String(error);
 		if (!message.includes(STT_NATIVE_EXTRACTION_UNAVAILABLE)) throw error;
 		const audioResult = await extractMono16kFromVideoUrl(videoUrl, {

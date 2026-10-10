@@ -146,6 +146,13 @@ public:
 
     bool start();
     void setMicrophoneChannelMode(MicrophoneChannelMode mode) { microphoneChannels_.setMode(mode); }
+    // Each source on its own, chunk for chunk with the mix and on its timestamps: the system
+    // sound as captured and the microphone at unity, before any gain or limiter. Set before
+    // start(); either may be empty.
+    void setStemOutputs(OutputCallback system, OutputCallback microphone) {
+        systemStem_ = std::move(system);
+        microphoneStem_ = std::move(microphone);
+    }
     void beginTimeline();
     void setPaused(bool paused);
     void stop();
@@ -170,6 +177,8 @@ private:
     bool includeMicrophone_ = false;
     double microphoneGain_ = 1.0;
     OutputCallback output_;
+    OutputCallback systemStem_;
+    OutputCallback microphoneStem_;
     std::mutex mutex_;
     std::condition_variable cv_;
     std::vector<BYTE> systemQueue_;

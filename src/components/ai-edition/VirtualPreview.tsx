@@ -59,6 +59,9 @@ export interface VideoSource {
 	/** Original filesystem path, used by the main process to expose the second audio track. */
 	filePath?: string;
 	label: string;
+	/** The take's voice and computer sound on their own (`asset.audioStems`), played in place
+	 *  of the video's mixed track so the Voice and Computer volumes apply. */
+	stems?: { voicePath: string; voiceSrc: string; systemSrc: string };
 }
 
 /**
@@ -388,10 +391,19 @@ export function VirtualPreview({
 	const virtualDurationSec = useMemo(() => totalVirtualDuration(clips), [clips]);
 	const activeSource = videoSources[sourceIndex] ?? null;
 
+	const activeStems = activeSource?.stems;
 	useEffect(() => {
 		let cancelled = false;
 		setSupplementalAudioSrc(null);
 		setAudioProbeComplete(false);
+		// With stems, the second element plays the computer sound; nothing to extract.
+		if (activeStems) {
+			setSupplementalAudioSrc(activeStems.systemSrc);
+			setAudioProbeComplete(true);
+			return () => {
+				cancelled = true;
+			};
+		}
 		if (!activeSource?.filePath || !window.electronAPI?.preparePreviewAudioTrack) {
 			setAudioProbeComplete(true);
 			return () => {
@@ -413,7 +425,7 @@ export function VirtualPreview({
 		return () => {
 			cancelled = true;
 		};
-	}, [activeSource?.filePath]);
+	}, [activeSource?.filePath, activeStems]);
 
 	// Loudness normalisation of every voice file the preview plays: the recording mounted now
 	// and each voiceover take. The export levels them to −16 LUFS with a gain the compositor
@@ -427,15 +439,16 @@ export function VirtualPreview({
 	const loudnessGainDbByPathRef = useRef(loudnessGainDbByPath);
 	loudnessGainDbByPathRef.current = loudnessGainDbByPath;
 	const requestedLoudnessRef = useRef(new Set<string>());
+	// The voice file is the voice stem when the take has one: that is what the export levels.
+	const activeVoicePath = activeStems?.voicePath ?? activeSource?.filePath;
 	const voicePathsKey = [
-		activeSource?.filePath,
+		activeVoicePath,
 		...audioTracks
 			.filter((track) => track.kind === "voiceover")
 			.map((track) => audioSources.find((source) => source.id === track.assetId)?.filePath),
 	]
 		.filter((path): path is string => Boolean(path))
 		.join("\n");
-	const activeVoicePath = activeSource?.filePath;
 	const measuredForRetryRef = useRef(retryToken);
 	useEffect(() => {
 		const getLoudnessGain = window.electronAPI?.getLoudnessGain;
@@ -466,9 +479,15 @@ export function VirtualPreview({
 			);
 		}
 	}, [voicePathsKey, retryToken, activeVoicePath]);
-	const voiceGainDb = activeSource?.filePath
-		? (loudnessGainDbByPath.get(activeSource.filePath) ?? 0)
-		: 0;
+	// Loudness, plus the Voice volume when the voice plays on its own.
+	const voiceGainDb =
+		(activeVoicePath ? (loudnessGainDbByPath.get(activeVoicePath) ?? 0) : 0) +
+		(activeStems ? settings.voiceGainDb : 0);
+	const systemGainDbRef = useRef(settings.systemGainDb);
+	systemGainDbRef.current = settings.systemGainDb;
+	const systemGainNodeRef = useRef<GainNode | null>(null);
+	const hasStemsRef = useRef(Boolean(activeStems));
+	hasStemsRef.current = Boolean(activeStems);
 	const voiceGainDbRef = useRef(voiceGainDb);
 	voiceGainDbRef.current = voiceGainDb;
 
@@ -522,6 +541,15 @@ export function VirtualPreview({
 		}
 
 		const connectedSources: MediaElementAudioSourceNode[] = [];
+		// With stems the second element is the computer sound: its own volume, straight to the
+		// output, and no part of what the music ducks under.
+		let systemGain: GainNode | null = null;
+		if (hasStemsRef.current && supplementalAudioEl) {
+			systemGain = graph.context.createGain();
+			systemGain.gain.value = audioGainScalar(systemGainDbRef.current);
+			systemGain.connect(graph.gain);
+		}
+		systemGainNodeRef.current = systemGain;
 		for (const element of elements) {
 			try {
 				let source = audioSourceNodesRef.current.get(element);
@@ -530,7 +558,7 @@ export function VirtualPreview({
 					audioSourceNodesRef.current.set(element, source);
 				}
 				source.disconnect();
-				source.connect(graph.voice);
+				source.connect(systemGain && element === supplementalAudioEl ? systemGain : graph.voice);
 				connectedSources.push(source);
 			} catch {
 				// Routing THIS element failed; leave the others alone. Once
@@ -575,6 +603,8 @@ export function VirtualPreview({
 			audioGraphRef.current = null;
 			for (const source of connectedSources) source.disconnect();
 			for (const trackGain of trackGainNodes) trackGain.disconnect();
+			systemGain?.disconnect();
+			systemGainNodeRef.current = null;
 			audioTrackGainNodesRef.current = new Map();
 			graph.voice.disconnect();
 			graph.analyser.disconnect();
@@ -623,6 +653,11 @@ export function VirtualPreview({
 			voiceGainDb,
 		);
 	}, [settings.audioGainDb, voiceGainDb]);
+
+	useEffect(() => {
+		const node = systemGainNodeRef.current;
+		if (node) node.gain.value = audioGainScalar(settings.systemGainDb);
+	}, [settings.systemGainDb]);
 
 	const setPrimaryAudioElement = useCallback((element: HTMLAudioElement | null) => {
 		primaryAudioRef.current = element;
@@ -1589,7 +1624,7 @@ export function VirtualPreview({
 						<audio
 							key={`${activeSource.id}:primary-audio`}
 							ref={setPrimaryAudioElement}
-							src={activeSource.src}
+							src={activeSource.stems?.voiceSrc ?? activeSource.src}
 							preload="metadata"
 							aria-hidden="true"
 							data-testid="preview-audio-primary"

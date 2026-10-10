@@ -36,6 +36,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 add_executable(wgc-capture
+  src/aac_stem_writer.cpp
+  src/aac_stem_writer.h
   src/audio_sample_utils.cpp
   src/audio_sample_utils.h
   src/desktop_icon_cover.cpp

@@ -386,7 +386,9 @@
 		"outputGain": "Livello di uscita",
 		"help": "Le voci vengono livellate automaticamente a un volume percepito standard. Regola il livello di uscita a partire da lì; si applica allo stesso modo nell’anteprima e nell’esportazione.",
 		"reset": "Reimposta audio",
-		"title": "Audio"
+		"title": "Audio",
+		"voiceGain": "Voce",
+		"systemGain": "Audio del computer"
 	},
 	"language": {
 		"title": "Lingua"

@@ -517,7 +517,16 @@ export interface SceneDescription {
 	 */
 	audio: {
 		gainDb: number;
+		/** The Voice and Computer volumes, for the takes listed in `audioStems`. */
+		voiceGainDb: number;
+		systemGainDb: number;
 	};
+	/**
+	 * The takes recorded with their voice and computer sound apart: the export reads these
+	 * stems in place of the video's mixed track (`SceneAudioStems`, Rust). Keyed by the
+	 * screen file, the same path every clip of that take carries as `screenPath`.
+	 */
+	audioStems: Array<{ screenPath: string; voicePath: string; systemPath: string }>;
 	/**
 	 * Timeline audio tracks (issue #350), mixed over the assembled programme by
 	 * `audio::mix_external_tracks`. One entry per contiguous stretch: a track split by a
@@ -1288,7 +1297,14 @@ export function buildSceneDescription(
 		},
 		audio: {
 			gainDb: settings.audioGainDb,
+			voiceGainDb: settings.voiceGainDb,
+			systemGainDb: settings.systemGainDb,
 		},
+		audioStems: document.assets.flatMap((asset) =>
+			asset.audioStems && asset.originalPath
+				? [{ screenPath: asset.originalPath, ...asset.audioStems }]
+				: [],
+		),
 		audioTracks,
 		background: sceneBackground(settings.wallpaper, settings.wallpaperMotion),
 		zoomRegions: projectedZoomRegions.map((region) => {

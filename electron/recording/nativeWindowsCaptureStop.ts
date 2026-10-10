@@ -85,6 +85,11 @@ export type NativeWindowsCaptureStopResult =
 			exited: boolean;
 	  };
 
+/** Did the helper finish both audio stems? It names them on its stop line only when it did. */
+export function readStemsFinalized(output: string) {
+	return /"event":"recording-stopped"[^\n]*"voicePath":"/.test(output);
+}
+
 export function readStoppedPath(output: string) {
 	return output.match(RECORDING_STOPPED_PATTERN)?.[1]?.trim() || null;
 }

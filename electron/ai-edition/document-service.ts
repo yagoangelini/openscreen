@@ -30,7 +30,7 @@ import {
 	type StylePresetAppearance,
 	stylePresetLegacyEditor,
 } from "../../src/lib/ai-edition/stylePresets";
-import { RECORDING_MARKERS_SUFFIX } from "../../src/lib/recordingSession";
+import { audioStemPathsFor, RECORDING_MARKERS_SUFFIX } from "../../src/lib/recordingSession";
 import { ensureDocumentExtensions } from "../media/extensionClip";
 import { relinkProjectMedia } from "../media/projectMediaRelinker";
 
@@ -184,6 +184,20 @@ async function readRecordingKeystrokes(videoPath: string) {
 	} catch {
 		return undefined;
 	}
+}
+
+/** The take's audio stems, when both are there and not empty. */
+async function readRecordingStems(videoPath: string) {
+	const stems = audioStemPathsFor(videoPath);
+	const sizes = await Promise.all(
+		[stems.voicePath, stems.systemPath].map((p) =>
+			fs.stat(p).then(
+				(s) => s.size,
+				() => 0,
+			),
+		),
+	);
+	return sizes.every((size) => size > 0) ? stems : undefined;
 }
 
 /** The previous save, kept beside each project file. */
@@ -482,6 +496,7 @@ export class DocumentService {
 		}
 		const markersSec = kind === "audio" ? undefined : await readRecordingMarkersSec(absolutePath);
 		const keystrokes = kind === "audio" ? undefined : await readRecordingKeystrokes(absolutePath);
+		const audioStems = kind === "audio" ? undefined : await readRecordingStems(absolutePath);
 		const asset: AxcutAsset = {
 			id: createId("asset"),
 			kind,
@@ -491,6 +506,7 @@ export class DocumentService {
 			cameraTrack: null,
 			...(markersSec && markersSec.length > 0 ? { markersSec } : {}),
 			...(keystrokes && keystrokes.length > 0 ? { keystrokes } : {}),
+			...(audioStems ? { audioStems } : {}),
 		};
 		// An audio import is an overlay, never the thing the timeline is built
 		// around, so it must not claim the empty primaryAssetId slot — otherwise the

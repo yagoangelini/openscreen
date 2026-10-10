@@ -663,6 +663,23 @@ pub struct SceneCrop {
 pub struct SceneAudio {
     #[serde(default)]
     pub gain_db: f32,
+    /// The Voice and Computer volumes (dB), applied to a take's audio stems when it has them
+    /// (`Scene::audio_stems`). Ignored for a take without: its single track keeps `gain_db`.
+    #[serde(default)]
+    pub voice_gain_db: f32,
+    #[serde(default)]
+    pub system_gain_db: f32,
+}
+
+/// A take's voice and computer sound on their own, beside its screen video: the export reads
+/// these in place of the video's mixed track, each at its own volume. Keyed by the screen file
+/// rather than carried on a clip, since every clip cut from the take shares them.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SceneAudioStems {
+    pub screen_path: String,
+    pub voice_path: String,
+    pub system_path: String,
 }
 
 /// One imported audio track (issue #350) mixed over the assembled programme —
@@ -784,6 +801,9 @@ pub struct Scene {
     /// absent from every scene written before this, and from a project with none.
     #[serde(default)]
     pub audio_tracks: Vec<SceneAudioTrack>,
+    /// See `SceneAudioStems`. Absent from every scene written before the stems existed.
+    #[serde(default)]
+    pub audio_stems: Vec<SceneAudioStems>,
     /// Crop écran par clip, dans le même ordre que `clips` (`cropByClip` côté TS).
     #[serde(default)]
     pub crop_by_clip: Vec<Option<SceneCrop>>,

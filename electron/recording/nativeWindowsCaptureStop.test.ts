@@ -9,6 +9,7 @@ import {
 	readCaptureFailureStage,
 	readMicrophoneDefaulted,
 	readMicrophoneUnavailable,
+	readStemsFinalized,
 	readStoppedPath,
 	readWebcamFormat,
 	readWebcamUnavailable,
@@ -82,6 +83,21 @@ describe("readStoppedPath", () => {
 		expect(readStoppedPath("Recording started\n[stop-timing] step=microphone elapsed_ms=0\n")).toBe(
 			null,
 		);
+	});
+});
+
+describe("readStemsFinalized", () => {
+	it("is true only when the stop line names the stems", () => {
+		expect(
+			readStemsFinalized(
+				'{"event":"recording-stopped","schemaVersion":2,"screenPath":"C:\\a.mp4","voicePath":"C:\\a.voice.m4a","systemPath":"C:\\a.system.m4a"}\n',
+			),
+		).toBe(true);
+		expect(
+			readStemsFinalized(
+				'{"event":"recording-stopped","schemaVersion":2,"screenPath":"C:\\a.mp4"}\n',
+			),
+		).toBe(false);
 	});
 });
 

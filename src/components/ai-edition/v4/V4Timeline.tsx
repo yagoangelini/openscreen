@@ -1630,7 +1630,8 @@ export function V4Timeline({
 		try {
 			const [peaks, telemetry] = await Promise.all([
 				window.electronAPI
-					?.getAudioPeaks?.(asset.originalPath, asset.durationSec)
+					// A wait is quiet speech: the voice stem says it without the computer's sound.
+					?.getAudioPeaks?.(asset.audioStems?.voicePath ?? asset.originalPath, asset.durationSec)
 					.then((r) => r.peaks ?? null)
 					.catch(() => null) ?? Promise.resolve(null),
 				nativeBridgeClient.cursor.getTelemetry(asset.originalPath).catch(() => null),

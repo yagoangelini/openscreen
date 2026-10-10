@@ -128,6 +128,9 @@ export interface EditorSettingsSnapshot {
 	 *  Authoritative: `webcamCropRegion.x/y` are rebuilt from it on read. */
 	webcamCropPan: CropPan;
 	audioGainDb: number;
+	/** The Voice and Computer volumes (dB), for a take recorded with its audio stems. */
+	voiceGainDb: number;
+	systemGainDb: number;
 	webcamBackgroundMode: WebcamBackgroundMode;
 	webcamWallpaper: string;
 	webcamBlurIntensity: number;
@@ -152,6 +155,8 @@ export const DEFAULT_EDITOR_SETTINGS: EditorSettingsSnapshot = {
 	webcamCropRegion: DEFAULT_CROP_REGION,
 	webcamCropPan: DEFAULT_CROP_PAN,
 	audioGainDb: 0,
+	voiceGainDb: 0,
+	systemGainDb: 0,
 	formatFollowCursor: null,
 	autoZoom: DEFAULT_AUTO_ZOOM_SETTINGS,
 };
@@ -185,6 +190,8 @@ interface LegacyShape {
 	webcamCropRegion?: CropRegion;
 	webcamCropPan?: CropPan;
 	audioGainDb?: number;
+	voiceGainDb?: number;
+	systemGainDb?: number;
 	webcamBackgroundMode?: WebcamBackgroundMode;
 	webcamWallpaper?: string;
 	webcamBlurIntensity?: number;
@@ -332,6 +339,15 @@ export function getEditorSettings(doc: AxcutDocument | null | undefined): Editor
 			AUDIO_GAIN_DB_LIMIT,
 			Math.max(-AUDIO_GAIN_DB_LIMIT, num(legacy?.audioGainDb, 0)),
 		),
+		// The stems' volumes take the same bound: the export clamps neither more nor less.
+		voiceGainDb: Math.min(
+			AUDIO_GAIN_DB_LIMIT,
+			Math.max(-AUDIO_GAIN_DB_LIMIT, num(legacy?.voiceGainDb, 0)),
+		),
+		systemGainDb: Math.min(
+			AUDIO_GAIN_DB_LIMIT,
+			Math.max(-AUDIO_GAIN_DB_LIMIT, num(legacy?.systemGainDb, 0)),
+		),
 		webcamBackgroundMode: isWebcamBackgroundMode(legacy?.webcamBackgroundMode)
 			? legacy.webcamBackgroundMode
 			: DEFAULT_EDITOR_SETTINGS.webcamBackgroundMode,
@@ -378,6 +394,8 @@ export interface EditorSettingsPatch {
 	webcamCropRegion?: CropRegion;
 	webcamCropPan?: CropPan;
 	audioGainDb?: number;
+	voiceGainDb?: number;
+	systemGainDb?: number;
 	webcamBackgroundMode?: WebcamBackgroundMode;
 	webcamWallpaper?: string;
 	webcamBlurIntensity?: number;

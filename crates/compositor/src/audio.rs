@@ -2475,7 +2475,7 @@ mod tests {
         for gain_db in [-12.0f32, -6.0206, 0.0, 6.0206, 12.0] {
             let result = finish_audio(
                 planar(&[0.2, -0.2]),
-                SceneAudio { gain_db },
+                SceneAudio { gain_db, ..SceneAudio::default() },
             );
             let expected = 0.2 * 10.0f32.powf(gain_db / 20.0);
             assert!(
@@ -2491,11 +2491,11 @@ mod tests {
     fn out_of_range_gain_is_clamped_to_the_editor_bound() {
         // A hand-edited project, the AI edition agent, or a future UI change must not be
         // able to ask for a gain the slider cannot display.
-        let quiet = finish_audio(planar(&[0.5]), SceneAudio { gain_db: -99.0 });
+        let quiet = finish_audio(planar(&[0.5]), SceneAudio { gain_db: -99.0, ..SceneAudio::default() });
         let floor = 0.5 * 10.0f32.powf(-12.0 / 20.0);
         assert!((quiet[0][0] - floor).abs() < 1e-6);
 
-        let loud = finish_audio(planar(&[0.1]), SceneAudio { gain_db: 99.0 });
+        let loud = finish_audio(planar(&[0.1]), SceneAudio { gain_db: 99.0, ..SceneAudio::default() });
         let ceiling = 0.1 * 10.0f32.powf(12.0 / 20.0);
         assert!((loud[0][0] - ceiling).abs() < 1e-6);
     }
@@ -2732,7 +2732,7 @@ mod tests {
     #[test]
     fn a_signal_under_the_ceiling_leaves_finishing_untouched() {
         let pcm = sine(1.0);
-        let result = finish_audio(pcm.clone(), SceneAudio { gain_db: 0.0 });
+        let result = finish_audio(pcm.clone(), SceneAudio { gain_db: 0.0, ..SceneAudio::default() });
         assert_eq!(result, pcm, "the limiter must be transparent below its ceiling");
     }
 
@@ -2747,7 +2747,7 @@ mod tests {
             }
         }
         let len = pcm[0].len();
-        let result = finish_audio(pcm, SceneAudio { gain_db: 12.0 });
+        let result = finish_audio(pcm, SceneAudio { gain_db: 12.0, ..SceneAudio::default() });
         assert_eq!(result[0].len(), len);
         let peak = result.iter().flatten().fold(0.0f32, |peak, s| peak.max(s.abs()));
         assert!(peak <= LIMITER_CEILING * (1.0 + 1e-6), "peak {peak} over the ceiling");

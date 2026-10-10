@@ -111,6 +111,46 @@ impl PcmStream for MemoryPcm {
     }
 }
 
+/// Streams added sample for sample: a take's voice and computer stems, played as one.
+pub struct SumStream {
+    inputs: Vec<Box<dyn PcmStream>>,
+    scratch: PlanarPcm,
+}
+
+impl SumStream {
+    pub fn new(inputs: Vec<Box<dyn PcmStream>>) -> Self {
+        Self { inputs, scratch: planes(0) }
+    }
+}
+
+impl PcmStream for SumStream {
+    fn pull(&mut self, n: usize, out: &mut PlanarPcm) {
+        let starts: Vec<usize> = out.iter().map(Vec::len).collect();
+        push_silence(n, out);
+        for input in &mut self.inputs {
+            for plane in self.scratch.iter_mut() {
+                plane.clear();
+            }
+            input.pull(n, &mut self.scratch);
+            for ((plane, start), source) in out.iter_mut().zip(&starts).zip(&self.scratch) {
+                for (i, sample) in source.iter().take(n).enumerate() {
+                    plane[start + i] += *sample;
+                }
+            }
+        }
+    }
+}
+
+/// A clip's two stems, opened and levelled for `clip_source`: the voice normalised like any
+/// voice file plus its volume, the computer sound at its volume alone (normalising it would
+/// boost a quiet desktop by up to 12 dB).
+pub struct ClipStems<'a> {
+    pub voice_path: &'a str,
+    pub voice_gain_db: f32,
+    pub system_path: &'a str,
+    pub system_gain_db: f32,
+}
+
 /// `apply_gain_db` on a stream: the per-file loudness normalisation of a clip.
 pub struct GainStream<S> {
     inner: S,
@@ -1082,11 +1122,32 @@ impl ProgrammeAudio {
     pub fn clip_source(
         clip_index: usize,
         screen_path: &str,
+        stems: Option<ClipStems<'_>>,
         source_start_sec: f64,
         source_end_sec: f64,
         speed_segments: &[SpeedSegment],
         output_fps: f64,
     ) -> Option<Box<dyn PcmStream>> {
+        if let Some(stems) = stems {
+            let open = |path: &str, gain_db: f32| -> Option<Box<dyn PcmStream>> {
+                match ClipAudioReader::open(path, source_start_sec, source_end_sec) {
+                    Ok(Some(reader)) => {
+                        let total = reader.len();
+                        let stretched = SpeedStretchStream::new(reader, speed_segments, output_fps, total);
+                        Some(Box::new(GainStream::new(stretched, gain_db)))
+                    }
+                    _ => None,
+                }
+            };
+            let voice = open(stems.voice_path, loudness_gain_db(stems.voice_path) + stems.voice_gain_db);
+            let system = open(stems.system_path, stems.system_gain_db);
+            if let (Some(voice), Some(system)) = (voice, system) {
+                return Some(Box::new(SumStream::new(vec![voice, system])));
+            }
+            eprintln!(
+                "[pipeline] warning: clip #{clip_index}: audio stems unreadable, using the video's own track"
+            );
+        }
         match ClipAudioReader::open(screen_path, source_start_sec, source_end_sec) {
             Ok(Some(reader)) => {
                 let total = reader.len();
@@ -1414,6 +1475,24 @@ mod tests {
     };
     use std::collections::HashMap;
     use std::rc::Rc;
+
+    #[test]
+    fn sum_stream_adds_the_stems_sample_for_sample_and_pads_the_shorter() {
+        let voice: PlanarPcm = (0..CHANNELS).map(|_| vec![0.25, 0.25, 0.25]).collect();
+        let system: PlanarPcm = (0..CHANNELS).map(|_| vec![0.5, -0.5]).collect();
+        let mut sum = SumStream::new(vec![
+            Box::new(MemoryPcm::new(voice)),
+            Box::new(GainStream::new(MemoryPcm::new(system), -6.0206)),
+        ]);
+        let mut out = planes(0);
+        sum.pull(2, &mut out);
+        sum.pull(2, &mut out);
+        for plane in &out {
+            assert_eq!(plane.len(), 4);
+            assert!((plane[0] - 0.5).abs() < 1e-4 && (plane[1] - 0.0).abs() < 1e-4);
+            assert!((plane[2] - 0.25).abs() < 1e-6 && plane[3].abs() < 1e-6);
+        }
+    }
 
     /// Deterministic, busy, and loud enough in places to make the limiter work.
     fn signal(len: usize, seed: u32) -> PlanarPcm {
