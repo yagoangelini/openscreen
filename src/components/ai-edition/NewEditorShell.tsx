@@ -506,6 +506,17 @@ export function NewEditorShell() {
 				? asset.originalPath
 				: toFileUrl(asset.originalPath),
 			label: asset.label,
+			// The voice and computer sound apart, when the take has them: the preview plays
+			// these instead of the video's mixed track, each at its own volume.
+			...(asset.audioStems
+				? {
+						stems: {
+							voicePath: asset.audioStems.voicePath,
+							voiceSrc: toFileUrl(asset.audioStems.voicePath),
+							systemSrc: toFileUrl(asset.audioStems.systemPath),
+						},
+					}
+				: {}),
 		}));
 	}, [document]);
 

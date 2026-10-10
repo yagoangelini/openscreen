@@ -386,7 +386,9 @@
 		"outputGain": "Ajuste de salida",
 		"help": "Las voces se nivelan automáticamente a una sonoridad estándar. Ajusta el nivel de salida a partir de ahí; se aplica igual en la vista previa y en la exportación.",
 		"reset": "Restablecer audio",
-		"title": "Audio"
+		"title": "Audio",
+		"voiceGain": "Voz",
+		"systemGain": "Sonido del equipo"
 	},
 	"language": {
 		"title": "Idioma"

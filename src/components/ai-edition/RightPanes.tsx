@@ -3421,6 +3421,8 @@ function WebcamFraming({
 export function AudioPane() {
 	const ts = useScopedT("settings");
 	const { settings, set, setLive, commit, hasDocument } = useEditorSettings();
+	// Two more sliders when a take was recorded with its voice and computer sound apart.
+	const hasStems = useProjectStore((s) => Boolean(s.document?.assets.some((a) => a.audioStems)));
 	return (
 		<Pane title={ts("audio.title")} icon={<AudioLines size={16} />} helpText={ts("audio.help")}>
 			<div className={styles.sliderGrid}>
@@ -3437,12 +3439,42 @@ export function AudioPane() {
 					onChange={(value) => setLive({ audioGainDb: value })}
 					onCommit={() => void commit()}
 				/>
+				{hasStems ? (
+					<>
+						<SliderCell
+							label={ts("audio.voiceGain")}
+							value={settings.voiceGainDb}
+							min={-AUDIO_GAIN_DB_LIMIT}
+							max={AUDIO_GAIN_DB_LIMIT}
+							defaultValue={0}
+							step={0.5}
+							decimals={1}
+							suffix=" dB"
+							disabled={!hasDocument}
+							onChange={(value) => setLive({ voiceGainDb: value })}
+							onCommit={() => void commit()}
+						/>
+						<SliderCell
+							label={ts("audio.systemGain")}
+							value={settings.systemGainDb}
+							min={-AUDIO_GAIN_DB_LIMIT}
+							max={AUDIO_GAIN_DB_LIMIT}
+							defaultValue={0}
+							step={0.5}
+							decimals={1}
+							suffix=" dB"
+							disabled={!hasDocument}
+							onChange={(value) => setLive({ systemGainDb: value })}
+							onCommit={() => void commit()}
+						/>
+					</>
+				) : null}
 			</div>
 			<button
 				type="button"
 				className={styles.secondaryBtn}
 				disabled={!hasDocument}
-				onClick={() => void set({ audioGainDb: 0 })}
+				onClick={() => void set({ audioGainDb: 0, voiceGainDb: 0, systemGainDb: 0 })}
 			>
 				{ts("audio.reset")}
 			</button>

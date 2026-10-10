@@ -386,7 +386,9 @@
 		"outputGain": "Mức đầu ra",
 		"help": "Giọng nói được tự động cân bằng về độ lớn tiêu chuẩn. Hãy điều chỉnh mức đầu ra từ đó; nó được áp dụng giống hệt nhau trong bản xem trước và khi xuất.",
 		"reset": "Đặt lại âm thanh",
-		"title": "Âm thanh"
+		"title": "Âm thanh",
+		"voiceGain": "Giọng nói",
+		"systemGain": "Âm thanh máy tính"
 	},
 	"language": {
 		"title": "Ngôn ngữ"

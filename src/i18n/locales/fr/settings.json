@@ -386,7 +386,9 @@
 		"outputGain": "Niveau de sortie",
 		"help": "Les voix sont automatiquement ramenées à une sonie standard. Ajustez le niveau de sortie à partir de là ; il s’applique à l’identique dans l’aperçu et à l’export.",
 		"reset": "Réinitialiser l’audio",
-		"title": "Audio"
+		"title": "Audio",
+		"voiceGain": "Voix",
+		"systemGain": "Son de l'ordinateur"
 	},
 	"language": {
 		"title": "Langue"

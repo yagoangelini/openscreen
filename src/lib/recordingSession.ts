@@ -13,6 +13,19 @@ export interface ProjectMedia {
 	cursorCaptureMode?: CursorCaptureMode;
 }
 
+/**
+ * The take's voice and computer sound on their own, beside its screen video, when it
+ * recorded both (the Windows helper writes them). Named after the video, so finding
+ * them needs nothing but its path.
+ */
+export function audioStemPathsFor(screenVideoPath: string): {
+	voicePath: string;
+	systemPath: string;
+} {
+	const base = screenVideoPath.replace(/\.[^./\\]+$/, "");
+	return { voicePath: `${base}.voice.m4a`, systemPath: `${base}.system.m4a` };
+}
+
 /** Sidecar beside a take's screen video holding the marker-shortcut positions (media ms). */
 export const RECORDING_MARKERS_SUFFIX = ".markers.json";
 

@@ -386,7 +386,9 @@
 		"outputGain": "Výstupní úroveň",
 		"help": "Hlas se automaticky vyrovná na standardní hlasitost. Výstupní úroveň upravte od ní; aplikuje se stejně v náhledu i při exportu.",
 		"reset": "Obnovit zvuk",
-		"title": "Zvuk"
+		"title": "Zvuk",
+		"voiceGain": "Hlas",
+		"systemGain": "Zvuk počítače"
 	},
 	"language": {
 		"title": "Jazyk"

@@ -384,3 +384,35 @@ describe("VirtualPreview imported audio track boost", () => {
 		expect(audioEl.volume).toBe(1); // volume left at unity so it doesn't double-attenuate
 	});
 });
+
+describe("VirtualPreview with audio stems", () => {
+	it("plays the voice and the computer sound in place of the video's mixed track", () => {
+		const sources: VideoSource[] = [
+			{
+				id: "a1",
+				src: "file:///tmp/take.mp4",
+				label: "take",
+				stems: {
+					voicePath: "/tmp/take.voice.m4a",
+					voiceSrc: "file:///tmp/take.voice.m4a",
+					systemSrc: "file:///tmp/take.system.m4a",
+				},
+			},
+		];
+		const { getByTestId } = render(
+			<VirtualPreview
+				videoSources={sources}
+				clips={[clip("c1", "a1", 0, 10, 0)]}
+				onTimeChange={vi.fn()}
+			/>,
+		);
+		expect(getByTestId("preview-audio-primary")).toHaveAttribute(
+			"src",
+			"file:///tmp/take.voice.m4a",
+		);
+		expect(getByTestId("preview-audio-supplemental")).toHaveAttribute(
+			"src",
+			"file:///tmp/take.system.m4a",
+		);
+	});
+});

@@ -411,6 +411,29 @@ describe("DocumentService", () => {
 			expect(updated.assets[0]?.markersSec).toEqual([5.532, 20.11]);
 		});
 
+		it("links a take's voice and computer stems when both are there", async () => {
+			const doc = await service.createProject("P");
+			const videoPath = path.join(mediaDir, "recording-stems.mp4");
+			await fs.writeFile(videoPath, "");
+			await fs.writeFile(path.join(mediaDir, "recording-stems.voice.m4a"), "aac");
+			await fs.writeFile(path.join(mediaDir, "recording-stems.system.m4a"), "aac");
+			const updated = await service.addAsset(doc.project.id, { path: videoPath });
+			expect(updated.assets[0]?.audioStems).toEqual({
+				voicePath: path.join(mediaDir, "recording-stems.voice.m4a"),
+				systemPath: path.join(mediaDir, "recording-stems.system.m4a"),
+			});
+		});
+
+		it("leaves a take with one stem, or an empty one, on its mixed track", async () => {
+			const doc = await service.createProject("P");
+			const videoPath = path.join(mediaDir, "recording-half.mp4");
+			await fs.writeFile(videoPath, "");
+			await fs.writeFile(path.join(mediaDir, "recording-half.voice.m4a"), "aac");
+			await fs.writeFile(path.join(mediaDir, "recording-half.system.m4a"), "");
+			const updated = await service.addAsset(doc.project.id, { path: videoPath });
+			expect(updated.assets[0]).not.toHaveProperty("audioStems");
+		});
+
 		it("imports a take with no markers file and no markers", async () => {
 			const doc = await service.createProject("P");
 			const updated = await service.addAsset(doc.project.id, { path: "/tmp/no-markers.mp4" });

@@ -206,6 +206,9 @@ export const assetSchema = z.object({
 			}),
 		)
 		.optional(),
+	// The take's voice and computer sound on their own (.m4a beside it), when it recorded
+	// both: what the editor's Voice and Computer volumes act on. Additive, like markersSec.
+	audioStems: z.object({ voicePath: z.string().min(1), systemPath: z.string().min(1) }).optional(),
 });
 
 // A crop is a sub-rectangle of the source video, expressed as fractions

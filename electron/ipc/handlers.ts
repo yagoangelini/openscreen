@@ -32,6 +32,7 @@ import {
 } from "../../src/lib/nativeMacRecording";
 import type { NativeWindowsRecordingRequest } from "../../src/lib/nativeWindowsRecording";
 import {
+	audioStemPathsFor,
 	type CursorCaptureMode,
 	normalizeCursorCaptureMode,
 	normalizeProjectMedia,
@@ -127,6 +128,7 @@ import {
 	readCaptureFailureStage,
 	readMicrophoneDefaulted,
 	readMicrophoneUnavailable,
+	readStemsFinalized,
 	readWebcamFormat,
 	readWebcamUnavailable,
 	terminateNativeWindowsCapture,
@@ -495,6 +497,13 @@ function approveDocumentMedia(document: AxcutDocument, trustedDirs?: string[]): 
 		const camera = normalizeVideoSourcePath(asset.cameraTrack?.sourcePath);
 		if (camera && hasAllowedImportMediaExtension(camera) && trusted(camera)) {
 			approveFilePath(camera);
+		}
+		// The take's voice and computer stems, which the preview plays in place of its track.
+		for (const stem of [asset.audioStems?.voicePath, asset.audioStems?.systemPath]) {
+			const stemPath = normalizeVideoSourcePath(stem);
+			if (stemPath && hasAllowedImportMediaExtension(stemPath) && trusted(stemPath)) {
+				approveFilePath(stemPath);
+			}
 		}
 	}
 }
@@ -902,6 +911,7 @@ async function removeNativeWindowsCaptureOutputs(
 		screenVideoPath,
 		webcamVideoPath,
 		screenVideoPath ? `${screenVideoPath}.cursor.json` : null,
+		...(screenVideoPath ? Object.values(audioStemPathsFor(screenVideoPath)) : []),
 	];
 	// The checkpoint follows the video: kept for as long as the take it would
 	// restore the cursor of might still be recovered.
@@ -3024,6 +3034,10 @@ export function registerIpcHandlers(
 					outputs: {
 						screenPath: outputPath,
 						webcamPath: webcamOutputPath,
+						// The voice and the computer sound apart, for the editor's two volumes.
+						...(request.audio.microphone.enabled && request.audio.system.enabled
+							? audioStemPathsFor(outputPath)
+							: {}),
 					},
 					source: {
 						type: request.source.type,
@@ -3693,6 +3707,15 @@ export function registerIpcHandlers(
 			const screenVideoPath = (stopResult.ok ? stopResult.screenVideoPath : null) || preferredPath;
 			if (!screenVideoPath) {
 				throw new Error("Native Windows capture did not return an output path.");
+			}
+			// Stems the helper did not finish are unindexed and unplayable: never left for the import.
+			if (!readStemsFinalized(nativeWindowsCaptureOutput)) {
+				const stems = audioStemPathsFor(screenVideoPath);
+				await Promise.all(
+					[stems.voicePath, stems.systemPath].map((p) =>
+						fs.rm(p, { force: true }).catch(() => undefined),
+					),
+				);
 			}
 
 			if (cursorCaptureMode === "editable-overlay") {

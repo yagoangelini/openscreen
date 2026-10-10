@@ -1878,11 +1878,17 @@ unsafe fn run_multi_inner(
         audio_settings,
         &audio_tracks,
     ));
+    let audio_stems: Vec<crate::scene::SceneAudioStems> =
+        scene.as_ref().map(|s| s.audio_stems.clone()).unwrap_or_default();
+    let stems_for = |screen: &str| audio_stems.iter().find(|s| s.screen_path == screen);
     let _prewarm = LoudnessPrewarm::spawn(
         clips
             .iter()
             .filter(|clip| clip.has_audio)
-            .map(|clip| clip.screen.clone())
+            .map(|clip| {
+                // The file whose loudness the export will ask for: the voice stem, when there is one.
+                stems_for(&clip.screen).map_or_else(|| clip.screen.clone(), |s| s.voice_path.clone())
+            })
             .chain(
                 audio_tracks
                     .iter()
@@ -1942,6 +1948,12 @@ unsafe fn run_multi_inner(
                 ProgrammeAudio::clip_source(
                     clip_index,
                     &clip.screen,
+                    stems_for(&clip.screen).map(|s| crate::audio_stream::ClipStems {
+                        voice_path: &s.voice_path,
+                        voice_gain_db: audio_settings.voice_gain_db,
+                        system_path: &s.system_path,
+                        system_gain_db: audio_settings.system_gain_db,
+                    }),
                     clip.source_start_sec,
                     source_end_sec,
                     speed_segments,

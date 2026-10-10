@@ -1184,26 +1184,56 @@ describe("buildSceneDescription.audio", () => {
 	// offset — this shipped once and was removed) cannot be added here unnoticed.
 	it("carries the authored gain through to the native payload", () => {
 		const doc = makeDoc({ legacyEditor: { audioGainDb: 4.5 } });
-		expect(buildSceneDescription(doc).audio).toEqual({ gainDb: 4.5 });
+		expect(buildSceneDescription(doc).audio).toEqual({
+			gainDb: 4.5,
+			voiceGainDb: 0,
+			systemGainDb: 0,
+		});
 	});
 
 	it("defaults to a no-op for a project that predates the control", () => {
-		expect(buildSceneDescription(makeDoc()).audio).toEqual({ gainDb: 0 });
+		expect(buildSceneDescription(makeDoc()).audio).toEqual({
+			gainDb: 0,
+			voiceGainDb: 0,
+			systemGainDb: 0,
+		});
 	});
 
-	it("exposes only the gain", () => {
+	it("exposes only linear gains", () => {
 		// Guards the parity contract itself, not a value: an extra key here means the
-		// export applies something the preview does not.
-		expect(Object.keys(buildSceneDescription(makeDoc()).audio)).toEqual(["gainDb"]);
+		// export applies something the preview does not. The Voice and Computer volumes
+		// are linear gains on the stems, which the preview applies to the same files.
+		expect(Object.keys(buildSceneDescription(makeDoc()).audio)).toEqual([
+			"gainDb",
+			"voiceGainDb",
+			"systemGainDb",
+		]);
 	});
 
 	it("clamps to the range the slider offers, so the UI can always display it", () => {
-		expect(buildSceneDescription(makeDoc({ legacyEditor: { audioGainDb: -99 } })).audio).toEqual({
-			gainDb: -12,
+		expect(
+			buildSceneDescription(
+				makeDoc({ legacyEditor: { audioGainDb: -99, voiceGainDb: 40, systemGainDb: -40 } }),
+			).audio,
+		).toEqual({ gainDb: -12, voiceGainDb: 12, systemGainDb: -12 });
+		expect(buildSceneDescription(makeDoc({ legacyEditor: { audioGainDb: 99 } })).audio.gainDb).toBe(
+			12,
+		);
+	});
+
+	it("lists the takes recorded with their stems, keyed by the screen file", () => {
+		const doc = makeDoc({
+			assets: [
+				{
+					...makeAsset({ id: "a", originalPath: "/take.mp4" }),
+					audioStems: { voicePath: "/take.voice.m4a", systemPath: "/take.system.m4a" },
+				},
+				makeAsset({ id: "b", originalPath: "/other.mp4" }),
+			],
 		});
-		expect(buildSceneDescription(makeDoc({ legacyEditor: { audioGainDb: 99 } })).audio).toEqual({
-			gainDb: 12,
-		});
+		expect(buildSceneDescription(doc).audioStems).toEqual([
+			{ screenPath: "/take.mp4", voicePath: "/take.voice.m4a", systemPath: "/take.system.m4a" },
+		]);
 	});
 });
 
