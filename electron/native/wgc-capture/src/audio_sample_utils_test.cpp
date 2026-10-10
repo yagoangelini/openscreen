@@ -1427,13 +1427,15 @@ int main() {
             std::cout << "GAIN_RAW mix-over-system " << detail << std::endl;
             expect("mixer-mic-gain-applied-at-mix", std::abs(got - 24903) <= 2, detail);
         }
-        // (2) 0.9 * 1.4 + 0.5 = 1.76 -> clamped once at the rail.
+        // (2) 0.9 * 1.4 + 0.5 = 1.76 -> limited once, as a sum, to the ceiling:
+        // held there by the limiter rather than flat-topped at the rail.
         {
             const int got = steadySample(true, 0.5, 0.9, 1.4);
+            const int want = static_cast<int>(std::lround(PeakLimiter::kCeiling * 32767.0));
             char detail[96]{};
-            sprintf_s(detail, "got=%d want=32767", got);
-            std::cout << "GAIN_RAW sum-clamp " << detail << std::endl;
-            expect("mixer-sum-clamps-once-at-rail", got >= 32766, detail);
+            sprintf_s(detail, "got=%d want=%d", got, want);
+            std::cout << "GAIN_RAW sum-limit " << detail << std::endl;
+            expect("mixer-sum-limited-once-at-ceiling", std::abs(got - want) <= 2, detail);
         }
         // (3) Unity passthrough: the level a mic-only take must ride at, since
         // the request now sends 1.0 when there is no system audio to sit over.
@@ -1443,6 +1445,129 @@ int main() {
             sprintf_s(detail, "got=%d want=29490", got);
             std::cout << "GAIN_RAW unity " << detail << std::endl;
             expect("mixer-unity-gain-passthrough", std::abs(got - 29490) <= 2, detail);
+        }
+    }
+
+    // --- Microphone channel picker ------------------------------------------
+    //
+    // A stereo mic with the voice only on the left (a USB interface's input 1)
+    // must come out in both ears; a real stereo source must be left alone.
+    {
+        const AudioInputFormat f32stereo = makeFormat(MFAudioFormat_Float, 48000, 2, 32);
+        const auto tonePacket = [&](double left, double right, size_t frames, size_t offset) {
+            std::vector<BYTE> bytes(frames * f32stereo.blockAlign, 0);
+            auto* samples = reinterpret_cast<float*>(bytes.data());
+            for (size_t i = 0; i < frames; i += 1) {
+                const double s = std::sin(2.0 * kTestPi * 440.0 * static_cast<double>(offset + i) / 48000.0);
+                samples[i * 2] = static_cast<float>(left * s);
+                samples[i * 2 + 1] = static_cast<float>(right * s);
+            }
+            return bytes;
+        };
+        const auto feed = [&](MicrophoneChannelPicker& picker, double left, double right,
+                              double seconds, std::vector<BYTE>* last) {
+            int live = -1;
+            const size_t packetFrames = 480;
+            const size_t packets = static_cast<size_t>(seconds * 100.0);
+            for (size_t p = 0; p < packets; p += 1) {
+                auto bytes = tonePacket(left, right, packetFrames, p * packetFrames);
+                live = picker.process(bytes.data(), static_cast<DWORD>(bytes.size()), f32stereo);
+                if (last) {
+                    *last = std::move(bytes);
+                }
+            }
+            return live;
+        };
+
+        {
+            MicrophoneChannelPicker picker;
+            std::vector<BYTE> last;
+            const int live = feed(picker, 0.3, 0.0, 3.0, &last);
+            const auto* s = reinterpret_cast<const float*>(last.data());
+            bool copied = true;
+            for (size_t i = 0; i < 480; i += 1) {
+                copied = copied && s[i * 2] == s[i * 2 + 1];
+            }
+            expect("mic-picker-copies-the-only-live-channel", live == 0 && copied,
+                   "live=" + std::to_string(live));
+        }
+        {
+            MicrophoneChannelPicker picker;
+            const int live = feed(picker, 0.0, 0.3, 3.0, nullptr);
+            expect("mic-picker-finds-a-right-only-mic", live == 1, "live=" + std::to_string(live));
+        }
+        {
+            MicrophoneChannelPicker picker;
+            std::vector<BYTE> last;
+            const int live = feed(picker, 0.3, 0.2, 3.0, &last);
+            const auto* s = reinterpret_cast<const float*>(last.data());
+            bool untouched = false;
+            for (size_t i = 0; i < 480; i += 1) {
+                untouched = untouched || s[i * 2] != s[i * 2 + 1];
+            }
+            expect("mic-picker-keeps-a-real-stereo-mic", live == -1 && untouched,
+                   "live=" + std::to_string(live));
+        }
+        {
+            // Room noise on both channels: too quiet to judge, so nothing changes.
+            MicrophoneChannelPicker picker;
+            const int live = feed(picker, 0.001, 0.0, 3.0, nullptr);
+            expect("mic-picker-ignores-a-near-silent-mic", live == -1, "live=" + std::to_string(live));
+        }
+        {
+            // Copying, then the right channel comes alive: back to stereo.
+            MicrophoneChannelPicker picker;
+            const int first = feed(picker, 0.3, 0.0, 3.0, nullptr);
+            const int after = feed(picker, 0.3, 0.25, 6.0, nullptr);
+            expect("mic-picker-lets-a-revived-channel-back", first == 0 && after == -1,
+                   "first=" + std::to_string(first) + " after=" + std::to_string(after));
+        }
+        {
+            const AudioInputFormat pcmMono = makeFormat(MFAudioFormat_PCM, 48000, 1, 16);
+            MicrophoneChannelPicker picker;
+            std::vector<BYTE> mono(960, 0x10);
+            expect("mic-picker-leaves-mono-alone",
+                   picker.process(mono.data(), static_cast<DWORD>(mono.size()), pcmMono) == -1, "");
+        }
+    }
+
+    // --- Peak limiter ---------------------------------------------------------
+    {
+        {
+            PeakLimiter limiter;
+            std::vector<double> quiet = {0.5, -0.5, 0.9, -0.9};
+            limiter.process(quiet.data(), 2, 2, 48000);
+            expect("limiter-passes-under-the-ceiling",
+                   quiet[0] == 0.5 && quiet[3] == -0.9 && limiter.gain() == 1.0, "");
+        }
+        {
+            PeakLimiter limiter;
+            std::vector<double> hot(4800 * 2);
+            for (size_t i = 0; i < 4800; i += 1) {
+                const double s = 1.6 * std::sin(2.0 * kTestPi * 220.0 * static_cast<double>(i) / 48000.0);
+                hot[i * 2] = s;
+                hot[i * 2 + 1] = -s;
+            }
+            limiter.process(hot.data(), 4800, 2, 48000);
+            double peak = 0.0;
+            for (double v : hot) {
+                peak = std::max(peak, std::abs(v));
+            }
+            char detail[64]{};
+            sprintf_s(detail, "peak=%.4f", peak);
+            expect("limiter-holds-overs-at-the-ceiling", peak <= PeakLimiter::kCeiling + 1e-9, detail);
+        }
+        {
+            // After the over, the gain recovers instead of staying down.
+            PeakLimiter limiter;
+            std::vector<double> burst = {1.9, 1.9};
+            limiter.process(burst.data(), 1, 2, 48000);
+            const double ducked = limiter.gain();
+            std::vector<double> quiet(48000 * 2, 0.1);
+            limiter.process(quiet.data(), 48000, 2, 48000);
+            char detail[64]{};
+            sprintf_s(detail, "ducked=%.3f recovered=%.4f", ducked, limiter.gain());
+            expect("limiter-releases-after-the-over", ducked < 0.6 && limiter.gain() > 0.999, detail);
         }
     }
 
