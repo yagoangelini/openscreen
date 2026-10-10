@@ -481,5 +481,10 @@
 		"improveWithAi": "用 AI 改善標題",
 		"aiHint": "將每章的逐字稿傳送給在代理中設定的 AI 服務商",
 		"aiFailed": "無法改善標題"
+	},
+	"subtitlesFile": {
+		"save": "儲存字幕 (.srt)",
+		"saved": "字幕已儲存：{{path}}",
+		"failed": "無法儲存字幕"
 	}
 }

@@ -481,5 +481,10 @@
 		"improveWithAi": "Başlıkları yapay zekâyla iyileştir",
 		"aiHint": "Her bölümün dökümünü ajanda ayarlı yapay zekâ sağlayıcısına gönderir",
 		"aiFailed": "Başlıklar iyileştirilemedi"
+	},
+	"subtitlesFile": {
+		"save": "Altyazıları kaydet (.srt)",
+		"saved": "Altyazılar kaydedildi: {{path}}",
+		"failed": "Altyazılar kaydedilemedi"
 	}
 }

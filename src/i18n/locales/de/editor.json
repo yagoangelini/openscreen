@@ -481,5 +481,10 @@
 		"improveWithAi": "Titel mit KI verbessern",
 		"aiHint": "Sendet das Transkript jedes Kapitels an den im Agenten eingerichteten KI-Anbieter",
 		"aiFailed": "Die Titel konnten nicht verbessert werden"
+	},
+	"subtitlesFile": {
+		"save": "Untertitel speichern (.srt)",
+		"saved": "Untertitel gespeichert: {{path}}",
+		"failed": "Untertitel konnten nicht gespeichert werden"
 	}
 }

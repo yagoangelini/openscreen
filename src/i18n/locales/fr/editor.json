@@ -481,5 +481,10 @@
 		"improveWithAi": "Améliorer les titres avec l'IA",
 		"aiHint": "Envoie la transcription de chaque chapitre au fournisseur d'IA configuré dans l'agent",
 		"aiFailed": "Impossible d'améliorer les titres"
+	},
+	"subtitlesFile": {
+		"save": "Enregistrer les sous-titres (.srt)",
+		"saved": "Sous-titres enregistrés : {{path}}",
+		"failed": "Impossible d'enregistrer les sous-titres"
 	}
 }

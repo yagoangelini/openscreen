@@ -50,7 +50,7 @@ import { buildSceneDescription, resolveVisibleClips } from "@/native/sceneDescri
 import { ModalShell } from "./Modals";
 import styles from "./NewEditorShell.module.css";
 import { Toggle } from "./RightPanes";
-import { YouTubeChapters } from "./YouTubeChapters";
+import { SubtitlesFileButton, YouTubeChapters } from "./YouTubeChapters";
 
 type Phase = "idle" | "configuring" | "rendering" | "writing" | "done" | "error";
 
@@ -770,6 +770,9 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 					}}
 				/>
 
+				{phase === "done" && document && savedPath ? (
+					<SubtitlesFileButton document={document} videoPath={savedPath} />
+				) : null}
 				{phase === "done" && document ? <YouTubeChapters document={document} /> : null}
 
 				{cpuCompositor && phase !== "done" && (

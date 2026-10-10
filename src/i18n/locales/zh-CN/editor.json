@@ -481,5 +481,10 @@
 		"improveWithAi": "用 AI 优化标题",
 		"aiHint": "将每章的转录发送给在智能体中配置的 AI 服务商",
 		"aiFailed": "无法优化标题"
+	},
+	"subtitlesFile": {
+		"save": "保存字幕 (.srt)",
+		"saved": "字幕已保存：{{path}}",
+		"failed": "无法保存字幕"
 	}
 }

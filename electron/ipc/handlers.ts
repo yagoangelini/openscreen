@@ -4443,6 +4443,29 @@ export function registerIpcHandlers(
 		return runOcrScan(videoPath);
 	});
 
+	// The captions as an .srt beside a video the user just exported. Narrow on purpose:
+	// only next to an existing .mp4, only as <same name>.srt.
+	ipcMain.handle("write-subtitles-beside", async (_, videoPath: unknown, text: unknown) => {
+		if (
+			typeof videoPath !== "string" ||
+			typeof text !== "string" ||
+			!path.isAbsolute(videoPath) ||
+			!/\.mp4$/i.test(videoPath) ||
+			text.length > 5_000_000
+		) {
+			return { success: false, error: "Invalid request." };
+		}
+		try {
+			const stats = await fs.stat(videoPath);
+			if (!stats.isFile()) return { success: false, error: "Not a file." };
+			const target = videoPath.replace(/\.mp4$/i, ".srt");
+			await fs.writeFile(target, text, "utf-8");
+			return { success: true, path: target };
+		} catch (error) {
+			return { success: false, error: String(error) };
+		}
+	});
+
 	ipcMain.handle("open-notification-settings", async () => {
 		if (process.platform !== "win32") {
 			return { success: false };

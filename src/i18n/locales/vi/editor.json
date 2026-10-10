@@ -481,5 +481,10 @@
 		"improveWithAi": "Cải thiện tiêu đề bằng AI",
 		"aiHint": "Gửi bản ghi của từng chương tới nhà cung cấp AI đã cấu hình trong agent",
 		"aiFailed": "Không thể cải thiện tiêu đề"
+	},
+	"subtitlesFile": {
+		"save": "Lưu phụ đề (.srt)",
+		"saved": "Đã lưu phụ đề: {{path}}",
+		"failed": "Không thể lưu phụ đề"
 	}
 }

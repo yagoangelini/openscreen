@@ -481,5 +481,10 @@
 		"improveWithAi": "AI로 제목 다듬기",
 		"aiHint": "각 챕터의 대본을 에이전트에 설정된 AI 제공자에게 보냅니다",
 		"aiFailed": "제목을 다듬을 수 없습니다"
+	},
+	"subtitlesFile": {
+		"save": "자막 저장 (.srt)",
+		"saved": "자막을 저장했습니다: {{path}}",
+		"failed": "자막을 저장할 수 없습니다"
 	}
 }

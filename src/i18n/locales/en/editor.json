@@ -481,5 +481,10 @@
 		"improveWithAi": "Improve titles with AI",
 		"aiHint": "Sends each chapter's transcript to the AI provider configured in the agent settings",
 		"aiFailed": "Could not improve the titles"
+	},
+	"subtitlesFile": {
+		"save": "Save subtitles (.srt)",
+		"saved": "Subtitles saved: {{path}}",
+		"failed": "Could not save the subtitles"
 	}
 }

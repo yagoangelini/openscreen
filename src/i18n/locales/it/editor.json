@@ -481,5 +481,10 @@
 		"improveWithAi": "Migliora i titoli con l'IA",
 		"aiHint": "Invia la trascrizione di ogni capitolo al provider IA configurato nell'agente",
 		"aiFailed": "Impossibile migliorare i titoli"
+	},
+	"subtitlesFile": {
+		"save": "Salva sottotitoli (.srt)",
+		"saved": "Sottotitoli salvati: {{path}}",
+		"failed": "Impossibile salvare i sottotitoli"
 	}
 }

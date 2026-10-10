@@ -481,5 +481,10 @@
 		"improveWithAi": "Vylepšit názvy pomocí AI",
 		"aiHint": "Odešle přepis každé kapitoly poskytovateli AI nastavenému v agentovi",
 		"aiFailed": "Názvy se nepodařilo vylepšit"
+	},
+	"subtitlesFile": {
+		"save": "Uložit titulky (.srt)",
+		"saved": "Titulky uloženy: {{path}}",
+		"failed": "Titulky se nepodařilo uložit"
 	}
 }

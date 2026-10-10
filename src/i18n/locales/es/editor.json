@@ -481,5 +481,10 @@
 		"improveWithAi": "Mejorar títulos con IA",
 		"aiHint": "Envía la transcripción de cada capítulo al proveedor de IA configurado en el agente",
 		"aiFailed": "No se pudieron mejorar los títulos"
+	},
+	"subtitlesFile": {
+		"save": "Guardar subtítulos (.srt)",
+		"saved": "Subtítulos guardados: {{path}}",
+		"failed": "No se pudieron guardar los subtítulos"
 	}
 }

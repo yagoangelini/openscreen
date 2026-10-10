@@ -1,7 +1,8 @@
-import { Copy, Loader2, Sparkles } from "lucide-react";
+import { Captions, Copy, Loader2, Sparkles } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useScopedT } from "@/contexts/I18nContext";
+import { documentToSrt } from "@/lib/ai-edition/captions/srt";
 import {
 	buildChapters,
 	chapterTranscripts,
@@ -10,6 +11,47 @@ import {
 import type { AxcutDocument } from "@/lib/ai-edition/schema";
 import { nativeBridgeClient } from "@/native/client";
 import styles from "./NewEditorShell.module.css";
+
+/**
+ * "Save subtitles (.srt)" for the video just exported: the captions, timed to it, in a
+ * file beside it to upload to YouTube with the video. Offered only when the take was
+ * transcribed and the export is an MP4.
+ */
+export function SubtitlesFileButton({
+	document,
+	videoPath,
+}: {
+	document: AxcutDocument;
+	videoPath: string;
+}) {
+	const t = useScopedT("editor");
+	const srt = useMemo(() => documentToSrt(document), [document]);
+	const [saving, setSaving] = useState(false);
+	if (!srt || !/\.mp4$/i.test(videoPath) || !window.electronAPI?.writeSubtitlesBeside) return null;
+	return (
+		<button
+			type="button"
+			data-testid="export-save-srt"
+			className={`${styles.btn} ${styles.btnSecondary}`}
+			style={{ alignSelf: "flex-start" }}
+			disabled={saving}
+			onClick={() => {
+				setSaving(true);
+				void window.electronAPI
+					?.writeSubtitlesBeside?.(videoPath, srt)
+					.then((result) => {
+						if (result?.success)
+							toast.success(t("subtitlesFile.saved", { path: result.path ?? "" }));
+						else toast.error(t("subtitlesFile.failed"), { description: result?.error });
+					})
+					.finally(() => setSaving(false));
+			}}
+		>
+			<Captions size={14} />
+			{t("subtitlesFile.save")}
+		</button>
+	);
+}
 
 /**
  * The chapter list for the video's YouTube description, shown once an export is
