@@ -37,8 +37,11 @@ they show cannot drift — captions are a derived view, not a parallel store.
 
 ## Auto-transcription
 
-Recognition is local and free, so the editor does not wait to be asked: every
-asset in the document gets a transcript on its own. The queue lives in
+Recognition is local and free, so the editor can transcribe without being asked: with
+the `autoTranscribe` preference on (Media stage checkbox; **off by default in this fork**,
+because an unrequested inference at editor open competed with the first playback for the
+GPU), every asset in the document gets a transcript on its own. The manual transcribe
+buttons work either way. The queue lives in
 [`src/lib/ai-edition/store/transcriptionStore.ts`](../../src/lib/ai-edition/store/transcriptionStore.ts),
 mounted once by the shell through `useAutoTranscription()`, and it is the only
 thing that calls `transcribeAsset`.
@@ -134,6 +137,19 @@ now hoists its channel arrays out of the sample loop (it was making one WebIDL
 call per sample per channel), but a long recording will still block the renderer
 for a moment during "extracting-audio". Moving the mixdown to a worker is the
 next step if it shows up in practice.
+
+### Glossary and the voice stem
+
+A finished transcript goes through `applyGlossary`
+([`transcription/glossary.ts`](../../src/lib/ai-edition/transcription/glossary.ts)) before
+`carryOverWordEdits`, in `transcriptionStore.ts`: a correction dictionary, one
+`Term: misheard, misheard` line per term (the `glossary` preference, edited in the Media stage,
+seeded with `DEFAULT_GLOSSARY` — M365, Copilot and Power Platform names that Whisper mishears
+in Portuguese; the term itself always matches, which fixes casing). The STT server takes no
+prompt, so this runs after recognition: a multi-word match folds into its first word, which
+spans to the last one's end, so timing is kept. A take recorded with stems is transcribed from its voice stem
+(`asset.audioStems.voicePath`, `document/transcribe.ts`), so the computer's sound does not
+reach the recogniser; the wait finder (`timeline/waits.ts`) reads the same file.
 
 ## The STT engine
 

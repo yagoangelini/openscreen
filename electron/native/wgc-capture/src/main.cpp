@@ -937,7 +937,7 @@ int wmain(int argc, wchar_t* argv[]) {
     encoderOptions.skipAacRateSnap = readEnvInt("OPENSCREEN_WGC_DISABLE_AAC_RATE_SNAP", 0) == 1;
     encoderOptions.injectAacRateProbe =
         readEnvInt("OPENSCREEN_WGC_TEST_INJECT_AAC_RATE_PROBE", 0) == 1;
-    // OFF by default. The GPU path exists to dodge a Map() that wedges inside
+    // Upstream: OFF by default. The GPU path exists to dodge a Map() that wedges inside
     // the display driver on the machine in #252, and it demonstrably fixed
     // display and window capture there. It also broke recording outright for
     // the reporter in #336, who had working video before it. Its fallbacks
