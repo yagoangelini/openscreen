@@ -432,5 +432,10 @@
 		"regionPasted": "Region pasted",
 		"regionCopied": "Region copied",
 		"cameraCheckFailed": "Could not check for a camera recording near {{name}}"
+	},
+	"exportPipeline": {
+		"quality1440p": "1440p",
+		"finalizing": "모든 프레임을 인코딩했습니다. 오디오를 쓰고 파일을 마무리하는 중…",
+		"gpuReset": "그래픽 드라이버가 재설정되었거나 GPU가 제거되어 내보내기가 중단되었습니다. 프로젝트는 안전합니다. 다시 내보내세요. 계속 발생하면 그래픽 드라이버를 업데이트하세요."
 	}
 }

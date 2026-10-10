@@ -432,5 +432,10 @@
 		"regionPasted": "Region pasted",
 		"regionCopied": "Region copied",
 		"cameraCheckFailed": "Could not check for a camera recording near {{name}}"
+	},
+	"exportPipeline": {
+		"quality1440p": "1440p",
+		"finalizing": "تم ترميز كل الإطارات. جارٍ كتابة الصوت وإنهاء الملف…",
+		"gpuReset": "توقف التصدير لأن برنامج تشغيل الرسومات أُعيد تشغيله أو أُزيلت وحدة GPU. مشروعك بأمان: صدّر مرة أخرى. إذا تكرر ذلك، حدّث برنامج تشغيل الرسومات."
 	}
 }

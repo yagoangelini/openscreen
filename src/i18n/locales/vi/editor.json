@@ -432,5 +432,10 @@
 		"regionPasted": "Region pasted",
 		"regionCopied": "Region copied",
 		"cameraCheckFailed": "Could not check for a camera recording near {{name}}"
+	},
+	"exportPipeline": {
+		"quality1440p": "1440p",
+		"finalizing": "Đã mã hóa tất cả khung hình. Đang ghi âm thanh và hoàn tất tệp…",
+		"gpuReset": "Quá trình xuất đã dừng vì trình điều khiển đồ họa bị khởi động lại hoặc GPU bị gỡ. Dự án của bạn vẫn an toàn: hãy xuất lại. Nếu tiếp tục xảy ra, hãy cập nhật trình điều khiển đồ họa."
 	}
 }

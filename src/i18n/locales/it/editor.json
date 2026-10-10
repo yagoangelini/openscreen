@@ -432,5 +432,10 @@
 		"regionPasted": "Regione incollata",
 		"regionCopied": "Regione copiata",
 		"cameraCheckFailed": "Impossibile cercare una registrazione della fotocamera vicino a {{name}}"
+	},
+	"exportPipeline": {
+		"quality1440p": "1440p",
+		"finalizing": "Tutti i fotogrammi sono codificati. Scrittura dell'audio e completamento del file…",
+		"gpuReset": "L'esportazione si è interrotta perché il driver grafico si è riavviato o la GPU è stata rimossa. Il progetto è al sicuro: esporta di nuovo. Se continua a succedere, aggiorna il driver grafico."
 	}
 }

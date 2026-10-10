@@ -12,13 +12,56 @@ use napi_derive::napi;
 use openscreen_compositor::compositor::{live_params_from_scene, Compositor};
 use openscreen_compositor::d3d::{Backend, Gpu};
 use openscreen_compositor::gif_export::{GifExportParams, GifStats};
-use openscreen_compositor::gif_export_control::{GifExportCancelled, GifExportControl};
+use openscreen_compositor::gif_export_control::{
+    ExportCancelled, ExportControl, ExportProgress, GifExportControl,
+};
 use openscreen_compositor::live::{LiveView, PausedPreviews};
 use openscreen_compositor::scene::Scene;
 use openscreen_compositor::{config, pipeline};
 use std::collections::HashMap;
+use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::PathBuf;
-use std::sync::{Mutex, OnceLock};
+use std::sync::{Mutex, MutexGuard, OnceLock};
+
+/// Runs one entry point with Rust panics contained.
+///
+/// A panic that unwinds out of an `extern "C"` napi callback aborts the process, and the
+/// process here is Electron's main one: one `unwrap` on a driver error closed the whole app,
+/// with the user's unsaved edit in it. Caught, the panic becomes a JS exception carrying its
+/// message, the caller's promise rejects, and the editor stays up.
+fn guarded<T>(what: &str, body: impl FnOnce() -> Result<T>) -> Result<T> {
+    match catch_unwind(AssertUnwindSafe(body)) {
+        Ok(result) => result,
+        Err(payload) => {
+            let message = payload
+                .downcast_ref::<String>()
+                .map(String::as_str)
+                .or_else(|| payload.downcast_ref::<&str>().copied())
+                .unwrap_or("unknown panic");
+            eprintln!("[compositor-view] {what} panicked: {message}");
+            Err(Error::from_reason(format!("internal error in {what}: {message}")))
+        }
+    }
+}
+
+/// The registry's lock, recovered when a panic poisoned it: the map itself is never left
+/// half-updated (every mutation is a single insert/remove), so the data is still good, and
+/// refusing it would turn one contained panic into every later call failing.
+fn registry_lock() -> MutexGuard<'static, HashMap<i32, LiveView>> {
+    registry().lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+/// Parses the scene the app sent. A scene that does not parse is an error, not "no scene":
+/// silently exporting raw footage — no background, no layout, no zoom — while the user saw
+/// their edit in the preview is the one outcome worse than failing.
+fn parse_scene(scene_json: Option<&str>) -> Result<Option<Scene>> {
+    scene_json
+        .map(|json| {
+            Scene::from_json(json)
+                .map_err(|e| Error::from_reason(format!("the project's scene could not be read: {e:#}")))
+        })
+        .transpose()
+}
 
 /// Résolution cible du preview en pixels device (largeur/hauteur du `<canvas>`
 /// Electron affichant la preview). `x`/`y` ne sont plus utilisés (Option B :
@@ -62,13 +105,57 @@ fn registry() -> &'static Mutex<HashMap<i32, LiveView>> {
 /// question posée au système et non à une vue : la modale d'export la pose sans qu'aucune
 /// preview n'existe. Réponse mise en cache côté Rust — c'est une propriété de la machine.
 #[napi]
-pub fn probe_backend() -> String {
-    match Gpu::probe() {
-        Some(Backend::Hardware) => "hardware",
-        Some(Backend::Cpu) => "cpu",
-        None => "none",
-    }
-    .to_string()
+pub fn probe_backend() -> Result<String> {
+    guarded("probeBackend", || {
+        Ok(match Gpu::probe() {
+            Some(Backend::Hardware) => "hardware",
+            Some(Backend::Cpu) => "cpu",
+            None => "none",
+        }
+        .to_string())
+    })
+}
+
+/// The GPU the compositor runs on and the encoder the last export used, for logs and the
+/// diagnostics bundle (JS: camelCase).
+#[napi(object)]
+pub struct GpuAdapterInfo {
+    pub description: String,
+    pub vendor_id: u32,
+    pub vendor_name: String,
+    pub device_id: u32,
+    /// `HighPart << 32 | LowPart` in hex — what `OPENSCREEN_COMPOSITOR_ADAPTER` accepts.
+    pub luid: String,
+    pub dedicated_video_memory_mb: u32,
+    /// `high-performance`, `minimum-power`, `luid …`, or `default` after a fallback.
+    pub selection: String,
+    /// `h264_nvenc`, `h264_amf`, … — `None` before the first export of the session.
+    pub last_export_encoder: Option<String>,
+}
+
+/// The adapter `probeBackend`'s device runs on. `None` when there is no device at all, and on
+/// the platforms whose single GPU leaves nothing to report.
+#[napi]
+pub fn gpu_adapter_info() -> Result<Option<GpuAdapterInfo>> {
+    guarded("gpuAdapterInfo", || {
+        #[cfg(windows)]
+        {
+            Ok(Gpu::probe_adapter().map(|info| GpuAdapterInfo {
+                vendor_name: info.vendor_name().to_string(),
+                luid: format!("{:016x}", info.luid),
+                dedicated_video_memory_mb: (info.dedicated_video_memory / (1024 * 1024)) as u32,
+                description: info.description,
+                vendor_id: info.vendor_id,
+                device_id: info.device_id,
+                selection: info.selection,
+                last_export_encoder: pipeline::last_export_encoder(),
+            }))
+        }
+        #[cfg(not(windows))]
+        {
+            Ok(None)
+        }
+    })
 }
 
 /// Si cette machine peut produire un masque de segmentation, c'est-à-dire si la bibliothèque
@@ -83,8 +170,10 @@ pub fn probe_backend() -> String {
 /// pas à répondre, puisque l'amont ne publie aucun binaire ONNX pour les Macs Intel, et une
 /// build de dev ou un `--dir` n'en ont pas davantage. Seul l'état réel de la machine le sait.
 #[napi]
-pub fn segmentation_runtime_available() -> bool {
-    openscreen_compositor::segmentation::runtime_available()
+pub fn segmentation_runtime_available() -> Result<bool> {
+    guarded("segmentationRuntimeAvailable", || {
+        Ok(openscreen_compositor::segmentation::runtime_available())
+    })
 }
 
 pub struct SegmentFrameTask {
@@ -97,22 +186,24 @@ impl Task for SegmentFrameTask {
     type JsValue = Buffer;
 
     fn compute(&mut self) -> Result<Self::Output> {
-        let rgb: Vec<u8> = self
-            .rgba
-            .chunks_exact(4)
-            .flat_map(|p| [p[0], p[1], p[2]])
-            .collect();
-        // ponytail: une session ONNX chargée par appel (quelques dizaines de ms), parce qu'il
-        // n'y a qu'un appel par caméra et par ouverture du panneau. À garder en cache si un
-        // appelant se met à segmenter en continu.
-        let mut segmenter = openscreen_compositor::segmentation::Segmenter::load(
-            std::path::Path::new(&self.model_path),
-        )
-        .map_err(|e| Error::from_reason(format!("{e:#}")))?;
-        segmenter
-            .run(&rgb)
-            .map(<[u8]>::to_vec)
-            .map_err(|e| Error::from_reason(format!("{e:#}")))
+        guarded("segmentFrame", || {
+            let rgb: Vec<u8> = self
+                .rgba
+                .chunks_exact(4)
+                .flat_map(|p| [p[0], p[1], p[2]])
+                .collect();
+            // ponytail: une session ONNX chargée par appel (quelques dizaines de ms), parce qu'il
+            // n'y a qu'un appel par caméra et par ouverture du panneau. À garder en cache si un
+            // appelant se met à segmenter en continu.
+            let mut segmenter = openscreen_compositor::segmentation::Segmenter::load(
+                std::path::Path::new(&self.model_path),
+            )
+            .map_err(|e| Error::from_reason(format!("{e:#}")))?;
+            segmenter
+                .run(&rgb)
+                .map(<[u8]>::to_vec)
+                .map_err(|e| Error::from_reason(format!("{e:#}")))
+        })
     }
 
     fn resolve(&mut self, _env: Env, mask: Self::Output) -> Result<Self::JsValue> {
@@ -144,26 +235,28 @@ pub fn create_view(
     webcam_path: Option<String>,
     cursor_path: Option<String>,
 ) -> Result<i32> {
-    let screen = screen_path
-        .ok_or_else(|| Error::from_reason("create_view: screen_path is required"))?;
-    let webcam = webcam_path.unwrap_or_default();
-    let cursor = cursor_path.unwrap_or_default();
-    let view = LiveView::create(
-        rect.width.max(1) as u32,
-        rect.height.max(1) as u32,
-        &screen,
-        &webcam,
-        &cursor,
-    )
-    .map_err(|e| Error::from_reason(format!("{e:#}")))?;
-    let id = {
-        let mut n = NEXT_ID.lock().unwrap();
-        let id = *n;
-        *n += 1;
-        id
-    };
-    registry().lock().unwrap().insert(id, view);
-    Ok(id)
+    guarded("createView", || {
+        let screen = screen_path
+            .ok_or_else(|| Error::from_reason("create_view: screen_path is required"))?;
+        let webcam = webcam_path.unwrap_or_default();
+        let cursor = cursor_path.unwrap_or_default();
+        let view = LiveView::create(
+            rect.width.max(1) as u32,
+            rect.height.max(1) as u32,
+            &screen,
+            &webcam,
+            &cursor,
+        )
+        .map_err(|e| Error::from_reason(format!("{e:#}")))?;
+        let id = {
+            let mut n = NEXT_ID.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+            let id = *n;
+            *n += 1;
+            id
+        };
+        registry_lock().insert(id, view);
+        Ok(id)
+    })
 }
 
 /// Met à jour la résolution cible du preview. L'ancienne sémantique « position
@@ -175,10 +268,13 @@ pub fn create_view(
 /// effet au prochain tour (`compositor::readback_resized` reconstruit la
 /// staging si `width`/`height` ont changé).
 #[napi]
-pub fn set_rect(id: i32, rect: CompositorViewRect) {
-    if let Some(v) = registry().lock().unwrap().get(&id) {
-        v.set_rect(rect.width.max(1) as u32, rect.height.max(1) as u32);
-    }
+pub fn set_rect(id: i32, rect: CompositorViewRect) -> Result<()> {
+    guarded("setRect", || {
+        if let Some(v) = registry_lock().get(&id) {
+            v.set_rect(rect.width.max(1) as u32, rect.height.max(1) as u32);
+        }
+        Ok(())
+    })
 }
 
 /// Une frame de preview auto-descriptive : ses pixels PLUS tout ce qu'il faut pour
@@ -217,63 +313,74 @@ pub struct FramePacket {
 /// le thread Node.
 #[napi]
 pub fn read_frame(id: i32, since_gen: f64) -> Result<Option<FramePacket>> {
-    // Snapshot le pixel buffer HORS du lock du registre : on en a besoin vivant
-    // (r#[napi] retourne un Buffer qui consomme l'ownership du Vec). Sinon le
-    // MutexGuard serait tenu pendant que la frame est consommée par JS, ce qui
-    // bloquerait tout autre appel napi (`set_rect`, `destroy_view`, ...).
-    let slot = match registry().lock().unwrap().get(&id) {
-        None => return Ok(None),
-        Some(v) => {
-            // Le thread de rendu est mort (device D3D11 indisponible, décodeur en échec…) :
-            // il ne publiera plus jamais de frame. Sans ce relais, `create_view` a déjà
-            // répondu Ok et l'échec ne se voyait que dans un `eprintln!` — l'utilisateur
-            // restait devant un canvas noir sans explication (PR #162). La boucle de pull
-            // du renderer appelle ceci ~30×/s, donc l'erreur remonte tout de suite, et par
-            // le chemin d'erreur que `read_frame` a déjà (`Result`), sans changer le contrat.
-            if let Some(fatal) = v.fatal_error() {
-                return Err(Error::from_reason(fatal));
+    guarded("readFrame", || {
+        // Snapshot le pixel buffer HORS du lock du registre : on en a besoin vivant
+        // (r#[napi] retourne un Buffer qui consomme l'ownership du Vec). Sinon le
+        // MutexGuard serait tenu pendant que la frame est consommée par JS, ce qui
+        // bloquerait tout autre appel napi (`set_rect`, `destroy_view`, ...).
+        let slot = match registry_lock().get(&id) {
+            None => return Ok(None),
+            Some(v) => {
+                // Le thread de rendu est mort (device D3D11 indisponible, décodeur en échec…) :
+                // il ne publiera plus jamais de frame. Sans ce relais, `create_view` a déjà
+                // répondu Ok et l'échec ne se voyait que dans un `eprintln!` — l'utilisateur
+                // restait devant un canvas noir sans explication (PR #162). La boucle de pull
+                // du renderer appelle ceci ~30×/s, donc l'erreur remonte tout de suite, et par
+                // le chemin d'erreur que `read_frame` a déjà (`Result`), sans changer le contrat.
+                if let Some(fatal) = v.fatal_error() {
+                    return Err(Error::from_reason(fatal));
+                }
+                v.latest_frame_since(since_gen.max(0.0) as u64)
             }
-            v.latest_frame_since(since_gen.max(0.0) as u64)
-        }
-    };
-    Ok(slot.map(|(gen, w, h, pixels)| {
-        debug_assert_eq!(pixels.len(), (w as usize) * (h as usize) * 4);
-        FramePacket {
-            gen: gen as f64,
-            width: w,
-            height: h,
-            data: Buffer::from(pixels),
-        }
-    }))
+        };
+        Ok(slot.map(|(gen, w, h, pixels)| {
+            debug_assert_eq!(pixels.len(), (w as usize) * (h as usize) * 4);
+            FramePacket {
+                gen: gen as f64,
+                width: w,
+                height: h,
+                data: Buffer::from(pixels),
+            }
+        }))
+    })
 }
 
 /// Param live (inspector). Le type de valeur route vers le bon setter :
 /// bool = switch (webcamMirror…), number = slider (shadow/roundness/motionBlur/backgroundBlur),
 /// string = sélection (backgroundColor "#rrggbb").
 #[napi]
-pub fn set_param(id: i32, key: String, value: Either3<bool, f64, String>) {
-    if let Some(v) = registry().lock().unwrap().get(&id) {
-        match value {
-            Either3::A(b) => v.set_param_bool(&key, b),
-            Either3::B(n) => v.set_param_num(&key, n),
-            Either3::C(s) => v.set_param_str(&key, &s),
+pub fn set_param(id: i32, key: String, value: Either3<bool, f64, String>) -> Result<()> {
+    guarded("setParam", || {
+        if let Some(v) = registry_lock().get(&id) {
+            match value {
+                Either3::A(b) => v.set_param_bool(&key, b),
+                Either3::B(n) => v.set_param_num(&key, n),
+                Either3::C(s) => v.set_param_str(&key, &s),
+            }
         }
-    }
+        Ok(())
+    })
 }
 
 #[napi]
-pub fn set_playing(id: i32, playing: bool) {
-    if let Some(v) = registry().lock().unwrap().get(&id) {
-        v.set_playing(playing);
-    }
+pub fn set_playing(id: i32, playing: bool) -> Result<()> {
+    guarded("setPlaying", || {
+        if let Some(v) = registry_lock().get(&id) {
+            v.set_playing(playing);
+        }
+        Ok(())
+    })
 }
 
 /// Positionne la vue au temps SOURCE du clip actif (conversion timeline faite côté renderer).
 #[napi]
-pub fn present_time(id: i32, seconds: f64) {
-    if let Some(v) = registry().lock().unwrap().get(&id) {
-        v.set_time(seconds);
-    }
+pub fn present_time(id: i32, seconds: f64) -> Result<()> {
+    guarded("presentTime", || {
+        if let Some(v) = registry_lock().get(&id) {
+            v.set_time(seconds);
+        }
+        Ok(())
+    })
 }
 
 /// Remplace les sources du clip actif sans recréer la vue ni son thread de rendu. L'identité
@@ -287,32 +394,41 @@ pub fn set_active_clip(
     webcam_offset_sec: f64,
     clip_index: u32,
     source_time_sec: f64,
-) {
-    if let Some(v) = registry().lock().unwrap().get(&id) {
-        v.set_active_clip(
-            &screen_path,
-            &webcam_path,
-            webcam_offset_sec,
-            clip_index as usize,
-            source_time_sec,
-        );
-    }
+) -> Result<()> {
+    guarded("setActiveClip", || {
+        if let Some(v) = registry_lock().get(&id) {
+            v.set_active_clip(
+                &screen_path,
+                &webcam_path,
+                webcam_offset_sec,
+                clip_index as usize,
+                source_time_sec,
+            );
+        }
+        Ok(())
+    })
 }
 
 /// Installe la scène de l'app (JSON `SceneDescription`) sur la vue : layout preset piloté par
 /// l'app au lieu de la fixture. JSON invalide → ignoré côté natif.
 #[napi]
-pub fn set_scene(id: i32, scene_json: String) {
-    if let Some(v) = registry().lock().unwrap().get(&id) {
-        v.set_scene(&scene_json);
-    }
+pub fn set_scene(id: i32, scene_json: String) -> Result<()> {
+    guarded("setScene", || {
+        if let Some(v) = registry_lock().get(&id) {
+            v.set_scene(&scene_json);
+        }
+        Ok(())
+    })
 }
 
 #[napi]
-pub fn destroy_view(id: i32) {
-    // remove hors du lock : le Drop (join du thread de rendu) ne le tient pas.
-    let removed = registry().lock().unwrap().remove(&id);
-    drop(removed);
+pub fn destroy_view(id: i32) -> Result<()> {
+    guarded("destroyView", || {
+        // remove hors du lock : le Drop (join du thread de rendu) ne le tient pas.
+        let removed = registry_lock().remove(&id);
+        drop(removed);
+        Ok(())
+    })
 }
 
 /// Bilan d'un export natif (mesure §10 : une lecture d'horloge avant-après tout le run).
@@ -350,19 +466,46 @@ pub struct GifExportStats {
 /// speed. Always reports the very first tick (frame <= 1) so a fast/short export still
 /// shows at least one progress update instead of jumping straight to the final Promise
 /// resolution.
-fn throttled_progress(
-    tsfn: Option<ThreadsafeFunction<u32, ErrorStrategy::Fatal>>,
-) -> impl FnMut(u64) {
+///
+/// `ExportProgress::Finalizing` is never throttled: it is sent once, when the last frame is
+/// out, and it is what tells the dialog to say "finishing" instead of sitting at 100 %. It
+/// carries the last frame count with it.
+fn throttled_progress(tsfn: Option<ProgressTsfn>) -> impl FnMut(ExportProgress) {
     let mut last_sent = std::time::Instant::now() - std::time::Duration::from_secs(1);
-    move |frames: u64| {
+    let mut last_frames = 0u32;
+    move |step: ExportProgress| {
         let Some(tsfn) = &tsfn else { return };
-        let now = std::time::Instant::now();
-        if frames <= 1 || now.duration_since(last_sent).as_millis() >= 100 {
-            last_sent = now;
-            tsfn.call(frames as u32, ThreadsafeFunctionCallMode::NonBlocking);
+        match step {
+            ExportProgress::Frames(frames) => {
+                last_frames = frames.min(u32::MAX as u64) as u32;
+                let now = std::time::Instant::now();
+                if frames <= 1 || now.duration_since(last_sent).as_millis() >= 100 {
+                    last_sent = now;
+                    tsfn.call(
+                        ProgressEvent { frames: last_frames, finalizing: false },
+                        ThreadsafeFunctionCallMode::NonBlocking,
+                    );
+                }
+            }
+            ExportProgress::Finalizing => {
+                tsfn.call(
+                    ProgressEvent { frames: last_frames, finalizing: true },
+                    ThreadsafeFunctionCallMode::NonBlocking,
+                );
+            }
         }
     }
 }
+
+/// One progress report: frames out so far, and whether the export is past its last frame.
+/// JS receives `(frames, phase)`, `phase` being `"finalizing"` or `undefined`.
+#[derive(Clone, Copy)]
+struct ProgressEvent {
+    frames: u32,
+    finalizing: bool,
+}
+
+type ProgressTsfn = ThreadsafeFunction<ProgressEvent, ErrorStrategy::Fatal>;
 
 /// Pauses every live preview of this process for the duration of an export — their render
 /// threads stop composing/presenting, which frees the GPU's 3D engine (measured: preview on
@@ -397,11 +540,22 @@ impl Drop for PreviewPause {
 /// libuv qui exécute `Task::compute` — c'est la seule façon de rappeler JS depuis là. Chaque
 /// appel transporte juste le nombre de frames encodées (`u32`) ; le JS connaît déjà le total
 /// attendu (durée × fps des clips) et calcule le pourcentage lui-même.
-fn make_progress_tsfn(
-    f: Option<JsFunction>,
-) -> Result<Option<ThreadsafeFunction<u32, ErrorStrategy::Fatal>>> {
-    f.map(|f| f.create_threadsafe_function(0, |ctx| Ok(vec![ctx.value])))
-        .transpose()
+fn make_progress_tsfn(f: Option<JsFunction>) -> Result<Option<ProgressTsfn>> {
+    f.map(|f| {
+        f.create_threadsafe_function(
+            0,
+            |ctx: napi::threadsafe_function::ThreadSafeCallContext<ProgressEvent>| {
+                let frames = ctx.env.create_uint32(ctx.value.frames)?.into_unknown();
+                let phase = if ctx.value.finalizing {
+                    ctx.env.create_string("finalizing")?.into_unknown()
+                } else {
+                    ctx.env.get_undefined()?.into_unknown()
+                };
+                Ok(vec![frames, phase])
+            },
+        )
+    })
+    .transpose()
 }
 
 /// Un clip de la timeline pour l'export multiclip (JS : camelCase).
@@ -462,6 +616,28 @@ mod output_size_tests {
     }
 
     #[test]
+    fn a_panic_becomes_an_error_instead_of_aborting_the_host() {
+        let result: Result<()> = guarded("test entry point", || panic!("driver said no"));
+        let error = result.expect_err("a panic must come back as an error");
+        assert!(error.reason.contains("internal error in test entry point"), "{}", error.reason);
+        assert!(error.reason.contains("driver said no"), "{}", error.reason);
+        // A formatted panic message (a String payload) reads the same way.
+        let result: Result<()> = guarded("formatted", || panic!("code {}", 7));
+        assert!(result.unwrap_err().reason.contains("code 7"));
+        assert_eq!(guarded("ok", || Ok(3)).unwrap(), 3);
+    }
+
+    #[test]
+    fn an_unreadable_scene_fails_the_export_instead_of_exporting_raw_footage() {
+        assert!(parse_scene(None).unwrap().is_none());
+        let error = parse_scene(Some("{\"clips\": [")).expect_err("truncated JSON");
+        assert!(error.reason.contains("scene could not be read"), "{}", error.reason);
+        assert!(parse_scene(Some(PORTRAIT_SCENE)).unwrap().is_some());
+    }
+
+    const PORTRAIT_SCENE: &str = r##"{"clips":[],"layout":{"preset":"no-webcam","webcamSize":1,"webcamShape":"rectangle","webcamMirror":false,"webcamPosition":null,"webcamReactiveZoom":false},"effects":{"padding":0,"blur":false,"shadow":0,"roundnessFrac":0,"motionBlur":0},"background":{"kind":"color","color":"#000000"},"zoomRegions":[],"cursor":{"show":false,"size":1,"smoothing":0,"motionBlur":0,"clickBounce":0,"clipToBounds":false,"theme":"default"},"cropByClip":[],"output":{"width":1080,"height":1920,"fps":null}}"##;
+
+    #[test]
     fn export_size_follows_the_scene_shape() {
         let scene = portrait_scene();
         // No size sent: the scene's frame, never the 1920x1080 default (the 9:16 → 16:9 bug).
@@ -508,14 +684,23 @@ pub struct ExportMultiTask {
     clips: Vec<pipeline::ClipSource>,
     scene_json: Option<String>,
     params: Option<ExportParamsInput>,
-    on_progress: Option<ThreadsafeFunction<u32, ErrorStrategy::Fatal>>,
+    control: ExportControl,
+    on_progress: Option<ProgressTsfn>,
 }
 
-impl Task for ExportMultiTask {
-    type Output = (u32, f64, f64, f64);
-    type JsValue = ExportStats;
+/// The MP4 export's error, as JS reads it. A cancellation is the fixed `EXPORT_CANCELLED`
+/// the bridge maps to its `CANCELLED` code; anything else keeps its full chain.
+fn export_task_error(error: anyhow::Error) -> Error {
+    if error.is::<ExportCancelled>() {
+        Error::from_reason("EXPORT_CANCELLED")
+    } else {
+        Error::from_reason(format!("{error:#}"))
+    }
+}
 
-    fn compute(&mut self) -> Result<Self::Output> {
+impl ExportMultiTask {
+    fn run(&mut self) -> Result<(u32, f64, f64, f64)> {
+        self.control.check().map_err(export_task_error)?;
         // Previews paused for the whole render (GPU 3D engine freed) and restored
         // exactly as found when this guard drops, including on the error paths.
         let _previews = PreviewPause::begin();
@@ -528,9 +713,10 @@ impl Task for ExportMultiTask {
         cfg.mblur_n = 1; // layout statique → pas de motion blur de layout (pas de surcoût)
 
         // scène de l'app = même chemin que la preview live : fond, layout, webcam, curseur.
-        // JSON absent/invalide → pas de scène (fixture), pareil que si la preview n'en avait
-        // jamais reçu — jamais un fallback masquant, juste rien de configuré.
-        let scene = self.scene_json.as_deref().and_then(|j| Scene::from_json(j).ok());
+        // Absente → pas de scène (fixture), pareil que si la preview n'en avait jamais reçu.
+        // Illisible → erreur (`parse_scene`) : exporter le métrage brut à la place de l'édition
+        // serait pire qu'échouer.
+        let scene = parse_scene(self.scene_json.as_deref())?;
         if let Some(scene) = &scene {
             cfg.bg_blur = scene.effects.blur;
             cfg.cursor = scene.cursor.show;
@@ -548,6 +734,9 @@ impl Task for ExportMultiTask {
         export_params.width = width;
         export_params.height = height;
         if let Some(p) = &self.params {
+            if p.fps == Some(0) {
+                return Err(Error::from_reason("export frame rate must be at least 1 fps"));
+            }
             export_params.fps = p.fps;
             export_params.bit_rate = p.bitrate.filter(|&b| b > 0).map(i64::from);
             if let Some(codec) = &p.codec {
@@ -581,7 +770,8 @@ impl Task for ExportMultiTask {
         comp.set_scene(scene);
 
         let mut progress = throttled_progress(self.on_progress.take());
-        let s = pipeline::run_composited_multi(
+        #[cfg(windows)]
+        let stats = pipeline::run_composited_multi_controlled(
             &self.clips,
             &self.out_path,
             &gpu,
@@ -589,9 +779,31 @@ impl Task for ExportMultiTask {
             &cfg,
             &export_params,
             &mut progress,
-        )
-        .map_err(|e| Error::from_reason(format!("{e:#}")))?;
+            &self.control,
+        );
+        // macOS and Linux keep their whole-buffer pipeline; the control is only honoured
+        // before it starts there.
+        #[cfg(not(windows))]
+        let stats = pipeline::run_composited_multi(
+            &self.clips,
+            &self.out_path,
+            &gpu,
+            &comp,
+            &cfg,
+            &export_params,
+            &mut |frames| progress(ExportProgress::Frames(frames)),
+        );
+        let s = stats.map_err(export_task_error)?;
         Ok((s.frames as u32, s.wall_s, s.fps, s.video_duration_s))
+    }
+}
+
+impl Task for ExportMultiTask {
+    type Output = (u32, f64, f64, f64);
+    type JsValue = ExportStats;
+
+    fn compute(&mut self) -> Result<Self::Output> {
+        guarded("exportMulti", || self.run())
     }
 
     fn resolve(&mut self, _env: Env, out: Self::Output) -> Result<Self::JsValue> {
@@ -602,8 +814,11 @@ impl Task for ExportMultiTask {
 /// Lance un export multiclip natif (vraie timeline → MP4) et résout `Promise<ExportStats>`.
 /// `scene_json` : même `SceneDescription` que la preview (fond/layout/webcam/effets/curseur).
 /// `params` : taille/cadence/codec de sortie voulus (absent → 1920x1080/fps du 1er clip/h264).
-/// `on_progress(framesEncodées)` optionnel — rappelé côté JS à ~10 Hz max pendant le rendu ;
-/// le JS calcule lui-même le pourcentage (il connaît déjà le total attendu, durée×fps des clips).
+/// `on_progress(framesEncodées, phase)` optionnel — rappelé côté JS à ~10 Hz max pendant le
+/// rendu, puis une fois avec `phase = "finalizing"` après la dernière frame ; le JS calcule
+/// lui-même le pourcentage (il connaît déjà le total attendu, durée×fps des clips).
+/// `control` optionnel (`createExportControl`) : `cancelExport(control)` l'annule ; la promesse
+/// rejette alors avec `EXPORT_CANCELLED` et le fichier cible existant reste intact.
 #[napi]
 pub fn export_multi(
     clips: Vec<ClipInput>,
@@ -611,6 +826,7 @@ pub fn export_multi(
     scene_json: Option<String>,
     params: Option<ExportParamsInput>,
     on_progress: Option<JsFunction>,
+    control: Option<External<ExportControl>>,
 ) -> Result<AsyncTask<ExportMultiTask>> {
     let clips = clips
         .into_iter()
@@ -628,6 +844,7 @@ pub fn export_multi(
         clips,
         scene_json,
         params,
+        control: control.map(|c| (*c).clone()).unwrap_or_default(),
         on_progress: make_progress_tsfn(on_progress)?,
     }))
 }
@@ -646,6 +863,19 @@ pub struct GifParamsInput {
     /// Floyd-Steinberg error diffusion à la quantification. Actif par défaut :
     /// sans lui, un fond en dégradé se découpe en bandes (cf. `GifExportParams`).
     pub dither: Option<bool>,
+}
+
+/// A cancellation handle for one export, MP4 or GIF. Opaque to JS: it stays in the main
+/// process and is handed back to `cancelExport`.
+#[napi]
+pub fn create_export_control() -> External<ExportControl> {
+    External::new(ExportControl::default())
+}
+
+/// `false` when the export already won the race (its output is being published).
+#[napi]
+pub fn cancel_export(control: External<ExportControl>) -> bool {
+    control.cancel()
 }
 
 /// Tâche d'export GIF (worker libuv, comme `ExportMultiTask`). Le
@@ -673,7 +903,7 @@ pub fn cancel_gif_export(control: External<GifExportControl>) -> bool {
 }
 
 fn gif_task_error(error: anyhow::Error) -> Error {
-    if error.is::<GifExportCancelled>() {
+    if error.is::<ExportCancelled>() {
         Error::from_reason("GIF_EXPORT_CANCELLED")
     } else {
         Error::from_reason(format!("{error:#}"))
@@ -685,20 +915,17 @@ pub struct ExportGifTask {
     /// driven by the same walk, not a single-file special case.
     clips: Vec<pipeline::ClipSource>,
     /// Scene JSON from the app, exactly as `exportMulti` receives it: it
-    /// carries background, layout, webcam and cursor. Absent/invalid → no
-    /// scene, same as a preview that was never configured.
+    /// carries background, layout, webcam and cursor. Absent → no scene, same
+    /// as a preview that was never configured; unreadable → an error.
     scene_json: Option<String>,
     out_path: PathBuf,
     params: GifExportParams,
     control: GifExportControl,
-    on_progress: Option<ThreadsafeFunction<u32, ErrorStrategy::Fatal>>,
+    on_progress: Option<ProgressTsfn>,
 }
 
-impl Task for ExportGifTask {
-    type Output = GifStats;
-    type JsValue = GifExportStats;
-
-    fn compute(&mut self) -> Result<Self::Output> {
+impl ExportGifTask {
+    fn run(&mut self) -> Result<GifStats> {
         self.control.check().map_err(gif_task_error)?;
         // Mêmes garanties que `ExportMultiTask` : previews paused for the
         // whole render et restored exactement comme trouvées, y compris
@@ -720,7 +947,7 @@ impl Task for ExportGifTask {
         cfg.layout_anim = false;
         cfg.mblur_n = 1;
 
-        let scene = self.scene_json.as_deref().and_then(|j| Scene::from_json(j).ok());
+        let scene = parse_scene(self.scene_json.as_deref())?;
         if let Some(scene) = &scene {
             cfg.bg_blur = scene.effects.blur;
             cfg.cursor = scene.cursor.show;
@@ -755,10 +982,19 @@ impl Task for ExportGifTask {
             &comp,
             &cfg,
             &self.params,
-            &mut progress,
+            &mut |frames| progress(ExportProgress::Frames(frames)),
             &self.control,
         )
         .map_err(gif_task_error)
+    }
+}
+
+impl Task for ExportGifTask {
+    type Output = GifStats;
+    type JsValue = GifExportStats;
+
+    fn compute(&mut self) -> Result<Self::Output> {
+        guarded("exportGif", || self.run())
     }
 
     fn resolve(&mut self, _env: Env, out: Self::Output) -> Result<Self::JsValue> {
@@ -843,8 +1079,13 @@ impl Task for RemuxTask {
     type JsValue = RemuxStats;
 
     fn compute(&mut self) -> Result<Self::Output> {
-        openscreen_compositor::remux::remux_to_seekable_matroska(&self.input_path, &self.output_path)
+        guarded("remuxSeekable", || {
+            openscreen_compositor::remux::remux_to_seekable_matroska(
+                &self.input_path,
+                &self.output_path,
+            )
             .map_err(|e| Error::from_reason(format!("{e:#}")))
+        })
     }
 
     fn resolve(&mut self, _env: Env, out: Self::Output) -> Result<Self::JsValue> {
@@ -885,7 +1126,9 @@ impl Task for LoudnessGainTask {
     type JsValue = f64;
 
     fn compute(&mut self) -> Result<Self::Output> {
-        Ok(f64::from(openscreen_compositor::audio::loudness_gain_db(&self.path)))
+        guarded("loudnessGainDb", || {
+            Ok(f64::from(openscreen_compositor::audio::loudness_gain_db(&self.path)))
+        })
     }
 
     fn resolve(&mut self, _env: Env, out: Self::Output) -> Result<Self::JsValue> {

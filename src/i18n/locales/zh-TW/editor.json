@@ -432,5 +432,10 @@
 		"regionPasted": "Region pasted",
 		"regionCopied": "Region copied",
 		"cameraCheckFailed": "Could not check for a camera recording near {{name}}"
+	},
+	"exportPipeline": {
+		"quality1440p": "1440p",
+		"finalizing": "所有影格已編碼，正在寫入音訊並完成檔案…",
+		"gpuReset": "由於顯示卡驅動程式已重設或 GPU 已移除，匯出已停止。專案安然無恙，請重新匯出。如果反覆發生，請更新顯示卡驅動程式。"
 	}
 }

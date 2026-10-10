@@ -168,16 +168,29 @@ export function destroyCompositorView(id: number): Promise<{ ok: true }> {
 	});
 }
 
+/** `exportId` makes the export cancellable with `cancelExportNative`; it is also the ID its
+ *  progress events carry. */
 export function exportMultiNative(
 	clips: CompositorClipInput[],
 	outPath?: string,
 	sceneJson?: string,
 	params?: CompositorExportParams,
+	exportId?: string,
 ): Promise<CompositorExportResult> {
 	return requireNativeBridgeData<CompositorExportResult>({
 		domain: "compositor",
 		action: "exportMulti",
-		payload: { clips, outPath, sceneJson, params },
+		payload: { clips, outPath, sceneJson, params, exportId },
+	});
+}
+
+/** Cancels the MP4 or GIF export started with `exportId`. `accepted: false` when it already
+ *  finished, or is publishing its file. */
+export function cancelExportNative(exportId: string): Promise<{ accepted: boolean }> {
+	return requireNativeBridgeData<{ accepted: boolean }>({
+		domain: "compositor",
+		action: "cancelExport",
+		payload: { exportId },
 	});
 }
 

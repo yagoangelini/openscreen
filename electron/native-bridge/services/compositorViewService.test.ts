@@ -58,6 +58,66 @@ describe("native GIF cancellation capability", () => {
 	});
 });
 
+describe("native MP4 cancellation capability", () => {
+	it("hands the addon one control and cancels through it", async () => {
+		const control = {};
+		const exportMulti = vi.fn(async () => ({ frames: 1, wallS: 1, fps: 1, videoDurationS: 1 }));
+		const cancelExport = vi.fn(() => true);
+		const service = new CompositorViewService({
+			addon: {
+				createExportControl: () => control,
+				cancelExport,
+				exportMulti,
+			} as unknown as CompositorViewAddon,
+		});
+		const progress = vi.fn();
+		const job = service.startMp4Export([], "/tmp/out.mp4", undefined, { fps: 60 }, progress);
+		expect(exportMulti).toHaveBeenCalledWith(
+			[],
+			"/tmp/out.mp4",
+			undefined,
+			{ fps: 60 },
+			progress,
+			control,
+		);
+		expect(job.cancel()).toBe(true);
+		expect(cancelExport).toHaveBeenCalledWith(control);
+		await expect(job.result).resolves.toMatchObject({ frames: 1 });
+	});
+
+	it("still exports with an addon that predates cancellation, refusing only the cancel", async () => {
+		// Unlike the GIF path, an MP4 export that cannot be stopped is better than none.
+		const exportMulti = vi.fn(async () => ({ frames: 2, wallS: 1, fps: 2, videoDurationS: 1 }));
+		const service = new CompositorViewService({
+			addon: { exportMulti } as unknown as CompositorViewAddon,
+		});
+		const job = service.startMp4Export([], "/tmp/out.mp4");
+		expect(job.cancel()).toBe(false);
+		await expect(job.result).resolves.toMatchObject({ frames: 2 });
+		expect(exportMulti).toHaveBeenCalledOnce();
+	});
+});
+
+describe("GPU adapter info", () => {
+	it("reports the addon's adapter, and nothing for an addon that predates it", () => {
+		const info = {
+			description: "NVIDIA GeForce RTX 3060 Laptop GPU",
+			vendorId: 0x10de,
+			vendorName: "NVIDIA",
+			deviceId: 0x2560,
+			luid: "0000000000014a77",
+			dedicatedVideoMemoryMb: 5994,
+			selection: "high-performance",
+		};
+		const withInfo = new CompositorViewService({
+			addon: { gpuAdapterInfo: () => info } as unknown as CompositorViewAddon,
+		});
+		expect(withInfo.gpuAdapterInfo()).toEqual(info);
+		const stale = new CompositorViewService({ addon: {} as unknown as CompositorViewAddon });
+		expect(stale.gpuAdapterInfo()).toBeNull();
+	});
+});
+
 /** A source checkout's `crates/.cargo/config.toml`, with `FFMPEG_DIR` written as `body`. */
 function writeCargoConfig(root: string, body: string): void {
 	const cargoDir = path.join(root, "crates", ".cargo");

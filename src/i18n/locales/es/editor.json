@@ -432,5 +432,10 @@
 		"regionPasted": "Región pegada",
 		"regionCopied": "Región copiada",
 		"cameraCheckFailed": "No se pudo buscar una grabación de cámara junto a {{name}}"
+	},
+	"exportPipeline": {
+		"quality1440p": "1440p",
+		"finalizing": "Todos los fotogramas están codificados. Escribiendo el audio y terminando el archivo…",
+		"gpuReset": "La exportación se detuvo porque el controlador gráfico se reinició o se retiró la GPU. Tu proyecto está a salvo: vuelve a exportar. Si sigue ocurriendo, actualiza el controlador gráfico."
 	}
 }

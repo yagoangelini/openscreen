@@ -112,10 +112,33 @@ export type CompositorBackend = "hardware" | "cpu" | "none";
  *  boundary and the IPC boundary each own their shape. */
 export type SegmentationSupport = "ready" | "no-runtime" | "no-model" | "none";
 
+/** The GPU the compositor runs on, and the encoder the last export used. */
+export interface GpuAdapterInfo {
+	description: string;
+	vendorId: number;
+	vendorName: string;
+	deviceId: number;
+	/** Hex LUID — the value `OPENSCREEN_COMPOSITOR_ADAPTER` accepts to pin this adapter. */
+	luid: string;
+	dedicatedVideoMemoryMb: number;
+	/** `high-performance`, `minimum-power`, `luid …`, or `default` after a fallback. */
+	selection: string;
+	/** `h264_nvenc`, `h264_amf`, … — absent before the first export of the session. */
+	lastExportEncoder?: string | null;
+}
+
+/** Progress of a native export: frames out so far, then once `"finalizing"` after the last
+ *  frame while the encoder queue, the audio tail and the container index are written. */
+export type NativeExportProgress = (frames: number, phase?: "finalizing") => void;
+
 export interface CompositorViewAddon {
 	/** What this machine offers, asked without allocating a view — the export dialog
 	 *  needs the answer before any preview exists. Cached native-side. */
 	probeBackend(): CompositorBackend;
+
+	/** The adapter `probeBackend`'s device runs on (Windows; `null` elsewhere or with no
+	 *  device). Optional: an older `.node` predates it. */
+	gpuAdapterInfo?(): GpuAdapterInfo | null;
 
 	/** Whether the ONNX Runtime library is where the app staged it, and therefore whether a
 	 *  segmentation mask can be produced at all. Asked of the machine rather than guessed from
@@ -178,14 +201,23 @@ export interface CompositorViewAddon {
 	 *  `sceneJson` — same `SceneDescription` as the live preview (background/layout/webcam/cursor/
 	 *  effects); omitted or invalid → nothing configured is applied (not a masking fallback).
 	 *  `params` — output size/fps/codec; omitted → 1920x1080/first clip's fps/h264.
-	 *  `onProgress` (frames encoded so far) is optional, throttled to ~10/s. */
+	 *  `onProgress` (frames encoded so far, then `"finalizing"`) is optional, throttled to
+	 *  ~10/s. `control` (`createExportControl`) lets `cancelExport` stop it: the promise then
+	 *  rejects with `EXPORT_CANCELLED`, and an existing `outPath` is left untouched — the file
+	 *  is written to a staging `.partial` and renamed over the target only on success. */
 	exportMulti(
 		clips: ClipInput[],
 		outPath: string,
 		sceneJson?: string,
 		params?: ExportParamsInput,
-		onProgress?: (frames: number) => void,
+		onProgress?: NativeExportProgress,
+		control?: object,
 	): Promise<ExportStats>;
+	/** Opaque napi External for one export, MP4 or GIF: kept in main, never sent to a
+	 *  renderer. Optional: an older `.node` predates it. */
+	createExportControl?(): object;
+	/** `false` when the export already won the race and is publishing its file. */
+	cancelExport?(control: object): boolean;
 	/** Native GIF export. Identical inputs to `exportMulti` — same clips, same
 	 *  scene — because it is the same render: both drive `walk_composited_timeline`
 	 *  in the compositor crate and differ only in the encoder. Cursor, background,

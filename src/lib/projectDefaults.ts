@@ -214,9 +214,12 @@ export const DEFAULT_PROJECT_APPEARANCE: ProjectAppearanceDefaults = {
 	wallpaperMotion: "none",
 	frame: "none",
 	frameTheme: "light",
-	// Auto: the frame follows the recording, its crop, the camera layout and the padding.
-	// Documents from before it stored no ratio and read 16:9; the v8 upgrader pins that.
-	aspectRatio: "auto",
+	// 16:9, so the default export is exactly 1920x1080 (the fork's decision, 2026-10-09). Auto
+	// sized the frame around the recording plus an even padding border, which on a 16:9
+	// screen with the default padding made a 1752x1080 frame: not a YouTube size, and letterboxed
+	// by every player. Auto stays one pick away in the format menu. Documents from before Auto
+	// stored no ratio and read 16:9; the v8 upgrader pins that.
+	aspectRatio: "16:9",
 	// 0.2 peaked at 9% opacity: a shadow nobody could see. 0.6 is 27%, the card lifts off the
 	// wallpaper without a halo.
 	shadowIntensity: 0.6,

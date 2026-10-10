@@ -1,9 +1,113 @@
 import { describe, expect, it } from "vitest";
+import { DEFAULT_PROJECT_APPEARANCE } from "@/lib/projectDefaults";
+import { getAspectRatioValue } from "@/utils/aspectRatioUtils";
 import {
 	calculateEffectiveSourceDimensions,
 	calculateMp4ExportSettings,
+	H264_MAX_SIDE,
 	wouldUpscale,
 } from "./mp4ExportSettings";
+
+describe("the default export", () => {
+	it("is exactly 1920x1080 for a new project at the dialog's default tier", () => {
+		// A new project's format and the dialog's default quality ("good"): the fork's export
+		// decision. Auto used to be the default and made 1752x1080 out of a 16:9 screen.
+		const aspectRatioValue = getAspectRatioValue(DEFAULT_PROJECT_APPEARANCE.aspectRatio);
+		expect(
+			calculateMp4ExportSettings({
+				quality: "good",
+				sourceWidth: 1920,
+				sourceHeight: 1080,
+				aspectRatioValue,
+				frameRate: 60,
+			}),
+		).toMatchObject({ width: 1920, height: 1080 });
+	});
+});
+
+describe("the 1440p tier", () => {
+	it("targets a 1440 short side in the project's format", () => {
+		expect(
+			calculateMp4ExportSettings({
+				quality: "high",
+				sourceWidth: 1920,
+				sourceHeight: 1080,
+				aspectRatioValue: 16 / 9,
+				frameRate: 60,
+			}),
+		).toMatchObject({ width: 2560, height: 1440 });
+		expect(
+			calculateMp4ExportSettings({
+				quality: "high",
+				sourceWidth: 1080,
+				sourceHeight: 1920,
+				aspectRatioValue: 9 / 16,
+				frameRate: 30,
+			}),
+		).toMatchObject({ width: 1440, height: 2560 });
+	});
+
+	it("is flagged as an upscale for a 1080p recording, like 1080p is for a 720p one", () => {
+		const dims = calculateMp4ExportSettings({
+			quality: "high",
+			sourceWidth: 1920,
+			sourceHeight: 1080,
+			aspectRatioValue: 16 / 9,
+			frameRate: 60,
+		});
+		expect(wouldUpscale(dims, { width: 1920, height: 1080 })).toBe(true);
+		expect(wouldUpscale(dims, { width: 2560, height: 1440 })).toBe(false);
+	});
+});
+
+describe("the H.264 size cap", () => {
+	it("scales a wider-than-4K source export down to 4096 for H.264, keeping its shape", () => {
+		const settings = calculateMp4ExportSettings({
+			quality: "source",
+			sourceWidth: 5120,
+			sourceHeight: 2880,
+			aspectRatioValue: 16 / 9,
+			frameRate: 30,
+		});
+		expect(settings).toMatchObject({ width: 4096, height: 2304 });
+		expect(Math.max(settings.width, settings.height)).toBeLessThanOrEqual(H264_MAX_SIDE);
+	});
+
+	it("caps a portrait export on its long side too", () => {
+		expect(
+			calculateMp4ExportSettings({
+				quality: "source",
+				sourceWidth: 2880,
+				sourceHeight: 5120,
+				aspectRatioValue: 9 / 16,
+				frameRate: 30,
+				codec: "h264",
+			}),
+		).toMatchObject({ width: 2304, height: 4096 });
+	});
+
+	it("leaves H.265 and sizes already under the cap alone", () => {
+		expect(
+			calculateMp4ExportSettings({
+				quality: "source",
+				sourceWidth: 5120,
+				sourceHeight: 2880,
+				aspectRatioValue: 16 / 9,
+				frameRate: 30,
+				codec: "h265",
+			}),
+		).toMatchObject({ width: 5120, height: 2880 });
+		expect(
+			calculateMp4ExportSettings({
+				quality: "source",
+				sourceWidth: 3840,
+				sourceHeight: 2160,
+				aspectRatioValue: 16 / 9,
+				frameRate: 30,
+			}),
+		).toMatchObject({ width: 3840, height: 2160 });
+	});
+});
 
 describe("calculateMp4ExportSettings", () => {
 	it("keeps 1080p explicit even when it upscales short native captures", () => {

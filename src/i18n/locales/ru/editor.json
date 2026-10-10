@@ -432,5 +432,10 @@
 		"regionPasted": "Region pasted",
 		"regionCopied": "Region copied",
 		"cameraCheckFailed": "Could not check for a camera recording near {{name}}"
+	},
+	"exportPipeline": {
+		"quality1440p": "1440p",
+		"finalizing": "Все кадры закодированы. Записывается звук и завершается файл…",
+		"gpuReset": "Экспорт остановлен: графический драйвер перезапустился или GPU был отключён. Проект в безопасности — запустите экспорт снова. Если это повторяется, обновите графический драйвер."
 	}
 }

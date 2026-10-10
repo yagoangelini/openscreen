@@ -19,6 +19,8 @@ import type {
 	ExportStats,
 	GifExportStats,
 	GifParamsInput,
+	GpuAdapterInfo,
+	NativeExportProgress,
 	NativeFramePacket,
 	RemuxStats,
 	SegmentationSupport,
@@ -527,6 +529,32 @@ export class CompositorViewService {
 		}
 	}
 
+	private adapterLogged = false;
+
+	/** The GPU the compositor runs on and the encoder the last export used — for logs and the
+	 *  diagnostics bundle. `null` when the addon is absent or predates the call, off Windows,
+	 *  or with no device at all. The first answer is also logged once, so a support log says
+	 *  which GPU the preview and exports ran on. */
+	gpuAdapterInfo(): GpuAdapterInfo | null {
+		const addon = this.ensureAddon();
+		if (!addon?.gpuAdapterInfo) {
+			return null;
+		}
+		try {
+			const info = addon.gpuAdapterInfo();
+			if (info && !this.adapterLogged) {
+				this.adapterLogged = true;
+				console.info(
+					`[compositor-view] GPU: ${info.description} (${info.vendorName}, ${info.dedicatedVideoMemoryMb} MB, LUID ${info.luid}, selection ${info.selection})`,
+				);
+			}
+			return info;
+		} catch (err) {
+			console.warn("[compositor-view] gpuAdapterInfo unavailable:", err);
+			return null;
+		}
+	}
+
 	/** Whether this machine can actually segment the camera, and if not, what is missing.
 	 *
 	 *  Three things have to line up, and each of them has been silently absent at some point:
@@ -685,20 +713,43 @@ export class CompositorViewService {
 		outPath?: string,
 		sceneJson?: string,
 		params?: ExportParamsInput,
-		onProgress?: (frames: number) => void,
+		onProgress?: NativeExportProgress,
+		control?: object,
 	): Promise<ExportStats | null> {
 		const addon = this.ensureAddon();
 		if (!addon) {
 			return null;
 		}
 		const target = outPath ?? path.join(app.getPath("temp"), "openscreen-native-export.mp4");
+		// Logged once per session, here because an export is when the GPU matters most.
+		this.gpuAdapterInfo();
 		return addon.exportMulti(
 			clips,
 			target,
 			sceneJson ? resolveSceneAssetPaths(sceneJson) : undefined,
 			params,
 			onProgress,
+			control,
 		);
+	}
+
+	/** `exportMulti` with a cancel handle. An addon that predates MP4 cancellation still
+	 *  exports — the handle then reports the cancel as refused (`false`) rather than the export
+	 *  failing to start, since an export that cannot be stopped beats one that cannot run. */
+	startMp4Export(
+		clips: ClipInput[],
+		outPath?: string,
+		sceneJson?: string,
+		params?: ExportParamsInput,
+		onProgress?: NativeExportProgress,
+	): GifExportJob<ExportStats | null> {
+		const addon = this.ensureAddon();
+		const control = addon?.createExportControl?.();
+		const cancel = addon?.cancelExport?.bind(addon);
+		return {
+			result: this.exportMulti(clips, outPath, sceneJson, params, onProgress, control),
+			cancel: () => (control && cancel ? cancel(control) : false),
+		};
 	}
 
 	/** Native GIF export. Same inputs as `exportMulti` — one clip list, one scene —

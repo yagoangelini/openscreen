@@ -314,6 +314,7 @@ fn export_gif_inner(
 					Ok(())
 				},
 				// GIF has no audio track, so clip boundaries need no work.
+				&mut |_, _, _| control.check(),
 				&mut |_, _, _, _| control.check(),
 			)?
 		};

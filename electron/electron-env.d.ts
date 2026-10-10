@@ -35,8 +35,11 @@ interface Window {
 		copyToClipboard?: (text: string) => Promise<void>;
 		/** Native (D3D) export progress — frames encoded so far, pushed at ~10 Hz max while
 		 *  `compositor.export`/`compositor.exportMulti` runs. Distinct from `exportOnFrameAck`,
-		 *  the OLD web/CPU pipeline's per-frame ack, not a progress signal. */
-		onNativeExportProgress?: (callback: (frames: number, exportId?: string) => void) => () => void;
+		 *  the OLD web/CPU pipeline's per-frame ack, not a progress signal. `phase` is
+		 *  `"finalizing"` once, after the last frame. */
+		onNativeExportProgress?: (
+			callback: (frames: number, exportId?: string, phase?: "finalizing") => void,
+		) => () => void;
 		getSources: (opts: Electron.SourcesOptions) => Promise<ProcessedDesktopSource[]>;
 		switchToEditor: () => Promise<void>;
 		switchToHud: () => Promise<void>;

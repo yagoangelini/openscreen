@@ -247,6 +247,10 @@ pub struct Compositor {
     dof_pyramid: RefCell<Option<DofPyramid>>,
     /// Device WARP : la profondeur de champ y obéit à `DOF_ON_CPU_BACKEND`.
     cpu_backend: bool,
+    /// First D3D failure met where nothing can return an error (the constant-buffer upload
+    /// inside every `draw_*`). The public entry points report it — as `GpuDeviceLost` when
+    /// the driver reset or the GPU went away — instead of the call site panicking.
+    device_fault: Cell<Option<windows::core::HRESULT>>,
 }
 
 /// Ressources d'un resize à une taille cible : RGBA intermédiaire (le RT composé, rendu à la
@@ -755,6 +759,7 @@ impl Compositor {
             nv12_readback_staging: RefCell::new(None),
             dof_pyramid: RefCell::new(None),
             cpu_backend: gpu.backend == crate::d3d::Backend::Cpu,
+            device_fault: Cell::new(None),
         })
     }
 
@@ -846,7 +851,11 @@ impl Compositor {
     /// Dimensions réelles de la texture décodeur (alignée macrobloc : 1080->1088, etc.).
     pub unsafe fn tex_dims(&self, frame: *const AVFrame) -> (u32, u32) {
         let tex_ptr = (*frame).data[0] as *mut c_void;
-        let tex = ID3D11Texture2D::from_raw_borrowed(&tex_ptr).unwrap();
+        // `nv12_srvs` runs first on every path and refuses a frame without a texture with a
+        // real error; this only keeps a stray caller from panicking on one.
+        let Some(tex) = ID3D11Texture2D::from_raw_borrowed(&tex_ptr) else {
+            return (1, 1);
+        };
         let mut d = D3D11_TEXTURE2D_DESC::default();
         tex.GetDesc(&mut d);
         (d.Width, d.Height)
@@ -1016,13 +1025,89 @@ impl Compositor {
 
     unsafe fn upload_cb(&self, cb: &LayerCB) {
         let mut m = D3D11_MAPPED_SUBRESOURCE::default();
-        self.ctx
-            .Map(&self.cbuf, 0, D3D11_MAP_WRITE_DISCARD, 0, Some(&mut m))
-            .unwrap();
+        // `Map` fails when the driver resets or the GPU is removed (DXGI_ERROR_DEVICE_REMOVED),
+        // which an `unwrap` here turned into a panic, i.e. the whole Electron app aborting. The
+        // draw is skipped instead — the frame is lost anyway — and the fault is reported by the
+        // entry point that drew it (`checked`).
+        if let Err(error) = self.ctx.Map(&self.cbuf, 0, D3D11_MAP_WRITE_DISCARD, 0, Some(&mut m)) {
+            if self.device_fault.get().is_none() {
+                self.device_fault.set(Some(error.code()));
+            }
+            return;
+        }
         std::ptr::copy_nonoverlapping(cb as *const LayerCB as *const u8, m.pData as *mut u8, std::mem::size_of::<LayerCB>());
         self.ctx.Unmap(&self.cbuf, 0);
         self.ctx.VSSetConstantBuffers(0, Some(&[Some(self.cbuf.clone())]));
         self.ctx.PSSetConstantBuffers(0, Some(&[Some(self.cbuf.clone())]));
+    }
+
+    /// The result of a public entry point, with whatever the draws inside it could not
+    /// return: a recorded `upload_cb` failure wins, and a lost device anywhere becomes
+    /// `GpuDeviceLost` ("the GPU was reset") rather than a bare HRESULT.
+    fn checked<T>(&self, result: Result<T>) -> Result<T> {
+        if let Some(code) = self.device_fault.take() {
+            return Err(crate::d3d::device_error(&self.dev, code));
+        }
+        result.map_err(|error| crate::d3d::classify_device_error(&self.dev, error))
+    }
+
+    /// Compose une frame animée (§6/§8) : fond flouté + screen zoomé (padding, coins, ombre)
+    /// + webcam crop carré (coins, ombre), placements interpolés A↔B par la timeline.
+    pub unsafe fn compose_frame(
+        &self,
+        screen: *const AVFrame,
+        webcam: *const AVFrame,
+        frame: f32,
+        cfg: &Cfg,
+    ) -> Result<()> {
+        let result = self.compose_frame_unchecked(screen, webcam, frame, cfg);
+        self.checked(result)
+    }
+
+    /// Rend le RT RGBA vers notre texture NV12 puis copie vers la surface `out_tex`/`slice`.
+    pub unsafe fn rgb_to_nv12(&self, out_tex: *mut c_void, slice: u32) -> Result<()> {
+        let result = self.rgb_to_nv12_unchecked(out_tex, slice);
+        self.checked(result)
+    }
+
+    /// See `rgb_to_nv12_scaled_unchecked`.
+    pub unsafe fn rgb_to_nv12_scaled(
+        &self,
+        target_w: u32,
+        target_h: u32,
+        out_tex: *mut c_void,
+        slice: u32,
+    ) -> Result<()> {
+        let result = self.rgb_to_nv12_scaled_unchecked(target_w, target_h, out_tex, slice);
+        self.checked(result)
+    }
+
+    /// See `readback_resized_unchecked`.
+    pub unsafe fn readback_resized(&self, target_w: u32, target_h: u32) -> Result<Vec<u8>> {
+        let result = self.readback_resized_unchecked(target_w, target_h);
+        self.checked(result)
+    }
+
+    /// See `readback_direct_unchecked`.
+    pub unsafe fn readback_direct(&self) -> Result<(u32, u32, Vec<u8>)> {
+        let result = self.readback_direct_unchecked();
+        self.checked(result)
+    }
+
+    /// See `read_nv12_scaled_unchecked`.
+    #[allow(clippy::too_many_arguments)]
+    pub unsafe fn read_nv12_scaled(
+        &self,
+        target_w: u32,
+        target_h: u32,
+        dst_y: *mut u8,
+        pitch_y: usize,
+        dst_uv: *mut u8,
+        pitch_uv: usize,
+    ) -> Result<()> {
+        let result =
+            self.read_nv12_scaled_unchecked(target_w, target_h, dst_y, pitch_y, dst_uv, pitch_uv);
+        self.checked(result)
     }
 
     /// Calque vidéo NV12.
@@ -1852,7 +1937,7 @@ impl Compositor {
 
     /// Compose une frame animée (§6/§8) : fond flouté + screen zoomé (padding, coins, ombre)
     /// + webcam crop carré (coins, ombre), placements interpolés A↔B par la timeline.
-    pub unsafe fn compose_frame(
+    unsafe fn compose_frame_unchecked(
         &self,
         screen: *const AVFrame,
         webcam: *const AVFrame,
@@ -2670,10 +2755,12 @@ impl Compositor {
     }
 
     /// Rend le RT RGBA vers notre texture NV12 puis copie vers la surface `out_tex`/`slice`.
-    pub unsafe fn rgb_to_nv12(&self, out_tex: *mut c_void, slice: u32) -> Result<()> {
+    unsafe fn rgb_to_nv12_unchecked(&self, out_tex: *mut c_void, slice: u32) -> Result<()> {
         self.render_nv12();
         let src: ID3D11Resource = self.nv12.cast()?;
-        let dst_tex = ID3D11Texture2D::from_raw_borrowed(&out_tex).unwrap().clone();
+        let dst_tex = ID3D11Texture2D::from_raw_borrowed(&out_tex)
+            .ok_or_else(|| anyhow::anyhow!("encoder surface without a D3D11 texture"))?
+            .clone();
         let dst: ID3D11Resource = dst_tex.cast()?;
         self.ctx.CopySubresourceRegion(&dst, slice, 0, 0, 0, &src, 0, None);
         Ok(())
@@ -2793,7 +2880,7 @@ impl Compositor {
     /// Pré-requis : `target_w`/`target_h` ≥ 1. Aucun effet sur le pipeline d'export
     /// (les sites d'appel de `rgb_to_nv12_scaled` et `blit_resized` ne sont pas touchés
     /// — ce helper réutilise `blit_resized` mais n'est pas sur le chemin d'export).
-    pub unsafe fn readback_resized(
+    unsafe fn readback_resized_unchecked(
         &self,
         target_w: u32,
         target_h: u32,
@@ -2899,7 +2986,7 @@ impl Compositor {
     /// octets RGBA8 tightly-packed. L'appelant (`live.rs`) publie ces dims dans le packet ; le
     /// canvas côté JS se dimensionne dessus (frame auto-descriptive), donc aucun couplage de
     /// taille à maintenir des deux côtés.
-    pub unsafe fn readback_direct(&self) -> Result<(u32, u32, Vec<u8>)> {
+    unsafe fn readback_direct_unchecked(&self) -> Result<(u32, u32, Vec<u8>)> {
         let (rw, rh) = self.render_dims();
         self.ctx.CopyResource(&self.staging, &self.rt);
         let mut m = D3D11_MAPPED_SUBRESOURCE::default();
@@ -2922,7 +3009,7 @@ impl Compositor {
     /// utilisés partout ailleurs dans le fichier, cf. `blit_resized`). Le RT suivant la sortie,
     /// c'est l'exception : dans le cas nominal la cible est la taille de rendu, et le coût est
     /// celui de `rgb_to_nv12`.
-    pub unsafe fn rgb_to_nv12_scaled(
+    unsafe fn rgb_to_nv12_scaled_unchecked(
         &self,
         target_w: u32,
         target_h: u32,
@@ -2937,7 +3024,9 @@ impl Compositor {
         // vers le pool de l'encodeur matériel — la seule partie qui lui soit propre.
         let src_tex = self.nv12_source(target_w, target_h)?;
         let src: ID3D11Resource = src_tex.cast()?;
-        let dst_tex = ID3D11Texture2D::from_raw_borrowed(&out_tex).unwrap().clone();
+        let dst_tex = ID3D11Texture2D::from_raw_borrowed(&out_tex)
+            .ok_or_else(|| anyhow::anyhow!("encoder surface without a D3D11 texture"))?
+            .clone();
         let dst: ID3D11Resource = dst_tex.cast()?;
         self.ctx.CopySubresourceRegion(&dst, slice, 0, 0, 0, &src, 0, None);
         Ok(())
@@ -2991,7 +3080,7 @@ impl Compositor {
     ///
     /// `dst_y`/`dst_uv` doivent tenir `target_h * pitch_y` et `target_h/2 * pitch_uv`
     /// octets — typiquement les `data[0]`/`data[1]` d'une `AVFrame` NV12.
-    pub unsafe fn read_nv12_scaled(
+    unsafe fn read_nv12_scaled_unchecked(
         &self,
         target_w: u32,
         target_h: u32,
@@ -3168,6 +3257,36 @@ impl Compositor {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A driver reset met inside a draw (where `upload_cb` cannot return an error) used to
+    /// panic the export — and with it the Electron main process. It now surfaces from the
+    /// entry point as `GpuDeviceLost`, whose message the app recognises.
+    #[test]
+    fn a_device_lost_during_a_draw_surfaces_as_gpu_device_lost() {
+        let Ok(gpu) = Gpu::create(false) else {
+            eprintln!("skip: no hardware D3D11 device on this host");
+            return;
+        };
+        let comp = Compositor::new_sized(&gpu, 64, 64).expect("compositor");
+        comp.device_fault
+            .set(Some(windows::Win32::Graphics::Dxgi::DXGI_ERROR_DEVICE_REMOVED));
+        let error = unsafe { comp.readback_direct() }.expect_err("the fault must be reported");
+        assert!(error.is::<crate::d3d::GpuDeviceLost>(), "{error:#}");
+        assert!(error.to_string().starts_with("GPU_DEVICE_LOST"), "{error}");
+        // Reported once: the next call starts clean.
+        assert!(unsafe { comp.readback_direct() }.is_ok());
+    }
+
+    #[test]
+    fn an_ordinary_d3d_failure_is_not_called_a_device_loss() {
+        let Ok(gpu) = Gpu::create(false) else {
+            return;
+        };
+        let comp = Compositor::new_sized(&gpu, 64, 64).expect("compositor");
+        comp.device_fault.set(Some(windows::Win32::Foundation::E_OUTOFMEMORY));
+        let error = unsafe { comp.readback_direct() }.expect_err("the fault must be reported");
+        assert!(!error.is::<crate::d3d::GpuDeviceLost>(), "{error:#}");
+    }
 
     /// Preuve de bout en bout que `img_cache` est borné : charge TOUS les wallpapers livrés,
     /// une frame par wallpaper — ce que fait le sélecteur quand on le parcourt — et vérifie que

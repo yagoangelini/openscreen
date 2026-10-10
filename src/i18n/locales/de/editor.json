@@ -432,5 +432,10 @@
 		"regionPasted": "Bereich eingefügt",
 		"regionCopied": "Bereich kopiert",
 		"cameraCheckFailed": "Neben {{name}} konnte keine Kameraaufnahme gesucht werden"
+	},
+	"exportPipeline": {
+		"quality1440p": "1440p",
+		"finalizing": "Alle Bilder sind kodiert. Audio wird geschrieben und die Datei abgeschlossen…",
+		"gpuReset": "Der Export wurde abgebrochen, weil der Grafiktreiber zurückgesetzt oder die GPU entfernt wurde. Dein Projekt ist sicher: Exportiere erneut. Passiert das öfter, aktualisiere den Grafiktreiber."
 	}
 }

@@ -1,7 +1,10 @@
 // Export dialog for the new editor. Wires together:
 // 1. pickExportSavePath (native save dialog)
 // 2. the native D3D exporter (exportMultiNative / exportGifNative)
-// 3. per-job GIF cancellation, with native cleanup before returning to options
+// 3. per-job cancellation (MP4 and GIF), with native cleanup before returning to options:
+//    the native side renders into a staging `.partial` file and only renames it over the
+//    picked path once the export is complete, so a cancelled export never touches the
+//    user's existing file
 //
 // Format/quality/GIF options live in the dialog's local state. The
 // dialog uses the new shell's modal style.
@@ -34,7 +37,7 @@ import {
 import { calculateMp4ExportSettings, wouldUpscale } from "@/lib/exporter/mp4ExportSettings";
 import { outputFrameCount } from "@/lib/exporter/outputFrameCount";
 import {
-	cancelGifExportNative,
+	cancelExportNative,
 	exportGifNative,
 	exportMultiNative,
 	useIsCpuCompositor,
@@ -49,7 +52,7 @@ import { Toggle } from "./RightPanes";
 type Phase = "idle" | "configuring" | "rendering" | "writing" | "done" | "error";
 
 interface ActiveExport {
-	id?: string;
+	id: string;
 	cancelRequested: boolean;
 	unsubscribe?: () => void;
 }
@@ -57,10 +60,20 @@ interface ActiveExport {
 function disposeExport(exportJob: ActiveExport | null) {
 	exportJob?.unsubscribe?.();
 	if (exportJob?.id) {
-		void cancelGifExportNative(exportJob.id).catch((error) => {
-			console.warn("[export] failed to cancel detached GIF export", error);
+		void cancelExportNative(exportJob.id).catch((error) => {
+			console.warn("[export] failed to cancel detached export", error);
 		});
 	}
+}
+
+/** The native side reports a driver reset / removed GPU with this prefix (`GpuDeviceLost`). */
+const GPU_DEVICE_LOST = "GPU_DEVICE_LOST";
+
+/** What the error panel and toast say: the app's own words for a GPU reset, the native
+ *  message for everything else. */
+function exportErrorMessage(err: unknown, gpuReset: string): string {
+	const message = err instanceof Error ? err.message : String(err);
+	return message.includes(GPU_DEVICE_LOST) ? gpuReset : message;
 }
 
 /** hh:mm:ss (always shows hours, unlike the shared mm:ss `formatTimePadded`) — exports can run
@@ -138,13 +151,18 @@ function buildNativeClipList(document: AxcutDocument): CompositorClipInput[] {
 	});
 }
 
+/** The MP4 tiers, smallest first. `scope` says which namespace holds the label: the first
+ *  three predate the 1440p tier and live in `settings`; 1440p was added in `editor`'s
+ *  `exportPipeline` block. */
 const QUALITY_OPTIONS: Array<{
 	value: ExportQuality;
 	labelKey: string;
+	scope: "settings" | "editor";
 }> = [
-	{ value: "medium", labelKey: "exportQuality.low" },
-	{ value: "good", labelKey: "exportQuality.medium" },
-	{ value: "source", labelKey: "exportQuality.high" },
+	{ value: "medium", labelKey: "exportQuality.low", scope: "settings" },
+	{ value: "good", labelKey: "exportQuality.medium", scope: "settings" },
+	{ value: "high", labelKey: "exportPipeline.quality1440p", scope: "editor" },
+	{ value: "source", labelKey: "exportQuality.high", scope: "settings" },
 ];
 
 interface ExportDialogProps {
@@ -254,6 +272,8 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 					sourceHeight: smallestSource.height,
 					aspectRatioValue: EXPORT_ASPECT,
 					frameRate: fps,
+					// H.264 stops at 4096 a side; the size shown is the size encoded.
+					codec,
 				})
 			: null;
 
@@ -301,7 +321,8 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 
 	const handleCancel = async () => {
 		const job = activeExport.current;
-		if (phase !== "rendering" || !job?.id) {
+		// Both formats are cancellable while they render and while they finish the file.
+		if ((phase !== "rendering" && phase !== "writing") || !job?.id) {
 			handleClose();
 			return;
 		}
@@ -309,7 +330,7 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 		job.cancelRequested = true;
 		setCancelPending(true);
 		try {
-			await cancelGifExportNative(job.id);
+			await cancelExportNative(job.id);
 			// Native settlement decides the winner and confirms file cleanup.
 		} catch (err) {
 			if (activeExport.current !== job) return;
@@ -370,7 +391,7 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 		// user previewed.
 		{
 			const job: ActiveExport = {
-				id: format === "gif" ? crypto.randomUUID() : undefined,
+				id: crypto.randomUUID(),
 				cancelRequested: false,
 			};
 			activeExport.current = job;
@@ -392,8 +413,21 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 			const totalFrames = outputFrameCount(clips, sceneDesc.speedRegions, outFps);
 			const startedAt = Date.now();
 			const unsubscribeProgress = window.electronAPI?.onNativeExportProgress?.(
-				(frames, exportId) => {
+				(frames, exportId, nativePhase) => {
 					if (activeExport.current !== job || job.cancelRequested || exportId !== job.id) return;
+					if (nativePhase === "finalizing") {
+						// Every frame is encoded; what is left (encoder queue, audio tail, file
+						// index) gets its own phase rather than a bar parked at 100 %.
+						setPhase("writing");
+						setProgress({
+							currentFrame: totalFrames,
+							totalFrames,
+							percentage: 100,
+							estimatedTimeRemaining: 0,
+							phase: "finalizing",
+						});
+						return;
+					}
 					const elapsedS = (Date.now() - startedAt) / 1000;
 					const fractionDone = Math.min(1, frames / totalFrames);
 					const estimatedTimeRemaining = fractionDone > 0 ? elapsedS / fractionDone - elapsedS : 0;
@@ -430,13 +464,19 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 								},
 								job.id,
 							)
-						: await exportMultiNative(exportClips, pickedPath, sceneJson, {
-								width: outDims?.width,
-								height: outDims?.height,
-								fps,
-								codec,
-								bitrate: outDims?.bitrate,
-							});
+						: await exportMultiNative(
+								exportClips,
+								pickedPath,
+								sceneJson,
+								{
+									width: outDims?.width,
+									height: outDims?.height,
+									fps,
+									codec,
+									bitrate: outDims?.bitrate,
+								},
+								job.id,
+							);
 				if (activeExport.current !== job) return;
 				setSavedPath(pickedPath);
 				setPhase("done");
@@ -470,11 +510,10 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 					setError(null);
 					return;
 				}
-				setError(err instanceof Error ? err.message : String(err));
+				const message = exportErrorMessage(err, t("exportPipeline.gpuReset"));
+				setError(message);
 				setPhase("error");
-				toast.error(t("exportDialog.exportFailed"), {
-					description: err instanceof Error ? err.message : String(err),
-				});
+				toast.error(t("exportDialog.exportFailed"), { description: message });
 			} finally {
 				unsubscribeProgress?.();
 				if (activeExport.current === job) {
@@ -524,7 +563,7 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 				{format === "mp4" ? (
 					<section>
 						<div className={styles.groupLabel}>{t("exportDialog.quality")}</div>
-						<div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
+						<div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8 }}>
 							{QUALITY_OPTIONS.map((q) => (
 								<button
 									type="button"
@@ -542,7 +581,9 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 										font: "500 13px/1 var(--font-body)",
 									}}
 								>
-									<span style={{ color: "var(--fg)", fontWeight: 600 }}>{ts(q.labelKey)}</span>
+									<span style={{ color: "var(--fg)", fontWeight: 600 }}>
+										{q.scope === "editor" ? t(q.labelKey) : ts(q.labelKey)}
+									</span>
 									{(() => {
 										const dims = tierOutputDims(q.value);
 										if (!dims) return null;
@@ -742,7 +783,7 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 						type="button"
 						className={`${styles.btn} ${styles.btnSecondary}`}
 						onClick={handleCancel}
-						disabled={isBusy && !(format === "gif" && phase === "rendering" && !cancelPending)}
+						disabled={isBusy && !((phase === "rendering" || phase === "writing") && !cancelPending)}
 						aria-busy={cancelPending}
 					>
 						{cancelPending && <Loader2 size={14} className="animate-spin" />}
@@ -1008,9 +1049,11 @@ function ProgressBlock({
 					color: "var(--muted)",
 				}}
 			>
-				{total > 0
-					? t("exportDialog.framesEta", { current, total, eta: Math.max(0, Math.round(eta)) })
-					: t("exportDialog.preparingEncoder")}
+				{phase === "writing"
+					? t("exportPipeline.finalizing")
+					: total > 0
+						? t("exportDialog.framesEta", { current, total, eta: Math.max(0, Math.round(eta)) })
+						: t("exportDialog.preparingEncoder")}
 			</div>
 		</div>
 	);
