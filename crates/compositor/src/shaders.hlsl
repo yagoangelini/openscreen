@@ -2156,6 +2156,15 @@ float4 device_frame(float2 local)
 
 float4 ps_main(VSOut i) : SV_Target
 {
+    // mode 19 : SPOTLIGHT. The whole output darkened (premultiplied black) outside a soft disc
+    // on the pointer: `src.xy` its centre in output fractions, `src.z` its radius and `src.w`
+    // the soft edge, both in px of `quad_px` (the output); `color.a` the darkness.
+    if (mode > 18.5)
+    {
+        float d = length(i.local - src.xy * quad_px);
+        return float4(0.0, 0.0, 0.0, color.a * smoothstep(src.z, src.z + src.w, d));
+    }
+
     // mode 18 : l'écran CADRÉ (ombre, cadre, métrage, appareil) flouté comme UN objet rigide
     // (`FrameGeometry::screen_trail`). t2 = son rendu isolé, prémultiplié, à la taille de la
     // sortie. Chaque tap retrouve le point de l'objet qui couvrait ce pixel plus tôt sur la

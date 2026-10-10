@@ -430,7 +430,8 @@
 		"bounceLight": "弱",
 		"bounceStrong": "強",
 		"showKeystrokes": "ショートカットを表示",
-		"clickRing": "クリックを強調"
+		"clickRing": "クリックを強調",
+		"spotlight": "スポットライト"
 	},
 	"export": {
 		"gifButton": "GIF をエクスポート",

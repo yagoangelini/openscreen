@@ -430,7 +430,8 @@
 		"bounceLight": "Light",
 		"bounceStrong": "Strong",
 		"showKeystrokes": "On-screen shortcuts",
-		"clickRing": "Click highlight"
+		"clickRing": "Click highlight",
+		"spotlight": "Spotlight"
 	},
 	"export": {
 		"gifButton": "Export GIF",

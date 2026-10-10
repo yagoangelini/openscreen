@@ -96,7 +96,13 @@
 		"previewUnavailable": "Vorschau nicht verfügbar",
 		"about": "Über",
 		"version": "Version {{version}}",
-		"checkingForUpdates": "Wird geprüft…"
+		"checkingForUpdates": "Wird geprüft…",
+		"micChannel": "Sprachkanal",
+		"micChannelAuto": "Auto",
+		"micChannelLeft": "Links",
+		"micChannelRight": "Rechts",
+		"micChannelMix": "Mix",
+		"broadcastTip": "Tipp: Wähle das Mikrofon „NVIDIA Broadcast“, um Hintergrundgeräusche zu entfernen."
 	},
 	"permissions": {
 		"title": "OpenScreen benötigt einige Berechtigungen",

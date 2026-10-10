@@ -51,6 +51,7 @@ struct CaptureConfig {
     std::string microphoneDeviceId;
     std::string microphoneDeviceName;
     double microphoneGain = 1.0;
+    std::string microphoneChannelMode = "auto";
     std::string webcamDeviceId;
     std::string webcamDeviceName;
     std::string webcamDirectShowClsid;
@@ -136,6 +137,21 @@ struct CaptureControl {
         }
     }
 };
+
+/** PCI vendor of the adapter a D3D11 device runs on; 0 when it cannot be read. */
+UINT deviceAdapterVendorId(ID3D11Device* device) {
+    if (!device) {
+        return 0;
+    }
+    Microsoft::WRL::ComPtr<IDXGIDevice> dxgiDevice;
+    Microsoft::WRL::ComPtr<IDXGIAdapter> adapter;
+    DXGI_ADAPTER_DESC desc{};
+    if (FAILED(device->QueryInterface(IID_PPV_ARGS(&dxgiDevice))) ||
+        FAILED(dxgiDevice->GetAdapter(&adapter)) || FAILED(adapter->GetDesc(&desc))) {
+        return 0;
+    }
+    return desc.VendorId;
+}
 
 int readEnvInt(const char* name, int fallback) {
     char raw[32]{};
@@ -605,6 +621,7 @@ bool parseConfig(const std::string& json, CaptureConfig& config) {
     config.microphoneDeviceId = findString(json, "microphoneDeviceId");
     config.microphoneDeviceName = findString(json, "microphoneDeviceName");
     config.microphoneGain = findDouble(json, "microphoneGain", 1.0);
+    config.microphoneChannelMode = findString(json, "microphoneChannelMode");
     config.webcamDeviceId = findString(json, "webcamDeviceId");
     config.webcamDeviceName = findString(json, "webcamDeviceName");
     config.webcamDirectShowClsid = findString(json, "webcamDirectShowClsid");
@@ -934,10 +951,22 @@ int wmain(int argc, wchar_t* argv[]) {
     // which the DXGI path does not produce. config.webcamEnabled, not
     // webcamActive -- the latter is only set once webcam capture has started,
     // well after this.
+    //
+    // The fork turns it on by default for a capture on an NVIDIA adapter (the user's RTX
+    // drives the external monitor; measured there: one NVENC session, 14% encoder load, and
+    // no CPU readback of 1080p60 frames). The variable still wins either way: 0 forces the
+    // CPU path, 1 forces the GPU path on any adapter.
+    constexpr UINT kNvidiaVendorId = 0x10DE;
+    const int dxgiInputEnv = readEnvInt("OPENSCREEN_WGC_ENABLE_DXGI_INPUT", -1);
+    const bool captureOnNvidia = deviceAdapterVendorId(session.device()) == kNvidiaVendorId;
+    const bool dxgiInputWanted = dxgiInputEnv == 1 || (dxgiInputEnv == -1 && captureOnNvidia);
     encoderOptions.useDxgiInput =
-        readEnvInt("OPENSCREEN_WGC_ENABLE_DXGI_INPUT", 0) == 1 &&
+        dxgiInputWanted &&
         !config.preferSoftwareEncoder &&
         (!config.webcamEnabled || writeSeparateWebcam);
+    std::cerr << "[encoder] dxgi-input=" << (encoderOptions.useDxgiInput ? "on" : "off")
+              << " captureOnNvidia=" << (captureOnNvidia ? "true" : "false")
+              << " env=" << dxgiInputEnv << std::endl;
 
     MFEncoder encoder;
     if (!encoder.initialize(
@@ -1401,6 +1430,7 @@ int wmain(int argc, wchar_t* argv[]) {
                 return true;
             });
 
+        audioMixer->setMicrophoneChannelMode(parseMicrophoneChannelMode(config.microphoneChannelMode));
         if (!audioMixer->start()) {
             std::cerr << "ERROR: Failed to start native audio mixer" << std::endl;
             return false;

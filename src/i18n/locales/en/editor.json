@@ -191,7 +191,9 @@
 		"noSpeechDetected": "No speech detected",
 		"autoTranscribe": "Transcribe new recordings automatically when the editor opens",
 		"autoRedact": "Blur sensitive data in new recordings",
-		"autoRedactHint": "After a take, OCR finds e-mails, tenant domains, GUIDs, secrets and phone numbers on screen and blurs them. Each blur is a regular annotation you can keep or delete. Runs offline."
+		"autoRedactHint": "After a take, OCR finds e-mails, tenant domains, GUIDs, secrets and phone numbers on screen and blurs them. Each blur is a regular annotation you can keep or delete. Runs offline.",
+		"glossary": "Glossary",
+		"glossaryHint": "Names the transcription is corrected to, one per line: Term: misheard 1, misheard 2. Applies to new transcriptions."
 	},
 	"exportDialog": {
 		"title": "Export",
@@ -233,7 +235,11 @@
 		"qualityUpscaleWarning": "Upscale",
 		"nothingToExport": "Nothing to export — the timeline is empty.",
 		"youtubeLoudness": "YouTube loudness (−14 LUFS)",
-		"youtubeLoudnessHint": "YouTube plays every video at −14 LUFS. Off, the export keeps the −16 LUFS the voice is levelled to, and plays 2 dB softer there."
+		"youtubeLoudnessHint": "YouTube plays every video at −14 LUFS. Off, the export keeps the −16 LUFS the voice is levelled to, and plays 2 dB softer there.",
+		"confirmCloseTitle": "Cancel the export?",
+		"confirmCloseBody": "Closing stops the export, and the video will not be saved.",
+		"keepExporting": "Keep exporting",
+		"cancelAndClose": "Cancel export and close"
 	},
 	"inspector": {
 		"resetFocusPoint": "Reset focus point",
@@ -452,7 +458,7 @@
 	},
 	"autoZoom": {
 		"title": "Automatic zooms",
-		"scope": "Applies to every automatic zoom in this project.",
+		"scope": "Camera and transition apply to every zoom in this project; the rest, when the automatic zooms are planned.",
 		"camera": {
 			"title": "Camera",
 			"fixed": "Fixed + pan",
@@ -465,11 +471,14 @@
 		"transition": "Transition",
 		"maxScale": "Max zoom",
 		"hold": "Minimum hold",
-		"replanHint": "Max zoom and hold apply when the automatic zooms are planned again.",
+		"replanHint": "Max zoom, hold and opening out apply when the automatic zooms are planned again.",
 		"replan": "Re-plan automatic zooms",
 		"replanDone": "Automatic zooms planned: {{count}}",
 		"replanNone": "No moment for an automatic zoom was found",
-		"replanFailed": "Could not plan the automatic zooms"
+		"replanFailed": "Could not plan the automatic zooms",
+		"wideBetween": "Open out between actions",
+		"wideCalm": "Calm (2.5 s)",
+		"wideBrisk": "Brisk (1.5 s)"
 	},
 	"youtubeChapters": {
 		"title": "YouTube chapters",

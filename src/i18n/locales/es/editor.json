@@ -191,7 +191,9 @@
 		"noSpeechDetected": "No se detectó voz",
 		"autoTranscribe": "Transcribir automáticamente las grabaciones nuevas al abrir el editor",
 		"autoRedact": "Difuminar datos sensibles en las nuevas grabaciones",
-		"autoRedactHint": "Tras grabar, el OCR encuentra correos, dominios de tenant, GUID, secretos y teléfonos en pantalla y los difumina. Cada difuminado es una anotación normal que puedes conservar o borrar. Funciona sin conexión."
+		"autoRedactHint": "Tras grabar, el OCR encuentra correos, dominios de tenant, GUID, secretos y teléfonos en pantalla y los difumina. Cada difuminado es una anotación normal que puedes conservar o borrar. Funciona sin conexión.",
+		"glossary": "Glosario",
+		"glossaryHint": "Nombres que la transcripción corrige, uno por línea: Término: mal oído 1, mal oído 2. Se aplica a las nuevas transcripciones."
 	},
 	"exportDialog": {
 		"title": "Exportar",
@@ -233,7 +235,11 @@
 		"exportedVideoOf": "de vídeo exportado en",
 		"nothingToExport": "Nada que exportar: la línea de tiempo está vacía.",
 		"youtubeLoudness": "Volumen de YouTube (−14 LUFS)",
-		"youtubeLoudnessHint": "YouTube reproduce todos los vídeos a −14 LUFS. Desactivado, la exportación se queda en los −16 LUFS de la voz y suena 2 dB más bajo allí."
+		"youtubeLoudnessHint": "YouTube reproduce todos los vídeos a −14 LUFS. Desactivado, la exportación se queda en los −16 LUFS de la voz y suena 2 dB más bajo allí.",
+		"confirmCloseTitle": "¿Cancelar la exportación?",
+		"confirmCloseBody": "Cerrar detiene la exportación y el vídeo no se guardará.",
+		"keepExporting": "Seguir exportando",
+		"cancelAndClose": "Cancelar y cerrar"
 	},
 	"inspector": {
 		"resetFocusPoint": "Restablecer punto de enfoque",
@@ -452,7 +458,7 @@
 	},
 	"autoZoom": {
 		"title": "Zooms automáticos",
-		"scope": "Se aplica a todos los zooms automáticos de este proyecto.",
+		"scope": "La cámara y la transición valen para todos los zooms del proyecto; el resto, al planificar los zooms automáticos.",
 		"camera": {
 			"title": "Cámara",
 			"fixed": "Fija + paneo",
@@ -465,11 +471,14 @@
 		"transition": "Transición",
 		"maxScale": "Zoom máximo",
 		"hold": "Tiempo mínimo quieto",
-		"replanHint": "El zoom máximo y el tiempo quieto se aplican cuando se vuelven a planificar los zooms automáticos.",
+		"replanHint": "Zoom máximo, duración y abrir entre acciones valen al volver a planificar los zooms automáticos.",
 		"replan": "Volver a planificar los zooms automáticos",
 		"replanDone": "Zooms automáticos planificados: {{count}}",
 		"replanNone": "No se encontró ningún momento para un zoom automático",
-		"replanFailed": "No se pudieron planificar los zooms automáticos"
+		"replanFailed": "No se pudieron planificar los zooms automáticos",
+		"wideBetween": "Abrir entre acciones",
+		"wideCalm": "Tranquilo (2,5 s)",
+		"wideBrisk": "Ágil (1,5 s)"
 	},
 	"youtubeChapters": {
 		"title": "Capítulos de YouTube",

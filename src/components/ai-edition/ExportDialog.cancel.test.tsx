@@ -346,3 +346,36 @@ describe("MP4 export cancellation and finishing", () => {
 		expect(cancelExportNative).toHaveBeenCalledWith(id);
 	});
 });
+
+describe("closing the dialog during an export", () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+		vi.mocked(cancelExportNative).mockResolvedValue({ accepted: true });
+		onClose = vi.fn();
+		unsubscribe = vi.fn();
+		window.electronAPI = {
+			pickExportSavePath: vi.fn(async () => ({ path: "/tmp/result.gif" })),
+			onNativeExportProgress: vi.fn((cb) => {
+				progress = cb;
+				return unsubscribe;
+			}),
+		} as unknown as Window["electronAPI"];
+	});
+	afterEach(cleanup);
+
+	it("asks first: Keep exporting leaves it running, Cancel and close stops it and closes", async () => {
+		pendingExport();
+		const { id } = await start();
+		fireEvent.keyDown(document, { key: "Escape" });
+		expect(await screen.findByTestId("export-confirm-close")).toBeInTheDocument();
+		expect(onClose).not.toHaveBeenCalled();
+		fireEvent.click(screen.getByRole("button", { name: "Keep exporting" }));
+		expect(screen.queryByTestId("export-confirm-close")).toBeNull();
+		expect(cancelExportNative).not.toHaveBeenCalled();
+
+		fireEvent.keyDown(document, { key: "Escape" });
+		fireEvent.click(await screen.findByRole("button", { name: "Cancel export and close" }));
+		await waitFor(() => expect(cancelExportNative).toHaveBeenCalledWith(id));
+		await waitFor(() => expect(onClose).toHaveBeenCalled());
+	});
+});

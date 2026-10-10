@@ -191,7 +191,9 @@
 		"noSpeechDetected": "未检测到语音",
 		"autoTranscribe": "打开编辑器时自动转录新录制",
 		"autoRedact": "模糊新录制中的敏感信息",
-		"autoRedactHint": "录制后，OCR 会找出屏幕上的邮箱、租户域名、GUID、密钥和电话号码并将其模糊。每处模糊都是普通标注，可保留或删除。离线运行。"
+		"autoRedactHint": "录制后，OCR 会找出屏幕上的邮箱、租户域名、GUID、密钥和电话号码并将其模糊。每处模糊都是普通标注，可保留或删除。离线运行。",
+		"glossary": "术语表",
+		"glossaryHint": "转录中要更正的名称，每行一个：术语: 误听1, 误听2。适用于新的转录。"
 	},
 	"exportDialog": {
 		"title": "导出",
@@ -233,7 +235,11 @@
 		"exportedVideoOf": "的视频已导出，用时",
 		"nothingToExport": "没有可导出的内容 — 时间轴为空。",
 		"youtubeLoudness": "YouTube 响度 (−14 LUFS)",
-		"youtubeLoudnessHint": "YouTube 以 −14 LUFS 播放所有视频。关闭时导出保持人声的 −16 LUFS，在 YouTube 上会小 2 dB。"
+		"youtubeLoudnessHint": "YouTube 以 −14 LUFS 播放所有视频。关闭时导出保持人声的 −16 LUFS，在 YouTube 上会小 2 dB。",
+		"confirmCloseTitle": "取消导出？",
+		"confirmCloseBody": "关闭会停止导出，视频不会被保存。",
+		"keepExporting": "继续导出",
+		"cancelAndClose": "取消并关闭"
 	},
 	"inspector": {
 		"resetFocusPoint": "重置焦点",
@@ -452,7 +458,7 @@
 	},
 	"autoZoom": {
 		"title": "自动缩放",
-		"scope": "适用于本项目中的所有自动缩放。",
+		"scope": "镜头和过渡适用于本项目的所有缩放；其余设置在规划自动缩放时生效。",
 		"camera": {
 			"title": "镜头",
 			"fixed": "固定 + 平移",
@@ -465,11 +471,14 @@
 		"transition": "过渡",
 		"maxScale": "最大缩放",
 		"hold": "最短停留",
-		"replanHint": "最大缩放和停留时间会在重新规划自动缩放时生效。",
+		"replanHint": "最大缩放、保持时长和拉远在重新规划自动缩放时生效。",
 		"replan": "重新规划自动缩放",
 		"replanDone": "已规划 {{count}} 个自动缩放",
 		"replanNone": "没有找到适合自动缩放的时刻",
-		"replanFailed": "无法规划自动缩放"
+		"replanFailed": "无法规划自动缩放",
+		"wideBetween": "操作之间拉远",
+		"wideCalm": "平稳 (2.5 秒)",
+		"wideBrisk": "轻快 (1.5 秒)"
 	},
 	"youtubeChapters": {
 		"title": "YouTube 章节",

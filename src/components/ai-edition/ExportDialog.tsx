@@ -199,6 +199,8 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 	const [starPrompt, setStarPrompt] = useState<{ store: boolean } | null>(null);
 	const activeExport = useRef<ActiveExport | null>(null);
 	const [cancelPending, setCancelPending] = useState(false);
+	// Esc or the close button while an export runs: asked, not ignored and not obeyed.
+	const [confirmingClose, setConfirmingClose] = useState(false);
 	const pickerGeneration = useRef(0);
 
 	useEffect(
@@ -313,6 +315,7 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 			setError(null);
 			setSavedPath(null);
 			setCancelPending(false);
+			setConfirmingClose(false);
 			// This component stays mounted across `open`, so an unanswered prompt would otherwise
 			// survive the close and reappear on a later export's done panel — a second ask, which
 			// is the one thing the whole feature is built to avoid.
@@ -321,7 +324,11 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 	}, [open]);
 
 	const handleClose = () => {
-		if (phase === "rendering" || phase === "writing" || phase === "configuring") return;
+		if (phase === "configuring") return;
+		if (phase === "rendering" || phase === "writing") {
+			setConfirmingClose(true);
+			return;
+		}
 		onClose();
 	};
 
@@ -796,6 +803,47 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 						{t("cpuCompositor.exportWarning")}
 					</p>
 				)}
+
+				{confirmingClose && isBusy ? (
+					<div
+						role="alertdialog"
+						aria-label={t("exportDialog.confirmCloseTitle")}
+						data-testid="export-confirm-close"
+						style={{
+							display: "flex",
+							flexDirection: "column",
+							gap: 10,
+							padding: "12px 14px",
+							borderRadius: 10,
+							border: "1px solid var(--warn)",
+							background: "var(--surface-2)",
+						}}
+					>
+						<span style={{ fontWeight: 600 }}>{t("exportDialog.confirmCloseTitle")}</span>
+						<span style={{ fontSize: 12.5, color: "var(--muted)" }}>
+							{t("exportDialog.confirmCloseBody")}
+						</span>
+						<div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+							<button
+								type="button"
+								className={`${styles.btn} ${styles.btnSecondary}`}
+								onClick={() => setConfirmingClose(false)}
+							>
+								{t("exportDialog.keepExporting")}
+							</button>
+							<button
+								type="button"
+								className={`${styles.btn} ${styles.btnPrimary}`}
+								onClick={() => {
+									setConfirmingClose(false);
+									void handleCancel().then(onClose);
+								}}
+							>
+								{t("exportDialog.cancelAndClose")}
+							</button>
+						</div>
+					</div>
+				) : null}
 
 				<div
 					style={{

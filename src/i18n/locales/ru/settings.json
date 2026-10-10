@@ -430,7 +430,8 @@
 		"bounceLight": "Лёгкий",
 		"bounceStrong": "Сильный",
 		"showKeystrokes": "Сочетания клавиш на экране",
-		"clickRing": "Подсветка щелчков"
+		"clickRing": "Подсветка щелчков",
+		"spotlight": "Прожектор"
 	},
 	"export": {
 		"gifButton": "Экспорт GIF",

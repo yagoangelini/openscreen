@@ -96,7 +96,13 @@
 		"previewUnavailable": "المعاينة غير متاحة",
 		"about": "حول",
 		"version": "الإصدار {{version}}",
-		"checkingForUpdates": "جارٍ التحقق…"
+		"checkingForUpdates": "جارٍ التحقق…",
+		"micChannel": "قناة الصوت",
+		"micChannelAuto": "تلقائي",
+		"micChannelLeft": "يسار",
+		"micChannelRight": "يمين",
+		"micChannelMix": "مزج",
+		"broadcastTip": "نصيحة: اختر ميكروفون \"NVIDIA Broadcast\" لإزالة الضوضاء الخلفية."
 	},
 	"permissions": {
 		"title": "يحتاج OpenScreen إلى بعض الأذونات",

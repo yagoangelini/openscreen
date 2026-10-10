@@ -31,6 +31,7 @@ function prefs(micEnabled: boolean): RecordingPrefs {
 		autoZoomEnabled: true,
 		recordingsFolder: null,
 		countdownSeconds: 3,
+		micChannelMode: "auto",
 	};
 }
 

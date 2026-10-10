@@ -96,7 +96,13 @@
 		"previewUnavailable": "Preview unavailable",
 		"about": "About",
 		"version": "Version {{version}}",
-		"checkingForUpdates": "Checking…"
+		"checkingForUpdates": "Checking…",
+		"micChannel": "Voice channel",
+		"micChannelAuto": "Auto",
+		"micChannelLeft": "Left",
+		"micChannelRight": "Right",
+		"micChannelMix": "Mix",
+		"broadcastTip": "Tip: pick the \"NVIDIA Broadcast\" microphone to have background noise removed."
 	},
 	"permissions": {
 		"title": "OpenScreen needs a few permissions",

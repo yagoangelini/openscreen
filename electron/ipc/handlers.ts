@@ -132,7 +132,7 @@ import {
 	terminateNativeWindowsCapture,
 	waitForNativeWindowsCaptureStop,
 } from "../recording/nativeWindowsCaptureStop";
-import { runOcrScan } from "../recording/ocrScan";
+import { runFrameChangeScan, runOcrScan } from "../recording/ocrScan";
 import {
 	clearPendingTake,
 	collectRecoverableTakes,
@@ -707,6 +707,8 @@ export interface RecordingPrefs {
 	recordingsFolder: string | null;
 	/** Countdown before a take starts: 0, 3 or 5 seconds. */
 	countdownSeconds: number;
+	/** The microphone's voice channel: auto, left, right or mix. */
+	micChannelMode: "auto" | "left" | "right" | "mix";
 }
 const defaultRecordingPrefs: RecordingPrefs = {
 	micEnabled: false,
@@ -721,6 +723,7 @@ const defaultRecordingPrefs: RecordingPrefs = {
 	autoZoomEnabled: true,
 	recordingsFolder: null,
 	countdownSeconds: 3,
+	micChannelMode: "auto",
 };
 
 // Cached source from the user's pick. Used by setDisplayMediaRequestHandler in main.ts for cursor-free capture.
@@ -3005,6 +3008,7 @@ export function registerIpcHandlers(
 					microphoneDeviceId: request.audio.microphone.deviceId ?? null,
 					microphoneDeviceName: request.audio.microphone.deviceName ?? null,
 					microphoneGain: request.audio.microphone.gain,
+					microphoneChannelMode: appSettings.getSnapshot().recording.micChannelMode,
 					webcamEnabled: request.webcam.enabled,
 					webcamDeviceId: request.webcam.deviceId ?? null,
 					webcamDeviceName: request.webcam.deviceName ?? null,
@@ -4464,6 +4468,17 @@ export function registerIpcHandlers(
 		} catch (error) {
 			return { success: false, error: String(error) };
 		}
+	});
+
+	// The frames around clicks, for the menus a web page draws (auto-zoom). Recordings only.
+	ipcMain.handle("scan-frame-changes", async (_, videoPath: unknown, timesMs: unknown) => {
+		if (typeof videoPath !== "string" || !isInRecordingDirs(videoPath) || !Array.isArray(timesMs)) {
+			return { success: false, error: "Not a recording." };
+		}
+		return runFrameChangeScan(
+			videoPath,
+			timesMs.filter((t): t is number => typeof t === "number").slice(0, 400),
+		);
 	});
 
 	ipcMain.handle("open-notification-settings", async () => {

@@ -96,7 +96,13 @@
 		"previewUnavailable": "Önizleme kullanılamıyor",
 		"about": "Hakkında",
 		"version": "Sürüm {{version}}",
-		"checkingForUpdates": "Denetleniyor…"
+		"checkingForUpdates": "Denetleniyor…",
+		"micChannel": "Ses kanalı",
+		"micChannelAuto": "Otomatik",
+		"micChannelLeft": "Sol",
+		"micChannelRight": "Sağ",
+		"micChannelMix": "Karışık",
+		"broadcastTip": "İpucu: arka plan gürültüsünü kaldırmak için \"NVIDIA Broadcast\" mikrofonunu seçin."
 	},
 	"permissions": {
 		"title": "OpenScreen'in birkaç izne ihtiyacı var",

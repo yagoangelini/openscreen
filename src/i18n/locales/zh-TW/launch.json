@@ -96,7 +96,13 @@
 		"previewUnavailable": "預覽無法使用",
 		"about": "關於",
 		"version": "版本 {{version}}",
-		"checkingForUpdates": "檢查中…"
+		"checkingForUpdates": "檢查中…",
+		"micChannel": "人聲聲道",
+		"micChannelAuto": "自動",
+		"micChannelLeft": "左",
+		"micChannelRight": "右",
+		"micChannelMix": "混合",
+		"broadcastTip": "提示：選擇「NVIDIA Broadcast」麥克風可去除背景噪音。"
 	},
 	"permissions": {
 		"title": "OpenScreen 需要一些權限",

@@ -88,6 +88,22 @@ describe("app settings store", () => {
 		expect(new AppSettingsStore(dir).getSnapshot().recording.countdownSeconds).toBe(3);
 	});
 
+	it("keeps the microphone channel mode to auto, left, right or mix", () => {
+		const dir = temp();
+		const store = new AppSettingsStore(dir);
+		expect(store.getSnapshot().recording.micChannelMode).toBe("auto");
+		store.setRecordingPreferences({ micChannelMode: "left" });
+		expect(new AppSettingsStore(dir).getSnapshot().recording.micChannelMode).toBe("left");
+		expect(() =>
+			store.setRecordingPreferences({ micChannelMode: "center" as unknown as "left" }),
+		).toThrow(TypeError);
+		writeFileSync(
+			path.join(dir, "recording-settings.json"),
+			JSON.stringify({ micChannelMode: "surround" }),
+		);
+		expect(new AppSettingsStore(dir).getSnapshot().recording.micChannelMode).toBe("auto");
+	});
+
 	it("reads a hand-edited relative recordings folder as the default", () => {
 		const dir = temp();
 		writeFileSync(

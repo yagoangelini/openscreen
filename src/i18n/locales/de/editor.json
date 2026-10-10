@@ -191,7 +191,9 @@
 		"noSpeechDetected": "Keine Sprache erkannt",
 		"autoTranscribe": "Neue Aufnahmen beim Öffnen des Editors automatisch transkribieren",
 		"autoRedact": "Sensible Daten in neuen Aufnahmen verwischen",
-		"autoRedactHint": "Nach einer Aufnahme findet die Texterkennung E-Mails, Tenant-Domains, GUIDs, Geheimnisse und Telefonnummern auf dem Bildschirm und verwischt sie. Jede Unschärfe ist eine normale Anmerkung zum Behalten oder Löschen. Läuft offline."
+		"autoRedactHint": "Nach einer Aufnahme findet die Texterkennung E-Mails, Tenant-Domains, GUIDs, Geheimnisse und Telefonnummern auf dem Bildschirm und verwischt sie. Jede Unschärfe ist eine normale Anmerkung zum Behalten oder Löschen. Läuft offline.",
+		"glossary": "Glossar",
+		"glossaryHint": "Namen, auf die das Transkript korrigiert wird, einer pro Zeile: Begriff: falsch 1, falsch 2. Gilt für neue Transkripte."
 	},
 	"exportDialog": {
 		"title": "Export",
@@ -233,7 +235,11 @@
 		"qualityUpscaleWarning": "Hochskalierung",
 		"nothingToExport": "Nichts zu exportieren — die Timeline ist leer.",
 		"youtubeLoudness": "YouTube-Lautheit (−14 LUFS)",
-		"youtubeLoudnessHint": "YouTube spielt jedes Video mit −14 LUFS ab. Aus bleibt der Export bei den −16 LUFS der Stimme und klingt dort 2 dB leiser."
+		"youtubeLoudnessHint": "YouTube spielt jedes Video mit −14 LUFS ab. Aus bleibt der Export bei den −16 LUFS der Stimme und klingt dort 2 dB leiser.",
+		"confirmCloseTitle": "Export abbrechen?",
+		"confirmCloseBody": "Schließen beendet den Export, und das Video wird nicht gespeichert.",
+		"keepExporting": "Weiter exportieren",
+		"cancelAndClose": "Abbrechen und schließen"
 	},
 	"inspector": {
 		"resetFocusPoint": "Fokuspunkt zurücksetzen",
@@ -452,7 +458,7 @@
 	},
 	"autoZoom": {
 		"title": "Automatische Zooms",
-		"scope": "Gilt für alle automatischen Zooms dieses Projekts.",
+		"scope": "Kamera und Übergang gelten für jeden Zoom im Projekt; der Rest, wenn die automatischen Zooms geplant werden.",
 		"camera": {
 			"title": "Kamera",
 			"fixed": "Fest + Schwenk",
@@ -465,11 +471,14 @@
 		"transition": "Übergang",
 		"maxScale": "Maximaler Zoom",
 		"hold": "Mindesthaltezeit",
-		"replanHint": "Maximaler Zoom und Haltezeit gelten, wenn die automatischen Zooms neu geplant werden.",
+		"replanHint": "Max. Zoom, Haltezeit und Aufziehen gelten, wenn die automatischen Zooms neu geplant werden.",
 		"replan": "Automatische Zooms neu planen",
 		"replanDone": "Geplante automatische Zooms: {{count}}",
 		"replanNone": "Kein Moment für einen automatischen Zoom gefunden",
-		"replanFailed": "Die automatischen Zooms konnten nicht geplant werden"
+		"replanFailed": "Die automatischen Zooms konnten nicht geplant werden",
+		"wideBetween": "Zwischen Aktionen aufziehen",
+		"wideCalm": "Ruhig (2,5 s)",
+		"wideBrisk": "Flott (1,5 s)"
 	},
 	"youtubeChapters": {
 		"title": "YouTube-Kapitel",

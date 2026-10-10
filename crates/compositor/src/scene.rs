@@ -605,6 +605,10 @@ pub struct SceneCursor {
     /// modelled one always draws it). `#[serde(default)]`: the app omits the key when false.
     #[serde(default)]
     pub click_ring: bool,
+    /// Spotlight: the frame dimmed except a soft disc around the pointer (mode 19). Drawn by
+    /// the D3D11 backend only for now; elsewhere the switch has no effect.
+    #[serde(default)]
+    pub spotlight: bool,
     pub clip_to_bounds: bool,
     /// id du thème (jeu de sprites) — informatif ici : le natif consomme `cursor_sprites`.
     pub theme: String,

@@ -191,7 +191,9 @@
 		"noSpeechDetected": "Không phát hiện giọng nói",
 		"autoTranscribe": "Tự động chép lời bản ghi mới khi mở trình chỉnh sửa",
 		"autoRedact": "Làm mờ dữ liệu nhạy cảm trong bản ghi mới",
-		"autoRedactHint": "Sau khi ghi, OCR tìm email, tên miền tenant, GUID, khóa bí mật và số điện thoại trên màn hình rồi làm mờ. Mỗi vùng mờ là một chú thích thông thường, bạn có thể giữ hoặc xóa. Chạy ngoại tuyến."
+		"autoRedactHint": "Sau khi ghi, OCR tìm email, tên miền tenant, GUID, khóa bí mật và số điện thoại trên màn hình rồi làm mờ. Mỗi vùng mờ là một chú thích thông thường, bạn có thể giữ hoặc xóa. Chạy ngoại tuyến.",
+		"glossary": "Bảng thuật ngữ",
+		"glossaryHint": "Các tên được sửa trong bản ghi, mỗi dòng một tên: Thuật ngữ: nghe nhầm 1, nghe nhầm 2. Áp dụng cho bản ghi mới."
 	},
 	"exportDialog": {
 		"title": "Xuất",
@@ -233,7 +235,11 @@
 		"exportedVideoOf": "video đã xuất trong",
 		"nothingToExport": "Không có gì để xuất — dòng thời gian trống.",
 		"youtubeLoudness": "Âm lượng YouTube (−14 LUFS)",
-		"youtubeLoudnessHint": "YouTube phát mọi video ở −14 LUFS. Khi tắt, bản xuất giữ mức −16 LUFS của giọng nói và nghe nhỏ hơn 2 dB ở đó."
+		"youtubeLoudnessHint": "YouTube phát mọi video ở −14 LUFS. Khi tắt, bản xuất giữ mức −16 LUFS của giọng nói và nghe nhỏ hơn 2 dB ở đó.",
+		"confirmCloseTitle": "Hủy lượt xuất?",
+		"confirmCloseBody": "Đóng sẽ dừng lượt xuất và video sẽ không được lưu.",
+		"keepExporting": "Tiếp tục xuất",
+		"cancelAndClose": "Hủy và đóng"
 	},
 	"inspector": {
 		"resetFocusPoint": "Đặt lại điểm lấy nét",
@@ -452,7 +458,7 @@
 	},
 	"autoZoom": {
 		"title": "Thu phóng tự động",
-		"scope": "Áp dụng cho mọi lần thu phóng tự động trong dự án này.",
+		"scope": "Camera và chuyển cảnh áp dụng cho mọi thu phóng trong dự án; phần còn lại khi lập kế hoạch thu phóng tự động.",
 		"camera": {
 			"title": "Máy quay",
 			"fixed": "Cố định + lia",
@@ -465,11 +471,14 @@
 		"transition": "Chuyển cảnh",
 		"maxScale": "Thu phóng tối đa",
 		"hold": "Thời gian giữ tối thiểu",
-		"replanHint": "Thu phóng tối đa và thời gian giữ áp dụng khi lập lại kế hoạch thu phóng tự động.",
+		"replanHint": "Mức phóng tối đa, thời gian giữ và mở rộng áp dụng khi lập lại kế hoạch thu phóng tự động.",
 		"replan": "Lập lại kế hoạch thu phóng tự động",
 		"replanDone": "Số lần thu phóng tự động đã lập: {{count}}",
 		"replanNone": "Không tìm thấy thời điểm nào để thu phóng tự động",
-		"replanFailed": "Không thể lập kế hoạch thu phóng tự động"
+		"replanFailed": "Không thể lập kế hoạch thu phóng tự động",
+		"wideBetween": "Mở rộng giữa các thao tác",
+		"wideCalm": "Chậm rãi (2,5 giây)",
+		"wideBrisk": "Nhanh (1,5 giây)"
 	},
 	"youtubeChapters": {
 		"title": "Chương YouTube",

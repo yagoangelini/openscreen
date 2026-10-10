@@ -430,7 +430,8 @@
 		"bounceLight": "Leve",
 		"bounceStrong": "Forte",
 		"showKeystrokes": "Atalhos na tela",
-		"clickRing": "Destaque de clique"
+		"clickRing": "Destaque de clique",
+		"spotlight": "Holofote"
 	},
 	"export": {
 		"gifButton": "Exportar GIF",

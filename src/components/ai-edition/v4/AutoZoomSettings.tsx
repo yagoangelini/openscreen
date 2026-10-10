@@ -13,6 +13,7 @@ import {
 	collectAutoZoomSuggestionsForLatestDocument,
 	withoutAutoZooms,
 } from "@/lib/ai-edition/timeline/apply-auto-zooms";
+import { getTelemetryWithFramePopups } from "@/lib/ai-edition/timeline/framePopups";
 import {
 	AUTO_ZOOM_BOUNDS,
 	type AutoZoomCameraMode,
@@ -34,7 +35,10 @@ async function replanAutoZooms(): Promise<number | null> {
 			const document = useProjectStore.getState().document;
 			return document ? withoutAutoZooms(document) : null;
 		},
-		(videoPath) => nativeBridgeClient.cursor.getTelemetry(videoPath),
+		(videoPath) =>
+			getTelemetryWithFramePopups(videoPath, (path) =>
+				nativeBridgeClient.cursor.getTelemetry(path),
+			),
 	);
 	const store = useProjectStore.getState();
 	if (!collected || store.projectId !== projectId) return null;
@@ -120,6 +124,15 @@ export function AutoZoomSettings() {
 				defaultValue={DEFAULT_AUTO_ZOOM_SETTINGS.holdSec}
 				onChange={(holdSec) => live({ holdSec })}
 				onCommit={done}
+			/>
+			<ChoiceRow<"2.5" | "1.5">
+				label={te("autoZoom.wideBetween")}
+				options={[
+					{ value: "2.5", label: te("autoZoom.wideCalm") },
+					{ value: "1.5", label: te("autoZoom.wideBrisk") },
+				]}
+				value={autoZoom.minWideSec === 1.5 ? "1.5" : "2.5"}
+				onChange={(choice) => void set({ autoZoom: { minWideSec: Number(choice) } })}
 			/>
 			<p className={shell.hint}>{te("autoZoom.replanHint")}</p>
 			<button type="button" className={PANE_BUTTON} disabled={busy} onClick={() => void replan()}>

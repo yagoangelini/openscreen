@@ -430,7 +430,8 @@
 		"bounceLight": "Leicht",
 		"bounceStrong": "Stark",
 		"showKeystrokes": "Tastenkürzel einblenden",
-		"clickRing": "Klicks hervorheben"
+		"clickRing": "Klicks hervorheben",
+		"spotlight": "Spotlight"
 	},
 	"export": {
 		"gifButton": "GIF exportieren",

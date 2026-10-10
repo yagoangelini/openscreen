@@ -96,7 +96,13 @@
 		"previewUnavailable": "Không thể xem trước",
 		"about": "Giới thiệu",
 		"version": "Phiên bản {{version}}",
-		"checkingForUpdates": "Đang kiểm tra…"
+		"checkingForUpdates": "Đang kiểm tra…",
+		"micChannel": "Kênh giọng",
+		"micChannelAuto": "Tự động",
+		"micChannelLeft": "Trái",
+		"micChannelRight": "Phải",
+		"micChannelMix": "Trộn",
+		"broadcastTip": "Mẹo: chọn micrô \"NVIDIA Broadcast\" để loại bỏ tiếng ồn nền."
 	},
 	"permissions": {
 		"title": "OpenScreen cần một vài quyền",

@@ -430,7 +430,8 @@
 		"bounceLight": "Lehký",
 		"bounceStrong": "Výrazný",
 		"showKeystrokes": "Zkratky na obrazovce",
-		"clickRing": "Zvýraznění kliknutí"
+		"clickRing": "Zvýraznění kliknutí",
+		"spotlight": "Reflektor"
 	},
 	"export": {
 		"gifButton": "Exportovat GIF",

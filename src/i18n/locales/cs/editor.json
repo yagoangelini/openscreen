@@ -191,7 +191,9 @@
 		"noSpeechDetected": "Žádná řeč nezjištěna",
 		"autoTranscribe": "Automaticky přepisovat nové nahrávky při otevření editoru",
 		"autoRedact": "Rozmazat citlivá data v nových nahrávkách",
-		"autoRedactHint": "Po nahrání najde OCR na obrazovce e-maily, domény tenantu, GUID, tajné klíče a telefonní čísla a rozmaže je. Každé rozmazání je běžná anotace, kterou můžete ponechat nebo smazat. Funguje offline."
+		"autoRedactHint": "Po nahrání najde OCR na obrazovce e-maily, domény tenantu, GUID, tajné klíče a telefonní čísla a rozmaže je. Každé rozmazání je běžná anotace, kterou můžete ponechat nebo smazat. Funguje offline.",
+		"glossary": "Glosář",
+		"glossaryHint": "Názvy, na které se přepis opraví, jeden na řádek: Výraz: chybně 1, chybně 2. Platí pro nové přepisy."
 	},
 	"exportDialog": {
 		"title": "Export",
@@ -233,7 +235,11 @@
 		"qualityUpscaleWarning": "Zvýšení rozlišení",
 		"nothingToExport": "Není co exportovat, časová osa je prázdná.",
 		"youtubeLoudness": "Hlasitost pro YouTube (−14 LUFS)",
-		"youtubeLoudnessHint": "YouTube přehrává každé video na −14 LUFS. Vypnuto zůstane export na −16 LUFS hlasu a zní tam o 2 dB tišeji."
+		"youtubeLoudnessHint": "YouTube přehrává každé video na −14 LUFS. Vypnuto zůstane export na −16 LUFS hlasu a zní tam o 2 dB tišeji.",
+		"confirmCloseTitle": "Zrušit export?",
+		"confirmCloseBody": "Zavřením se export zastaví a video se neuloží.",
+		"keepExporting": "Pokračovat v exportu",
+		"cancelAndClose": "Zrušit a zavřít"
 	},
 	"inspector": {
 		"resetFocusPoint": "Obnovit bod zaostření",
@@ -452,7 +458,7 @@
 	},
 	"autoZoom": {
 		"title": "Automatické zoomy",
-		"scope": "Platí pro všechny automatické zoomy v tomto projektu.",
+		"scope": "Kamera a přechod platí pro všechna přiblížení v projektu; zbytek při plánování automatických přiblížení.",
 		"camera": {
 			"title": "Kamera",
 			"fixed": "Pevná + posun",
@@ -465,11 +471,14 @@
 		"transition": "Přechod",
 		"maxScale": "Maximální zoom",
 		"hold": "Minimální výdrž",
-		"replanHint": "Maximální zoom a výdrž platí při novém naplánování automatických zoomů.",
+		"replanHint": "Max. přiblížení, výdrž a oddálení se projeví při novém naplánování automatických přiblížení.",
 		"replan": "Znovu naplánovat automatické zoomy",
 		"replanDone": "Naplánováno automatických zoomů: {{count}}",
 		"replanNone": "Nenalezen žádný okamžik pro automatický zoom",
-		"replanFailed": "Automatické zoomy se nepodařilo naplánovat"
+		"replanFailed": "Automatické zoomy se nepodařilo naplánovat",
+		"wideBetween": "Oddálit mezi akcemi",
+		"wideCalm": "Klidně (2,5 s)",
+		"wideBrisk": "Svižně (1,5 s)"
 	},
 	"youtubeChapters": {
 		"title": "Kapitoly YouTube",

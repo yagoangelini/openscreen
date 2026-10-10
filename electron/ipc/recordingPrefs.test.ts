@@ -25,6 +25,7 @@ const defaults: RecordingPrefs = {
 	autoZoomEnabled: true,
 	recordingsFolder: null,
 	countdownSeconds: 3,
+	micChannelMode: "auto",
 };
 let dir: string;
 beforeEach(() => {

@@ -191,7 +191,9 @@
 		"noSpeechDetected": "音声が検出されませんでした",
 		"autoTranscribe": "エディターを開いたときに新しい録画を自動で文字起こしする",
 		"autoRedact": "新しい録画の機密情報をぼかす",
-		"autoRedactHint": "録画後、OCR が画面上のメールアドレス、テナントのドメイン、GUID、シークレット、電話番号を見つけてぼかします。各ぼかしは通常の注釈なので、残すことも削除することもできます。オフラインで動作します。"
+		"autoRedactHint": "録画後、OCR が画面上のメールアドレス、テナントのドメイン、GUID、シークレット、電話番号を見つけてぼかします。各ぼかしは通常の注釈なので、残すことも削除することもできます。オフラインで動作します。",
+		"glossary": "用語集",
+		"glossaryHint": "文字起こしで修正する名前を 1 行に 1 つ: 用語: 聞き間違い1, 聞き間違い2。新しい文字起こしに適用されます。"
 	},
 	"exportDialog": {
 		"title": "エクスポート",
@@ -233,7 +235,11 @@
 		"exportedVideoOf": "の動画を書き出しました。所要時間:",
 		"nothingToExport": "書き出す内容がありません — タイムラインが空です。",
 		"youtubeLoudness": "YouTube のラウドネス (−14 LUFS)",
-		"youtubeLoudnessHint": "YouTube はすべての動画を −14 LUFS で再生します。オフにすると声の −16 LUFS のまま書き出され、YouTube では 2 dB 小さく聞こえます。"
+		"youtubeLoudnessHint": "YouTube はすべての動画を −14 LUFS で再生します。オフにすると声の −16 LUFS のまま書き出され、YouTube では 2 dB 小さく聞こえます。",
+		"confirmCloseTitle": "エクスポートを中止しますか？",
+		"confirmCloseBody": "閉じるとエクスポートが止まり、動画は保存されません。",
+		"keepExporting": "エクスポートを続ける",
+		"cancelAndClose": "中止して閉じる"
 	},
 	"inspector": {
 		"resetFocusPoint": "フォーカスポイントをリセット",
@@ -452,7 +458,7 @@
 	},
 	"autoZoom": {
 		"title": "自動ズーム",
-		"scope": "このプロジェクトのすべての自動ズームに適用されます。",
+		"scope": "カメラとトランジションはこのプロジェクトのすべてのズームに適用されます。その他は自動ズームの計画時に適用されます。",
 		"camera": {
 			"title": "カメラ",
 			"fixed": "固定 + パン",
@@ -465,11 +471,14 @@
 		"transition": "トランジション",
 		"maxScale": "最大ズーム",
 		"hold": "最短保持時間",
-		"replanHint": "最大ズームと保持時間は、自動ズームを再計画したときに適用されます。",
+		"replanHint": "最大ズーム、保持時間、引きは自動ズームを再計画したときに適用されます。",
 		"replan": "自動ズームを再計画",
 		"replanDone": "自動ズームを {{count}} 件計画しました",
 		"replanNone": "自動ズームに適した場面が見つかりませんでした",
-		"replanFailed": "自動ズームを計画できませんでした"
+		"replanFailed": "自動ズームを計画できませんでした",
+		"wideBetween": "操作の間で引く",
+		"wideCalm": "落ち着き (2.5 秒)",
+		"wideBrisk": "きびきび (1.5 秒)"
 	},
 	"youtubeChapters": {
 		"title": "YouTube チャプター",

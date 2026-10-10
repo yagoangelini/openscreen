@@ -3726,6 +3726,13 @@ pub fn plan_cursor(g: &FrameGeometry, input: &CursorPlanInput) -> Option<CursorP
         Vec::new()
     };
 
+    // The spotlight, first so the click rings sit on top of it. Windows only: the Metal and
+    // wgpu shaders do not know mode 19 yet, and an unknown mode there would draw garbage.
+    let mut impacts = impacts;
+    if cfg!(target_os = "windows") && input.scene.is_some_and(|s| s.cursor.spotlight) {
+        impacts.insert(0, spotlight_cb(placement, [rw, rh], alpha));
+    }
+
     Some(CursorPlan {
         placement,
         prev_placement,
@@ -4268,6 +4275,37 @@ struct Impact {
     halo_a: f32,
     spot_r: f32,
     spot_a: f32,
+}
+
+/// Radius of the lit disc, and the soft edge around it, as shares of the frame height.
+const SPOTLIGHT_RADIUS: f32 = 0.16;
+const SPOTLIGHT_FEATHER: f32 = 0.10;
+/// How dark the rest of the frame gets.
+const SPOTLIGHT_DIM: f32 = 0.55;
+
+/// Where a cursor placement puts the pointer, in fractions of the output.
+fn placement_output_point(placement: CursorPlacement, render_px: [f32; 2]) -> [f32; 2] {
+    match placement {
+        CursorPlacement::Upright { center } => center,
+        CursorPlacement::Tilted { plane_pt, quad, center_px, .. } => {
+            let (px, py) = quad.point_px(plane_pt[0], plane_pt[1]);
+            [(center_px[0] + px) / render_px[0], (center_px[1] + py) / render_px[1]]
+        }
+    }
+}
+
+/// `LayerCB` of the spotlight (mode 19): the whole output, dimmed outside a soft disc on the
+/// pointer. `src` = disc centre (output fractions), radius and feather (px); `color.a` = dim.
+fn spotlight_cb(placement: CursorPlacement, render_px: [f32; 2], alpha: f32) -> LayerCB {
+    let [cx, cy] = placement_output_point(placement, render_px);
+    LayerCB {
+        dst: [0.0, 0.0, 1.0, 1.0],
+        src: [cx, cy, SPOTLIGHT_RADIUS * render_px[1], SPOTLIGHT_FEATHER * render_px[1]],
+        quad_px: render_px,
+        mode: 19.0,
+        color: [0.0, 0.0, 0.0, SPOTLIGHT_DIM * alpha.clamp(0.0, 1.0)],
+        ..Default::default()
+    }
 }
 
 /// `LayerCB` de l'impact (mode 16) centré sur le point du plan de `placement`, carré de demi-côté
@@ -8404,6 +8442,32 @@ mod tests {
         assert!(flat(0.0, TC + IMPACT_DELAY_S + IMPACT_S + 0.001).is_empty(), "gone after 0.4 s");
         let cb = flat(0.0, TC + 0.1)[0];
         assert_eq!(cb.mode, 16.0);
+        // The spotlight: one full-frame layer first, its disc on the pointer.
+        if cfg!(target_os = "windows") {
+            let mut lit = ringed.clone();
+            lit.cursor.spotlight = true;
+            let lit_plan = plan_cursor(
+                &fg,
+                &CursorPlanInput {
+                    render_px: [1920.0, 1080.0],
+                    u_max: 1.0,
+                    v_max: 1.0,
+                    cfg: &cfg,
+                    live: LiveParams { cursor_model3d: false, ..LiveParams::default() },
+                    scene: Some(&lit),
+                    track,
+                    t: TC + 0.1,
+                },
+            )
+            .expect("plan");
+            let layers = &lit_plan.impacts;
+            assert_eq!(layers[0].mode, 19.0);
+            assert_eq!(layers[0].dst, [0.0, 0.0, 1.0, 1.0]);
+            // On the pointer as it is drawn (the smoothed track), not on the raw click.
+            let at = placement_output_point(lit_plan.placement, [1920.0, 1080.0]);
+            assert!((layers[0].src[0] - at[0]).abs() < 1e-6 && (layers[0].src[1] - at[1]).abs() < 1e-6);
+            assert_eq!(layers[1].mode, 16.0, "the ring is drawn over the spotlight");
+        }
         let center = [
             (cb.dst[0] + cb.dst[2] * 0.5) * 1920.0,
             (cb.dst[1] + cb.dst[3] * 0.5) * 1080.0,

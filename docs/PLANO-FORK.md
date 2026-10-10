@@ -132,3 +132,18 @@ Medido pela investigação: hoje passam cerca de 5 a 8 s entre o clique em grava
 - **Acelerar esperas:** só sugere; nada é aplicado sem a sua aprovação.
 - **Recursos visuais em projetos novos:** destaque de clique e atalhos na tela vêm ligados; spotlight vem desligado. Todos podem ser ligados, desligados e editados.
 - **Avisos:** só de manhã. Uma dúvida que surgir pausa aquela tarefa, e o trabalho segue nas outras.
+
+## Decisões da manhã (10/10/2026)
+
+- **Faixas separadas:** gravar mic e sistema em duas faixas no MP4; o editor mostra dois volumes (Voz e Computador) e a exportação mixa com eles.
+- **Redução de ruído:** recomendar o microfone do NVIDIA Broadcast (dica no app quando ele existir). Sem filtro próprio.
+- **Glossário:** dicionário de correção depois da transcrição, com lista padrão editável.
+- **Spotlight:** implementar, opcional na edição (desligado por padrão).
+- **Auto-zoom:** escolher entre abrir após 2,5 s (calmo) ou 1,5 s; rolagem como está; modo de câmera e transição valem para todos os zooms, inclusive os manuais; sliders continuam valendo só com "Replanejar"; detectar menus de sites por diferença de quadros.
+- **NVENC na RTX por padrão** ao gravar o monitor da RTX.
+- **Kaspersky:** o usuário vai criar a exclusão do OpenScreen (lembrar); depois reativar o modo armado.
+- **Webcam:** abrir só na contagem regressiva.
+- **16:9** também nos projetos antigos que nunca escolheram formato.
+- **Esc/fechar a janela de exportação** durante um export pergunta antes de cancelar.
+- **Canal do microfone:** Automático mais escolha manual (Esquerdo, Direito, Mix).
+- **Impacto do clique:** continua desligado.

@@ -494,6 +494,13 @@ constexpr double kRevivedChannelRatio = 1e-2;  // -20 dB
 
 }  // namespace
 
+MicrophoneChannelMode parseMicrophoneChannelMode(const std::string& value) {
+    if (value == "left") return MicrophoneChannelMode::Left;
+    if (value == "right") return MicrophoneChannelMode::Right;
+    if (value == "mix") return MicrophoneChannelMode::Mix;
+    return MicrophoneChannelMode::Auto;
+}
+
 void MicrophoneChannelPicker::reset() {
     energy_.clear();
     liveChannel_ = -1;
@@ -505,6 +512,34 @@ int MicrophoneChannelPicker::process(BYTE* data, DWORD byteCount, const AudioInp
     }
     const size_t frames = byteCount / format.blockAlign;
     if (frames == 0) {
+        return liveChannel_;
+    }
+    // A forced mode: the user said which channel carries the voice, or to mix them.
+    if (mode_ != MicrophoneChannelMode::Auto) {
+        if (mode_ == MicrophoneChannelMode::Mix) {
+            for (size_t frame = 0; frame < frames; ++frame) {
+                double sum = 0.0;
+                for (UINT32 channel = 0; channel < format.channels; ++channel) {
+                    sum += readSampleAsDouble(data, format, frame, channel);
+                }
+                const double mixed = sum / static_cast<double>(format.channels);
+                for (UINT32 channel = 0; channel < format.channels; ++channel) {
+                    writeSampleFromDouble(data, format, frame, channel, mixed);
+                }
+            }
+            liveChannel_ = -1;
+            return liveChannel_;
+        }
+        liveChannel_ = mode_ == MicrophoneChannelMode::Left ? 0 : 1;
+        const auto live = static_cast<UINT32>(liveChannel_);
+        for (size_t frame = 0; frame < frames; ++frame) {
+            const double v = readSampleAsDouble(data, format, frame, live);
+            for (UINT32 channel = 0; channel < format.channels; ++channel) {
+                if (channel != live) {
+                    writeSampleFromDouble(data, format, frame, channel, v);
+                }
+            }
+        }
         return liveChannel_;
     }
     if (energy_.size() != format.channels) {

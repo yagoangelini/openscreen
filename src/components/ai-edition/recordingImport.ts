@@ -34,6 +34,7 @@ import {
 	appendAutoZoomSuggestions,
 	collectAutoZoomSuggestionsForLatestDocument,
 } from "@/lib/ai-edition/timeline/apply-auto-zooms";
+import { getTelemetryWithFramePopups } from "@/lib/ai-edition/timeline/framePopups";
 import { loadUserPreferences } from "@/lib/userPreferences";
 import { nativeBridgeClient } from "@/native/client";
 
@@ -194,7 +195,11 @@ export async function applyPendingFreshRecordingAutoZooms(
 	if (!canApplyFreshRecordingAutoZooms(start)) return start;
 
 	const inner =
-		deps.getTelemetry ?? ((videoPath: string) => nativeBridgeClient.cursor.getTelemetry(videoPath));
+		deps.getTelemetry ??
+		((videoPath: string) =>
+			getTelemetryWithFramePopups(videoPath, (path) =>
+				nativeBridgeClient.cursor.getTelemetry(path),
+			));
 	let telemetryFailed = false;
 	const getTelemetry = async (videoPath: string) => {
 		try {

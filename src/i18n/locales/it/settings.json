@@ -430,7 +430,8 @@
 		"bounceLight": "Leggero",
 		"bounceStrong": "Marcato",
 		"showKeystrokes": "Scorciatoie a schermo",
-		"clickRing": "Evidenzia clic"
+		"clickRing": "Evidenzia clic",
+		"spotlight": "Riflettore"
 	},
 	"export": {
 		"gifButton": "Esporta GIF",

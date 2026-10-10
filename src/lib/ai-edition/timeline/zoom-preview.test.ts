@@ -81,8 +81,16 @@ describe("computeZoomPreviewTransform like the compositor", () => {
 			autoZoom: settings,
 		});
 		expect(Math.log(mid.scale)).toBeCloseTo(Math.log(1.5) / 2, 6);
-		// A hand-drawn zoom keeps the classic spring, already well past half way there.
-		const hand = computeZoomPreviewTransform([{ ...auto, source: "manual" }], 2000 - 600);
-		expect(Math.log(hand.scale)).toBeGreaterThan(Math.log(1.5) / 2);
+		// A hand-drawn zoom moves the same way: one control for every zoom (2026-10-10).
+		const hand = computeZoomPreviewTransform(
+			[{ ...auto, source: "manual" }],
+			2000 - 600,
+			undefined,
+			undefined,
+			{
+				autoZoom: settings,
+			},
+		);
+		expect(Math.log(hand.scale)).toBeCloseTo(Math.log(1.5) / 2, 6);
 	});
 });

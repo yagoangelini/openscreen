@@ -191,7 +191,9 @@
 		"noSpeechDetected": "Konuşma algılanmadı",
 		"autoTranscribe": "Düzenleyici açıldığında yeni kayıtları otomatik olarak yazıya dök",
 		"autoRedact": "Yeni kayıtlarda hassas verileri bulanıklaştır",
-		"autoRedactHint": "Kayıttan sonra OCR ekrandaki e-postaları, tenant alan adlarını, GUID'leri, gizli anahtarları ve telefon numaralarını bulup bulanıklaştırır. Her bulanıklık, tutabileceğiniz veya silebileceğiniz normal bir nottur. Çevrimdışı çalışır."
+		"autoRedactHint": "Kayıttan sonra OCR ekrandaki e-postaları, tenant alan adlarını, GUID'leri, gizli anahtarları ve telefon numaralarını bulup bulanıklaştırır. Her bulanıklık, tutabileceğiniz veya silebileceğiniz normal bir nottur. Çevrimdışı çalışır.",
+		"glossary": "Sözlük",
+		"glossaryHint": "Dökümde düzeltilen adlar, satır başına bir tane: Terim: yanlış 1, yanlış 2. Yeni dökümlere uygulanır."
 	},
 	"exportDialog": {
 		"title": "Dışa Aktar",
@@ -233,7 +235,11 @@
 		"exportedVideoOf": "video şu sürede dışa aktarıldı:",
 		"nothingToExport": "Dışa aktarılacak bir şey yok — zaman çizelgesi boş.",
 		"youtubeLoudness": "YouTube ses düzeyi (−14 LUFS)",
-		"youtubeLoudnessHint": "YouTube her videoyu −14 LUFS'ta oynatır. Kapalıyken dışa aktarma sesin −16 LUFS düzeyinde kalır ve orada 2 dB daha kısık çalar."
+		"youtubeLoudnessHint": "YouTube her videoyu −14 LUFS'ta oynatır. Kapalıyken dışa aktarma sesin −16 LUFS düzeyinde kalır ve orada 2 dB daha kısık çalar.",
+		"confirmCloseTitle": "Dışa aktarma iptal edilsin mi?",
+		"confirmCloseBody": "Kapatmak dışa aktarmayı durdurur ve video kaydedilmez.",
+		"keepExporting": "Dışa aktarmaya devam et",
+		"cancelAndClose": "İptal et ve kapat"
 	},
 	"inspector": {
 		"resetFocusPoint": "Odak noktasını sıfırla",
@@ -452,7 +458,7 @@
 	},
 	"autoZoom": {
 		"title": "Otomatik yakınlaştırmalar",
-		"scope": "Bu projedeki tüm otomatik yakınlaştırmalara uygulanır.",
+		"scope": "Kamera ve geçiş projedeki tüm yakınlaştırmalara uygulanır; geri kalanı otomatik yakınlaştırmalar planlanırken.",
 		"camera": {
 			"title": "Kamera",
 			"fixed": "Sabit + kaydırma",
@@ -465,11 +471,14 @@
 		"transition": "Geçiş",
 		"maxScale": "Maksimum yakınlaştırma",
 		"hold": "Minimum bekleme",
-		"replanHint": "Maksimum yakınlaştırma ve bekleme, otomatik yakınlaştırmalar yeniden planlandığında uygulanır.",
+		"replanHint": "Maks. yakınlaştırma, bekleme ve uzaklaşma otomatik yakınlaştırmalar yeniden planlanınca uygulanır.",
 		"replan": "Otomatik yakınlaştırmaları yeniden planla",
 		"replanDone": "Planlanan otomatik yakınlaştırma: {{count}}",
 		"replanNone": "Otomatik yakınlaştırma için an bulunamadı",
-		"replanFailed": "Otomatik yakınlaştırmalar planlanamadı"
+		"replanFailed": "Otomatik yakınlaştırmalar planlanamadı",
+		"wideBetween": "Eylemler arasında uzaklaş",
+		"wideCalm": "Sakin (2,5 sn)",
+		"wideBrisk": "Hızlı (1,5 sn)"
 	},
 	"youtubeChapters": {
 		"title": "YouTube bölümleri",
