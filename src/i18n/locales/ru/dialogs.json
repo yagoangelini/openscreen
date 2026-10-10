@@ -87,7 +87,8 @@
 		"videoFiles": "Видеофайлы",
 		"audioFiles": "Аудиофайлы",
 		"openscreenProject": "Проект OpenScreen",
-		"allFiles": "Все файлы"
+		"allFiles": "Все файлы",
+		"chooseRecordingsFolder": "Выберите папку для новых записей"
 	},
 	"recovery": {
 		"title": "Восстановить запись",

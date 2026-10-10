@@ -159,6 +159,15 @@ contextBridge.exposeInMainWorld("electronAPI", {
 		ipcRenderer.on("source-selector-closed", listener);
 		return () => ipcRenderer.removeListener("source-selector-closed", listener);
 	},
+	getRecordingsFolder: () => {
+		return ipcRenderer.invoke("get-recordings-folder");
+	},
+	chooseRecordingsFolder: () => {
+		return ipcRenderer.invoke("choose-recordings-folder");
+	},
+	openRecordingsFolder: () => {
+		return ipcRenderer.invoke("open-recordings-folder");
+	},
 	onHudTogglePause: (callback: () => void) => {
 		const listener = () => callback();
 		ipcRenderer.on("hud-toggle-pause", listener);

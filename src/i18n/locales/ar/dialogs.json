@@ -87,7 +87,8 @@
 		"videoFiles": "ملفات فيديو",
 		"audioFiles": "ملفات الصوت",
 		"openscreenProject": "مشروع OpenScreen",
-		"allFiles": "جميع الملفات"
+		"allFiles": "جميع الملفات",
+		"chooseRecordingsFolder": "اختر مجلد التسجيلات الجديدة"
 	},
 	"recovery": {
 		"title": "استعادة التسجيل",

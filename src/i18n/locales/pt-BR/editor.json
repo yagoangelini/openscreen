@@ -143,7 +143,11 @@
 			"noScreensFound": "Nenhuma tela encontrada",
 			"noWindowsFound": "Nenhuma janela encontrada",
 			"cancel": "Cancelar"
-		}
+		},
+		"recordingsFolder": "Pasta das gravações",
+		"openRecordingsFolder": "Abrir",
+		"changeRecordingsFolder": "Alterar…",
+		"defaultRecordingsFolder": "Usar padrão"
 	},
 	"mediaStage": {
 		"openProjectFirst": "Abra um projeto primeiro",

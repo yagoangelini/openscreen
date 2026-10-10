@@ -143,7 +143,11 @@
 			"noScreensFound": "Không tìm thấy màn hình",
 			"noWindowsFound": "Không tìm thấy cửa sổ",
 			"cancel": "Hủy"
-		}
+		},
+		"recordingsFolder": "Thư mục bản ghi",
+		"openRecordingsFolder": "Mở",
+		"changeRecordingsFolder": "Thay đổi…",
+		"defaultRecordingsFolder": "Dùng mặc định"
 	},
 	"mediaStage": {
 		"openProjectFirst": "Hãy mở một dự án trước",

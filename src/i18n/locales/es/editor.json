@@ -143,7 +143,11 @@
 			"noScreensFound": "No se encontraron pantallas",
 			"noWindowsFound": "No se encontraron ventanas",
 			"cancel": "Cancelar"
-		}
+		},
+		"recordingsFolder": "Carpeta de grabaciones",
+		"openRecordingsFolder": "Abrir",
+		"changeRecordingsFolder": "Cambiar…",
+		"defaultRecordingsFolder": "Usar predeterminada"
 	},
 	"mediaStage": {
 		"openProjectFirst": "Abre un proyecto primero",

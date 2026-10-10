@@ -87,7 +87,8 @@
 		"videoFiles": "影片檔案",
 		"audioFiles": "音訊檔案",
 		"openscreenProject": "OpenScreen 專案",
-		"allFiles": "所有檔案"
+		"allFiles": "所有檔案",
+		"chooseRecordingsFolder": "選擇新錄製的資料夾"
 	},
 	"recovery": {
 		"title": "復原錄製",

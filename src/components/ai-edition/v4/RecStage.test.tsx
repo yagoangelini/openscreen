@@ -228,6 +228,7 @@ describe("RecStage controls", () => {
 			cursorCaptureMode: "editable-overlay",
 			hideDesktopIcons: false,
 			autoZoomEnabled: true,
+			recordingsFolder: null,
 		};
 		stubRecordingPrefs();
 		let answerReread: ((prefs: RecordingPrefs) => void) | undefined;
@@ -428,6 +429,7 @@ describe("RecStage controls", () => {
 			cursorCaptureMode: "editable-overlay",
 			hideDesktopIcons: false,
 			autoZoomEnabled: true,
+			recordingsFolder: null,
 		};
 		act(() => {
 			recordingPrefsListeners.forEach((listener) => listener(resetPrefs));

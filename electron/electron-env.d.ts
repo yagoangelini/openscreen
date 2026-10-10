@@ -68,6 +68,10 @@ interface Window {
 		) => () => void;
 		onSourceSelectorClosed: (callback: () => void) => () => void;
 		onAutoStartRecording: (callback: () => void) => () => void;
+		/** The folder new takes are written to, resolved; `isDefault` when none was chosen. */
+		getRecordingsFolder: () => Promise<{ folder: string; isDefault: boolean }>;
+		chooseRecordingsFolder: () => Promise<{ canceled: true } | { canceled: false; folder: string }>;
+		openRecordingsFolder: () => Promise<{ success: boolean }>;
 		/** The pause shortcut, pressed while another app had focus. Returns an unsubscribe. */
 		onHudTogglePause: (callback: () => void) => () => void;
 		/** The marker shortcut added a marker; `count` is the take's total so far. */

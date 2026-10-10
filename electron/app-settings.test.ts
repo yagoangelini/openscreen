@@ -62,6 +62,27 @@ describe("app settings store", () => {
 		);
 	});
 
+	it("persists an absolute recordings folder and rejects a relative one", () => {
+		const dir = temp();
+		const store = new AppSettingsStore(dir);
+		expect(store.getSnapshot().recording.recordingsFolder).toBeNull();
+		const chosen = path.join(dir, "takes");
+		store.setRecordingPreferences({ recordingsFolder: chosen });
+		expect(new AppSettingsStore(dir).getSnapshot().recording.recordingsFolder).toBe(chosen);
+		expect(() => store.setRecordingPreferences({ recordingsFolder: "takes" })).toThrow(TypeError);
+		store.setRecordingPreferences({ recordingsFolder: null });
+		expect(new AppSettingsStore(dir).getSnapshot().recording.recordingsFolder).toBeNull();
+	});
+
+	it("reads a hand-edited relative recordings folder as the default", () => {
+		const dir = temp();
+		writeFileSync(
+			path.join(dir, "recording-settings.json"),
+			JSON.stringify({ recordingsFolder: "relative/path" }),
+		);
+		expect(new AppSettingsStore(dir).getSnapshot().recording.recordingsFolder).toBeNull();
+	});
+
 	it("stores the last source beside the recording preferences", () => {
 		const dir = temp();
 		const store = new AppSettingsStore(dir);

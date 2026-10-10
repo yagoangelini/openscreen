@@ -21,6 +21,11 @@ export interface RecordingPreferences {
 	 * behaviour it gates has been on for every such installation.
 	 */
 	autoZoomEnabled: boolean;
+	/**
+	 * Where new takes are written. Null means the default, Videos\OpenScreen: the old
+	 * default was a hidden folder under AppData, out of sight and on the system drive.
+	 */
+	recordingsFolder: string | null;
 }
 
 export const DEFAULT_RECORDING_PREFERENCES: RecordingPreferences = {
@@ -34,6 +39,7 @@ export const DEFAULT_RECORDING_PREFERENCES: RecordingPreferences = {
 	cursorCaptureMode: "editable-overlay",
 	hideDesktopIcons: false,
 	autoZoomEnabled: true,
+	recordingsFolder: null,
 };
 
 export interface RecordingSourceDescriptor {
@@ -110,6 +116,10 @@ function parseRecording(raw: RawSettings): RecordingPreferences {
 				: DEFAULT_RECORDING_PREFERENCES.cursorCaptureMode,
 		hideDesktopIcons: bool(raw.hideDesktopIcons, DEFAULT_RECORDING_PREFERENCES.hideDesktopIcons),
 		autoZoomEnabled: bool(raw.autoZoomEnabled, DEFAULT_RECORDING_PREFERENCES.autoZoomEnabled),
+		recordingsFolder:
+			typeof raw.recordingsFolder === "string" && path.isAbsolute(raw.recordingsFolder)
+				? raw.recordingsFolder
+				: DEFAULT_RECORDING_PREFERENCES.recordingsFolder,
 	};
 }
 
@@ -166,6 +176,13 @@ function validateRecordingPatch(patch: Partial<RecordingPreferences>): void {
 		}
 		if (key === "cursorCaptureMode" && value !== "system" && value !== "editable-overlay") {
 			throw new TypeError("cursorCaptureMode is invalid");
+		}
+		if (
+			key === "recordingsFolder" &&
+			value !== null &&
+			(typeof value !== "string" || !path.isAbsolute(value))
+		) {
+			throw new TypeError("recordingsFolder must be an absolute path or null");
 		}
 	}
 }

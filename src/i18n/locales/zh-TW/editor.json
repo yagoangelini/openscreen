@@ -143,7 +143,11 @@
 			"noScreensFound": "找不到螢幕",
 			"noWindowsFound": "找不到視窗",
 			"cancel": "取消"
-		}
+		},
+		"recordingsFolder": "錄製資料夾",
+		"openRecordingsFolder": "開啟",
+		"changeRecordingsFolder": "變更…",
+		"defaultRecordingsFolder": "使用預設"
 	},
 	"mediaStage": {
 		"openProjectFirst": "請先開啟專案",

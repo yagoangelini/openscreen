@@ -2,6 +2,7 @@ import {
 	Camera,
 	CameraOff,
 	ChevronDown,
+	FolderOpen,
 	LayoutGrid,
 	Loader2,
 	MicOff,
@@ -34,6 +35,7 @@ interface RecordingPrefsState {
 	cursorCaptureMode: "editable-overlay" | "system";
 	hideDesktopIcons: boolean;
 	autoZoomEnabled: boolean;
+	recordingsFolder: string | null;
 }
 
 const DEFAULT_PREFS: RecordingPrefsState = {
@@ -47,7 +49,89 @@ const DEFAULT_PREFS: RecordingPrefsState = {
 	cursorCaptureMode: "editable-overlay",
 	hideDesktopIcons: false,
 	autoZoomEnabled: true,
+	recordingsFolder: null,
 };
+
+/**
+ * Where new takes go, with a picker to change it. Shows the resolved folder (the
+ * default Videos\OpenScreen when none was chosen) rather than "default", so the
+ * user always knows where to look for a file.
+ */
+function RecordingsFolderRow({
+	chosenFolder,
+	onChoose,
+}: {
+	chosenFolder: string | null;
+	onChoose: (folder: string | null) => void;
+}) {
+	const t = useScopedT("editor");
+	const [resolved, setResolved] = useState<{ folder: string; isDefault: boolean } | null>(null);
+	// biome-ignore lint/correctness/useExhaustiveDependencies: re-read the resolved folder whenever the saved choice changes
+	useEffect(() => {
+		let cancelled = false;
+		void window.electronAPI
+			?.getRecordingsFolder?.()
+			.then((value) => {
+				if (!cancelled) setResolved(value);
+			})
+			.catch(() => undefined);
+		return () => {
+			cancelled = true;
+		};
+	}, [chosenFolder]);
+
+	const choose = async () => {
+		const result = await window.electronAPI?.chooseRecordingsFolder?.();
+		if (result && !result.canceled) {
+			onChoose(result.folder);
+		}
+	};
+
+	return (
+		<div className={styles.recRow}>
+			<div className={styles.recRowLabel} title={resolved?.folder}>
+				<FolderOpen size={15} />
+				<span style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
+					{t("rec.recordingsFolder")}
+					<span
+						data-testid="rec-recordings-folder-path"
+						style={{
+							fontSize: 11,
+							color: "var(--muted)",
+							overflow: "hidden",
+							textOverflow: "ellipsis",
+							whiteSpace: "nowrap",
+						}}
+					>
+						{resolved?.folder ?? ""}
+					</span>
+				</span>
+			</div>
+			<div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+				<button
+					type="button"
+					className={styles.recToggleBtn}
+					onClick={() => void window.electronAPI?.openRecordingsFolder?.()}
+				>
+					{t("rec.openRecordingsFolder")}
+				</button>
+				<button
+					type="button"
+					data-testid="rec-choose-recordings-folder"
+					className={styles.recToggleBtn}
+					onClick={() => void choose()}
+				>
+					{t("rec.changeRecordingsFolder")}
+				</button>
+				{resolved && !resolved.isDefault ? (
+					<button type="button" className={styles.recToggleBtn} onClick={() => onChoose(null)}>
+						{t("rec.defaultRecordingsFolder")}
+					</button>
+				) : null}
+			</div>
+		</div>
+	);
+}
 
 function normalizedRecordingPrefs(prefs: Partial<RecordingPrefsState>): RecordingPrefsState {
 	const next = { ...DEFAULT_PREFS, ...prefs };
@@ -500,6 +584,11 @@ export function RecStage({
 							</button>
 						</div>
 					) : null}
+
+					<RecordingsFolderRow
+						chosenFolder={prefs.recordingsFolder}
+						onChoose={(folder) => updatePrefs({ recordingsFolder: folder })}
+					/>
 
 					{desktopIconsHint ? (
 						<div className={styles.recRow}>

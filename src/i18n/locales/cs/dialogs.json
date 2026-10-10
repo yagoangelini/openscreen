@@ -87,7 +87,8 @@
 		"videoFiles": "Video soubory",
 		"audioFiles": "Zvukové soubory",
 		"openscreenProject": "Projekt OpenScreen",
-		"allFiles": "Všechny soubory"
+		"allFiles": "Všechny soubory",
+		"chooseRecordingsFolder": "Vyberte složku pro nové nahrávky"
 	},
 	"recovery": {
 		"title": "Obnovit nahrávku",

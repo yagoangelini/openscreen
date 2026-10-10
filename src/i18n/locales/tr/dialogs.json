@@ -87,7 +87,8 @@
 		"videoFiles": "Video Dosyaları",
 		"audioFiles": "Ses dosyaları",
 		"openscreenProject": "OpenScreen Projesi",
-		"allFiles": "Tüm Dosyalar"
+		"allFiles": "Tüm Dosyalar",
+		"chooseRecordingsFolder": "Yeni kayıtlar için klasör seçin"
 	},
 	"recovery": {
 		"title": "Kaydı kurtar",

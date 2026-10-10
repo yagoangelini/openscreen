@@ -143,7 +143,11 @@
 			"noScreensFound": "Ekran bulunamadı",
 			"noWindowsFound": "Pencere bulunamadı",
 			"cancel": "İptal"
-		}
+		},
+		"recordingsFolder": "Kayıt klasörü",
+		"openRecordingsFolder": "Aç",
+		"changeRecordingsFolder": "Değiştir…",
+		"defaultRecordingsFolder": "Varsayılanı kullan"
 	},
 	"mediaStage": {
 		"openProjectFirst": "Önce bir proje açın",

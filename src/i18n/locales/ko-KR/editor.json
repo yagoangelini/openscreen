@@ -143,7 +143,11 @@
 			"noScreensFound": "화면을 찾을 수 없음",
 			"noWindowsFound": "창을 찾을 수 없음",
 			"cancel": "취소"
-		}
+		},
+		"recordingsFolder": "녹화 폴더",
+		"openRecordingsFolder": "열기",
+		"changeRecordingsFolder": "변경…",
+		"defaultRecordingsFolder": "기본값 사용"
 	},
 	"mediaStage": {
 		"openProjectFirst": "먼저 프로젝트를 여세요",
