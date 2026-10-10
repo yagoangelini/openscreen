@@ -410,5 +410,26 @@
 	"cpuCompositor": {
 		"notice": "Running without a compatible GPU — rendering on CPU, so playback is slower.",
 		"exportWarning": "No compatible GPU: this export runs on CPU and will take much longer than usual."
+	},
+	"autoZoom": {
+		"title": "Automatic zooms",
+		"scope": "Applies to every automatic zoom in this project.",
+		"camera": {
+			"title": "Camera",
+			"fixed": "Fixed + pan",
+			"hybrid": "Hybrid",
+			"follow": "Follow mouse",
+			"fixedHint": "Holds on what the action frames and pans smoothly to the next one.",
+			"hybridHint": "Holds still until the pointer leaves most of the view, then re-frames slowly.",
+			"followHint": "Follows the pointer, heavily smoothed."
+		},
+		"transition": "Transition",
+		"maxScale": "Max zoom",
+		"hold": "Minimum hold",
+		"replanHint": "Max zoom and hold apply when the automatic zooms are planned again.",
+		"replan": "Re-plan automatic zooms",
+		"replanDone": "Automatic zooms planned: {{count}}",
+		"replanNone": "No moment for an automatic zoom was found",
+		"replanFailed": "Could not plan the automatic zooms"
 	}
 }

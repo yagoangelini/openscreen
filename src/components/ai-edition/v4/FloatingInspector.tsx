@@ -74,6 +74,7 @@ import {
 	VideoEffectsPane,
 } from "../RightPanes";
 import { TextColorField } from "../TextColorField";
+import { AutoZoomSettings } from "./AutoZoomSettings";
 import styles from "./EditorShellV4.module.css";
 
 type TimelineApi = ReturnType<typeof useTimeline>;
@@ -853,25 +854,30 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 							cameraLabel(region.rotationPreset ?? "off"),
 						)}
 					</div>
-					{paneStack(
-						ts("zoom.focusMode.title"),
-						// While the global toggle is on it OVERRIDES every region, so the control shows
-						// the effective mode ("auto") and goes read-only rather than lying about a
-						// per-region value that currently has no effect. The region's own `focusMode` is
-						// never written by the toggle — that is what makes each zoom snap back to its
-						// previous value the moment the toggle goes off.
-						<ChoiceRow<"manual" | "auto">
-							label={ts("zoom.focusMode.title")}
-							options={[
-								{ value: "manual", label: ts("zoom.focusMode.manual") },
-								{ value: "auto", label: ts("zoom.focusMode.auto") },
-							]}
-							value={autoFocusAll ? "auto" : (region.focusMode ?? "manual")}
-							disabled={autoFocusAll}
-							describedBy={autoFocusAll ? focusHintId : undefined}
-							onChange={(mode) => void tl.updateZoomFocusMode(region.id, mode)}
-						/>,
-					)}
+					{/* An automatic zoom moves by the project's auto-zoom camera, not by a mode of its
+					    own: its settings stand where the focus mode would, for all of them at once. */}
+					{region.source === "auto" ? <AutoZoomSettings /> : null}
+					{region.source === "auto"
+						? null
+						: paneStack(
+								ts("zoom.focusMode.title"),
+								// While the global toggle is on it OVERRIDES every region, so the control shows
+								// the effective mode ("auto") and goes read-only rather than lying about a
+								// per-region value that currently has no effect. The region's own `focusMode` is
+								// never written by the toggle — that is what makes each zoom snap back to its
+								// previous value the moment the toggle goes off.
+								<ChoiceRow<"manual" | "auto">
+									label={ts("zoom.focusMode.title")}
+									options={[
+										{ value: "manual", label: ts("zoom.focusMode.manual") },
+										{ value: "auto", label: ts("zoom.focusMode.auto") },
+									]}
+									value={autoFocusAll ? "auto" : (region.focusMode ?? "manual")}
+									disabled={autoFocusAll}
+									describedBy={autoFocusAll ? focusHintId : undefined}
+									onChange={(mode) => void tl.updateZoomFocusMode(region.id, mode)}
+								/>,
+							)}
 					{paneStack(
 						ts("zoom.cursor.title"),
 						<ChoiceRow<"show" | "hide">

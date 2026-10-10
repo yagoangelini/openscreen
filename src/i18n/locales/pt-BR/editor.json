@@ -410,5 +410,26 @@
 	"cpuCompositor": {
 		"notice": "Sem GPU compatível — a renderização ocorre na CPU, então a reprodução fica mais lenta.",
 		"exportWarning": "Sem GPU compatível: esta exportação roda na CPU e vai demorar muito mais que o normal."
+	},
+	"autoZoom": {
+		"title": "Zooms automáticos",
+		"scope": "Vale para todos os zooms automáticos deste projeto.",
+		"camera": {
+			"title": "Câmera",
+			"fixed": "Fixa + pan",
+			"hybrid": "Híbrida",
+			"follow": "Seguir o mouse",
+			"fixedHint": "Fica parada no que a ação enquadra e faz um pan suave até a próxima.",
+			"hybridHint": "Fica parada até o ponteiro sair de boa parte da vista e então reenquadra devagar.",
+			"followHint": "Segue o ponteiro, bem suavizada."
+		},
+		"transition": "Transição",
+		"maxScale": "Zoom máximo",
+		"hold": "Tempo mínimo parado",
+		"replanHint": "O zoom máximo e o tempo parado valem quando os zooms automáticos são planejados de novo.",
+		"replan": "Replanejar zooms automáticos",
+		"replanDone": "Zooms automáticos planejados: {{count}}",
+		"replanNone": "Nenhum momento para zoom automático foi encontrado",
+		"replanFailed": "Não foi possível planejar os zooms automáticos"
 	}
 }

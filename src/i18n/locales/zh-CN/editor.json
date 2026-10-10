@@ -410,5 +410,26 @@
 	"cpuCompositor": {
 		"notice": "没有兼容的 GPU，正在使用 CPU 渲染，因此播放较慢。",
 		"exportWarning": "没有兼容的 GPU：本次导出将在 CPU 上运行，耗时会比平常长很多。"
+	},
+	"autoZoom": {
+		"title": "自动缩放",
+		"scope": "适用于本项目中的所有自动缩放。",
+		"camera": {
+			"title": "镜头",
+			"fixed": "固定 + 平移",
+			"hybrid": "混合",
+			"follow": "跟随鼠标",
+			"fixedHint": "停留在操作所在的画面，并平滑平移到下一个操作。",
+			"hybridHint": "保持不动，直到指针离开大部分视图，再缓慢重新取景。",
+			"followHint": "强力平滑地跟随指针。"
+		},
+		"transition": "过渡",
+		"maxScale": "最大缩放",
+		"hold": "最短停留",
+		"replanHint": "最大缩放和停留时间会在重新规划自动缩放时生效。",
+		"replan": "重新规划自动缩放",
+		"replanDone": "已规划 {{count}} 个自动缩放",
+		"replanNone": "没有找到适合自动缩放的时刻",
+		"replanFailed": "无法规划自动缩放"
 	}
 }

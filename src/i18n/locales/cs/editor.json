@@ -410,5 +410,26 @@
 	"cpuCompositor": {
 		"notice": "Běží bez kompatibilního GPU, takže renderování probíhá na CPU a přehrávání je pomalejší.",
 		"exportWarning": "Žádné kompatibilní GPU: tento export běží na CPU a bude trvat mnohem déle než obvykle."
+	},
+	"autoZoom": {
+		"title": "Automatické zoomy",
+		"scope": "Platí pro všechny automatické zoomy v tomto projektu.",
+		"camera": {
+			"title": "Kamera",
+			"fixed": "Pevná + posun",
+			"hybrid": "Hybridní",
+			"follow": "Sledovat myš",
+			"fixedHint": "Drží záběr akce a plynule se posune na další.",
+			"hybridHint": "Stojí, dokud ukazatel neopustí většinu pohledu, pak pomalu přerámuje.",
+			"followHint": "Sleduje ukazatel, silně vyhlazeně."
+		},
+		"transition": "Přechod",
+		"maxScale": "Maximální zoom",
+		"hold": "Minimální výdrž",
+		"replanHint": "Maximální zoom a výdrž platí při novém naplánování automatických zoomů.",
+		"replan": "Znovu naplánovat automatické zoomy",
+		"replanDone": "Naplánováno automatických zoomů: {{count}}",
+		"replanNone": "Nenalezen žádný okamžik pro automatický zoom",
+		"replanFailed": "Automatické zoomy se nepodařilo naplánovat"
 	}
 }

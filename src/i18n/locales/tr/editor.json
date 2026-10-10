@@ -410,5 +410,26 @@
 	"cpuCompositor": {
 		"notice": "Uyumlu GPU yok — işleme CPU üzerinde yapılıyor, bu yüzden oynatma daha yavaş.",
 		"exportWarning": "Uyumlu GPU yok: bu dışa aktarma CPU üzerinde çalışır ve normalden çok daha uzun sürer."
+	},
+	"autoZoom": {
+		"title": "Otomatik yakınlaştırmalar",
+		"scope": "Bu projedeki tüm otomatik yakınlaştırmalara uygulanır.",
+		"camera": {
+			"title": "Kamera",
+			"fixed": "Sabit + kaydırma",
+			"hybrid": "Hibrit",
+			"follow": "Fareyi takip et",
+			"fixedHint": "Eylemin çerçevelediği yerde kalır ve bir sonrakine yumuşakça kayar.",
+			"hybridHint": "İmleç görünümün büyük kısmından çıkana kadar sabit kalır, sonra yavaşça yeniden çerçeveler.",
+			"followHint": "İmleci güçlü yumuşatmayla takip eder."
+		},
+		"transition": "Geçiş",
+		"maxScale": "Maksimum yakınlaştırma",
+		"hold": "Minimum bekleme",
+		"replanHint": "Maksimum yakınlaştırma ve bekleme, otomatik yakınlaştırmalar yeniden planlandığında uygulanır.",
+		"replan": "Otomatik yakınlaştırmaları yeniden planla",
+		"replanDone": "Planlanan otomatik yakınlaştırma: {{count}}",
+		"replanNone": "Otomatik yakınlaştırma için an bulunamadı",
+		"replanFailed": "Otomatik yakınlaştırmalar planlanamadı"
 	}
 }
