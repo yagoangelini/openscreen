@@ -52,6 +52,15 @@ interface NormalizedSample {
 	withinBounds: boolean;
 }
 
+/**
+ * How many times a take brings the sampler back after it dies. Each restart
+ * costs a half-second hole in the telemetry, which the auto-zoom planner reads
+ * as the cursor standing still; past this many the helper is evidently not
+ * going to stay up, and the take carries on without it.
+ */
+const MAX_HELPER_RESTARTS = 5;
+const HELPER_RESTART_DELAY_MS = 500;
+
 export class WindowsNativeRecordingSession implements CursorRecordingSession {
 	private assets = new Map<string, NativeCursorAsset>();
 	private samples: CursorRecordingSample[] = [];
@@ -71,6 +80,14 @@ export class WindowsNativeRecordingSession implements CursorRecordingSession {
 	private lastPoint = { cx: 0.5, cy: 0.5 };
 	private lastVisible = true;
 	private lastCursorType: CursorRecordingSample["cursorType"] = null;
+	/** start() has returned: from here on the take relies on this helper. */
+	private started = false;
+	private stopped = true;
+	private helperPath = "";
+	private helperArgs: string[] = [];
+	private restarts = 0;
+	private restartTimer: NodeJS.Timeout | null = null;
+	private helperErrorCount = 0;
 
 	constructor(private readonly options: WindowsNativeRecordingSessionOptions) {}
 
@@ -87,6 +104,10 @@ export class WindowsNativeRecordingSession implements CursorRecordingSession {
 		this.lastPoint = { cx: 0.5, cy: 0.5 };
 		this.lastVisible = true;
 		this.lastCursorType = null;
+		this.started = false;
+		this.stopped = false;
+		this.restarts = 0;
+		this.helperErrorCount = 0;
 
 		const helperPath = findCursorSamplerPath();
 		if (!helperPath) {
@@ -96,18 +117,34 @@ export class WindowsNativeRecordingSession implements CursorRecordingSession {
 		const windowHandle = parseWindowHandleFromSourceId(this.options.sourceId);
 		const args = [String(this.options.sampleIntervalMs)];
 		if (windowHandle) args.push(windowHandle);
+		this.helperPath = helperPath;
+		this.helperArgs = args;
 
-		const child = spawn(helperPath, args, {
+		this.spawnHelper();
+
+		try {
+			await this.waitUntilReady();
+		} catch (error) {
+			this.stopped = true;
+			this.terminateHelperProcess();
+			throw error;
+		}
+		this.started = true;
+	}
+
+	private spawnHelper() {
+		const child = spawn(this.helperPath, this.helperArgs, {
 			stdio: ["ignore", "pipe", "pipe"],
 			windowsHide: true,
 		});
 
 		this.process = child;
+		this.lineBuffer = "";
 		this.logDiagnostic("spawn", {
 			pid: child.pid ?? null,
 			sampleIntervalMs: this.options.sampleIntervalMs,
 			sourceId: this.options.sourceId ?? null,
-			windowHandle,
+			restart: this.restarts,
 		});
 
 		child.stdout.setEncoding("utf8");
@@ -133,23 +170,55 @@ export class WindowsNativeRecordingSession implements CursorRecordingSession {
 			this.rejectReady(
 				new Error(`Windows cursor helper exited before ready (code=${code}, signal=${signal})`),
 			);
+			if (this.process === child) {
+				this.process = null;
+			}
+			this.scheduleRestart(code, signal);
 		});
 		child.once("error", (error) => {
 			this.logDiagnostic("process-error", { message: error.message });
 			this.rejectReady(error);
 		});
+	}
 
-		try {
-			await this.waitUntilReady();
-		} catch (error) {
-			this.terminateHelperProcess();
-			throw error;
+	/**
+	 * The sampler died mid-take -- crashed, killed by an antivirus, or gone with
+	 * the session it ran in. Without it the rest of the take has no cursor and no
+	 * clicks, so no auto-zoom: bring it back, within reason.
+	 */
+	private scheduleRestart(code: number | null, signal: NodeJS.Signals | null) {
+		if (this.stopped || !this.started || this.restartTimer) {
+			return;
 		}
+		if (this.restarts >= MAX_HELPER_RESTARTS) {
+			this.logDiagnostic("restart-gave-up", { restarts: this.restarts, code, signal });
+			return;
+		}
+		this.restarts += 1;
+		this.logDiagnostic("restart-scheduled", { restart: this.restarts, code, signal });
+		this.restartTimer = setTimeout(() => {
+			this.restartTimer = null;
+			if (this.stopped) {
+				return;
+			}
+			try {
+				this.spawnHelper();
+			} catch (error) {
+				this.logDiagnostic("restart-failed", {
+					message: error instanceof Error ? error.message : String(error),
+				});
+			}
+		}, HELPER_RESTART_DELAY_MS);
 	}
 
 	async stop(): Promise<CursorRecordingData> {
 		const child = this.process;
 		this.process = null;
+		this.stopped = true;
+		if (this.restartTimer) {
+			clearTimeout(this.restartTimer);
+			this.restartTimer = null;
+		}
 		this.clearReadyState();
 
 		this.killHelperProcess(child);
@@ -158,6 +227,8 @@ export class WindowsNativeRecordingSession implements CursorRecordingSession {
 			sampleCount: this.sampleCount,
 			assetCount: this.assets.size,
 			outOfBoundsSampleCount: this.outOfBoundsSampleCount,
+			restarts: this.restarts,
+			helperErrorCount: this.helperErrorCount,
 		});
 
 		// Input events are written by the helper's own thread, a moment after the ticks around
@@ -193,6 +264,22 @@ export class WindowsNativeRecordingSession implements CursorRecordingSession {
 
 	private handleEvent(payload: WindowsCursorEvent) {
 		if (payload.type === "error") {
+			// Once the take is running, an error is a tick the helper skipped, not a
+			// dead helper: GetCursorInfo fails for as long as a UAC prompt or the lock
+			// screen holds the secure desktop, and the helper carries on by itself
+			// once it is back. Killing it here used to end the cursor -- and every
+			// auto-zoom -- for the rest of the take. Logged sparingly: it repeats on
+			// every tick while it lasts.
+			this.helperErrorCount += 1;
+			if (this.started) {
+				if (this.helperErrorCount === 1 || this.helperErrorCount % 100 === 0) {
+					this.logDiagnostic("helper-error", {
+						message: payload.message,
+						count: this.helperErrorCount,
+					});
+				}
+				return;
+			}
 			this.logDiagnostic("helper-error", { message: payload.message });
 			console.error("Windows cursor helper error:", payload.message);
 			this.failHelper(new Error(payload.message));
