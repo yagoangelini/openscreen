@@ -429,7 +429,8 @@
 		"bounceNone": "Aucun",
 		"bounceLight": "Léger",
 		"bounceStrong": "Marqué",
-		"showKeystrokes": "Raccourcis à l'écran"
+		"showKeystrokes": "Raccourcis à l'écran",
+		"clickRing": "Mise en évidence des clics"
 	},
 	"export": {
 		"gifButton": "Exporter le GIF",

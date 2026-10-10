@@ -429,7 +429,8 @@
 		"bounceNone": "なし",
 		"bounceLight": "弱",
 		"bounceStrong": "強",
-		"showKeystrokes": "ショートカットを表示"
+		"showKeystrokes": "ショートカットを表示",
+		"clickRing": "クリックを強調"
 	},
 	"export": {
 		"gifButton": "GIF をエクスポート",

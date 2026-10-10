@@ -429,7 +429,8 @@
 		"bounceNone": "بلا",
 		"bounceLight": "خفيف",
 		"bounceStrong": "قوي",
-		"showKeystrokes": "اختصارات على الشاشة"
+		"showKeystrokes": "اختصارات على الشاشة",
+		"clickRing": "إبراز النقرات"
 	},
 	"export": {
 		"gifButton": "تصدير GIF",

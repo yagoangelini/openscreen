@@ -429,7 +429,8 @@
 		"bounceNone": "Žádný",
 		"bounceLight": "Lehký",
 		"bounceStrong": "Výrazný",
-		"showKeystrokes": "Zkratky na obrazovce"
+		"showKeystrokes": "Zkratky na obrazovce",
+		"clickRing": "Zvýraznění kliknutí"
 	},
 	"export": {
 		"gifButton": "Exportovat GIF",

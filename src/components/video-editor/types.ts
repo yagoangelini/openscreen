@@ -306,6 +306,8 @@ export interface CursorVisualSettings {
 	autoHide?: boolean;
 	/** The shortcuts pressed while recording, shown as plates (`lib/ai-edition/keystrokes.ts`). */
 	showKeystrokes?: boolean;
+	/** A ring at every click, so the viewer sees where it landed (`SceneCursor::click_ring`). */
+	clickRing?: boolean;
 }
 
 // The project defaults, under the names the legacy editor reads: one value, not two to keep in sync.

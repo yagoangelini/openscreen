@@ -86,8 +86,9 @@ describe("DocumentService", () => {
 			it("starts from the factory look when there is nothing to inherit", async () => {
 				const doc = await service.createProject("First");
 				// The fork's factory choice on top of the factory look: shortcuts on screen.
-				expect(doc.legacyEditor).toEqual({ cursorShowKeystrokes: true });
+				expect(doc.legacyEditor).toEqual({ cursorShowKeystrokes: true, cursorClickRing: true });
 				expect(getEditorSettings(doc).cursor.showKeystrokes).toBe(true);
+				expect(getEditorSettings(doc).cursor.clickRing).toBe(true);
 			});
 
 			it("takes the most recently edited project's look, never its format or footage", async () => {

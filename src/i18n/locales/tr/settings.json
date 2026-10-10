@@ -429,7 +429,8 @@
 		"bounceNone": "Yok",
 		"bounceLight": "Hafif",
 		"bounceStrong": "Belirgin",
-		"showKeystrokes": "Ekranda kısayollar"
+		"showKeystrokes": "Ekranda kısayollar",
+		"clickRing": "Tıklama vurgusu"
 	},
 	"export": {
 		"gifButton": "GIF Olarak Dışa Aktar",

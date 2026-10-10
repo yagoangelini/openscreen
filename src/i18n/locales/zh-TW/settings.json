@@ -429,7 +429,8 @@
 		"bounceNone": "無",
 		"bounceLight": "輕",
 		"bounceStrong": "強",
-		"showKeystrokes": "螢幕顯示快捷鍵"
+		"showKeystrokes": "螢幕顯示快捷鍵",
+		"clickRing": "點擊醒目提示"
 	},
 	"export": {
 		"gifButton": "匯出 GIF",

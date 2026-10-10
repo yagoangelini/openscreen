@@ -429,7 +429,8 @@
 		"bounceNone": "Keiner",
 		"bounceLight": "Leicht",
 		"bounceStrong": "Stark",
-		"showKeystrokes": "Tastenkürzel einblenden"
+		"showKeystrokes": "Tastenkürzel einblenden",
+		"clickRing": "Klicks hervorheben"
 	},
 	"export": {
 		"gifButton": "GIF exportieren",

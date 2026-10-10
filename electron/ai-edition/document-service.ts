@@ -411,12 +411,12 @@ export class DocumentService {
 		// Every new project comes through here — the New dialog, the empty state and a finished
 		// recording alike — so this is the one place it takes the user's look.
 		// The fork's factory choices for a new project, under whatever look it inherits:
-		// the shortcuts pressed while recording show on screen (2026-10-09). A look that
-		// says otherwise -- the user switched them off last time -- wins.
+		// the shortcuts pressed while recording show on screen, and every click gets a
+		// ring (2026-10-09). A look that says otherwise wins.
 		const look = await this.newProjectLook();
 		const doc: AxcutDocument = {
 			...createEmptyDocument({ projectId, title: title?.trim() || "Untitled Project" }),
-			legacyEditor: { [SHOW_KEYSTROKES_KEY]: true, ...(look ?? {}) },
+			legacyEditor: { [SHOW_KEYSTROKES_KEY]: true, cursorClickRing: true, ...(look ?? {}) },
 		};
 		await this.writeProject(doc);
 		return doc;
