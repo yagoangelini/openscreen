@@ -353,6 +353,8 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				(screenRecorder.current && screenRecorder.current.recorder.state !== "inactive"),
 		);
 
+	const pauseToggleInFlight = useRef(false);
+
 	const getRecordingDurationMs = useCallback(() => {
 		const segmentDuration =
 			segmentStartedAt.current === null ? 0 : Date.now() - segmentStartedAt.current;
@@ -2105,6 +2107,13 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 	const togglePaused = () => {
 		const activeNativeWindowsRecording = nativeWindowsRecording.current;
 		if (activeNativeWindowsRecording && !activeNativeWindowsRecording.finalizing) {
+			// One toggle at a time. `paused` only flips once the IPC answers, so a fast
+			// double click read the same state twice and sent pause twice instead of
+			// pause then resume, leaving the HUD and the take disagreeing.
+			if (pauseToggleInFlight.current) {
+				return;
+			}
+			pauseToggleInFlight.current = true;
 			void (async () => {
 				try {
 					if (activeNativeWindowsRecording.paused) {
@@ -2131,6 +2140,8 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				} catch (error) {
 					console.error("Failed to toggle native Windows pause state:", error);
 					toast.error(error instanceof Error ? error.message : "Failed to toggle pause state");
+				} finally {
+					pauseToggleInFlight.current = false;
 				}
 			})();
 			return;
