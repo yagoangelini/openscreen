@@ -26,7 +26,12 @@ export interface RecordingPreferences {
 	 * default was a hidden folder under AppData, out of sight and on the system drive.
 	 */
 	recordingsFolder: string | null;
+	/** Seconds of countdown before a take starts: 0 (none), 3 or 5. */
+	countdownSeconds: number;
 }
+
+/** The countdown lengths offered; anything else reads as the default. */
+export const COUNTDOWN_SECONDS_OPTIONS = [0, 3, 5] as const;
 
 export const DEFAULT_RECORDING_PREFERENCES: RecordingPreferences = {
 	micEnabled: false,
@@ -40,6 +45,7 @@ export const DEFAULT_RECORDING_PREFERENCES: RecordingPreferences = {
 	hideDesktopIcons: false,
 	autoZoomEnabled: true,
 	recordingsFolder: null,
+	countdownSeconds: 3,
 };
 
 export interface RecordingSourceDescriptor {
@@ -120,6 +126,11 @@ function parseRecording(raw: RawSettings): RecordingPreferences {
 			typeof raw.recordingsFolder === "string" && path.isAbsolute(raw.recordingsFolder)
 				? raw.recordingsFolder
 				: DEFAULT_RECORDING_PREFERENCES.recordingsFolder,
+		countdownSeconds: (COUNTDOWN_SECONDS_OPTIONS as readonly unknown[]).includes(
+			raw.countdownSeconds,
+		)
+			? (raw.countdownSeconds as number)
+			: DEFAULT_RECORDING_PREFERENCES.countdownSeconds,
 	};
 }
 
@@ -183,6 +194,12 @@ function validateRecordingPatch(patch: Partial<RecordingPreferences>): void {
 			(typeof value !== "string" || !path.isAbsolute(value))
 		) {
 			throw new TypeError("recordingsFolder must be an absolute path or null");
+		}
+		if (
+			key === "countdownSeconds" &&
+			!(COUNTDOWN_SECONDS_OPTIONS as readonly unknown[]).includes(value)
+		) {
+			throw new TypeError("countdownSeconds must be 0, 3 or 5");
 		}
 	}
 }

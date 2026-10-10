@@ -147,7 +147,10 @@
 		"recordingsFolder": "録画フォルダー",
 		"openRecordingsFolder": "開く",
 		"changeRecordingsFolder": "変更…",
-		"defaultRecordingsFolder": "既定に戻す"
+		"defaultRecordingsFolder": "既定に戻す",
+		"countdown": "カウントダウン",
+		"countdownNone": "なし",
+		"countdownSeconds": "{{seconds}} 秒"
 	},
 	"mediaStage": {
 		"openProjectFirst": "先にプロジェクトを開いてください",

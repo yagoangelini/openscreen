@@ -9,6 +9,7 @@ import {
 	Mic as MicOn,
 	MonitorSmartphone,
 	MousePointer2,
+	Timer,
 	Volume2,
 	VolumeX,
 	ZoomIn,
@@ -36,6 +37,7 @@ interface RecordingPrefsState {
 	hideDesktopIcons: boolean;
 	autoZoomEnabled: boolean;
 	recordingsFolder: string | null;
+	countdownSeconds: number;
 }
 
 const DEFAULT_PREFS: RecordingPrefsState = {
@@ -50,6 +52,7 @@ const DEFAULT_PREFS: RecordingPrefsState = {
 	hideDesktopIcons: false,
 	autoZoomEnabled: true,
 	recordingsFolder: null,
+	countdownSeconds: 3,
 };
 
 /**
@@ -584,6 +587,32 @@ export function RecStage({
 							</button>
 						</div>
 					) : null}
+
+					<div className={styles.recRow}>
+						<div className={styles.recRowLabel}>
+							<Timer size={15} />
+							{t("rec.countdown")}
+						</div>
+						<div
+							style={{ display: "flex", gap: 6 }}
+							role="radiogroup"
+							aria-label={t("rec.countdown")}
+						>
+							{[0, 3, 5].map((seconds) => (
+								<button
+									key={seconds}
+									type="button"
+									role="radio"
+									aria-checked={prefs.countdownSeconds === seconds}
+									data-testid={`rec-countdown-${seconds}`}
+									className={`${styles.recToggleBtn}${prefs.countdownSeconds === seconds ? ` ${styles.on}` : ""}`}
+									onClick={() => updatePrefs({ countdownSeconds: seconds })}
+								>
+									{seconds === 0 ? t("rec.countdownNone") : t("rec.countdownSeconds", { seconds })}
+								</button>
+							))}
+						</div>
+					</div>
 
 					<RecordingsFolderRow
 						chosenFolder={prefs.recordingsFolder}

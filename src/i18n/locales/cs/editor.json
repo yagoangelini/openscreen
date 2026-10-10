@@ -147,7 +147,10 @@
 		"recordingsFolder": "Složka nahrávek",
 		"openRecordingsFolder": "Otevřít",
 		"changeRecordingsFolder": "Změnit…",
-		"defaultRecordingsFolder": "Použít výchozí"
+		"defaultRecordingsFolder": "Použít výchozí",
+		"countdown": "Odpočet",
+		"countdownNone": "Žádný",
+		"countdownSeconds": "{{seconds}} s"
 	},
 	"mediaStage": {
 		"openProjectFirst": "Nejprve otevřete projekt",

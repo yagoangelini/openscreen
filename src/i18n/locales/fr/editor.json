@@ -147,7 +147,10 @@
 		"recordingsFolder": "Dossier des enregistrements",
 		"openRecordingsFolder": "Ouvrir",
 		"changeRecordingsFolder": "Changer…",
-		"defaultRecordingsFolder": "Par défaut"
+		"defaultRecordingsFolder": "Par défaut",
+		"countdown": "Compte à rebours",
+		"countdownNone": "Aucun",
+		"countdownSeconds": "{{seconds}} s"
 	},
 	"mediaStage": {
 		"openProjectFirst": "Ouvrez d'abord un projet",

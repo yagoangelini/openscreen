@@ -24,6 +24,7 @@ const defaults: RecordingPrefs = {
 	hideDesktopIcons: false,
 	autoZoomEnabled: true,
 	recordingsFolder: null,
+	countdownSeconds: 3,
 };
 let dir: string;
 beforeEach(() => {

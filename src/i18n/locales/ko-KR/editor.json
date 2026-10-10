@@ -147,7 +147,10 @@
 		"recordingsFolder": "녹화 폴더",
 		"openRecordingsFolder": "열기",
 		"changeRecordingsFolder": "변경…",
-		"defaultRecordingsFolder": "기본값 사용"
+		"defaultRecordingsFolder": "기본값 사용",
+		"countdown": "카운트다운",
+		"countdownNone": "없음",
+		"countdownSeconds": "{{seconds}}초"
 	},
 	"mediaStage": {
 		"openProjectFirst": "먼저 프로젝트를 여세요",

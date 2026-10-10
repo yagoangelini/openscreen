@@ -74,6 +74,20 @@ describe("app settings store", () => {
 		expect(new AppSettingsStore(dir).getSnapshot().recording.recordingsFolder).toBeNull();
 	});
 
+	it("keeps the countdown at 0, 3 or 5 seconds", () => {
+		const dir = temp();
+		const store = new AppSettingsStore(dir);
+		expect(store.getSnapshot().recording.countdownSeconds).toBe(3);
+		store.setRecordingPreferences({ countdownSeconds: 0 });
+		expect(new AppSettingsStore(dir).getSnapshot().recording.countdownSeconds).toBe(0);
+		expect(() => store.setRecordingPreferences({ countdownSeconds: 7 })).toThrow(TypeError);
+		writeFileSync(
+			path.join(dir, "recording-settings.json"),
+			JSON.stringify({ countdownSeconds: 9 }),
+		);
+		expect(new AppSettingsStore(dir).getSnapshot().recording.countdownSeconds).toBe(3);
+	});
+
 	it("reads a hand-edited relative recordings folder as the default", () => {
 		const dir = temp();
 		writeFileSync(

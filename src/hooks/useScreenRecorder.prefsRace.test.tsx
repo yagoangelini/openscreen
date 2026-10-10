@@ -30,6 +30,7 @@ function prefs(micEnabled: boolean): RecordingPrefs {
 		hideDesktopIcons: false,
 		autoZoomEnabled: true,
 		recordingsFolder: null,
+		countdownSeconds: 3,
 	};
 }
 

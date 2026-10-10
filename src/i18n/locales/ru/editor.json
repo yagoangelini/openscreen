@@ -147,7 +147,10 @@
 		"recordingsFolder": "Папка записей",
 		"openRecordingsFolder": "Открыть",
 		"changeRecordingsFolder": "Изменить…",
-		"defaultRecordingsFolder": "По умолчанию"
+		"defaultRecordingsFolder": "По умолчанию",
+		"countdown": "Обратный отсчёт",
+		"countdownNone": "Нет",
+		"countdownSeconds": "{{seconds}} с"
 	},
 	"mediaStage": {
 		"openProjectFirst": "Сначала откройте проект",

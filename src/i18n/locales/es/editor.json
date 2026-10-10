@@ -147,7 +147,10 @@
 		"recordingsFolder": "Carpeta de grabaciones",
 		"openRecordingsFolder": "Abrir",
 		"changeRecordingsFolder": "Cambiar…",
-		"defaultRecordingsFolder": "Usar predeterminada"
+		"defaultRecordingsFolder": "Usar predeterminada",
+		"countdown": "Cuenta atrás",
+		"countdownNone": "Ninguna",
+		"countdownSeconds": "{{seconds}} s"
 	},
 	"mediaStage": {
 		"openProjectFirst": "Abre un proyecto primero",

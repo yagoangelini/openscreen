@@ -147,7 +147,10 @@
 		"recordingsFolder": "Thư mục bản ghi",
 		"openRecordingsFolder": "Mở",
 		"changeRecordingsFolder": "Thay đổi…",
-		"defaultRecordingsFolder": "Dùng mặc định"
+		"defaultRecordingsFolder": "Dùng mặc định",
+		"countdown": "Đếm ngược",
+		"countdownNone": "Không",
+		"countdownSeconds": "{{seconds}} giây"
 	},
 	"mediaStage": {
 		"openProjectFirst": "Hãy mở một dự án trước",

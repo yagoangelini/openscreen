@@ -684,6 +684,8 @@ export interface RecordingPrefs {
 	autoZoomEnabled: boolean;
 	/** Where new takes go; null is the default Videos\OpenScreen. */
 	recordingsFolder: string | null;
+	/** Countdown before a take starts: 0, 3 or 5 seconds. */
+	countdownSeconds: number;
 }
 const defaultRecordingPrefs: RecordingPrefs = {
 	micEnabled: false,
@@ -697,6 +699,7 @@ const defaultRecordingPrefs: RecordingPrefs = {
 	hideDesktopIcons: false,
 	autoZoomEnabled: true,
 	recordingsFolder: null,
+	countdownSeconds: 3,
 };
 
 // Cached source from the user's pick. Used by setDisplayMediaRequestHandler in main.ts for cursor-free capture.

@@ -147,7 +147,10 @@
 		"recordingsFolder": "مجلد التسجيلات",
 		"openRecordingsFolder": "فتح",
 		"changeRecordingsFolder": "تغيير…",
-		"defaultRecordingsFolder": "استخدام الافتراضي"
+		"defaultRecordingsFolder": "استخدام الافتراضي",
+		"countdown": "العد التنازلي",
+		"countdownNone": "بدون",
+		"countdownSeconds": "{{seconds}} ث"
 	},
 	"mediaStage": {
 		"openProjectFirst": "افتح مشروعًا أولاً",

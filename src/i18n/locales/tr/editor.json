@@ -147,7 +147,10 @@
 		"recordingsFolder": "Kayıt klasörü",
 		"openRecordingsFolder": "Aç",
 		"changeRecordingsFolder": "Değiştir…",
-		"defaultRecordingsFolder": "Varsayılanı kullan"
+		"defaultRecordingsFolder": "Varsayılanı kullan",
+		"countdown": "Geri sayım",
+		"countdownNone": "Yok",
+		"countdownSeconds": "{{seconds}} sn"
 	},
 	"mediaStage": {
 		"openProjectFirst": "Önce bir proje açın",

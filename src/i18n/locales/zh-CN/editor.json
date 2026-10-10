@@ -147,7 +147,10 @@
 		"recordingsFolder": "录制文件夹",
 		"openRecordingsFolder": "打开",
 		"changeRecordingsFolder": "更改…",
-		"defaultRecordingsFolder": "使用默认"
+		"defaultRecordingsFolder": "使用默认",
+		"countdown": "倒计时",
+		"countdownNone": "无",
+		"countdownSeconds": "{{seconds}} 秒"
 	},
 	"mediaStage": {
 		"openProjectFirst": "请先打开一个项目",

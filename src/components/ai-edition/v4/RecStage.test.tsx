@@ -229,6 +229,7 @@ describe("RecStage controls", () => {
 			hideDesktopIcons: false,
 			autoZoomEnabled: true,
 			recordingsFolder: null,
+			countdownSeconds: 3,
 		};
 		stubRecordingPrefs();
 		let answerReread: ((prefs: RecordingPrefs) => void) | undefined;
@@ -430,6 +431,7 @@ describe("RecStage controls", () => {
 			hideDesktopIcons: false,
 			autoZoomEnabled: true,
 			recordingsFolder: null,
+			countdownSeconds: 3,
 		};
 		act(() => {
 			recordingPrefsListeners.forEach((listener) => listener(resetPrefs));

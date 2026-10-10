@@ -147,7 +147,10 @@
 		"recordingsFolder": "錄製資料夾",
 		"openRecordingsFolder": "開啟",
 		"changeRecordingsFolder": "變更…",
-		"defaultRecordingsFolder": "使用預設"
+		"defaultRecordingsFolder": "使用預設",
+		"countdown": "倒數計時",
+		"countdownNone": "無",
+		"countdownSeconds": "{{seconds}} 秒"
 	},
 	"mediaStage": {
 		"openProjectFirst": "請先開啟專案",

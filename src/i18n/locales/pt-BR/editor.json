@@ -147,7 +147,10 @@
 		"recordingsFolder": "Pasta das gravações",
 		"openRecordingsFolder": "Abrir",
 		"changeRecordingsFolder": "Alterar…",
-		"defaultRecordingsFolder": "Usar padrão"
+		"defaultRecordingsFolder": "Usar padrão",
+		"countdown": "Contagem regressiva",
+		"countdownNone": "Nenhuma",
+		"countdownSeconds": "{{seconds}} s"
 	},
 	"mediaStage": {
 		"openProjectFirst": "Abra um projeto primeiro",

@@ -277,6 +277,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			camDeviceName?: string | null;
 			systemAudioEnabled: boolean;
 			cursorCaptureMode: CursorCaptureMode;
+			countdownSeconds?: number;
 		}) => {
 			if (cancelled) return;
 			// Not applied where a take cannot record the microphone (#700): it would ask
@@ -294,6 +295,8 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			}
 			setSystemAudioEnabled(prefs.systemAudioEnabled);
 			setCursorCaptureMode(prefs.cursorCaptureMode);
+			countdownSecondsRef.current =
+				typeof prefs.countdownSeconds === "number" ? prefs.countdownSeconds : 3;
 			setRecordingPrefsLoaded(true);
 		};
 		const stop = window.electronAPI?.onRecordingPrefsChanged?.((prefs) => {
@@ -354,6 +357,8 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 		);
 
 	const pauseToggleInFlight = useRef(false);
+	/** The countdown length the user chose (0, 3 or 5 s), read when a countdown starts. */
+	const countdownSecondsRef = useRef(3);
 
 	const getRecordingDurationMs = useCallback(() => {
 		const segmentDuration =
@@ -1741,8 +1746,14 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 
 		let overlayHiddenBeforeStart = false;
 		try {
-			const values = [3, 2, 1];
-			const overlayShown = await safeShowCountdownOverlay(values[0], runId);
+			const countdownSeconds = countdownSecondsRef.current;
+			const values = Array.from(
+				{ length: countdownSeconds },
+				(_, index) => countdownSeconds - index,
+			);
+			// No countdown at all: no overlay to show, and nothing to wait out.
+			const overlayShown =
+				values.length > 0 ? await safeShowCountdownOverlay(values[0], runId) : false;
 
 			if (countdownRunId.current !== runId) {
 				return;
