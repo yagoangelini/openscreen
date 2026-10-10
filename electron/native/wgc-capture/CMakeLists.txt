@@ -82,6 +82,8 @@ target_link_libraries(wgc-capture PRIVATE
 add_executable(cursor-sampler
   src/cursor-sampler.cpp
   src/dpi_awareness.h
+  src/input_signals.cpp
+  src/input_signals.h
 )
 
 target_compile_definitions(cursor-sampler PRIVATE
@@ -94,7 +96,27 @@ target_compile_options(cursor-sampler PRIVATE /EHsc /W4 /utf-8)
 target_link_libraries(cursor-sampler PRIVATE
   gdi32
   gdiplus
+  dwmapi
+  ole32
+  oleaut32
 )
+
+# The pure half of the sampler's input signals (chord names, AltGr, double clicks, hook
+# timestamps). Run by scripts/build-windows-wgc-helper.mjs after the build.
+add_executable(input_signals_test
+  src/input_signals.cpp
+  src/input_signals.h
+  src/input_signals_test.cpp
+)
+
+target_compile_definitions(input_signals_test PRIVATE
+  NOMINMAX
+  _WIN32_WINNT=0x0A00
+)
+
+target_compile_options(input_signals_test PRIVATE /EHsc /W4 /utf-8)
+
+target_link_libraries(input_signals_test PRIVATE user32)
 
 add_executable(audio_sample_utils_test
   src/audio_sample_utils.cpp

@@ -6,6 +6,7 @@ import {
 } from "@/lib/ai-edition/timeline/zoom-scale";
 import type { WebcamLayoutPreset } from "@/lib/compositeLayout";
 import type { CursorKind } from "@/lib/cursor/cursorThemes";
+import type { CursorInputSignal } from "@/lib/cursor/inputSignals";
 import { DEFAULT_PROJECT_APPEARANCE, SETTING_BOUNDS } from "@/lib/projectDefaults";
 import { clamp01 } from "@/utils/math";
 
@@ -269,6 +270,8 @@ export interface CursorTelemetryPoint {
 	cy: number;
 	visible?: boolean;
 	interactionType?: "move" | "click" | "double-click" | "right-click" | "middle-click" | "mouseup";
+	/** What the user did at this sample besides moving (Windows sampler). See `inputSignals.ts`. */
+	input?: CursorInputSignal;
 	cursorType?:
 		| "arrow"
 		| "text"

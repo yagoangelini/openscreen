@@ -17,6 +17,7 @@
 
 import { constants as fsConstants } from "node:fs";
 import fs from "node:fs/promises";
+import { normalizeInputSignal } from "../../src/lib/cursor/inputSignals";
 import type {
 	CursorProviderKind,
 	CursorRecordingData,
@@ -55,6 +56,7 @@ export function normalizeCursorSample(sample: unknown): CursorRecordingSample | 
 	}
 
 	const point = sample as Partial<CursorRecordingSample>;
+	const input = normalizeInputSignal(point.input);
 	const interactionType =
 		point.interactionType === "click" ||
 		point.interactionType === "double-click" ||
@@ -75,6 +77,7 @@ export function normalizeCursorSample(sample: unknown): CursorRecordingSample | 
 		visible: typeof point.visible === "boolean" ? point.visible : true,
 		cursorType: typeof point.cursorType === "string" ? point.cursorType : null,
 		interactionType,
+		...(input ? { input } : {}),
 	};
 }
 
@@ -244,6 +247,10 @@ export async function readCursorTelemetryFile(
 				cy: sample.cy,
 				visible: sample.visible,
 				interactionType: sample.interactionType,
+				// The planner reads what the user did (typing, popups, the clicked element) and
+				// the cursor state (a text caret). Both absent from older sidecars.
+				...(sample.cursorType ? { cursorType: sample.cursorType } : {}),
+				...(sample.input ? { input: sample.input } : {}),
 			})),
 		};
 	} catch (error) {

@@ -1,39 +1,28 @@
 #include <windows.h>
+#include <dwmapi.h>
 #include <gdiplus.h>
 #include <objbase.h>
+#include <tlhelp32.h>
+#include <uiautomation.h>
 
 #include "dpi_awareness.h"
+#include "input_signals.h"
 
 #include <atomic>
 #include <algorithm>
 #include <chrono>
 #include <cinttypes>
+#include <condition_variable>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <deque>
 #include <iostream>
 #include <mutex>
+#include <set>
 #include <string>
 #include <thread>
 #include <vector>
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Global mouse-hook state
-// ─────────────────────────────────────────────────────────────────────────────
-static HHOOK              g_mouseHook    = nullptr;
-static DWORD              g_mainThreadId = 0;
-static std::atomic<int>   g_leftDownCount{0};
-static std::atomic<int>   g_leftUpCount{0};
-static std::atomic<bool>  g_stop{false};
-static std::mutex         g_stdoutMtx;
-
-static LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
-    if (nCode >= 0) {
-        if      (wParam == WM_LBUTTONDOWN) g_leftDownCount.fetch_add(1, std::memory_order_relaxed);
-        else if (wParam == WM_LBUTTONUP)   g_leftUpCount.fetch_add(1,   std::memory_order_relaxed);
-    }
-    return CallNextHookEx(g_mouseHook, nCode, wParam, lParam);
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Utilities
@@ -45,10 +34,310 @@ static int64_t nowMs() {
         .count());
 }
 
+static std::mutex g_stdoutMtx;
+
 static void writeJsonLine(const std::string& json) {
     std::lock_guard<std::mutex> lock(g_stdoutMtx);
     std::cout << json << '\n';
     std::cout.flush();
+}
+
+static std::string rectJson(const RECT& r) {
+    char buf[128];
+    std::snprintf(buf, sizeof(buf), "{\"x\":%ld,\"y\":%ld,\"width\":%ld,\"height\":%ld}",
+                  r.left, r.top, r.right - r.left, r.bottom - r.top);
+    return buf;
+}
+
+static std::string handleJson(const void* h) {
+    char buf[32];
+    std::snprintf(buf, sizeof(buf), "\"0x%" PRIX64 "\"",
+                  static_cast<uint64_t>(reinterpret_cast<uintptr_t>(h)));
+    return buf;
+}
+
+/// A window's visible bounds: DWM's extended frame, which leaves out the invisible resize
+/// borders Windows 10+ adds around a window and which window capture does not draw.
+/// GetWindowRect counts them, which put every cursor sample of a window capture ~7 px off.
+static bool visibleWindowRect(HWND hwnd, RECT& out) {
+    if (SUCCEEDED(DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, &out, sizeof(out))) &&
+        out.right > out.left && out.bottom > out.top) {
+        return true;
+    }
+    return GetWindowRect(hwnd, &out) != FALSE;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Input events: queued by the hooks (which must return at once, or Windows silently
+// removes them), written by a worker thread that also asks UI Automation what was clicked.
+// ─────────────────────────────────────────────────────────────────────────────
+struct PendingInput {
+    enum Kind { Press, Release, Wheel, Key } kind;
+    int64_t timeMs;
+    POINT pt;
+    int button;          // 0 left, 1 right, 2 middle
+    bool isDouble;
+    int wheelDelta;
+    bool horizontal;
+    std::string combo;   // only ever a Ctrl/Alt/Win chord (input_signals::comboName)
+};
+
+static std::mutex                 g_inputMtx;
+static std::condition_variable    g_inputCv;
+static std::deque<PendingInput>   g_inputQueue;
+static std::atomic<bool>          g_inputStop{false};
+
+static void queueInput(PendingInput&& input) {
+    {
+        std::lock_guard<std::mutex> lock(g_inputMtx);
+        // A stalled writer must not grow memory without bound; a burst this size is pathological.
+        if (g_inputQueue.size() > 4096) g_inputQueue.pop_front();
+        g_inputQueue.push_back(std::move(input));
+    }
+    g_inputCv.notify_one();
+}
+
+static const char* buttonName(int button) {
+    return button == 1 ? "right" : button == 2 ? "middle" : "left";
+}
+
+/// UI Automation at a click: the element's bounds and control type, NEVER its name or value.
+/// `uia` may be null (UIA unavailable): the click is still written, without a target.
+static std::string clickTargetJson(IUIAutomation* uia, POINT pt) {
+    if (!uia) return "";
+    IUIAutomationElement* element = nullptr;
+    if (FAILED(uia->ElementFromPoint(pt, &element)) || !element) return "";
+    std::string out;
+    RECT r{};
+    CONTROLTYPEID controlType = 0;
+    if (SUCCEEDED(element->get_CurrentBoundingRectangle(&r)) && r.right > r.left &&
+        r.bottom > r.top) {
+        out += ",\"target\":" + rectJson(r);
+        if (SUCCEEDED(element->get_CurrentControlType(&controlType)) && controlType) {
+            out += ",\"controlType\":" + std::to_string(controlType);
+        }
+    }
+    element->Release();
+    return out;
+}
+
+static void runInputWorker() {
+    const HRESULT coInit = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    IUIAutomation* uia = nullptr;
+    IUIAutomation2* uia2 = nullptr;
+    // CUIAutomation8 (Windows 8+) takes timeouts: an app that does not answer must not hold
+    // up every later click behind it.
+    if (SUCCEEDED(CoCreateInstance(__uuidof(CUIAutomation8), nullptr, CLSCTX_INPROC_SERVER,
+                                   IID_PPV_ARGS(&uia2)))) {
+        uia2->put_ConnectionTimeout(400);
+        uia2->put_TransactionTimeout(400);
+        uia = uia2;
+    } else if (FAILED(CoCreateInstance(__uuidof(CUIAutomation), nullptr, CLSCTX_INPROC_SERVER,
+                                       IID_PPV_ARGS(&uia)))) {
+        uia = nullptr;
+    }
+
+    for (;;) {
+        PendingInput input;
+        {
+            std::unique_lock<std::mutex> lock(g_inputMtx);
+            g_inputCv.wait(lock, [] { return g_inputStop.load() || !g_inputQueue.empty(); });
+            if (g_inputQueue.empty()) break;
+            input = std::move(g_inputQueue.front());
+            g_inputQueue.pop_front();
+        }
+        std::string out;
+        out.reserve(256);
+        out += "{\"type\":\"input\",\"timestampMs\":" + std::to_string(input.timeMs);
+        out += ",\"x\":" + std::to_string(input.pt.x) + ",\"y\":" + std::to_string(input.pt.y);
+        switch (input.kind) {
+            case PendingInput::Press:
+                out += ",\"kind\":\"press\",\"button\":\"";
+                out += buttonName(input.button);
+                out += "\",\"double\":";
+                out += input.isDouble ? "true" : "false";
+                out += clickTargetJson(uia, input.pt);
+                break;
+            case PendingInput::Release:
+                out += ",\"kind\":\"release\",\"button\":\"";
+                out += buttonName(input.button);
+                out += "\"";
+                break;
+            case PendingInput::Wheel:
+                out += ",\"kind\":\"wheel\",\"delta\":" + std::to_string(input.wheelDelta);
+                out += ",\"horizontal\":";
+                out += input.horizontal ? "true" : "false";
+                break;
+            case PendingInput::Key:
+                out += ",\"kind\":\"key\"";
+                if (!input.combo.empty()) out += ",\"combo\":\"" + input.combo + "\"";
+                break;
+        }
+        out += "}";
+        writeJsonLine(out);
+    }
+
+    if (uia) uia->Release();
+    if (SUCCEEDED(coInit)) CoUninitialize();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Global hooks (installed on the main thread, which pumps their messages)
+// ─────────────────────────────────────────────────────────────────────────────
+static HHOOK              g_mouseHook    = nullptr;
+static HHOOK              g_keyboardHook = nullptr;
+static DWORD              g_mainThreadId = 0;
+static std::atomic<int>   g_leftDownCount{0};
+static std::atomic<int>   g_leftUpCount{0};
+static std::atomic<bool>  g_stop{false};
+
+static input_signals::DoubleClickTracker* g_doubleClicks = nullptr;
+static input_signals::Modifiers           g_modifiers;
+static std::set<DWORD>                    g_keysDown;
+
+static void queuePress(PendingInput::Kind kind, int button, const MSLLHOOKSTRUCT* info) {
+    PendingInput input{};
+    input.kind = kind;
+    input.timeMs = input_signals::eventTimeMs(nowMs(), GetTickCount(), info->time);
+    input.pt = info->pt;
+    input.button = button;
+    input.isDouble = kind == PendingInput::Press && g_doubleClicks &&
+                     g_doubleClicks->press(button, input.timeMs, info->pt.x, info->pt.y);
+    queueInput(std::move(input));
+}
+
+static LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
+    if (nCode >= 0) {
+        const auto* info = reinterpret_cast<const MSLLHOOKSTRUCT*>(lParam);
+        switch (wParam) {
+            case WM_LBUTTONDOWN:
+                g_leftDownCount.fetch_add(1, std::memory_order_relaxed);
+                queuePress(PendingInput::Press, 0, info);
+                break;
+            case WM_LBUTTONUP:
+                g_leftUpCount.fetch_add(1, std::memory_order_relaxed);
+                queuePress(PendingInput::Release, 0, info);
+                break;
+            case WM_RBUTTONDOWN: queuePress(PendingInput::Press, 1, info); break;
+            case WM_RBUTTONUP: queuePress(PendingInput::Release, 1, info); break;
+            case WM_MBUTTONDOWN: queuePress(PendingInput::Press, 2, info); break;
+            case WM_MBUTTONUP: queuePress(PendingInput::Release, 2, info); break;
+            case WM_MOUSEWHEEL:
+            case WM_MOUSEHWHEEL: {
+                PendingInput input{};
+                input.kind = PendingInput::Wheel;
+                input.timeMs = input_signals::eventTimeMs(nowMs(), GetTickCount(), info->time);
+                input.pt = info->pt;
+                input.wheelDelta = static_cast<short>(HIWORD(info->mouseData));
+                input.horizontal = wParam == WM_MOUSEHWHEEL;
+                queueInput(std::move(input));
+                break;
+            }
+            default:
+                break;
+        }
+    }
+    return CallNextHookEx(g_mouseHook, nCode, wParam, lParam);
+}
+
+static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
+    if (nCode >= 0) {
+        const auto* info = reinterpret_cast<const KBDLLHOOKSTRUCT*>(lParam);
+        const DWORD vk = info->vkCode;
+        const bool down = wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN;
+        if (input_signals::isModifierKey(vk)) {
+            input_signals::applyModifier(g_modifiers, vk, down);
+        } else if (!down) {
+            g_keysDown.erase(vk);
+        } else if (g_keysDown.insert(vk).second) {
+            // A new key-down (not auto-repeat). Its time always; its name only inside a chord.
+            PendingInput input{};
+            input.kind = PendingInput::Key;
+            input.timeMs = input_signals::eventTimeMs(nowMs(), GetTickCount(), info->time);
+            GetCursorPos(&input.pt);
+            input.combo = input_signals::comboName(
+                g_modifiers, vk, MapVirtualKeyW(vk, MAPVK_VK_TO_CHAR));
+            queueInput(std::move(input));
+        }
+    }
+    return CallNextHookEx(g_keyboardHook, nCode, wParam, lParam);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Popups and menus (WinEvents, delivered on the main thread's message loop)
+// ─────────────────────────────────────────────────────────────────────────────
+static DWORD           g_parentPid = 0;
+static std::set<HWND>  g_openPopups;
+
+static DWORD parentProcessId() {
+    const DWORD self = GetCurrentProcessId();
+    DWORD parent = 0;
+    HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (snapshot == INVALID_HANDLE_VALUE) return 0;
+    PROCESSENTRY32W entry{};
+    entry.dwSize = sizeof(entry);
+    if (Process32FirstW(snapshot, &entry)) {
+        do {
+            if (entry.th32ProcessID == self) {
+                parent = entry.th32ParentProcessID;
+                break;
+            }
+        } while (Process32NextW(snapshot, &entry));
+    }
+    CloseHandle(snapshot);
+    return parent;
+}
+
+static void writePopup(const char* event, HWND hwnd, bool menu, const RECT* rect) {
+    std::string out = "{\"type\":\"popup\",\"timestampMs\":" + std::to_string(nowMs());
+    out += ",\"event\":\"";
+    out += event;
+    out += "\",\"id\":" + handleJson(hwnd);
+    out += ",\"menu\":";
+    out += menu ? "true" : "false";
+    if (rect) out += ",\"rect\":" + rectJson(*rect);
+    out += "}";
+    writeJsonLine(out);
+}
+
+/// A window worth framing: a visible top-level popup (menus, dropdowns, flyouts, dialogs'
+/// pickers) that is not a tooltip, not OpenScreen's own (its HUD is a popup too), and neither
+/// a speck nor the whole screen.
+static bool isFramablePopup(HWND hwnd, RECT& rect) {
+    if (!IsWindowVisible(hwnd) || GetAncestor(hwnd, GA_ROOT) != hwnd) return false;
+    const LONG_PTR style = GetWindowLongPtrW(hwnd, GWL_STYLE);
+    if (!(style & WS_POPUP)) return false;
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hwnd, &pid);
+    if (pid == GetCurrentProcessId() || (g_parentPid && pid == g_parentPid)) return false;
+    wchar_t cls[64] = {};
+    GetClassNameW(hwnd, cls, 64);
+    if (wcscmp(cls, L"tooltips_class32") == 0 || wcscmp(cls, L"Shell_TrayWnd") == 0) return false;
+    if (!visibleWindowRect(hwnd, rect)) return false;
+    const LONG w = rect.right - rect.left;
+    const LONG h = rect.bottom - rect.top;
+    if (w < 24 || h < 16) return false;
+    const LONG screenW = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+    const LONG screenH = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+    return !(w >= screenW * 95 / 100 && h >= screenH * 95 / 100);
+}
+
+static void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObject,
+                                  LONG idChild, DWORD, DWORD) {
+    const bool menu = event == EVENT_SYSTEM_MENUPOPUPSTART || event == EVENT_SYSTEM_MENUPOPUPEND;
+    if (!hwnd) return;
+    // A menu event names its window with OBJID_CLIENT; a show/hide is about a window only when
+    // it names the window itself (it fires for every control inside one too).
+    if (!menu && (idObject != OBJID_WINDOW || idChild != CHILDID_SELF)) return;
+    if (event == EVENT_OBJECT_SHOW || event == EVENT_SYSTEM_MENUPOPUPSTART) {
+        RECT rect{};
+        if (g_openPopups.count(hwnd) || !isFramablePopup(hwnd, rect)) return;
+        g_openPopups.insert(hwnd);
+        writePopup("open", hwnd, menu, &rect);
+    } else if (event == EVENT_OBJECT_HIDE || event == EVENT_SYSTEM_MENUPOPUPEND ||
+               event == EVENT_OBJECT_DESTROY) {
+        if (g_openPopups.erase(hwnd)) writePopup("close", hwnd, menu, nullptr);
+    }
 }
 
 static std::string jsonEscape(const std::string& s) {
@@ -366,7 +655,7 @@ static void runSamplingLoop(int intervalMs, HWND targetWindow, const CLSID& pngC
         std::string boundsJson = "null";
         if (targetWindow && IsWindow(targetWindow)) {
             RECT r{};
-            if (GetWindowRect(targetWindow, &r)) {
+            if (visibleWindowRect(targetWindow, r)) {
                 const int bw = r.right  - r.left;
                 const int bh = r.bottom - r.top;
                 if (bw > 0 && bh > 0) {
@@ -464,23 +753,51 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+    // Double clicks are told apart the way the system does it, by its own settings.
+    input_signals::DoubleClickTracker doubleClicks(
+        GetDoubleClickTime(), GetSystemMetrics(SM_CXDOUBLECLK) / 2,
+        GetSystemMetrics(SM_CYDOUBLECLK) / 2);
+    g_doubleClicks = &doubleClicks;
+    g_parentPid = parentProcessId();
+
+    // The worker writes the input events; it must be running before the hooks queue any.
+    std::thread inputWorker(runInputWorker);
+
     // Install global low-level mouse hook on this thread
     g_mouseHook = SetWindowsHookEx(WH_MOUSE_LL, LowLevelMouseProc, GetModuleHandle(nullptr), 0);
     if (!g_mouseHook) {
         std::cerr << "SetWindowsHookEx failed" << std::endl;
+        g_inputStop.store(true);
+        g_inputCv.notify_all();
+        inputWorker.join();
         Gdiplus::GdiplusShutdown(gdipToken);
         return 1;
     }
+    // Keyboard: key-down TIMES (and shortcut chords) for the auto-zoom's typing hold. Optional:
+    // without it the recording only loses that signal.
+    g_keyboardHook =
+        SetWindowsHookEx(WH_KEYBOARD_LL, LowLevelKeyboardProc, GetModuleHandle(nullptr), 0);
+    // Popups and menus, for the auto-zoom's framing. Optional as well.
+    const HWINEVENTHOOK menuHook =
+        SetWinEventHook(EVENT_SYSTEM_MENUPOPUPSTART, EVENT_SYSTEM_MENUPOPUPEND, nullptr,
+                        WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
+    const HWINEVENTHOOK showHook =
+        SetWinEventHook(EVENT_OBJECT_DESTROY, EVENT_OBJECT_HIDE, nullptr, WinEventProc, 0, 0,
+                        WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
 
     // Prime GetAsyncKeyState so the first poll doesn't return stale "since-last-call" bits
     GetAsyncKeyState(VK_LBUTTON);
 
-    // Signal readiness
+    // Signal readiness. `inputEvents`: presses, releases, wheel and keys arrive as their own
+    // `input` events, stamped by the hook, so the reader stops deriving clicks from the ticks.
     g_mainThreadId = GetCurrentThreadId();
     {
-        char buf[80];
+        char buf[160];
         std::snprintf(buf, sizeof(buf),
-            "{\"type\":\"ready\",\"timestampMs\":%" PRId64 "}", nowMs());
+            "{\"type\":\"ready\",\"timestampMs\":%" PRId64
+            ",\"inputEvents\":true,\"keyboard\":%s,\"popups\":%s}",
+            nowMs(), g_keyboardHook ? "true" : "false",
+            (menuHook && showHook) ? "true" : "false");
         writeJsonLine(buf);
     }
 
@@ -496,7 +813,14 @@ int main(int argc, char* argv[]) {
 
     g_stop.store(true, std::memory_order_relaxed);
     if (sampler.joinable()) sampler.join();
+    if (showHook) UnhookWinEvent(showHook);
+    if (menuHook) UnhookWinEvent(menuHook);
+    if (g_keyboardHook) UnhookWindowsHookEx(g_keyboardHook);
     UnhookWindowsHookEx(g_mouseHook);
+    g_doubleClicks = nullptr;
+    g_inputStop.store(true);
+    g_inputCv.notify_all();
+    if (inputWorker.joinable()) inputWorker.join();
     Gdiplus::GdiplusShutdown(gdipToken);
     return 0;
 }

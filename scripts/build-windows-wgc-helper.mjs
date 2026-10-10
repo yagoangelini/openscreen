@@ -105,3 +105,10 @@ if (!fs.existsSync(audioUtilsTestPath)) {
 // Pack) instead of failing this packaging command.
 await run(audioUtilsTestPath, [], { cwd: BUILD_DIR });
 console.log(`Passed ${audioUtilsTestPath}`);
+
+const inputSignalsTestPath = path.join(BUILD_DIR, "input_signals_test.exe");
+if (!fs.existsSync(inputSignalsTestPath)) {
+	throw new Error(`WGC helper build completed but ${inputSignalsTestPath} was not found.`);
+}
+await run(inputSignalsTestPath, [], { cwd: BUILD_DIR });
+console.log(`Passed ${inputSignalsTestPath}`);

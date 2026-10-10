@@ -24,6 +24,46 @@ export interface WindowsCursorSampleEvent {
 export interface WindowsCursorReadyEvent {
 	type: "ready";
 	timestampMs: number;
+	/** The helper writes presses, releases, wheel and keys as their own `input` events, stamped
+	 *  by the hook: the ticks' button flags stop being the source of clicks. Absent from older
+	 *  helpers. */
+	inputEvents?: boolean;
+}
+
+interface WindowsHelperRect {
+	x: number;
+	y: number;
+	width: number;
+	height: number;
+}
+
+/** One input event, at the hook's own time and point (physical screen pixels). */
+export type WindowsCursorInputEvent = {
+	type: "input";
+	timestampMs: number;
+	x: number;
+	y: number;
+} & (
+	| {
+			kind: "press";
+			button: "left" | "right" | "middle";
+			double?: boolean;
+			target?: WindowsHelperRect;
+			controlType?: number;
+	  }
+	| { kind: "release"; button: "left" | "right" | "middle" }
+	| { kind: "wheel"; delta: number; horizontal?: boolean }
+	| { kind: "key"; combo?: string }
+);
+
+/** A popup or menu window opening or closing (WinEvents), in physical screen pixels. */
+export interface WindowsCursorPopupEvent {
+	type: "popup";
+	timestampMs: number;
+	event: "open" | "close";
+	id: string;
+	menu?: boolean;
+	rect?: WindowsHelperRect;
 }
 
 export interface WindowsCursorErrorEvent {
@@ -45,6 +85,8 @@ export interface WindowsCursorAssetPayload {
 export type WindowsCursorEvent =
 	| WindowsCursorSampleEvent
 	| WindowsCursorReadyEvent
+	| WindowsCursorInputEvent
+	| WindowsCursorPopupEvent
 	| WindowsCursorErrorEvent;
 
 export interface WindowsNativeRecordingSessionOptions {
