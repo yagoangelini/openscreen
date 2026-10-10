@@ -563,6 +563,7 @@ unsafe fn run_c0_inner(screen: &str, out: &str, gpu: &Gpu) -> Result<Stats> {
                     60,
                     8_000_000,
                     (*frame).hw_frames_ctx,
+                    gpu.adapter_info().map(|info| info.vendor_id),
                 )?;
                 ectx = opened.ctx;
                 enc = Some(opened);
@@ -1190,6 +1191,7 @@ unsafe fn run_c1_inner(
         60,
         8_000_000,
         enc_frames,
+        gpu.adapter_info().map(|info| info.vendor_id),
     )?;
     let ectx = enc.ctx;
 
@@ -1289,6 +1291,7 @@ pub fn run_composited_multi(
 /// VP9 a été essayé via un chemin logiciel (libvpx-vp9) mais retiré : trop lent pour être
 /// utile en pratique, pas la peine de maintenir ce chemin. Choisir VP9 échoue avec un message
 /// clair plutôt que de silencieusement retomber sur H264.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ExportCodec {
     H264,
     H265,
@@ -1322,27 +1325,46 @@ impl ExportCodec {
     /// - `libopenh264` / `libkvazaar` — dernier recours 100 % logiciel. **Pas** libx264/libx265 :
     ///   le ffmpeg vendorisé est le build LGPL, `--disable-libx264 --disable-libx265`. Ces deux
     ///   là y sont, et sont les seuls encodeurs logiciels H264/H265 dont on dispose.
-    fn candidates(&self) -> &'static [EncoderCandidate] {
+    ///
+    /// `vendor` is the PCI vendor of the adapter the compositor renders on
+    /// (`d3d::adapter_info`). On NVIDIA, NVENC goes first: AMF cannot open there anyway, but
+    /// trying it costs a driver round trip and, worse, a log line that reads like a failure.
+    fn candidates(&self, vendor: Option<u32>) -> Vec<EncoderCandidate> {
         const D3D11: AVPixelFormat::Type = AVPixelFormat::AV_PIX_FMT_D3D11;
         const NV12: AVPixelFormat::Type = AVPixelFormat::AV_PIX_FMT_NV12;
         const YUV420P: AVPixelFormat::Type = AVPixelFormat::AV_PIX_FMT_YUV420P;
-        match self {
-            ExportCodec::H264 => &[
+        let mut list: Vec<EncoderCandidate> = match self {
+            ExportCodec::H264 => vec![
                 ("h264_amf", D3D11),
                 ("h264_nvenc", D3D11),
                 ("h264_qsv", NV12),
                 ("h264_mf", NV12),
                 ("libopenh264", YUV420P),
             ],
-            ExportCodec::H265 => &[
+            ExportCodec::H265 => vec![
                 ("hevc_amf", D3D11),
                 ("hevc_nvenc", D3D11),
                 ("hevc_qsv", NV12),
                 ("hevc_mf", NV12),
                 ("libkvazaar", YUV420P),
             ],
+        };
+        if vendor == Some(crate::d3d::VENDOR_NVIDIA) {
+            // Both are zero-copy, so swapping the first two keeps the D3D11-before-system
+            // memory order the tests pin.
+            list.swap(0, 1);
         }
+        list
     }
+}
+
+/// The encoder the last export of this process opened (`h264_nvenc`, `h264_amf`…), for
+/// diagnostics: a support report has to say who encoded, not only that it worked.
+static LAST_EXPORT_ENCODER: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+
+/// See `LAST_EXPORT_ENCODER`.
+pub fn last_export_encoder() -> Option<String> {
+    LAST_EXPORT_ENCODER.lock().ok().and_then(|last| last.clone())
 }
 
 /// L'encodeur vidéo retenu pour ce run, plus ce qu'il faut pour le nourrir.
@@ -1388,10 +1410,11 @@ impl VideoEncoder {
         fps: i32,
         bit_rate: i64,
         hw_frames: *mut AVBufferRef,
+        vendor: Option<u32>,
     ) -> Result<VideoEncoder> {
         let forced = std::env::var("OPENSCREEN_EXPORT_ENCODER").ok();
         let mut refused: Vec<String> = Vec::new();
-        for &candidate in codec.candidates() {
+        for candidate in codec.candidates(vendor) {
             let (name, pix_fmt) = candidate;
             if forced.as_deref().is_some_and(|forced| forced != name) {
                 continue;
@@ -1411,6 +1434,9 @@ impl VideoEncoder {
                 }
             };
             // Journalisé sans condition : un rapport de support doit dire qui a encodé.
+            if let Ok(mut last) = LAST_EXPORT_ENCODER.lock() {
+                *last = Some(name.to_string());
+            }
             eprintln!(
                 "[pipeline] encodeur vidéo : {name} ({}){}",
                 if encoder.sw.is_null() { "textures D3D11, zéro-copie" } else { "frames système" },
@@ -1674,6 +1700,7 @@ unsafe fn run_multi_inner(
         out_fps,
         bit_rate,
         enc_frames,
+        gpu.adapter_info().map(|info| info.vendor_id),
     )?;
     let ectx = enc.ctx;
 
@@ -1956,8 +1983,12 @@ mod tests {
     /// a pas besoin, sans que rien n'échoue — donc sans que personne ne le voie.
     #[test]
     fn les_candidats_vont_du_zero_copie_a_la_memoire_systeme() {
-        for codec in [ExportCodec::H264, ExportCodec::H265] {
-            let candidates = codec.candidates();
+        let vendors = [None, Some(crate::d3d::VENDOR_NVIDIA), Some(crate::d3d::VENDOR_AMD)];
+        for (codec, vendor) in [ExportCodec::H264, ExportCodec::H265]
+            .into_iter()
+            .flat_map(|codec| vendors.map(move |vendor| (codec.clone(), vendor)))
+        {
+            let candidates = codec.candidates(vendor);
             let last_d3d11 = candidates
                 .iter()
                 .rposition(|&(_, fmt)| fmt == AVPixelFormat::AV_PIX_FMT_D3D11)
@@ -1970,6 +2001,18 @@ mod tests {
         }
     }
 
+    /// On an NVIDIA adapter NVENC is tried before AMF; everywhere else the measured AMF-first
+    /// order is unchanged.
+    #[test]
+    fn nvenc_goes_first_on_an_nvidia_adapter() {
+        let first = |codec: ExportCodec, vendor| codec.candidates(vendor)[0].0;
+        assert_eq!(first(ExportCodec::H264, Some(crate::d3d::VENDOR_NVIDIA)), "h264_nvenc");
+        assert_eq!(first(ExportCodec::H265, Some(crate::d3d::VENDOR_NVIDIA)), "hevc_nvenc");
+        assert_eq!(first(ExportCodec::H264, Some(crate::d3d::VENDOR_AMD)), "h264_amf");
+        assert_eq!(first(ExportCodec::H264, Some(crate::d3d::VENDOR_INTEL)), "h264_amf");
+        assert_eq!(first(ExportCodec::H264, None), "h264_amf");
+    }
+
     /// Le dernier recours doit être 100 % logiciel, sinon une machine sans encodeur matériel
     /// (VM, RDP) n'exporte pas du tout — la régression que cette sélection corrige.
     /// libx264/libx265 sont GPL et absents du build LGPL vendorisé : les nommer ferait un
@@ -1978,11 +2021,11 @@ mod tests {
     fn le_dernier_recours_est_un_encodeur_logiciel_present_dans_le_build_lgpl() {
         let fallbacks: Vec<&str> = [ExportCodec::H264, ExportCodec::H265]
             .iter()
-            .map(|codec| codec.candidates().last().expect("liste non vide").0)
+            .map(|codec| codec.candidates(None).last().expect("liste non vide").0)
             .collect();
         assert_eq!(fallbacks, ["libopenh264", "libkvazaar"]);
         for codec in [ExportCodec::H264, ExportCodec::H265] {
-            for &(name, _) in codec.candidates() {
+            for (name, _) in codec.candidates(None) {
                 assert!(!matches!(name, "libx264" | "libx265"), "{name} absent du build LGPL");
             }
         }
