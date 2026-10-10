@@ -410,5 +410,10 @@
 	"cpuCompositor": {
 		"notice": "Uyumlu GPU yok — işleme CPU üzerinde yapılıyor, bu yüzden oynatma daha yavaş.",
 		"exportWarning": "Uyumlu GPU yok: bu dışa aktarma CPU üzerinde çalışır ve normalden çok daha uzun sürer."
+	},
+	"exportPipeline": {
+		"quality1440p": "1440p",
+		"finalizing": "Tüm kareler kodlandı. Ses yazılıyor ve dosya tamamlanıyor…",
+		"gpuReset": "Grafik sürücüsü sıfırlandığı veya GPU çıkarıldığı için dışa aktarma durdu. Projeniz güvende: yeniden dışa aktarın. Tekrarlanırsa grafik sürücüsünü güncelleyin."
 	}
 }

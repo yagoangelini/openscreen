@@ -410,5 +410,10 @@
 	"cpuCompositor": {
 		"notice": "Läuft ohne kompatible GPU — das Rendering erfolgt auf der CPU, die Wiedergabe ist daher langsamer.",
 		"exportWarning": "Keine kompatible GPU: Dieser Export läuft auf der CPU und dauert deutlich länger als üblich."
+	},
+	"exportPipeline": {
+		"quality1440p": "1440p",
+		"finalizing": "Alle Bilder sind kodiert. Audio wird geschrieben und die Datei abgeschlossen…",
+		"gpuReset": "Der Export wurde abgebrochen, weil der Grafiktreiber zurückgesetzt oder die GPU entfernt wurde. Dein Projekt ist sicher: Exportiere erneut. Passiert das öfter, aktualisiere den Grafiktreiber."
 	}
 }

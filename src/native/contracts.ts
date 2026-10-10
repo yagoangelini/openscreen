@@ -767,6 +767,8 @@ export type NativeBridgeRequest =
 			domain: "compositor";
 			action: "exportMulti";
 			payload: {
+				/** Present → the export can be cancelled with `cancelExport`. */
+				exportId?: string;
 				clips: CompositorClipInput[];
 				outPath?: string;
 				sceneJson?: string;
@@ -820,6 +822,13 @@ export type NativeBridgeRequest =
 	| {
 			domain: "compositor";
 			action: "cancelGifExport";
+			payload: { exportId: string };
+			requestId?: string;
+	  }
+	| {
+			domain: "compositor";
+			/** Cancels the MP4 or GIF export started with this ID. */
+			action: "cancelExport";
 			payload: { exportId: string };
 			requestId?: string;
 	  }

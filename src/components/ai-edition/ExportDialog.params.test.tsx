@@ -162,6 +162,22 @@ describe("ExportDialog format settings", () => {
 		expect(await exportMp4()).toMatchObject({ width: 1920, height: 1080, fps: 60, codec: "h264" });
 	});
 
+	it("exports a new project, which stores no format, at exactly 1920x1080", async () => {
+		// The first test export of the fork came out 1752x1080: new projects defaulted to Auto,
+		// which adds the padding border around a 16:9 screen. The default is 16:9 now.
+		renderDialog({ ...DOC, legacyEditor: null });
+		expect(await exportMp4()).toMatchObject({ width: 1920, height: 1080 });
+	});
+
+	it("offers a 1440p tier between 1080p and Source, flagged as an upscale of 1080p footage", async () => {
+		renderDialog();
+		const tier = screen.getByRole("button", { name: /^1440p/ });
+		expect(tier).toHaveTextContent("2560 × 1440");
+		expect(tier).toHaveTextContent("Upscale");
+		fireEvent.click(tier);
+		expect(await exportMp4()).toMatchObject({ width: 2560, height: 1440 });
+	});
+
 	it("half the frame rate is half the bitrate, same frame", async () => {
 		renderDialog();
 		const web = await exportMp4();

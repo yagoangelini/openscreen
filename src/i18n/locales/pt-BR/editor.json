@@ -410,5 +410,10 @@
 	"cpuCompositor": {
 		"notice": "Sem GPU compatível — a renderização ocorre na CPU, então a reprodução fica mais lenta.",
 		"exportWarning": "Sem GPU compatível: esta exportação roda na CPU e vai demorar muito mais que o normal."
+	},
+	"exportPipeline": {
+		"quality1440p": "1440p",
+		"finalizing": "Todos os quadros foram codificados. Gravando o áudio e finalizando o arquivo…",
+		"gpuReset": "A exportação parou porque o driver de vídeo foi reiniciado ou a GPU foi removida. Seu projeto está seguro: exporte de novo. Se isso se repetir, atualize o driver de vídeo."
 	}
 }

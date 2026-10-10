@@ -410,5 +410,10 @@
 	"cpuCompositor": {
 		"notice": "Běží bez kompatibilního GPU, takže renderování probíhá na CPU a přehrávání je pomalejší.",
 		"exportWarning": "Žádné kompatibilní GPU: tento export běží na CPU a bude trvat mnohem déle než obvykle."
+	},
+	"exportPipeline": {
+		"quality1440p": "1440p",
+		"finalizing": "Všechny snímky jsou zakódovány. Zapisuje se zvuk a dokončuje soubor…",
+		"gpuReset": "Export se zastavil, protože se restartoval grafický ovladač nebo byla odebrána GPU. Projekt je v pořádku: exportujte znovu. Pokud se to opakuje, aktualizujte grafický ovladač."
 	}
 }

@@ -7,7 +7,7 @@ vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock("@/native", () => ({
 	exportMultiNative: vi.fn(),
 	exportGifNative: vi.fn(),
-	cancelGifExportNative: vi.fn(async () => ({ accepted: true })),
+	cancelExportNative: vi.fn(async () => ({ accepted: true })),
 	useIsCpuCompositor: () => false,
 }));
 vi.mock("@/native/sceneDescription", () => ({
@@ -18,9 +18,9 @@ vi.mock("@/native/sceneDescription", () => ({
 import { toast } from "sonner";
 import { I18nProvider } from "@/contexts/I18nContext";
 import { type AxcutDocument, axcutSchemaVersion } from "@/lib/ai-edition/schema";
-import { cancelGifExportNative, exportGifNative } from "@/native";
+import { cancelExportNative, exportGifNative, exportMultiNative } from "@/native";
 import { NativeBridgeRequestError } from "@/native/client";
-import type { CompositorExportGifResult } from "@/native/contracts";
+import type { CompositorExportGifResult, CompositorExportResult } from "@/native/contracts";
 import { ExportDialog } from "./ExportDialog";
 
 const DOC: AxcutDocument = {
@@ -88,7 +88,7 @@ function pendingExport() {
 	return { resolve, reject };
 }
 
-let progress: (frames: number, exportId?: string) => void;
+let progress: (frames: number, exportId?: string, phase?: "finalizing") => void;
 let unsubscribe: ReturnType<typeof vi.fn>;
 let onClose: ReturnType<typeof vi.fn<() => void>>;
 
@@ -109,7 +109,7 @@ async function start() {
 describe("GIF export cancellation", () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
-		vi.mocked(cancelGifExportNative).mockResolvedValue({ accepted: true });
+		vi.mocked(cancelExportNative).mockResolvedValue({ accepted: true });
 		onClose = vi.fn();
 		unsubscribe = vi.fn();
 		window.electronAPI = {
@@ -128,10 +128,10 @@ describe("GIF export cancellation", () => {
 		const cancel = screen.getByRole("button", { name: "Cancel" });
 		expect(cancel).toBeEnabled();
 		fireEvent.click(cancel);
-		await waitFor(() => expect(cancelGifExportNative).toHaveBeenCalledWith(id));
+		await waitFor(() => expect(cancelExportNative).toHaveBeenCalledWith(id));
 		expect(cancel).toBeDisabled();
 		fireEvent.click(cancel);
-		expect(cancelGifExportNative).toHaveBeenCalledOnce();
+		expect(cancelExportNative).toHaveBeenCalledOnce();
 		expect(screen.queryByRole("button", { name: "Export GIF" })).not.toBeInTheDocument();
 		await act(async () =>
 			job.reject(
@@ -186,7 +186,7 @@ describe("GIF export cancellation", () => {
 	});
 
 	it("surfaces a rejected cancel request instead of keeping the progress view", async () => {
-		vi.mocked(cancelGifExportNative).mockRejectedValueOnce(new Error("cancel ipc failed"));
+		vi.mocked(cancelExportNative).mockRejectedValueOnce(new Error("cancel ipc failed"));
 		pendingExport();
 		await start();
 		fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
@@ -197,7 +197,7 @@ describe("GIF export cancellation", () => {
 	});
 
 	it("reports success when native publication wins the race", async () => {
-		vi.mocked(cancelGifExportNative).mockResolvedValue({ accepted: false });
+		vi.mocked(cancelExportNative).mockResolvedValue({ accepted: false });
 		const job = pendingExport();
 		await start();
 		fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
@@ -221,7 +221,7 @@ describe("GIF export cancellation", () => {
 		const job = pendingExport();
 		const { id, unmount } = await start();
 		unmount();
-		expect(cancelGifExportNative).toHaveBeenCalledWith(id);
+		expect(cancelExportNative).toHaveBeenCalledWith(id);
 		await act(async () => job.resolve(STATS));
 		expect(toast.success).not.toHaveBeenCalled();
 		expect(toast.error).not.toHaveBeenCalled();
@@ -245,5 +245,104 @@ describe("GIF export cancellation", () => {
 		view.unmount();
 		await act(async () => choose({ success: true, path: "/tmp/late.gif" }));
 		expect(exportGifNative).not.toHaveBeenCalled();
+	});
+});
+
+function pendingMp4Export() {
+	let resolve!: (stats: CompositorExportResult) => void;
+	let reject!: (error: Error) => void;
+	const result = new Promise<CompositorExportResult>((yes, no) => {
+		resolve = yes;
+		reject = no;
+	});
+	vi.mocked(exportMultiNative).mockReturnValueOnce(result);
+	return { resolve, reject };
+}
+
+async function startMp4() {
+	const view = render(
+		<I18nProvider>
+			<ExportDialog open onClose={onClose} document={DOC} />
+		</I18nProvider>,
+	);
+	fireEvent.click(screen.getByRole("button", { name: "Export MP4" }));
+	await waitFor(() => expect(exportMultiNative).toHaveBeenCalledOnce());
+	const id = vi.mocked(exportMultiNative).mock.calls[0][4];
+	expect(id).toMatch(/^[A-Za-z0-9_-]+$/);
+	return { ...view, id };
+}
+
+describe("MP4 export cancellation and finishing", () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+		vi.mocked(cancelExportNative).mockResolvedValue({ accepted: true });
+		onClose = vi.fn();
+		unsubscribe = vi.fn();
+		window.electronAPI = {
+			pickExportSavePath: vi.fn(async () => ({ path: "/tmp/result.mp4" })),
+			onNativeExportProgress: vi.fn((cb) => {
+				progress = cb;
+				return unsubscribe;
+			}),
+		} as unknown as Window["electronAPI"];
+	});
+	afterEach(cleanup);
+
+	it("cancels an MP4 export by its ID and returns to the options", async () => {
+		const job = pendingMp4Export();
+		const { id } = await startMp4();
+		const cancel = screen.getByRole("button", { name: "Cancel" });
+		expect(cancel).toBeEnabled();
+		fireEvent.click(cancel);
+		await waitFor(() => expect(cancelExportNative).toHaveBeenCalledWith(id));
+		await act(async () =>
+			job.reject(
+				new NativeBridgeRequestError({ code: "CANCELLED", message: "cancelled", retryable: false }),
+			),
+		);
+		expect(screen.getByRole("button", { name: "Export MP4" })).toBeEnabled();
+		expect(toast.error).not.toHaveBeenCalled();
+		expect(onClose).not.toHaveBeenCalled();
+	});
+
+	it("says it is finishing the file after the last frame, and can still be cancelled there", async () => {
+		const job = pendingMp4Export();
+		const { id } = await startMp4();
+		act(() => progress(600, id));
+		expect(screen.getByText("100%")).toBeVisible();
+		act(() => progress(600, id, "finalizing"));
+		expect(screen.getByText("Writing file…")).toBeVisible();
+		expect(screen.getByText(/writing the audio/i)).toBeVisible();
+		expect(screen.queryByText(/Frame \d+ of/)).not.toBeInTheDocument();
+		const cancel = screen.getByRole("button", { name: "Cancel" });
+		expect(cancel).toBeEnabled();
+		fireEvent.click(cancel);
+		await waitFor(() => expect(cancelExportNative).toHaveBeenCalledWith(id));
+		await act(async () =>
+			job.reject(
+				new NativeBridgeRequestError({ code: "CANCELLED", message: "cancelled", retryable: false }),
+			),
+		);
+	});
+
+	it("explains a GPU reset in the app's own words", async () => {
+		const job = pendingMp4Export();
+		await startMp4();
+		await act(async () =>
+			job.reject(
+				new Error(
+					"GPU_DEVICE_LOST: the GPU was reset or removed while exporting (HRESULT 0x887a0005)",
+				),
+			),
+		);
+		expect(screen.getByText(/graphics driver reset/i)).toBeVisible();
+		expect(screen.queryByText(/HRESULT/)).not.toBeInTheDocument();
+	});
+
+	it("cancels a running MP4 export when the dialog goes away", async () => {
+		pendingMp4Export();
+		const { id, unmount } = await startMp4();
+		unmount();
+		expect(cancelExportNative).toHaveBeenCalledWith(id);
 	});
 });

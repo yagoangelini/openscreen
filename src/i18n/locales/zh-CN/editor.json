@@ -410,5 +410,10 @@
 	"cpuCompositor": {
 		"notice": "没有兼容的 GPU，正在使用 CPU 渲染，因此播放较慢。",
 		"exportWarning": "没有兼容的 GPU：本次导出将在 CPU 上运行，耗时会比平常长很多。"
+	},
+	"exportPipeline": {
+		"quality1440p": "1440p",
+		"finalizing": "所有帧已编码，正在写入音频并完成文件…",
+		"gpuReset": "由于显卡驱动已重置或 GPU 已移除，导出已停止。项目安然无恙，请重新导出。如果反复出现，请更新显卡驱动。"
 	}
 }
