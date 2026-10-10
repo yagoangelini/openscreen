@@ -19,7 +19,7 @@ vi.mock("@/native", () => ({
 vi.mock("@/native/sceneDescription", () => ({
 	// `speedRegions` is what the export dialog reads to size the progress total
 	// (`outputFrameCount`); an empty object here made it read `undefined`.
-	buildSceneDescription: () => ({ speedRegions: [] }),
+	buildSceneDescription: () => ({ speedRegions: [], audio: { gainDb: 0 } }),
 	resolveVisibleClips: (doc: AxcutDocument) => doc.timeline.clips,
 }));
 

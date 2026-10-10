@@ -229,7 +229,9 @@
 		"failedToWriteFile": "Falha ao gravar o arquivo",
 		"qualityUpscaleWarning": "Upscaling",
 		"exportedVideoOf": "de vídeo exportado em",
-		"nothingToExport": "Nada para exportar — a linha do tempo está vazia."
+		"nothingToExport": "Nada para exportar — a linha do tempo está vazia.",
+		"youtubeLoudness": "Volume do YouTube (−14 LUFS)",
+		"youtubeLoudnessHint": "O YouTube toca todos os vídeos a −14 LUFS. Desligado, a exportação fica nos −16 LUFS em que a voz é nivelada e toca 2 dB mais baixo lá."
 	},
 	"inspector": {
 		"resetFocusPoint": "Redefinir ponto de foco",

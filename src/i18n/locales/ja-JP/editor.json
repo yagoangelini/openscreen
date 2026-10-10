@@ -229,7 +229,9 @@
 		"failedToWriteFile": "ファイルの書き込みに失敗しました",
 		"qualityUpscaleWarning": "アップスケール",
 		"exportedVideoOf": "の動画を書き出しました。所要時間:",
-		"nothingToExport": "書き出す内容がありません — タイムラインが空です。"
+		"nothingToExport": "書き出す内容がありません — タイムラインが空です。",
+		"youtubeLoudness": "YouTube のラウドネス (−14 LUFS)",
+		"youtubeLoudnessHint": "YouTube はすべての動画を −14 LUFS で再生します。オフにすると声の −16 LUFS のまま書き出され、YouTube では 2 dB 小さく聞こえます。"
 	},
 	"inspector": {
 		"resetFocusPoint": "フォーカスポイントをリセット",

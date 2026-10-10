@@ -229,7 +229,9 @@
 		"failedToWriteFile": "Impossibile scrivere il file",
 		"qualityUpscaleWarning": "Upscaling",
 		"exportedVideoOf": "di video esportato in",
-		"nothingToExport": "Niente da esportare: la timeline è vuota."
+		"nothingToExport": "Niente da esportare: la timeline è vuota.",
+		"youtubeLoudness": "Volume YouTube (−14 LUFS)",
+		"youtubeLoudnessHint": "YouTube riproduce ogni video a −14 LUFS. Disattivato, l'esportazione resta ai −16 LUFS della voce e lì suona 2 dB più bassa."
 	},
 	"inspector": {
 		"resetFocusPoint": "Reimposta punto di messa a fuoco",

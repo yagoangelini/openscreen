@@ -229,7 +229,9 @@
 		"exportFailed": "Export selhal",
 		"failedToWriteFile": "Nepodařilo se zapsat soubor",
 		"qualityUpscaleWarning": "Zvýšení rozlišení",
-		"nothingToExport": "Není co exportovat, časová osa je prázdná."
+		"nothingToExport": "Není co exportovat, časová osa je prázdná.",
+		"youtubeLoudness": "Hlasitost pro YouTube (−14 LUFS)",
+		"youtubeLoudnessHint": "YouTube přehrává každé video na −14 LUFS. Vypnuto zůstane export na −16 LUFS hlasu a zní tam o 2 dB tišeji."
 	},
 	"inspector": {
 		"resetFocusPoint": "Obnovit bod zaostření",

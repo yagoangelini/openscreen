@@ -229,7 +229,9 @@
 		"failedToWriteFile": "Không thể ghi tệp",
 		"qualityUpscaleWarning": "Upscale",
 		"exportedVideoOf": "video đã xuất trong",
-		"nothingToExport": "Không có gì để xuất — dòng thời gian trống."
+		"nothingToExport": "Không có gì để xuất — dòng thời gian trống.",
+		"youtubeLoudness": "Âm lượng YouTube (−14 LUFS)",
+		"youtubeLoudnessHint": "YouTube phát mọi video ở −14 LUFS. Khi tắt, bản xuất giữ mức −16 LUFS của giọng nói và nghe nhỏ hơn 2 dB ở đó."
 	},
 	"inspector": {
 		"resetFocusPoint": "Đặt lại điểm lấy nét",

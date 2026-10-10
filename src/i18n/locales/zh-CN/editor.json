@@ -229,7 +229,9 @@
 		"failedToWriteFile": "写入文件失败",
 		"qualityUpscaleWarning": "放大",
 		"exportedVideoOf": "的视频已导出，用时",
-		"nothingToExport": "没有可导出的内容 — 时间轴为空。"
+		"nothingToExport": "没有可导出的内容 — 时间轴为空。",
+		"youtubeLoudness": "YouTube 响度 (−14 LUFS)",
+		"youtubeLoudnessHint": "YouTube 以 −14 LUFS 播放所有视频。关闭时导出保持人声的 −16 LUFS，在 YouTube 上会小 2 dB。"
 	},
 	"inspector": {
 		"resetFocusPoint": "重置焦点",

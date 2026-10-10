@@ -229,7 +229,9 @@
 		"failedToWriteFile": "No se pudo escribir el archivo",
 		"qualityUpscaleWarning": "Upscaling",
 		"exportedVideoOf": "de vídeo exportado en",
-		"nothingToExport": "Nada que exportar: la línea de tiempo está vacía."
+		"nothingToExport": "Nada que exportar: la línea de tiempo está vacía.",
+		"youtubeLoudness": "Volumen de YouTube (−14 LUFS)",
+		"youtubeLoudnessHint": "YouTube reproduce todos los vídeos a −14 LUFS. Desactivado, la exportación se queda en los −16 LUFS de la voz y suena 2 dB más bajo allí."
 	},
 	"inspector": {
 		"resetFocusPoint": "Restablecer punto de enfoque",

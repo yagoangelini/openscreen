@@ -32,6 +32,8 @@ export interface UserPreferences {
 	 * the user wanted to watch the take, and not every video needs captions.
 	 */
 	autoTranscribe: boolean;
+	/** Exports at YouTube's −14 LUFS instead of the −16 the voice is normalised to. */
+	youtubeLoudness: boolean;
 }
 
 export const DEFAULT_PREFS: UserPreferences = {
@@ -45,6 +47,7 @@ export const DEFAULT_PREFS: UserPreferences = {
 	preferSoftwareEncoder: false,
 	hideSoftwareEncoderFallbackNotice: false,
 	autoTranscribe: false,
+	youtubeLoudness: true,
 };
 
 /** Parses stored preferences without throwing on malformed JSON. */
@@ -108,6 +111,10 @@ export function loadUserPreferences(): UserPreferences {
 				: DEFAULT_PREFS.hideSoftwareEncoderFallbackNotice,
 		autoTranscribe:
 			typeof raw.autoTranscribe === "boolean" ? raw.autoTranscribe : DEFAULT_PREFS.autoTranscribe,
+		youtubeLoudness:
+			typeof raw.youtubeLoudness === "boolean"
+				? raw.youtubeLoudness
+				: DEFAULT_PREFS.youtubeLoudness,
 	};
 }
 

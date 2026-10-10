@@ -16,7 +16,7 @@ vi.mock("@/native", () => ({
 }));
 
 vi.mock("@/native/sceneDescription", () => ({
-	buildSceneDescription: () => ({ speedRegions: [] }),
+	buildSceneDescription: () => ({ speedRegions: [], audio: { gainDb: 0 } }),
 	resolveVisibleClips: (doc: AxcutDocument) => doc.timeline.clips,
 }));
 
@@ -121,6 +121,21 @@ describe("ExportDialog MP4 params", () => {
 	afterEach(() => {
 		cleanup();
 		vi.clearAllMocks();
+	});
+
+	it("exports at YouTube loudness by default, and at the voice's level when switched off", async () => {
+		localStorage.clear();
+		renderDialog();
+		await exportMp4();
+		const sent = (call: number) =>
+			JSON.parse(String(vi.mocked(exportMultiNative).mock.calls[call][2])).audio.gainDb;
+		expect(sent(0)).toBe(2);
+		cleanup();
+		renderDialog();
+		fireEvent.click(screen.getByRole("button", { name: /youtube loudness/i }));
+		await exportMp4();
+		expect(sent(1)).toBe(0);
+		localStorage.clear();
 	});
 
 	it("sends the bitrate for the frame rate it exports at", async () => {

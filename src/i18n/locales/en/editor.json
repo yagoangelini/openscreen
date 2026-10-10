@@ -229,7 +229,9 @@
 		"exportFailed": "Export failed",
 		"failedToWriteFile": "Failed to write file",
 		"qualityUpscaleWarning": "Upscale",
-		"nothingToExport": "Nothing to export — the timeline is empty."
+		"nothingToExport": "Nothing to export — the timeline is empty.",
+		"youtubeLoudness": "YouTube loudness (−14 LUFS)",
+		"youtubeLoudnessHint": "YouTube plays every video at −14 LUFS. Off, the export keeps the −16 LUFS the voice is levelled to, and plays 2 dB softer there."
 	},
 	"inspector": {
 		"resetFocusPoint": "Reset focus point",

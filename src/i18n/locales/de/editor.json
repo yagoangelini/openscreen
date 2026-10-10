@@ -229,7 +229,9 @@
 		"exportFailed": "Export fehlgeschlagen",
 		"failedToWriteFile": "Datei konnte nicht geschrieben werden",
 		"qualityUpscaleWarning": "Hochskalierung",
-		"nothingToExport": "Nichts zu exportieren — die Timeline ist leer."
+		"nothingToExport": "Nichts zu exportieren — die Timeline ist leer.",
+		"youtubeLoudness": "YouTube-Lautheit (−14 LUFS)",
+		"youtubeLoudnessHint": "YouTube spielt jedes Video mit −14 LUFS ab. Aus bleibt der Export bei den −16 LUFS der Stimme und klingt dort 2 dB leiser."
 	},
 	"inspector": {
 		"resetFocusPoint": "Fokuspunkt zurücksetzen",
