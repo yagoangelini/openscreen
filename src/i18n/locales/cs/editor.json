@@ -443,7 +443,7 @@
 		"regionPasted": "Region pasted",
 		"regionCopied": "Region copied",
 		"cameraCheckFailed": "Could not check for a camera recording near {{name}}",
-		"sensitiveBlurred": "Automaticky rozmazáno {{count}} citlivých oblastí. Zkontrolujte je na časové ose."
+		"sensitiveBlurred": "Automaticky rozmazané citlivé oblasti: {{count}}. Zkontrolujte je na časové ose."
 	},
 	"exportPipeline": {
 		"quality1440p": "1440p",

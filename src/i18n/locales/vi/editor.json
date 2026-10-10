@@ -443,7 +443,7 @@
 		"regionPasted": "Region pasted",
 		"regionCopied": "Region copied",
 		"cameraCheckFailed": "Could not check for a camera recording near {{name}}",
-		"sensitiveBlurred": "Đã tự động làm mờ {{count}} vùng nhạy cảm. Hãy kiểm tra trên dòng thời gian."
+		"sensitiveBlurred": "Vùng nhạy cảm đã tự động làm mờ: {{count}}. Hãy kiểm tra trên dòng thời gian."
 	},
 	"exportPipeline": {
 		"quality1440p": "1440p",

@@ -443,7 +443,7 @@
 		"regionPasted": "Region pasted",
 		"regionCopied": "Region copied",
 		"cameraCheckFailed": "Could not check for a camera recording near {{name}}",
-		"sensitiveBlurred": "민감한 영역 {{count}}곳을 자동으로 흐리게 처리했습니다. 타임라인에서 확인하세요."
+		"sensitiveBlurred": "자동으로 흐리게 처리한 민감한 영역: {{count}}. 타임라인에서 확인하세요."
 	},
 	"exportPipeline": {
 		"quality1440p": "1440p",

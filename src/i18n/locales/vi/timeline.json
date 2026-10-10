@@ -88,7 +88,14 @@
 		"smartCutsNoSpeech": "Không phát hiện giọng nói",
 		"smartCutsFailed": "Phiên âm thất bại — thử lại trong Media",
 		"addAudioTooltip": "Thêm âm thanh",
-		"addedWord": "Từ đã thêm: \"{{word}}\" — không có âm thanh phía sau"
+		"addedWord": "Từ đã thêm: \"{{word}}\" — không có âm thanh phía sau",
+		"speedUpWaits": "Tăng tốc đoạn chờ",
+		"speedUpWaitsHint": "Tìm các đoạn im lặng, đứng yên để bạn chọn đoạn nào phát nhanh hơn",
+		"waitsFound": "Đoạn chờ tìm thấy: {{count}}",
+		"waitLength": "{{seconds}} giây",
+		"speedUpPicked": "Tăng tốc đoạn đã chọn ({{speed}}×)",
+		"noWaits": "Bản ghi này không có đoạn chờ dài",
+		"waitsSpedUp": "Đoạn chờ đã tăng tốc: {{count}}"
 	},
 	"audio": {
 		"addVoiceover": "Thêm thuyết minh",

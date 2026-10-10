@@ -88,7 +88,14 @@
 		"smartCutsNoSpeech": "Řeč nebyla detekována",
 		"smartCutsFailed": "Přepisování selhalo, zkuste to znovu z Média",
 		"addAudioTooltip": "Přidat zvuk",
-		"addedWord": "Přidáno slovo: „{{word}}”, za ním není žádný zvuk"
+		"addedWord": "Přidáno slovo: „{{word}}”, za ním není žádný zvuk",
+		"speedUpWaits": "Zrychlit čekání",
+		"speedUpWaitsHint": "Najde tiché úseky bez pohybu a vy vyberete, které zrychlit",
+		"waitsFound": "Nalezená čekání: {{count}}",
+		"waitLength": "{{seconds}} s",
+		"speedUpPicked": "Zrychlit vybrané ({{speed}}×)",
+		"noWaits": "V této nahrávce není žádné dlouhé čekání",
+		"waitsSpedUp": "Zrychlená čekání: {{count}}"
 	},
 	"audio": {
 		"addVoiceover": "Přidat komentář",

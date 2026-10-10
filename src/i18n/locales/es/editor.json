@@ -443,7 +443,7 @@
 		"regionPasted": "Región pegada",
 		"regionCopied": "Región copiada",
 		"cameraCheckFailed": "No se pudo buscar una grabación de cámara junto a {{name}}",
-		"sensitiveBlurred": "Se difuminaron {{count}} áreas sensibles automáticamente. Revísalas en la línea de tiempo."
+		"sensitiveBlurred": "Áreas sensibles difuminadas automáticamente: {{count}}. Revísalas en la línea de tiempo."
 	},
 	"exportPipeline": {
 		"quality1440p": "1440p",

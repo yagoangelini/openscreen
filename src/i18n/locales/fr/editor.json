@@ -443,7 +443,7 @@
 		"regionPasted": "Région collée",
 		"regionCopied": "Région copiée",
 		"cameraCheckFailed": "Impossible de chercher un enregistrement caméra près de {{name}}",
-		"sensitiveBlurred": "{{count}} zones sensibles ont été floutées automatiquement. Vérifiez-les sur la timeline."
+		"sensitiveBlurred": "Zones sensibles floutées automatiquement : {{count}}. Vérifiez-les sur la timeline."
 	},
 	"exportPipeline": {
 		"quality1440p": "1440p",

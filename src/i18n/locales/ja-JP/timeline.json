@@ -88,7 +88,14 @@
 		"smartCutsNoSpeech": "音声が検出されませんでした",
 		"smartCutsFailed": "文字起こしに失敗しました — メディアから再試行してください",
 		"addAudioTooltip": "音声を追加",
-		"addedWord": "追加した単語:「{{word}}」— 音声はありません"
+		"addedWord": "追加した単語:「{{word}}」— 音声はありません",
+		"speedUpWaits": "待ち時間を早送り",
+		"speedUpWaitsHint": "無音で動きのない区間を見つけ、早送りする区間を選べます",
+		"waitsFound": "見つかった待ち時間: {{count}}",
+		"waitLength": "{{seconds}} 秒",
+		"speedUpPicked": "選んだ区間を早送り ({{speed}}×)",
+		"noWaits": "この録画に長い待ち時間はありません",
+		"waitsSpedUp": "早送りにした待ち時間: {{count}}"
 	},
 	"audio": {
 		"addVoiceover": "ナレーションを追加",

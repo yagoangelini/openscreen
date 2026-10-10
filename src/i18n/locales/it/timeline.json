@@ -88,7 +88,14 @@
 		"smartCutsNoSpeech": "Nessun parlato rilevato",
 		"smartCutsFailed": "Trascrizione non riuscita: riprova da Contenuti multimediali",
 		"addAudioTooltip": "Aggiungi audio",
-		"addedWord": "Parola aggiunta: «{{word}}» — nessun audio dietro"
+		"addedWord": "Parola aggiunta: «{{word}}» — nessun audio dietro",
+		"speedUpWaits": "Accelera le attese",
+		"speedUpWaitsHint": "Trova i tratti fermi e silenziosi e scegli quali velocizzare",
+		"waitsFound": "Attese trovate: {{count}}",
+		"waitLength": "{{seconds}} s",
+		"speedUpPicked": "Accelera le scelte ({{speed}}×)",
+		"noWaits": "Nessuna attesa lunga in questa ripresa",
+		"waitsSpedUp": "Attese accelerate: {{count}}"
 	},
 	"audio": {
 		"addVoiceover": "Aggiungi voce fuori campo",

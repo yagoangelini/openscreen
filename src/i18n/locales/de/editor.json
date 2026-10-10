@@ -443,7 +443,7 @@
 		"regionPasted": "Bereich eingefügt",
 		"regionCopied": "Bereich kopiert",
 		"cameraCheckFailed": "Neben {{name}} konnte keine Kameraaufnahme gesucht werden",
-		"sensitiveBlurred": "{{count}} sensible Bereiche wurden automatisch verwischt. Prüfe sie in der Zeitleiste."
+		"sensitiveBlurred": "Automatisch verwischte sensible Bereiche: {{count}}. Prüfe sie in der Zeitleiste."
 	},
 	"exportPipeline": {
 		"quality1440p": "1440p",

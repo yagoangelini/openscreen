@@ -443,7 +443,7 @@
 		"regionPasted": "Region pasted",
 		"regionCopied": "Region copied",
 		"cameraCheckFailed": "Could not check for a camera recording near {{name}}",
-		"sensitiveBlurred": "{{count}} hassas alan otomatik olarak bulanıklaştırıldı. Zaman çizelgesinde kontrol edin."
+		"sensitiveBlurred": "Otomatik bulanıklaştırılan hassas alanlar: {{count}}. Zaman çizelgesinde kontrol edin."
 	},
 	"exportPipeline": {
 		"quality1440p": "1440p",

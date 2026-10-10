@@ -88,7 +88,14 @@
 		"smartCutsNoSpeech": "No se detectó voz",
 		"smartCutsFailed": "La transcripción falló: reinténtala desde Medios",
 		"addAudioTooltip": "Añadir audio",
-		"addedWord": "Palabra añadida: «{{word}}» — sin audio detrás"
+		"addedWord": "Palabra añadida: «{{word}}» — sin audio detrás",
+		"speedUpWaits": "Acelerar esperas",
+		"speedUpWaitsHint": "Busca los tramos quietos y en silencio y elige cuáles reproducir más rápido",
+		"waitsFound": "Esperas encontradas: {{count}}",
+		"waitLength": "{{seconds}} s",
+		"speedUpPicked": "Acelerar las elegidas ({{speed}}×)",
+		"noWaits": "No hay esperas largas en esta toma",
+		"waitsSpedUp": "Esperas aceleradas: {{count}}"
 	},
 	"audio": {
 		"addVoiceover": "Añadir voz en off",

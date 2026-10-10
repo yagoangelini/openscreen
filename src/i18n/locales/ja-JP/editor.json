@@ -443,7 +443,7 @@
 		"regionPasted": "Region pasted",
 		"regionCopied": "Region copied",
 		"cameraCheckFailed": "Could not check for a camera recording near {{name}}",
-		"sensitiveBlurred": "{{count}} か所の機密情報を自動でぼかしました。タイムラインで確認してください。"
+		"sensitiveBlurred": "自動でぼかした機密情報: {{count}}。タイムラインで確認してください。"
 	},
 	"exportPipeline": {
 		"quality1440p": "1440p",

@@ -88,7 +88,14 @@
 		"smartCutsNoSpeech": "لم يتم اكتشاف كلام",
 		"smartCutsFailed": "فشل النسخ — أعد المحاولة من قسم الوسائط",
 		"addAudioTooltip": "إضافة صوت",
-		"addedWord": "كلمة مضافة: \"{{word}}\" — لا صوت خلفها"
+		"addedWord": "كلمة مضافة: \"{{word}}\" — لا صوت خلفها",
+		"speedUpWaits": "تسريع فترات الانتظار",
+		"speedUpWaitsHint": "يعثر على المقاطع الصامتة والساكنة لتختار ما يُسرَّع منها",
+		"waitsFound": "فترات الانتظار التي عُثر عليها: {{count}}",
+		"waitLength": "{{seconds}} ث",
+		"speedUpPicked": "تسريع المحدد ({{speed}}×)",
+		"noWaits": "لا توجد فترات انتظار طويلة في هذا التسجيل",
+		"waitsSpedUp": "فترات الانتظار المسرَّعة: {{count}}"
 	},
 	"audio": {
 		"addVoiceover": "إضافة تعليق صوتي",

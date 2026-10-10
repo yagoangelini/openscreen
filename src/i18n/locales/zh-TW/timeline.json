@@ -88,7 +88,14 @@
 		"smartCutsNoSpeech": "未偵測到語音",
 		"smartCutsFailed": "轉錄失敗 — 請在「媒體」中重試",
 		"addAudioTooltip": "新增音訊",
-		"addedWord": "已加入的字詞：「{{word}}」— 背後沒有聲音"
+		"addedWord": "已加入的字詞：「{{word}}」— 背後沒有聲音",
+		"speedUpWaits": "加速等待片段",
+		"speedUpWaitsHint": "找出靜止且無聲的片段，由你選擇要加速哪些",
+		"waitsFound": "找到的等待：{{count}}",
+		"waitLength": "{{seconds}} 秒",
+		"speedUpPicked": "加速所選片段 ({{speed}}×)",
+		"noWaits": "此錄製中沒有較長的等待",
+		"waitsSpedUp": "已加速的等待：{{count}}"
 	},
 	"audio": {
 		"addVoiceover": "新增旁白",

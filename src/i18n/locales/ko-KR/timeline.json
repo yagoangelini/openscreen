@@ -88,7 +88,14 @@
 		"smartCutsNoSpeech": "음성이 감지되지 않음",
 		"smartCutsFailed": "받아쓰기에 실패했습니다 — 미디어에서 다시 시도하세요",
 		"addAudioTooltip": "오디오 추가",
-		"addedWord": "추가한 단어: \"{{word}}\" — 뒤에 오디오가 없습니다"
+		"addedWord": "추가한 단어: \"{{word}}\" — 뒤에 오디오가 없습니다",
+		"speedUpWaits": "대기 구간 빨리 감기",
+		"speedUpWaitsHint": "조용하고 움직임이 없는 구간을 찾아 빨리 재생할 구간을 고를 수 있습니다",
+		"waitsFound": "찾은 대기 구간: {{count}}",
+		"waitLength": "{{seconds}}초",
+		"speedUpPicked": "선택한 구간 빨리 감기 ({{speed}}×)",
+		"noWaits": "이 녹화에는 긴 대기 구간이 없습니다",
+		"waitsSpedUp": "빨리 감은 대기 구간: {{count}}"
 	},
 	"audio": {
 		"addVoiceover": "내레이션 추가",

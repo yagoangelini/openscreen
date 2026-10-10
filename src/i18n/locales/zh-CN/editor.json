@@ -443,7 +443,7 @@
 		"regionPasted": "Region pasted",
 		"regionCopied": "Region copied",
 		"cameraCheckFailed": "Could not check for a camera recording near {{name}}",
-		"sensitiveBlurred": "已自动模糊 {{count}} 处敏感区域，请在时间线上检查。"
+		"sensitiveBlurred": "已自动模糊的敏感区域：{{count}}。请在时间线上检查。"
 	},
 	"exportPipeline": {
 		"quality1440p": "1440p",

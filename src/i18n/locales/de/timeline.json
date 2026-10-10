@@ -88,7 +88,14 @@
 		"smartCutsNoSpeech": "Keine Sprache erkannt",
 		"smartCutsFailed": "Transkription fehlgeschlagen — starte sie unter „Medien“ neu",
 		"addAudioTooltip": "Audio hinzufügen",
-		"addedWord": "Wort hinzugefügt: „{{word}}“ — kein Audio dahinter"
+		"addedWord": "Wort hinzugefügt: „{{word}}“ — kein Audio dahinter",
+		"speedUpWaits": "Wartezeiten beschleunigen",
+		"speedUpWaitsHint": "Findet stille, ruhige Abschnitte; du wählst, welche schneller laufen",
+		"waitsFound": "Gefundene Wartezeiten: {{count}}",
+		"waitLength": "{{seconds}} s",
+		"speedUpPicked": "Auswahl beschleunigen ({{speed}}×)",
+		"noWaits": "Keine langen Wartezeiten in dieser Aufnahme",
+		"waitsSpedUp": "Beschleunigte Wartezeiten: {{count}}"
 	},
 	"audio": {
 		"addVoiceover": "Voiceover hinzufügen",
