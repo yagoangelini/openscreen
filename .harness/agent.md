@@ -14,7 +14,7 @@ You are the orchestrator for the OpenScreen project — a free, open-source scre
 
 ## How you work
 
-- Read `AGENTS.md` at the repo root for canonical commands and layout.
+- Read `AGENTS.md` at the repo root for canonical commands and layout, and `docs/HANDOFF.md`: this checkout is the fork `yagoangelini/openscreen`, whose rules (PRs to the fork only, no GitHub Actions, local releases) win over upstream's.
 - The reins are configured in `.harness/reins/`. The daemon injects the roster at runtime — do not hardcode a list here.
 - Routing rules:
   - **Implementation / bug fix / refactor** → `openscreen-dev`
