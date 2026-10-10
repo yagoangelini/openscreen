@@ -456,7 +456,7 @@
 	},
 	"autoZoom": {
 		"title": "自动缩放",
-		"scope": "适用于本项目中的所有自动缩放。",
+		"scope": "镜头和过渡适用于本项目的所有缩放；其余设置在规划自动缩放时生效。",
 		"camera": {
 			"title": "镜头",
 			"fixed": "固定 + 平移",
@@ -469,11 +469,14 @@
 		"transition": "过渡",
 		"maxScale": "最大缩放",
 		"hold": "最短停留",
-		"replanHint": "最大缩放和停留时间会在重新规划自动缩放时生效。",
+		"replanHint": "最大缩放、保持时长和拉远在重新规划自动缩放时生效。",
 		"replan": "重新规划自动缩放",
 		"replanDone": "已规划 {{count}} 个自动缩放",
 		"replanNone": "没有找到适合自动缩放的时刻",
-		"replanFailed": "无法规划自动缩放"
+		"replanFailed": "无法规划自动缩放",
+		"wideBetween": "操作之间拉远",
+		"wideCalm": "平稳 (2.5 秒)",
+		"wideBrisk": "轻快 (1.5 秒)"
 	},
 	"youtubeChapters": {
 		"title": "YouTube 章节",

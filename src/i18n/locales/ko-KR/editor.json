@@ -456,7 +456,7 @@
 	},
 	"autoZoom": {
 		"title": "자동 확대",
-		"scope": "이 프로젝트의 모든 자동 확대에 적용됩니다.",
+		"scope": "카메라와 전환은 이 프로젝트의 모든 확대에 적용되고, 나머지는 자동 확대를 계획할 때 적용됩니다.",
 		"camera": {
 			"title": "카메라",
 			"fixed": "고정 + 이동",
@@ -469,11 +469,14 @@
 		"transition": "전환",
 		"maxScale": "최대 확대",
 		"hold": "최소 유지 시간",
-		"replanHint": "최대 확대와 유지 시간은 자동 확대를 다시 계획할 때 적용됩니다.",
+		"replanHint": "최대 확대, 유지 시간, 축소는 자동 확대를 다시 계획할 때 적용됩니다.",
 		"replan": "자동 확대 다시 계획",
 		"replanDone": "자동 확대 {{count}}개를 계획했습니다",
 		"replanNone": "자동 확대할 순간을 찾지 못했습니다",
-		"replanFailed": "자동 확대를 계획하지 못했습니다"
+		"replanFailed": "자동 확대를 계획하지 못했습니다",
+		"wideBetween": "동작 사이에 축소",
+		"wideCalm": "차분하게 (2.5초)",
+		"wideBrisk": "빠르게 (1.5초)"
 	},
 	"youtubeChapters": {
 		"title": "YouTube 챕터",

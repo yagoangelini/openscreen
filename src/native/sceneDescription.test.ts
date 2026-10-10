@@ -578,13 +578,21 @@ describe("buildSceneDescription.zoomRegions — automatic zooms", () => {
 		focus: { cx: 0.5, cy: 0.5 },
 	});
 
-	it("gives every automatic zoom the project's motion and fixed camera, and no other zoom", () => {
+	it("gives every zoom the project's motion and fixed camera, the hand-drawn ones too", () => {
 		const { zoomRegions } = buildSceneDescription(makeDoc({ zoomRanges: [auto, hand] }));
 		expect(zoomRegions[0].focusMode).toBe("manual");
 		expect(zoomRegions[0].motion).toEqual(autoZoomMotion(DEFAULT_AUTO_ZOOM_SETTINGS));
 		expect(zoomRegions[0].motion?.easing).toBe("smooth");
-		expect(zoomRegions[1].motion).toBeUndefined();
-		expect(zoomRegions[1].focusMode).toBeNull();
+		expect(zoomRegions[1].motion).toEqual(autoZoomMotion(DEFAULT_AUTO_ZOOM_SETTINGS));
+		expect(zoomRegions[1].focusMode).toBe("manual");
+	});
+
+	it("keeps the focus mode a hand-drawn zoom was given in its inspector", () => {
+		const doc = makeDoc({
+			zoomRanges: [{ ...hand, focusMode: "auto" as const }],
+			legacyEditor: { autoZoom: { cameraMode: "fixed" } },
+		});
+		expect(buildSceneDescription(doc).zoomRegions[0].focusMode).toBe("auto");
 	});
 
 	it("switches every automatic zoom at once with the camera mode", () => {
@@ -597,9 +605,9 @@ describe("buildSceneDescription.zoomRegions — automatic zooms", () => {
 				legacyEditor: { autoZoom: { cameraMode } },
 			});
 			const { zoomRegions } = buildSceneDescription(doc);
-			expect(zoomRegions.slice(0, 2).map((z) => z.focusMode)).toEqual([focusMode, focusMode]);
+			expect(zoomRegions.map((z) => z.focusMode)).toEqual([focusMode, focusMode, focusMode]);
 			expect(zoomRegions[0].motion?.followDeadZone).toBe(deadZone);
-			expect(zoomRegions[2].motion).toBeUndefined();
+			expect(zoomRegions[2].motion?.followDeadZone).toBe(deadZone);
 		}
 	});
 
@@ -878,7 +886,8 @@ describe("buildSceneDescription.zoomRegions with an earlier trim", () => {
 				scale: ZOOM_DEPTH_SCALES[3],
 				focusX: 0.5,
 				focusY: 0.5,
-				focusMode: null,
+				focusMode: "manual",
+				motion: autoZoomMotion(DEFAULT_AUTO_ZOOM_SETTINGS),
 				rotation: null,
 				clipIndex: 1,
 			},
@@ -920,7 +929,8 @@ describe("buildSceneDescription.zoomRegions with an earlier trim", () => {
 				scale: ZOOM_DEPTH_SCALES[3],
 				focusX: 0.5,
 				focusY: 0.5,
-				focusMode: null,
+				focusMode: "manual",
+				motion: autoZoomMotion(DEFAULT_AUTO_ZOOM_SETTINGS),
 				rotation: null,
 				clipIndex: 0,
 				underTrim: true,

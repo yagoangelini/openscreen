@@ -487,6 +487,8 @@ interface PlanContext {
 	settings: AutoZoomSettings;
 	rampMs: (scale: number) => number;
 	minHoldMs: number;
+	/** The shortest wide shot between two zooms (`MIN_WIDE_BETWEEN_MS` unless set). */
+	minWideMs: number;
 }
 
 function usableRect(rect: NormalizedRect | undefined, point: ZoomFocus, maxArea: number) {
@@ -812,7 +814,7 @@ function chainShots(shots: Shot[], ctx: PlanContext): Shot[] {
 			continue;
 		}
 		const wide = shot.start - ctx.rampMs(shot.scale) - (prev.end + ctx.rampMs(prev.scale));
-		if (wide >= MIN_WIDE_BETWEEN_MS) {
+		if (wide >= ctx.minWideMs) {
 			out.push({ ...shot });
 			continue;
 		}
@@ -933,7 +935,7 @@ function resolveChains(chains: Chain[], reserved: ReservedZoom[], ctx: PlanConte
 		for (const span of spans) {
 			if (reach && (reach.chain || span.chain)) {
 				const wide = span.start - outOf(reach) - span.rampIn;
-				if (wide < MIN_WIDE_BETWEEN_MS) {
+				if (wide < ctx.minWideMs) {
 					clash = [reach, span];
 					break;
 				}
@@ -979,6 +981,7 @@ function contextOf(settings: AutoZoomSettings = DEFAULT_AUTO_ZOOM_SETTINGS): Pla
 		settings,
 		rampMs: (scale) => motionTransitionSec(motion, scale) * 1000,
 		minHoldMs: settings.holdSec * 1000,
+		minWideMs: (settings.minWideSec ?? MIN_WIDE_BETWEEN_MS / 1000) * 1000,
 	};
 }
 

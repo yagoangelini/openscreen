@@ -367,6 +367,19 @@ describe("buildAutoZoomSuggestions: several actions", () => {
 		expect(clear.map((s) => s.span)).toEqual([{ start: 9800, end: 12500 }]);
 	});
 
+	it("lets a brisk wide shot (1.5 s) sit where the calm one (2.5 s) would not fit", () => {
+		const existingRegions = [{ startMs: 3000, endMs: 5000 }];
+		const at = (minWideSec: number) =>
+			buildAutoZoomSuggestions({
+				cursorTelemetry: [click(9500, 0.5, 0.5)],
+				totalMs: 14000,
+				existingRegions,
+				settings: { ...DEFAULT_AUTO_ZOOM_SETTINGS, minWideSec },
+			});
+		expect(at(2.5)).toEqual([]);
+		expect(at(1.5)).toHaveLength(1);
+	});
+
 	it("keeps clear of a placed zoom that reaches past the next one", () => {
 		const suggestions = buildAutoZoomSuggestions({
 			cursorTelemetry: [click(12000, 0.5, 0.5)],

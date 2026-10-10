@@ -456,7 +456,7 @@
 	},
 	"autoZoom": {
 		"title": "Thu phóng tự động",
-		"scope": "Áp dụng cho mọi lần thu phóng tự động trong dự án này.",
+		"scope": "Camera và chuyển cảnh áp dụng cho mọi thu phóng trong dự án; phần còn lại khi lập kế hoạch thu phóng tự động.",
 		"camera": {
 			"title": "Máy quay",
 			"fixed": "Cố định + lia",
@@ -469,11 +469,14 @@
 		"transition": "Chuyển cảnh",
 		"maxScale": "Thu phóng tối đa",
 		"hold": "Thời gian giữ tối thiểu",
-		"replanHint": "Thu phóng tối đa và thời gian giữ áp dụng khi lập lại kế hoạch thu phóng tự động.",
+		"replanHint": "Mức phóng tối đa, thời gian giữ và mở rộng áp dụng khi lập lại kế hoạch thu phóng tự động.",
 		"replan": "Lập lại kế hoạch thu phóng tự động",
 		"replanDone": "Số lần thu phóng tự động đã lập: {{count}}",
 		"replanNone": "Không tìm thấy thời điểm nào để thu phóng tự động",
-		"replanFailed": "Không thể lập kế hoạch thu phóng tự động"
+		"replanFailed": "Không thể lập kế hoạch thu phóng tự động",
+		"wideBetween": "Mở rộng giữa các thao tác",
+		"wideCalm": "Chậm rãi (2,5 giây)",
+		"wideBrisk": "Nhanh (1,5 giây)"
 	},
 	"youtubeChapters": {
 		"title": "Chương YouTube",

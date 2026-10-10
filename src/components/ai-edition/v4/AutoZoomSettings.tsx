@@ -121,6 +121,15 @@ export function AutoZoomSettings() {
 				onChange={(holdSec) => live({ holdSec })}
 				onCommit={done}
 			/>
+			<ChoiceRow<"2.5" | "1.5">
+				label={te("autoZoom.wideBetween")}
+				options={[
+					{ value: "2.5", label: te("autoZoom.wideCalm") },
+					{ value: "1.5", label: te("autoZoom.wideBrisk") },
+				]}
+				value={autoZoom.minWideSec === 1.5 ? "1.5" : "2.5"}
+				onChange={(choice) => void set({ autoZoom: { minWideSec: Number(choice) } })}
+			/>
 			<p className={shell.hint}>{te("autoZoom.replanHint")}</p>
 			<button type="button" className={PANE_BUTTON} disabled={busy} onClick={() => void replan()}>
 				{te("autoZoom.replan")}

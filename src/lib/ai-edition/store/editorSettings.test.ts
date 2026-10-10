@@ -45,6 +45,7 @@ describe("auto-zoom settings", () => {
 			maxScale: 1.5,
 			transitionSec: 1.1,
 			holdSec: 2.5,
+			minWideSec: 2.5,
 		});
 		const doc = {
 			...baseDoc,
@@ -55,6 +56,7 @@ describe("auto-zoom settings", () => {
 			maxScale: 2.2,
 			transitionSec: 1.1,
 			holdSec: 2.5,
+			minWideSec: 2.5,
 		});
 	});
 

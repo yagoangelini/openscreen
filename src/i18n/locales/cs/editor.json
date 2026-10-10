@@ -456,7 +456,7 @@
 	},
 	"autoZoom": {
 		"title": "Automatické zoomy",
-		"scope": "Platí pro všechny automatické zoomy v tomto projektu.",
+		"scope": "Kamera a přechod platí pro všechna přiblížení v projektu; zbytek při plánování automatických přiblížení.",
 		"camera": {
 			"title": "Kamera",
 			"fixed": "Pevná + posun",
@@ -469,11 +469,14 @@
 		"transition": "Přechod",
 		"maxScale": "Maximální zoom",
 		"hold": "Minimální výdrž",
-		"replanHint": "Maximální zoom a výdrž platí při novém naplánování automatických zoomů.",
+		"replanHint": "Max. přiblížení, výdrž a oddálení se projeví při novém naplánování automatických přiblížení.",
 		"replan": "Znovu naplánovat automatické zoomy",
 		"replanDone": "Naplánováno automatických zoomů: {{count}}",
 		"replanNone": "Nenalezen žádný okamžik pro automatický zoom",
-		"replanFailed": "Automatické zoomy se nepodařilo naplánovat"
+		"replanFailed": "Automatické zoomy se nepodařilo naplánovat",
+		"wideBetween": "Oddálit mezi akcemi",
+		"wideCalm": "Klidně (2,5 s)",
+		"wideBrisk": "Svižně (1,5 s)"
 	},
 	"youtubeChapters": {
 		"title": "Kapitoly YouTube",

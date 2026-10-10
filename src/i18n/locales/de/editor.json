@@ -456,7 +456,7 @@
 	},
 	"autoZoom": {
 		"title": "Automatische Zooms",
-		"scope": "Gilt für alle automatischen Zooms dieses Projekts.",
+		"scope": "Kamera und Übergang gelten für jeden Zoom im Projekt; der Rest, wenn die automatischen Zooms geplant werden.",
 		"camera": {
 			"title": "Kamera",
 			"fixed": "Fest + Schwenk",
@@ -469,11 +469,14 @@
 		"transition": "Übergang",
 		"maxScale": "Maximaler Zoom",
 		"hold": "Mindesthaltezeit",
-		"replanHint": "Maximaler Zoom und Haltezeit gelten, wenn die automatischen Zooms neu geplant werden.",
+		"replanHint": "Max. Zoom, Haltezeit und Aufziehen gelten, wenn die automatischen Zooms neu geplant werden.",
 		"replan": "Automatische Zooms neu planen",
 		"replanDone": "Geplante automatische Zooms: {{count}}",
 		"replanNone": "Kein Moment für einen automatischen Zoom gefunden",
-		"replanFailed": "Die automatischen Zooms konnten nicht geplant werden"
+		"replanFailed": "Die automatischen Zooms konnten nicht geplant werden",
+		"wideBetween": "Zwischen Aktionen aufziehen",
+		"wideCalm": "Ruhig (2,5 s)",
+		"wideBrisk": "Flott (1,5 s)"
 	},
 	"youtubeChapters": {
 		"title": "YouTube-Kapitel",

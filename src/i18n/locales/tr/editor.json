@@ -456,7 +456,7 @@
 	},
 	"autoZoom": {
 		"title": "Otomatik yakınlaştırmalar",
-		"scope": "Bu projedeki tüm otomatik yakınlaştırmalara uygulanır.",
+		"scope": "Kamera ve geçiş projedeki tüm yakınlaştırmalara uygulanır; geri kalanı otomatik yakınlaştırmalar planlanırken.",
 		"camera": {
 			"title": "Kamera",
 			"fixed": "Sabit + kaydırma",
@@ -469,11 +469,14 @@
 		"transition": "Geçiş",
 		"maxScale": "Maksimum yakınlaştırma",
 		"hold": "Minimum bekleme",
-		"replanHint": "Maksimum yakınlaştırma ve bekleme, otomatik yakınlaştırmalar yeniden planlandığında uygulanır.",
+		"replanHint": "Maks. yakınlaştırma, bekleme ve uzaklaşma otomatik yakınlaştırmalar yeniden planlanınca uygulanır.",
 		"replan": "Otomatik yakınlaştırmaları yeniden planla",
 		"replanDone": "Planlanan otomatik yakınlaştırma: {{count}}",
 		"replanNone": "Otomatik yakınlaştırma için an bulunamadı",
-		"replanFailed": "Otomatik yakınlaştırmalar planlanamadı"
+		"replanFailed": "Otomatik yakınlaştırmalar planlanamadı",
+		"wideBetween": "Eylemler arasında uzaklaş",
+		"wideCalm": "Sakin (2,5 sn)",
+		"wideBrisk": "Hızlı (1,5 sn)"
 	},
 	"youtubeChapters": {
 		"title": "YouTube bölümleri",

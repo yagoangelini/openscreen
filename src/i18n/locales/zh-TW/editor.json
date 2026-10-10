@@ -456,7 +456,7 @@
 	},
 	"autoZoom": {
 		"title": "自動縮放",
-		"scope": "適用於本專案中的所有自動縮放。",
+		"scope": "鏡頭與轉場適用於本專案的所有縮放；其餘設定在規劃自動縮放時生效。",
 		"camera": {
 			"title": "鏡頭",
 			"fixed": "固定 + 平移",
@@ -469,11 +469,14 @@
 		"transition": "轉場",
 		"maxScale": "最大縮放",
 		"hold": "最短停留",
-		"replanHint": "最大縮放與停留時間會在重新規劃自動縮放時生效。",
+		"replanHint": "最大縮放、保持時間與拉遠在重新規劃自動縮放時生效。",
 		"replan": "重新規劃自動縮放",
 		"replanDone": "已規劃 {{count}} 個自動縮放",
 		"replanNone": "找不到適合自動縮放的時刻",
-		"replanFailed": "無法規劃自動縮放"
+		"replanFailed": "無法規劃自動縮放",
+		"wideBetween": "操作之間拉遠",
+		"wideCalm": "平穩 (2.5 秒)",
+		"wideBrisk": "輕快 (1.5 秒)"
 	},
 	"youtubeChapters": {
 		"title": "YouTube 章節",

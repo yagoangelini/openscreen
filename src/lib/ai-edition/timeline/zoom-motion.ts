@@ -48,7 +48,15 @@ export interface AutoZoomSettings {
 	transitionSec: number;
 	/** The shortest time an automatic zoom holds, fully in, in seconds. */
 	holdSec: number;
+	/**
+	 * The shortest wide shot between two automatic zooms: 2.5 s, calm (actions a few seconds
+	 * apart share one shot and pan), or 1.5 s, brisk (it opens out between them more often).
+	 */
+	minWideSec: number;
 }
+
+/** The two lengths offered for the wide shot between zooms. */
+export const MIN_WIDE_SEC_OPTIONS = [2.5, 1.5] as const;
 
 /** The "Tutorial" preset: calm, framing the whole action rather than chasing the pointer. */
 export const DEFAULT_AUTO_ZOOM_SETTINGS: AutoZoomSettings = {
@@ -56,6 +64,7 @@ export const DEFAULT_AUTO_ZOOM_SETTINGS: AutoZoomSettings = {
 	maxScale: 1.5,
 	transitionSec: 1.1,
 	holdSec: 2.5,
+	minWideSec: 2.5,
 };
 
 /** The slider ranges, and the bounds a stored value is read into. */
@@ -98,6 +107,9 @@ export function readAutoZoomSettings(raw: unknown): AutoZoomSettings {
 			defaults.transitionSec,
 		),
 		holdSec: bounded(value.holdSec, AUTO_ZOOM_BOUNDS.holdSec, defaults.holdSec),
+		minWideSec: (MIN_WIDE_SEC_OPTIONS as readonly unknown[]).includes(value.minWideSec)
+			? (value.minWideSec as number)
+			: defaults.minWideSec,
 	};
 }
 
@@ -125,9 +137,10 @@ export function autoZoomFocusMode(cameraMode: AutoZoomCameraMode): "manual" | "a
 }
 
 /**
- * How one stored zoom renders: an automatic one (`source: "auto"`) takes the project's camera
- * mode and motion, anything else keeps its own focus mode and the classic motion. The global
- * Auto-Focus toggle still forces every zoom to follow the pointer, automatic ones included.
+ * How one stored zoom renders: every zoom takes the project's camera mode and motion (the
+ * fork's choice, 2026-10-10: one control moves them all, the ones drawn by hand included);
+ * a zoom whose own focus mode was set in its inspector keeps that one. The global Auto-Focus
+ * toggle still forces every zoom to follow the pointer.
  * The one rule both renderers apply (`sceneDescription.ts`, `zoom-preview.ts`).
  */
 export function resolveZoomRendering(
@@ -136,7 +149,12 @@ export function resolveZoomRendering(
 	autoFocusAll: boolean,
 ): { focusMode: "manual" | "auto" | null; motion?: ZoomMotion } {
 	if (region.source !== "auto") {
-		return { focusMode: autoFocusAll ? "auto" : (region.focusMode ?? null) };
+		return {
+			focusMode: autoFocusAll
+				? "auto"
+				: (region.focusMode ?? autoZoomFocusMode(autoZoom.cameraMode)),
+			motion: autoZoomMotion(autoZoom),
+		};
 	}
 	return {
 		focusMode: autoFocusAll ? "auto" : autoZoomFocusMode(autoZoom.cameraMode),
