@@ -314,6 +314,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	writeSubtitlesBeside: (videoPath: string, text: string) => {
 		return ipcRenderer.invoke("write-subtitles-beside", videoPath, text);
 	},
+	scanFrameChanges: (videoPath: string, timesMs: number[]) => {
+		return ipcRenderer.invoke("scan-frame-changes", videoPath, timesMs);
+	},
 	scanRecordingText: (videoPath: string) => {
 		return ipcRenderer.invoke("scan-recording-text", videoPath);
 	},

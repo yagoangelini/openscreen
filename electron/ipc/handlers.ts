@@ -132,7 +132,7 @@ import {
 	terminateNativeWindowsCapture,
 	waitForNativeWindowsCaptureStop,
 } from "../recording/nativeWindowsCaptureStop";
-import { runOcrScan } from "../recording/ocrScan";
+import { runFrameChangeScan, runOcrScan } from "../recording/ocrScan";
 import {
 	clearPendingTake,
 	collectRecoverableTakes,
@@ -4468,6 +4468,17 @@ export function registerIpcHandlers(
 		} catch (error) {
 			return { success: false, error: String(error) };
 		}
+	});
+
+	// The frames around clicks, for the menus a web page draws (auto-zoom). Recordings only.
+	ipcMain.handle("scan-frame-changes", async (_, videoPath: unknown, timesMs: unknown) => {
+		if (typeof videoPath !== "string" || !isInRecordingDirs(videoPath) || !Array.isArray(timesMs)) {
+			return { success: false, error: "Not a recording." };
+		}
+		return runFrameChangeScan(
+			videoPath,
+			timesMs.filter((t): t is number => typeof t === "number").slice(0, 400),
+		);
 	});
 
 	ipcMain.handle("open-notification-settings", async () => {

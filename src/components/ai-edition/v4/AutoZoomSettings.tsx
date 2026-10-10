@@ -13,6 +13,7 @@ import {
 	collectAutoZoomSuggestionsForLatestDocument,
 	withoutAutoZooms,
 } from "@/lib/ai-edition/timeline/apply-auto-zooms";
+import { getTelemetryWithFramePopups } from "@/lib/ai-edition/timeline/framePopups";
 import {
 	AUTO_ZOOM_BOUNDS,
 	type AutoZoomCameraMode,
@@ -34,7 +35,10 @@ async function replanAutoZooms(): Promise<number | null> {
 			const document = useProjectStore.getState().document;
 			return document ? withoutAutoZooms(document) : null;
 		},
-		(videoPath) => nativeBridgeClient.cursor.getTelemetry(videoPath),
+		(videoPath) =>
+			getTelemetryWithFramePopups(videoPath, (path) =>
+				nativeBridgeClient.cursor.getTelemetry(path),
+			),
 	);
 	const store = useProjectStore.getState();
 	if (!collected || store.projectId !== projectId) return null;

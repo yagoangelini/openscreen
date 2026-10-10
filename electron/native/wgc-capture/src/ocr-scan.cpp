@@ -31,6 +31,7 @@
 #include <winrt/Windows.Media.Ocr.h>
 #include <winrt/Windows.Storage.Streams.h>
 
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
@@ -152,7 +153,175 @@ bool copyFrame(IMFSample* sample, UINT32 width, UINT32 height, LONG defaultStrid
 
 }  // namespace
 
+/**
+ * ocr-scan.exe --popups <video> <ms,ms,...>
+ *
+ * For each time (a click), what changed on screen just after it: the frame 150 ms before
+ * against the one 600 ms after, compared on a coarse luma grid. A menu or dropdown drawn
+ * inside a web page is invisible to UI Automation, but not to this. One line per time:
+ *   {"type":"change","t":4210,"rect":[x,y,w,h],"share":0.031}   (fractions of the frame)
+ *   {"type":"none","t":4210}
+ * Decoded as NV12 and read on its Y plane only, so no frame is converted to colour.
+ */
+namespace popups {
+
+constexpr int kGridW = 192;
+constexpr int kGridH = 108;
+constexpr LONGLONG kBeforeHns = 1'500'000;  // 150 ms
+constexpr LONGLONG kAfterHns = 6'000'000;   // 600 ms
+/** A cell this much brighter or darker, in luma levels, has changed. */
+constexpr float kCellDelta = 14.0f;
+/** Less than this share of the cells changing is a cursor hover, a caret, noise. */
+constexpr double kMinChangedShare = 0.002;
+
+struct Grid {
+    std::vector<float> cells;
+};
+
+bool lumaGrid(IMFSample* sample, UINT32 width, UINT32 height, Grid& out) {
+    ComPtr<IMFMediaBuffer> buffer;
+    if (FAILED(sample->ConvertToContiguousBuffer(&buffer))) return false;
+    BYTE* data = nullptr;
+    LONG pitch = static_cast<LONG>(width);
+    ComPtr<IMF2DBuffer> buffer2d;
+    bool locked2d = false;
+    if (SUCCEEDED(buffer.As(&buffer2d)) && SUCCEEDED(buffer2d->Lock2D(&data, &pitch))) {
+        locked2d = true;
+    } else if (FAILED(buffer->Lock(&data, nullptr, nullptr))) {
+        return false;
+    }
+    out.cells.assign(kGridW * kGridH, 0.0f);
+    for (int gy = 0; gy < kGridH; ++gy) {
+        const UINT32 y0 = static_cast<UINT32>(static_cast<uint64_t>(gy) * height / kGridH);
+        const UINT32 y1 = std::max(y0 + 1, static_cast<UINT32>(static_cast<uint64_t>(gy + 1) * height / kGridH));
+        for (int gx = 0; gx < kGridW; ++gx) {
+            const UINT32 x0 = static_cast<UINT32>(static_cast<uint64_t>(gx) * width / kGridW);
+            const UINT32 x1 = std::max(x0 + 1, static_cast<UINT32>(static_cast<uint64_t>(gx + 1) * width / kGridW));
+            // A few samples per cell: enough to see a menu, cheap enough for hundreds of clicks.
+            float sum = 0.0f;
+            int n = 0;
+            for (UINT32 y = y0; y < y1; y += 2) {
+                const BYTE* row = data + static_cast<ptrdiff_t>(y) * pitch;
+                for (UINT32 x = x0; x < x1; x += 2) {
+                    sum += row[x];
+                    ++n;
+                }
+            }
+            out.cells[gy * kGridW + gx] = n > 0 ? sum / n : 0.0f;
+        }
+    }
+    if (locked2d) buffer2d->Unlock2D(); else buffer->Unlock();
+    return true;
+}
+
+/** The first decoded frame at or after `target` (100 ns units), from wherever the reader is. */
+bool readUntil(IMFSourceReader* reader, DWORD stream, LONGLONG target, ComPtr<IMFSample>& out) {
+    for (int guard = 0; guard < 2000; ++guard) {
+        DWORD flags = 0;
+        LONGLONG timestamp = 0;
+        ComPtr<IMFSample> sample;
+        if (FAILED(reader->ReadSample(stream, 0, nullptr, &flags, &timestamp, &sample))) return false;
+        if (flags & MF_SOURCE_READERF_ENDOFSTREAM) return false;
+        if (!sample) continue;
+        out = sample;
+        if (timestamp + 170'000 >= target) return true;  // within a frame at 60 fps
+    }
+    return false;
+}
+
+int run(const std::wstring& videoPath, const std::wstring& timesArg) {
+    std::vector<LONGLONG> times;
+    size_t start = 0;
+    while (start <= timesArg.size()) {
+        const size_t comma = timesArg.find(L',', start);
+        const std::wstring token = timesArg.substr(start, comma == std::wstring::npos ? std::wstring::npos : comma - start);
+        if (!token.empty()) times.push_back(static_cast<LONGLONG>(_wtoi64(token.c_str())) * 10'000);
+        if (comma == std::wstring::npos) break;
+        start = comma + 1;
+    }
+    std::sort(times.begin(), times.end());
+
+    ComPtr<IMFSourceReader> reader;
+    if (FAILED(MFCreateSourceReaderFromURL(videoPath.c_str(), nullptr, &reader))) {
+        return fail("could not open the video");
+    }
+    const DWORD stream = static_cast<DWORD>(MF_SOURCE_READER_FIRST_VIDEO_STREAM);
+    reader->SetStreamSelection(static_cast<DWORD>(MF_SOURCE_READER_ALL_STREAMS), FALSE);
+    reader->SetStreamSelection(stream, TRUE);
+    ComPtr<IMFMediaType> wanted;
+    MFCreateMediaType(&wanted);
+    wanted->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video);
+    wanted->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_NV12);
+    if (FAILED(reader->SetCurrentMediaType(stream, nullptr, wanted.Get()))) {
+        return fail("the video cannot be decoded to NV12");
+    }
+    ComPtr<IMFMediaType> actual;
+    reader->GetCurrentMediaType(stream, &actual);
+    UINT32 width = 0, height = 0;
+    MFGetAttributeSize(actual.Get(), MF_MT_FRAME_SIZE, &width, &height);
+    if (width == 0 || height == 0) return fail("the video has no frame size");
+
+    for (const LONGLONG t : times) {
+        const LONGLONG before = std::max<LONGLONG>(0, t - kBeforeHns);
+        const LONGLONG after = t + kAfterHns;
+        PROPVARIANT position;
+        InitPropVariantFromInt64(before, &position);
+        const HRESULT seek = reader->SetCurrentPosition(GUID_NULL, position);
+        PropVariantClear(&position);
+        ComPtr<IMFSample> a;
+        ComPtr<IMFSample> b;
+        Grid ga, gb;
+        const std::string tMs = std::to_string(t / 10'000);
+        if (FAILED(seek) || !readUntil(reader.Get(), stream, before, a) || !readUntil(reader.Get(), stream, after, b) ||
+            !lumaGrid(a.Get(), width, height, ga) || !lumaGrid(b.Get(), width, height, gb)) {
+            emit("{\"type\":\"none\",\"t\":" + tMs + "}");
+            continue;
+        }
+        // Changed cells, kept only with a changed neighbour: a lone cell is compression noise.
+        std::vector<uint8_t> changed(kGridW * kGridH, 0);
+        for (int i = 0; i < kGridW * kGridH; ++i) {
+            changed[i] = std::fabs(ga.cells[i] - gb.cells[i]) > kCellDelta ? 1 : 0;
+        }
+        int count = 0, minX = kGridW, minY = kGridH, maxX = -1, maxY = -1;
+        for (int gy = 0; gy < kGridH; ++gy) {
+            for (int gx = 0; gx < kGridW; ++gx) {
+                if (!changed[gy * kGridW + gx]) continue;
+                int neighbours = 0;
+                for (int dy = -1; dy <= 1; ++dy) {
+                    for (int dx = -1; dx <= 1; ++dx) {
+                        const int nx = gx + dx, ny = gy + dy;
+                        if ((dx || dy) && nx >= 0 && ny >= 0 && nx < kGridW && ny < kGridH && changed[ny * kGridW + nx]) ++neighbours;
+                    }
+                }
+                if (neighbours < 2) continue;
+                ++count;
+                minX = std::min(minX, gx); maxX = std::max(maxX, gx);
+                minY = std::min(minY, gy); maxY = std::max(maxY, gy);
+            }
+        }
+        if (count < kMinChangedShare * kGridW * kGridH) {
+            emit("{\"type\":\"none\",\"t\":" + tMs + "}");
+            continue;
+        }
+        const double x = static_cast<double>(minX) / kGridW, y = static_cast<double>(minY) / kGridH;
+        const double w = static_cast<double>(maxX - minX + 1) / kGridW, h = static_cast<double>(maxY - minY + 1) / kGridH;
+        emit("{\"type\":\"change\",\"t\":" + tMs + ",\"rect\":[" + fmt(x) + "," + fmt(y) + "," + fmt(w) + "," + fmt(h) +
+             "],\"share\":" + fmt(static_cast<double>(count) / (kGridW * kGridH)) + "}");
+    }
+    emit("{\"type\":\"done\",\"times\":" + std::to_string(times.size()) + "}");
+    return 0;
+}
+
+}  // namespace popups
+
 int wmain(int argc, wchar_t** argv) {
+    if (argc >= 4 && std::wstring(argv[1]) == L"--popups") {
+        winrt::init_apartment(winrt::apartment_type::multi_threaded);
+        if (FAILED(MFStartup(MF_VERSION))) return fail("MFStartup failed");
+        const int code = popups::run(argv[2], argv[3]);
+        MFShutdown();
+        return code;
+    }
     if (argc < 2) {
         return fail("usage: ocr-scan.exe <video> [intervalMs]");
     }

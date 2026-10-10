@@ -80,6 +80,11 @@ interface Window {
 			videoPath: string,
 			text: string,
 		) => Promise<{ success: boolean; path?: string; error?: string }>;
+		/** What changed on screen after each click: menus drawn inside web pages. Windows only. */
+		scanFrameChanges?: (
+			videoPath: string,
+			timesMs: number[],
+		) => Promise<import("./recording/ocrScan").FrameChangesResult>;
 		/** OCR over a take, for the privacy blur: `ocr-scan.exe`'s NDJSON. Windows only. */
 		scanRecordingText?: (videoPath: string) => Promise<import("./recording/ocrScan").OcrScanResult>;
 		chooseRecordingsFolder: () => Promise<{ canceled: true } | { canceled: false; folder: string }>;

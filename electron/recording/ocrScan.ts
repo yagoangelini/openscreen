@@ -104,3 +104,59 @@ export function runOcrScan(
 		});
 	});
 }
+
+export interface FrameChangesResult {
+	success: boolean;
+	changes?: Array<{ t: number; rect: { x: number; y: number; width: number; height: number } }>;
+	error?: string;
+}
+
+/**
+ * What changed on screen just after each of `timesMs` (`ocr-scan.exe --popups`): the menus
+ * a web page draws, which UI Automation cannot see. Windows only; bounded like the OCR.
+ */
+export function runFrameChangeScan(
+	videoPath: string,
+	timesMs: number[],
+	timeoutMs = 60_000,
+): Promise<FrameChangesResult> {
+	if (process.platform !== "win32") {
+		return Promise.resolve({ success: false, error: "Frame scan is Windows-only." });
+	}
+	const helper = findOcrScanPath();
+	if (!helper) return Promise.resolve({ success: false, error: "ocr-scan.exe is not available." });
+	const times = timesMs.filter((t) => Number.isFinite(t) && t >= 0).map((t) => Math.round(t));
+	if (times.length === 0) return Promise.resolve({ success: true, changes: [] });
+	return new Promise((resolve) => {
+		const child = spawn(helper, ["--popups", videoPath, times.join(",")], {
+			stdio: ["ignore", "pipe", "ignore"],
+			windowsHide: true,
+		});
+		let output = "";
+		child.stdout.setEncoding("utf8");
+		child.stdout.on("data", (chunk: string) => {
+			output += chunk;
+		});
+		const timer = setTimeout(() => child.kill(), timeoutMs);
+		child.once("error", (error) => {
+			clearTimeout(timer);
+			resolve({ success: false, error: error.message });
+		});
+		child.once("close", () => {
+			clearTimeout(timer);
+			const changes: NonNullable<FrameChangesResult["changes"]> = [];
+			for (const line of output.split(/\r?\n/)) {
+				try {
+					const event = JSON.parse(line) as { type?: string; t?: number; rect?: number[] };
+					if (event.type === "change" && typeof event.t === "number" && event.rect?.length === 4) {
+						const [x, y, width, height] = event.rect;
+						changes.push({ t: event.t, rect: { x, y, width, height } });
+					}
+				} catch {
+					// Not a line of the scan.
+				}
+			}
+			resolve({ success: true, changes });
+		});
+	});
+}
