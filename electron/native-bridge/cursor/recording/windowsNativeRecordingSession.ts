@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { Readable } from "node:stream";
 import { app, screen } from "electron";
+import type { CursorInputSignal } from "../../../../src/lib/cursor/inputSignals";
 import { parseWindowHandleFromSourceId } from "../../../../src/lib/nativeWindowsRecording";
 import type {
 	CursorRecordingData,
@@ -13,6 +14,9 @@ import { toHelperRect } from "../../helperCoordinates";
 import type { CursorRecordingSession } from "./session";
 import type {
 	WindowsCursorEvent,
+	WindowsCursorInputEvent,
+	WindowsCursorPopupEvent,
+	WindowsCursorSampleEvent,
 	WindowsNativeRecordingSessionOptions,
 } from "./windowsNativeRecordingSession.types";
 
@@ -60,6 +64,13 @@ export class WindowsNativeRecordingSession implements CursorRecordingSession {
 	private sampleCount = 0;
 	private outOfBoundsSampleCount = 0;
 	private previousLeftButtonDown = false;
+	/** The helper writes its own input events (`ready.inputEvents`). */
+	private inputEvents = false;
+	/** What the last tick saw, for the input and popup events between ticks. */
+	private lastPhysicalBounds: { x: number; y: number; width: number; height: number } | null = null;
+	private lastPoint = { cx: 0.5, cy: 0.5 };
+	private lastVisible = true;
+	private lastCursorType: CursorRecordingSample["cursorType"] = null;
 
 	constructor(private readonly options: WindowsNativeRecordingSessionOptions) {}
 
@@ -71,6 +82,11 @@ export class WindowsNativeRecordingSession implements CursorRecordingSession {
 		this.sampleCount = 0;
 		this.outOfBoundsSampleCount = 0;
 		this.previousLeftButtonDown = false;
+		this.inputEvents = false;
+		this.lastPhysicalBounds = null;
+		this.lastPoint = { cx: 0.5, cy: 0.5 };
+		this.lastVisible = true;
+		this.lastCursorType = null;
 
 		const helperPath = findCursorSamplerPath();
 		if (!helperPath) {
@@ -144,6 +160,9 @@ export class WindowsNativeRecordingSession implements CursorRecordingSession {
 			outOfBoundsSampleCount: this.outOfBoundsSampleCount,
 		});
 
+		// Input events are written by the helper's own thread, a moment after the ticks around
+		// them: put them back in time order (a stable sort keeps a tick's order).
+		this.samples.sort((a, b) => a.timeMs - b.timeMs);
 		return {
 			version: 2,
 			provider: this.assets.size > 0 ? "native" : "none",
@@ -181,8 +200,17 @@ export class WindowsNativeRecordingSession implements CursorRecordingSession {
 		}
 
 		if (payload.type === "ready") {
-			this.logDiagnostic("ready", { timestampMs: payload.timestampMs });
+			this.inputEvents = payload.inputEvents === true;
+			this.logDiagnostic("ready", {
+				timestampMs: payload.timestampMs,
+				inputEvents: this.inputEvents,
+			});
 			this.resolveReady();
+			return;
+		}
+
+		if (payload.type === "input" || payload.type === "popup") {
+			this.samples.push(this.normalizeSignal(payload));
 			return;
 		}
 
@@ -225,17 +253,111 @@ export class WindowsNativeRecordingSession implements CursorRecordingSession {
 		}
 	}
 
+	/** The captured surface in physical screen pixels, for a sample carrying `bounds` or not. */
+	private physicalBoundsOf(bounds: WindowsCursorSampleEvent["bounds"]) {
+		const resolved = bounds ?? this.options.getDisplayBounds() ?? screen.getPrimaryDisplay().bounds;
+		// The cursor-sampler reports raw x/y in physical screen pixels (Win32
+		// GetCursorInfo). `payload.bounds` from the sampler (DWM's frame bounds) is also
+		// physical, so use it as-is. Bounds from Electron's `screen` API (or the
+		// fallback for display captures) are in DIPs, so they go through the shared
+		// conversion the capture helper's bounds also use.
+		return bounds != null ? resolved : toHelperRect(resolved);
+	}
+
+	/**
+	 * An input or popup event as a sample of its own, at the event's time and (for input) the
+	 * hook's own point. Popups carry no point: they sit at the last sampled one. Rects are
+	 * normalized against the same surface as the pointer, the last one a tick reported.
+	 */
+	private normalizeSignal(
+		payload: WindowsCursorInputEvent | WindowsCursorPopupEvent,
+	): CursorRecordingSample {
+		const b = this.lastPhysicalBounds ?? this.physicalBoundsOf(null);
+		const width = Math.max(1, b.width);
+		const height = Math.max(1, b.height);
+		const rect = (r: { x: number; y: number; width: number; height: number }) => ({
+			x: (r.x - b.x) / width,
+			y: (r.y - b.y) / height,
+			width: r.width / width,
+			height: r.height / height,
+		});
+		const timeMs = Math.max(0, payload.timestampMs - this.startTimeMs);
+		if (payload.type === "popup") {
+			const input: CursorInputSignal | null =
+				payload.event === "close"
+					? { kind: "popup-close", id: payload.id }
+					: payload.rect
+						? {
+								kind: "popup-open",
+								id: payload.id,
+								rect: rect(payload.rect),
+								...(payload.menu ? { menu: true } : {}),
+							}
+						: null;
+			return {
+				timeMs,
+				cx: this.lastPoint.cx,
+				cy: this.lastPoint.cy,
+				visible: this.lastVisible,
+				interactionType: "move",
+				...(input ? { input } : {}),
+			};
+		}
+		const cx = (payload.x - b.x) / width;
+		const cy = (payload.y - b.y) / height;
+		const withinBounds = cx >= 0 && cx <= 1 && cy >= 0 && cy <= 1;
+		let input: CursorInputSignal;
+		let interactionType: CursorRecordingSample["interactionType"] = "move";
+		switch (payload.kind) {
+			case "press":
+				input = {
+					kind: "press",
+					button: payload.button,
+					...(payload.double ? { double: true } : {}),
+					...(payload.target ? { target: rect(payload.target) } : {}),
+					...(typeof payload.controlType === "number" ? { controlType: payload.controlType } : {}),
+				};
+				// A double click's second press stays a "click": the renderer bounces on clicks.
+				interactionType =
+					payload.button === "right"
+						? "right-click"
+						: payload.button === "middle"
+							? "middle-click"
+							: "click";
+				break;
+			case "release":
+				input = { kind: "release", button: payload.button };
+				interactionType = payload.button === "left" ? "mouseup" : "move";
+				break;
+			case "wheel":
+				input = {
+					kind: "wheel",
+					delta: payload.delta,
+					...(payload.horizontal ? { horizontal: true } : {}),
+				};
+				break;
+			default:
+				input = payload.combo ? { kind: "key", combo: payload.combo } : { kind: "key" };
+				break;
+		}
+		return {
+			timeMs,
+			cx,
+			cy,
+			visible: this.lastVisible && withinBounds,
+			cursorType: this.lastCursorType,
+			interactionType,
+			input,
+		};
+	}
+
 	private normalizeSample(
 		payload: Extract<WindowsCursorEvent, { type: "sample" }>,
 	): NormalizedSample {
 		const bounds =
 			payload.bounds ?? this.options.getDisplayBounds() ?? screen.getPrimaryDisplay().bounds;
-		// The cursor-sampler reports raw x/y in physical screen pixels (Win32
-		// GetCursorInfo). `payload.bounds` from the sampler's GetWindowRect is also
-		// physical, so use it as-is. Bounds from Electron's `screen` API (or the
-		// fallback for display captures) are in DIPs, so they go through the shared
-		// conversion the capture helper's bounds also use.
-		const physicalBounds = payload.bounds != null ? bounds : toHelperRect(bounds);
+		const physicalBounds = this.physicalBoundsOf(payload.bounds);
+		this.lastPhysicalBounds = physicalBounds;
 		const physicalX = physicalBounds.x;
 		const physicalY = physicalBounds.y;
 		const width = Math.max(1, physicalBounds.width);
@@ -247,13 +369,19 @@ export class WindowsNativeRecordingSession implements CursorRecordingSession {
 		const leftButtonDown = payload.leftButtonDown === true;
 		const leftButtonPressed = payload.leftButtonPressed === true;
 		const leftButtonReleased = payload.leftButtonReleased === true;
-		const interactionType =
-			leftButtonPressed || (leftButtonDown && !this.previousLeftButtonDown)
+		// A helper that writes its own `input` events has already written this tick's presses,
+		// at their exact time and place: the tick is a move, or every click would count twice.
+		const interactionType = this.inputEvents
+			? "move"
+			: leftButtonPressed || (leftButtonDown && !this.previousLeftButtonDown)
 				? "click"
 				: leftButtonReleased || (!leftButtonDown && this.previousLeftButtonDown)
 					? "mouseup"
 					: "move";
 		this.previousLeftButtonDown = leftButtonDown;
+		this.lastPoint = { cx: normalizedX, cy: normalizedY };
+		this.lastVisible = payload.visible;
+		this.lastCursorType = payload.cursorType ?? payload.asset?.cursorType ?? null;
 
 		if (this.sampleCount === 0 || (!withinBounds && this.outOfBoundsSampleCount === 0)) {
 			this.logDiagnostic("sample", {

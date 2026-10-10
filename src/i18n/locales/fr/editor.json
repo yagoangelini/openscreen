@@ -437,5 +437,26 @@
 		"quality1440p": "1440p",
 		"finalizing": "Toutes les images sont encodées. Écriture de l'audio et finalisation du fichier…",
 		"gpuReset": "L'export s'est arrêté parce que le pilote graphique a redémarré ou que le GPU a été retiré. Votre projet est intact : relancez l'export. Si cela se reproduit, mettez à jour le pilote graphique."
+	},
+	"autoZoom": {
+		"title": "Zooms automatiques",
+		"scope": "S'applique à tous les zooms automatiques de ce projet.",
+		"camera": {
+			"title": "Caméra",
+			"fixed": "Fixe + panoramique",
+			"hybrid": "Hybride",
+			"follow": "Suivre la souris",
+			"fixedHint": "Reste sur ce que l'action cadre et glisse en douceur vers la suivante.",
+			"hybridHint": "Reste immobile jusqu'à ce que le pointeur quitte l'essentiel de la vue, puis recadre lentement.",
+			"followHint": "Suit le pointeur, fortement lissée."
+		},
+		"transition": "Transition",
+		"maxScale": "Zoom maximal",
+		"hold": "Maintien minimal",
+		"replanHint": "Le zoom maximal et le maintien s'appliquent quand les zooms automatiques sont replanifiés.",
+		"replan": "Replanifier les zooms automatiques",
+		"replanDone": "Zooms automatiques planifiés : {{count}}",
+		"replanNone": "Aucun moment pour un zoom automatique n'a été trouvé",
+		"replanFailed": "Impossible de planifier les zooms automatiques"
 	}
 }

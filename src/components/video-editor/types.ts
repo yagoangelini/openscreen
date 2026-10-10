@@ -1,3 +1,4 @@
+import type { ZoomMotion } from "@/lib/ai-edition/timeline/zoom-motion";
 import {
 	effectiveZoomScale,
 	type ZoomDepth,
@@ -5,6 +6,7 @@ import {
 } from "@/lib/ai-edition/timeline/zoom-scale";
 import type { WebcamLayoutPreset } from "@/lib/compositeLayout";
 import type { CursorKind } from "@/lib/cursor/cursorThemes";
+import type { CursorInputSignal } from "@/lib/cursor/inputSignals";
 import { DEFAULT_PROJECT_APPEARANCE, SETTING_BOUNDS } from "@/lib/projectDefaults";
 import { clamp01 } from "@/utils/math";
 
@@ -163,6 +165,9 @@ export interface ZoomRegion {
 	source?: ZoomRegionSource;
 	/** When true, cursor is hidden during this zoom region. */
 	hideCursor?: boolean;
+	/** How an automatic zoom moves (`zoom-motion.ts`), resolved from the project's auto-zoom
+	 *  settings at render time. Absent: the classic motion. Never stored. */
+	motion?: ZoomMotion;
 }
 
 export function getRotation3D(region: Pick<ZoomRegion, "rotationPreset">): Rotation3D {
@@ -265,6 +270,8 @@ export interface CursorTelemetryPoint {
 	cy: number;
 	visible?: boolean;
 	interactionType?: "move" | "click" | "double-click" | "right-click" | "middle-click" | "mouseup";
+	/** What the user did at this sample besides moving (Windows sampler). See `inputSignals.ts`. */
+	input?: CursorInputSignal;
 	cursorType?:
 		| "arrow"
 		| "text"

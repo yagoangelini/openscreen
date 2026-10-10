@@ -46,6 +46,7 @@ import { resolveClipSourceEndSec } from "@/lib/ai-edition/timeline/clipDuration"
 import { removedRawSpans } from "@/lib/ai-edition/timeline/programme-time";
 import { takeProgramme } from "@/lib/ai-edition/timeline/take-programme";
 import { projectRegionsToSource } from "@/lib/ai-edition/timeline/timelineMap";
+import { resolveZoomRendering, type ZoomMotion } from "@/lib/ai-edition/timeline/zoom-motion";
 import {
 	MAGNIFICATION_REFERENCE_PX,
 	MAX_ZOOM_SCALE,
@@ -117,6 +118,10 @@ export interface SceneZoomRegion {
 	underTrim?: boolean;
 	/** When true, cursor is hidden during this zoom region. */
 	hideCursor?: boolean;
+	/** How an AUTOMATIC zoom moves: the scene's zoom motion, built once from the project's
+	 *  auto-zoom settings (`autoZoomMotion`) and carried by each automatic region. Omitted for
+	 *  every other zoom, which keeps the classic motion. See `SceneZoomMotion` (scene.rs). */
+	motion?: ZoomMotion;
 }
 
 /** A "Full Camera" timeline region (from `legacyEditor.cameraFullscreenRegions`). Times in seconds. */
@@ -1270,44 +1275,51 @@ export function buildSceneDescription(
 		},
 		audioTracks,
 		background: sceneBackground(settings.wallpaper, settings.wallpaperMotion),
-		zoomRegions: projectedZoomRegions.map((region) => ({
-			id: region.id,
-			startSec: region.startMs / 1000,
-			endSec: region.endMs / 1000,
-			// `ZOOM_DEPTH_SCALES` et rien d'autre. Cette ligne portait sa propre formule,
-			// `depth / 2 + 0.5`, qui ne coïncide avec la table qu'à la profondeur 2 — et le focus,
-			// lui, est borné avec la table (`getFocusBoundsForScale`, via `getZoomScale`). Les deux
-			// échelles se contredisaient donc : à la profondeur 3 le gimbal butait à 1/(2×1.8) =
-			// 0.2778 pendant que le compositeur découpait une demi-fenêtre de 1/(2×2.0) = 0.25, si
-			// bien que la fenêtre source s'arrêtait 2.78 % avant le bord — 53 px sur 1920
-			// définitivement hors d'atteinte, gimbal à fond dans le coin. Le symptôme rapporté :
-			// « le zoom coupe les bords extérieurs ».
-			//
-			// ponytail: et c'est `getZoomScale` en entier, pas la table seule. La ligne
-			// lisait `region.customScale ?? ZOOM_DEPTH_SCALES[depth]`, donc sans le clamp
-			// [1.0, 5.0] que l'UI applique. Or `zoomRegionSchema` n'exige de `customScale`
-			// que d'être positif : un document portant `customScale: 12` est valide, rendait
-			// 5× dans l'aperçu web et 12× ici. Même désaccord que ci-dessus, un cran plus bas.
-			//
-			// Bounded per clip: crop and zoom multiply, and past `MAX_SOURCE_MAGNIFICATION` the
-			// recording blurs. The inspector greys those levels out; this catches a level set
-			// before a crop or a format change made it too deep.
-			scale: Math.min(
-				getZoomScale(region),
-				zoomLimitByClip[region.clipIndex ?? 0] ?? MAX_ZOOM_SCALE,
-			),
-			focusX: region.focus.cx,
-			focusY: region.focus.cy,
-			// The global Auto-Focus toggle OVERRIDES each region's own mode rather than merely
-			// seeding it — that's what `settings.zoom.focusMode.lockedDisclaimer` promises the
-			// user ("turn it off to set focus mode per zoom"), and it's what makes the toolbar
-			// button a one-click "make every zoom follow the cursor".
-			focusMode: settings.autoFocusAll ? "auto" : (region.focusMode ?? null),
-			rotation: region.rotationPreset ?? null,
-			clipIndex: region.clipIndex,
-			...(region.underTrim ? { underTrim: true } : {}),
-			...(region.hideCursor ? { hideCursor: true } : {}),
-		})),
+		zoomRegions: projectedZoomRegions.map((region) => {
+			const rendering = resolveZoomRendering(region, settings.autoZoom, settings.autoFocusAll);
+			return {
+				id: region.id,
+				startSec: region.startMs / 1000,
+				endSec: region.endMs / 1000,
+				// `ZOOM_DEPTH_SCALES` et rien d'autre. Cette ligne portait sa propre formule,
+				// `depth / 2 + 0.5`, qui ne coïncide avec la table qu'à la profondeur 2 — et le focus,
+				// lui, est borné avec la table (`getFocusBoundsForScale`, via `getZoomScale`). Les deux
+				// échelles se contredisaient donc : à la profondeur 3 le gimbal butait à 1/(2×1.8) =
+				// 0.2778 pendant que le compositeur découpait une demi-fenêtre de 1/(2×2.0) = 0.25, si
+				// bien que la fenêtre source s'arrêtait 2.78 % avant le bord — 53 px sur 1920
+				// définitivement hors d'atteinte, gimbal à fond dans le coin. Le symptôme rapporté :
+				// « le zoom coupe les bords extérieurs ».
+				//
+				// ponytail: et c'est `getZoomScale` en entier, pas la table seule. La ligne
+				// lisait `region.customScale ?? ZOOM_DEPTH_SCALES[depth]`, donc sans le clamp
+				// [1.0, 5.0] que l'UI applique. Or `zoomRegionSchema` n'exige de `customScale`
+				// que d'être positif : un document portant `customScale: 12` est valide, rendait
+				// 5× dans l'aperçu web et 12× ici. Même désaccord que ci-dessus, un cran plus bas.
+				//
+				// Bounded per clip: crop and zoom multiply, and past `MAX_SOURCE_MAGNIFICATION` the
+				// recording blurs. The inspector greys those levels out; this catches a level set
+				// before a crop or a format change made it too deep.
+				scale: Math.min(
+					getZoomScale(region),
+					zoomLimitByClip[region.clipIndex ?? 0] ?? MAX_ZOOM_SCALE,
+				),
+				focusX: region.focus.cx,
+				focusY: region.focus.cy,
+				// The global Auto-Focus toggle OVERRIDES each region's own mode rather than merely
+				// seeding it — that's what `settings.zoom.focusMode.lockedDisclaimer` promises the
+				// user ("turn it off to set focus mode per zoom"), and it's what makes the toolbar
+				// button a one-click "make every zoom follow the cursor".
+				//
+				// An automatic zoom takes the project's auto-zoom camera instead of its own mode, and
+				// carries the project's motion: one control moves them all (`resolveZoomRendering`).
+				focusMode: rendering.focusMode,
+				rotation: region.rotationPreset ?? null,
+				clipIndex: region.clipIndex,
+				...(region.underTrim ? { underTrim: true } : {}),
+				...(region.hideCursor ? { hideCursor: true } : {}),
+				...(rendering.motion ? { motion: rendering.motion } : {}),
+			};
+		}),
 		annotations: projectedAnnotations
 			.map((region) => {
 				const style = region.style;

@@ -8,7 +8,9 @@
 
 use crate::camera::Follow;
 use crate::cursor::CursorTrack;
-use crate::scene::{SceneCameraFullscreenRegion, SceneSpeedRegion, SceneZoomRegion};
+use crate::scene::{
+    SceneCameraFullscreenRegion, SceneSpeedRegion, SceneZoomEasing, SceneZoomMotion, SceneZoomRegion,
+};
 
 /// Quantification commune vidéo/audio : le web retranche exactement 1 ms avant `ceil`.
 pub const SPEED_FRAME_EPSILON_SEC: f64 = 0.001;
@@ -357,6 +359,50 @@ fn zoom_transition_s(scale: f32) -> f32 {
     ZOOM_TRANSITION_BASE_S + ZOOM_TRANSITION_PER_LN_S * scale.max(1.0).ln()
 }
 
+/// Smootherstep, 6t⁵ − 15t⁴ + 10t³: symmetric, leaves and lands with zero speed AND zero
+/// acceleration. The calm motion's ramp and pan, where the spring's front-loaded rise read as a
+/// lunge. Mirror of `smootherstep` (TS, `mathUtils.ts`).
+fn smootherstep(t: f32) -> f32 {
+    let x = clamp01(t);
+    x * x * x * (x * (x * 6.0 - 15.0) + 10.0)
+}
+
+/// How long `region`'s ramps last on screen: its motion's when it carries one, the classic
+/// `zoom_transition_s` otherwise. Mirror of `zoomTransitionMsFor` (TS).
+fn ramp_s(region: &SceneZoomRegion) -> f32 {
+    match region.motion {
+        Some(m) => motion_transition_s(&m, region.scale),
+        None => zoom_transition_s(region.scale),
+    }
+}
+
+fn motion_transition_s(motion: &SceneZoomMotion, scale: f32) -> f32 {
+    (motion.transition_base_sec + motion.transition_per_ln_sec * scale.max(1.0).ln()).max(0.05)
+}
+
+/// `region`'s ramp easing at `t` (0..1 of the ramp).
+fn ramp_ease(region: &SceneZoomRegion, t: f32) -> f32 {
+    match region.motion.map(|m| m.easing) {
+        Some(SceneZoomEasing::Smooth) => smootherstep(t),
+        _ => ease_spring(t),
+    }
+}
+
+/// A chained pan's easing at `t`: the calm motion's smootherstep, or the classic curve.
+fn pan_ease(smooth: bool, t: f32) -> f32 {
+    if smooth {
+        smootherstep(t)
+    } else {
+        ease_connected_pan(t)
+    }
+}
+
+/// The motion that times the pan between `cur` and `next`: the arriving region's, else the
+/// leaving one's, else none (the classic pan). Mirror of `panMotionOf` (TS).
+fn pan_motion(cur: &SceneZoomRegion, next: &SceneZoomRegion) -> Option<SceneZoomMotion> {
+    next.motion.or(cur.motion)
+}
+
 /// Port de `computeRegionStrength` (TS, `zoomRegionUtils.ts`) : 0 hors fenêtre, ease-in qui
 /// arrive pile à `startSec` (le zoom est en place quand la région commence), plein régime pendant
 /// la région, ease-out qui part de `endSec`. Les deux transitions durent `zoom_transition_s`.
@@ -375,17 +421,17 @@ fn zoom_region_strength(region: &SceneZoomRegion, t: f32, clock: &ScreenClock) -
         return if t >= start && t < end { 1.0 } else { 0.0 };
     }
     let (start, end, t) = (clock.at(start), clock.at(end), clock.at(t));
-    let window = zoom_transition_s(region.scale);
+    let window = ramp_s(region);
     if t < start - window || t > end + window {
         return 0.0;
     }
     if t < start {
-        return ease_spring((t - (start - window)) / window);
+        return ramp_ease(region, (t - (start - window)) / window);
     }
     if t <= end {
         return 1.0;
     }
-    1.0 - ease_spring((t - end) / window)
+    1.0 - ramp_ease(region, (t - end) / window)
 }
 
 /// Facteur d'opacité du curseur (0.0..1.0) induit par les régions de zoom ayant `hide_cursor = true`.
@@ -400,12 +446,12 @@ pub fn zoom_cursor_alpha(regions: &[SceneZoomRegion], t: f32, clock: &ScreenCloc
     let screen_t = clock.at(t);
 
     // 1) transition chaînée : pan lissé de la région courante vers la suivante.
-    for &(ci, ni, t_start, t_end) in &pairs {
+    for &(ci, ni, t_start, t_end, smooth) in &pairs {
         if screen_t < t_start || screen_t > t_end {
             continue;
         }
         let progress =
-            ease_connected_pan(clamp01((screen_t - t_start) / (t_end - t_start).max(1e-3)));
+            pan_ease(smooth, clamp01((screen_t - t_start) / (t_end - t_start).max(1e-3)));
         let cur_alpha = if regions[ci].hide_cursor { 0.0 } else { 1.0 };
         let next_alpha = if regions[ni].hide_cursor { 0.0 } else { 1.0 };
         return lerp(cur_alpha, next_alpha, progress).clamp(0.0, 1.0);
@@ -413,7 +459,7 @@ pub fn zoom_cursor_alpha(regions: &[SceneZoomRegion], t: f32, clock: &ScreenCloc
 
     // 2) palier chaîné : entre la fin de la transition et le début officiel de la région
     // suivante, celle-ci est déjà pleinement active (anticipe son propre ease-in).
-    for &(_, ni, _, t_end) in &pairs {
+    for &(_, ni, _, t_end, _) in &pairs {
         let next = &regions[ni];
         if screen_t > t_end && t < next.start_sec as f32 {
             return if next.hide_cursor { 0.0 } else { 1.0 };
@@ -426,10 +472,10 @@ pub fn zoom_cursor_alpha(regions: &[SceneZoomRegion], t: f32, clock: &ScreenCloc
     for (i, r) in regions.iter().enumerate() {
         let outgoing_past_end = pairs
             .iter()
-            .any(|&(ci, _, _, _)| ci == i && t > regions[i].end_sec as f32);
+            .any(|&(ci, _, _, _, _)| ci == i && t > regions[i].end_sec as f32);
         let incoming_before_transition_end = pairs
             .iter()
-            .any(|&(_, ni, _, t_end)| ni == i && screen_t < t_end);
+            .any(|&(_, ni, _, t_end, _)| ni == i && screen_t < t_end);
         if outgoing_past_end || incoming_before_transition_end {
             continue;
         }
@@ -720,6 +766,32 @@ fn resolve_focus(
     if camera_for(&region.rotation) == Camera::Orbit {
         return [0.5, 0.5];
     }
+    // An automatic zoom under a following mode ("auto" follows the pointer smoothly, "hybrid"
+    // holds until it leaves a wide dead zone): the view starts on the PLANNED focus, not on the
+    // pointer, and re-frames with the motion's own dead zone and time constant. The planned
+    // focus is where the action is; starting on the pointer made the view drift before it.
+    if let (Some(motion), Some("auto" | "hybrid"), Some(track)) =
+        (region.motion, region.focus_mode.as_deref(), cursor)
+    {
+        let window = ramp_s(region);
+        let t0 = clock.source_at(clock.at(region.start_sec as f32) - window);
+        let t_end = if region.under_trim {
+            region.end_sec as f32
+        } else {
+            clock.source_at(clock.at(region.end_sec as f32) + window)
+        };
+        if let Some((cx, cy)) = track.follow_view(
+            (region.focus_x, region.focus_y),
+            t0,
+            t,
+            t_end,
+            region.scale,
+            motion.follow_dead_zone,
+            motion.follow_tau_sec,
+        ) {
+            return [cx, cy];
+        }
+    }
     if region.focus_mode.as_deref() == Some("auto") {
         if let Some(track) = cursor {
             // La piste LISSÉE, avec une zone morte au centre de la vue zoomée (`follow_in_view`) :
@@ -753,10 +825,14 @@ fn resolve_focus(
 /// rendu, donc un pan lissé vers (ou depuis) l'une d'elles ferait bouger des frames gardées au
 /// nom d'une région que l'export ne joue pas. Elles restent des régions dominantes indépendantes,
 /// sèches sur leur propre span (cf. `zoom_region_strength`).
+///
+/// The gap that chains and the pan's duration and easing come from the pair's motion
+/// (`pan_motion`) when it has one: an automatic zoom chains on its own terms. Last field: the
+/// pan eases with smootherstep.
 fn connected_pairs(
     regions: &[SceneZoomRegion],
     clock: &ScreenClock,
-) -> Vec<(usize, usize, f32, f32)> {
+) -> Vec<(usize, usize, f32, f32, bool)> {
     let mut order: Vec<usize> = (0..regions.len())
         .filter(|&i| !regions[i].under_trim)
         .collect();
@@ -771,13 +847,16 @@ fn connected_pairs(
         let (ci, ni) = (w[0], w[1]);
         let transition_start = clock.at(regions[ci].end_sec as f32);
         let gap = clock.at(regions[ni].start_sec as f32) - transition_start;
-        if gap <= CHAINED_ZOOM_PAN_GAP_S {
-            pairs.push((
-                ci,
-                ni,
-                transition_start,
-                transition_start + CONNECTED_ZOOM_PAN_DURATION_S,
-            ));
+        let (max_gap, duration, smooth) = match pan_motion(&regions[ci], &regions[ni]) {
+            Some(m) => (
+                m.pan_gap_sec,
+                m.pan_duration_sec.max(0.05),
+                m.easing == SceneZoomEasing::Smooth,
+            ),
+            None => (CHAINED_ZOOM_PAN_GAP_S, CONNECTED_ZOOM_PAN_DURATION_S, false),
+        };
+        if gap <= max_gap {
+            pairs.push((ci, ni, transition_start, transition_start + duration, smooth));
         }
     }
     pairs
@@ -820,12 +899,12 @@ pub fn zoom_state_in(
     let screen_t = clock.at(t);
 
     // 1) transition chaînée : pan lissé de la région courante vers la suivante.
-    for &(ci, ni, t_start, t_end) in &pairs {
+    for &(ci, ni, t_start, t_end, smooth) in &pairs {
         if screen_t < t_start || screen_t > t_end {
             continue;
         }
         let progress =
-            ease_connected_pan(clamp01((screen_t - t_start) / (t_end - t_start).max(1e-3)));
+            pan_ease(smooth, clamp01((screen_t - t_start) / (t_end - t_start).max(1e-3)));
         let (cur, next) = (&regions[ci], &regions[ni]);
         let cur_focus = resolve_focus(cur, t, cursor, clock);
         let next_focus = resolve_focus(next, t, cursor, clock);
@@ -885,7 +964,7 @@ pub fn zoom_state_in(
 
     // 2) palier chaîné : entre la fin de la transition et le début officiel de la région
     // suivante, celle-ci est déjà pleinement active (anticipe son propre ease-in).
-    for &(_, ni, _, t_end) in &pairs {
+    for &(_, ni, _, t_end, _) in &pairs {
         let next = &regions[ni];
         if screen_t > t_end && t < next.start_sec as f32 {
             let camera = orbit_flag(next);
@@ -909,10 +988,10 @@ pub fn zoom_state_in(
     for (i, r) in regions.iter().enumerate() {
         let outgoing_past_end = pairs
             .iter()
-            .any(|&(ci, _, _, _)| ci == i && t > regions[i].end_sec as f32);
+            .any(|&(ci, _, _, _, _)| ci == i && t > regions[i].end_sec as f32);
         let incoming_before_transition_end = pairs
             .iter()
-            .any(|&(_, ni, _, t_end)| ni == i && screen_t < t_end);
+            .any(|&(_, ni, _, t_end, _)| ni == i && screen_t < t_end);
         if outgoing_past_end || incoming_before_transition_end {
             continue;
         }
@@ -1636,6 +1715,7 @@ mod zoom_focus_tests {
             rotation: None,
             under_trim: false,
             hide_cursor: false,
+            motion: None,
         }
     }
 
@@ -2533,6 +2613,7 @@ mod tilt_tests {
             rotation: rotation.map(Into::into),
             under_trim: false,
             hide_cursor: false,
+            motion: None,
         };
         // `orbit` n'incline pas l'écran (caméra réelle, `camera.rs`) : chaînée à un angle
         // fixe, la transition passe par l'écran droit, que ce balayage couvre aussi.
@@ -2955,6 +3036,7 @@ mod tilt_tests {
             rotation: rotation.map(Into::into),
             under_trim: false,
             hide_cursor: false,
+            motion: None,
         };
         assert_eq!(zoom_state_at(&[region(Some("left"))], 5.0, None).tilt, 1.0);
         assert_eq!(zoom_state_at(&[region(None)], 5.0, None).tilt, 0.0);
@@ -3263,6 +3345,7 @@ mod orbit_camera_tests {
             rotation: Some(rotation.into()),
             under_trim: false,
             hide_cursor: false,
+            motion: None,
         }
     }
 
@@ -3432,5 +3515,236 @@ mod orbit_camera_tests {
         for i in (0..240).rev() {
             assert_eq!(at(i), forward[i], "frame {i}");
         }
+    }
+}
+
+/// The calm motion of automatic zooms (`SceneZoomMotion`). The golden tables below are ALSO
+/// asserted by `src/lib/zoomMath/calmMotion.parity.test.ts`: the preview's TS mirror and this
+/// renderer must agree on them, number for number.
+#[cfg(test)]
+mod calm_motion_tests {
+    use super::*;
+    use crate::scene::SceneZoomRegion;
+
+    const CALM: SceneZoomMotion = SceneZoomMotion {
+        easing: SceneZoomEasing::Smooth,
+        transition_base_sec: 0.95,
+        transition_per_ln_sec: 0.35,
+        pan_gap_sec: 2.0,
+        pan_duration_sec: 1.1,
+        follow_dead_zone: 0.7,
+        follow_tau_sec: 0.5,
+    };
+
+    fn calm(start: f64, end: f64, scale: f32, focus: (f32, f32)) -> SceneZoomRegion {
+        SceneZoomRegion {
+            id: format!("z{start}"),
+            clip_index: None,
+            start_sec: start,
+            end_sec: end,
+            scale,
+            focus_x: focus.0,
+            focus_y: focus.1,
+            focus_mode: Some("manual".into()),
+            rotation: None,
+            under_trim: false,
+            hide_cursor: false,
+            motion: Some(CALM),
+        }
+    }
+
+    #[test]
+    fn a_calm_ramp_is_symmetric_and_lasts_its_motion() {
+        let r = calm(2.0, 6.0, 1.5, (0.5, 0.5));
+        let w = CALM.transition_base_sec + CALM.transition_per_ln_sec * 1.5f32.ln();
+        assert!((ramp_s(&r) - w).abs() < 1e-6);
+        let clock = ScreenClock::default();
+        let s = |t: f32| zoom_region_strength(&r, t, &clock);
+        assert_eq!(s(2.0 - w - 0.01), 0.0);
+        assert!((s(2.0 - w / 2.0) - 0.5).abs() < 1e-4, "{}", s(2.0 - w / 2.0));
+        assert_eq!(s(2.0), 1.0);
+        for i in 0..=20 {
+            let u = i as f32 / 20.0;
+            // In and out are mirror images: the ramp is as gentle arriving as leaving.
+            let rise = s(2.0 - w + u * w);
+            let fall = s(6.0 + (1.0 - u) * w);
+            assert!((rise - fall).abs() < 1e-4, "u {u}: {rise} vs {fall}");
+            assert!((smootherstep(u) + smootherstep(1.0 - u) - 1.0).abs() < 1e-6);
+        }
+        // Still at both ends: no lunge on the first frame, no bump on the last.
+        let dt = 1.0 / 240.0;
+        let speed = |t: f32| (s(t + dt) - s(t)).abs() / dt;
+        let peak = (0..=240)
+            .map(|i| speed(2.0 - w + i as f32 * w / 240.0))
+            .fold(0.0, f32::max);
+        assert!(speed(2.0 - w) < 0.01 * peak && speed(2.0 - dt) < 0.01 * peak);
+    }
+
+    #[test]
+    fn calm_zooms_chain_with_their_own_pan() {
+        // 1.8 s apart: the classic motion would zoom out and back in; the calm one pans.
+        let regions = [
+            calm(2.0, 4.0, 1.5, (0.3, 0.4)),
+            calm(5.8, 8.0, 1.5, (0.7, 0.6)),
+        ];
+        let pairs = connected_pairs(&regions, &ScreenClock::default());
+        assert_eq!(pairs.len(), 1);
+        let (_, _, t0, t1, smooth) = pairs[0];
+        assert!(smooth);
+        assert!((t0 - 4.0).abs() < 1e-6 && (t1 - 5.1).abs() < 1e-6);
+        // Mid-pan, half way, at full zoom: the scale never dips back towards 1×.
+        let mid = zoom_state_at(&regions, 4.55, None);
+        assert!((mid.scale - 1.5).abs() < 1e-5);
+        assert!((mid.focus[0] - 0.5).abs() < 1e-4, "{}", mid.focus[0]);
+    }
+
+    /// The scenario both sides replay: two calm zooms chained by a pan, then one classic zoom.
+    fn parity_regions() -> Vec<SceneZoomRegion> {
+        let mut classic = calm(10.0, 12.0, 1.8, (0.7, 0.3));
+        classic.motion = None;
+        vec![
+            calm(2.0, 4.0, 1.5, (0.35, 0.4)),
+            calm(5.1, 7.0, 1.5, (0.65, 0.6)),
+            classic,
+        ]
+    }
+
+    const PARITY_TIMES: [f32; 14] = [
+        0.5, 1.2, 1.6, 2.0, 3.0, 4.3, 4.55, 4.8, 5.1, 6.0, 7.4, 9.4, 11.0, 12.6,
+    ];
+
+    /// `(t, scale, centre x, centre y)`: the centre is the source point drawn at the middle of
+    /// the frame.
+    const PARITY_STATES: [(f32, f32, f32, f32); 14] = [
+        (0.5, 1.0, 0.5, 0.5),
+        (1.2, 1.050_984_7, 0.475_219_25, 0.483_479_5),
+        (1.6, 1.349_341_8, 0.379_020_12, 0.419_346_75),
+        (2.0, 1.5, 0.35, 0.4),
+        (3.0, 1.5, 0.35, 0.4),
+        (4.3, 1.5, 0.388_676_6, 0.425_784_44),
+        (4.55, 1.5, 0.5, 0.5),
+        (4.8, 1.5, 0.611_323_5, 0.574_215_7),
+        (5.1, 1.5, 0.65, 0.6),
+        (6.0, 1.5, 0.65, 0.6),
+        (7.4, 1.349_341_6, 0.620_979_8, 0.580_653_25),
+        (9.4, 1.515_817_6, 0.661_428_5, 0.338_571_52),
+        (11.0, 1.8, 0.7, 0.3),
+        (12.6, 1.030_903_1, 0.516_040_8, 0.483_959_23),
+    ];
+
+    #[test]
+    #[ignore = "prints the golden tables; run with --ignored --nocapture after a deliberate change"]
+    fn print_the_parity_tables() {
+        let regions = parity_regions();
+        for t in PARITY_TIMES {
+            let s = zoom_state_at(&regions, t, None);
+            println!("({t:?}, {:?}, {:?}, {:?}),", s.scale, s.focus[0], s.focus[1]);
+        }
+        let track = parity_track();
+        for t in PARITY_VIEW_TIMES {
+            let h = track
+                .follow_view((0.4, 0.5), 0.5, t, 6.0, 1.5, 0.7, 0.5)
+                .unwrap();
+            let f = track
+                .follow_view((0.4, 0.5), 0.5, t, 6.0, 1.5, 0.2, 0.8)
+                .unwrap();
+            println!("({t:?}, {:?}, {:?}, {:?}),", h.0, h.1, f.0);
+        }
+    }
+
+    #[test]
+    fn the_renderer_matches_the_golden_table() {
+        let regions = parity_regions();
+        for (t, scale, x, y) in PARITY_STATES {
+            let s = zoom_state_at(&regions, t, None);
+            assert!(
+                (s.scale - scale).abs() < 1e-4
+                    && (s.focus[0] - x).abs() < 1e-4
+                    && (s.focus[1] - y).abs() < 1e-4,
+                "t {t}: {} {:?}",
+                s.scale,
+                s.focus
+            );
+        }
+    }
+
+    fn parity_track() -> CursorTrack {
+        CursorTrack::new(
+            (0..=180)
+                .map(|i| {
+                    let t = i as f32 / 30.0;
+                    (
+                        t,
+                        0.5 + 0.35 * (t * 1.3).sin(),
+                        0.5 + 0.1 * (t * 0.9).cos(),
+                    )
+                })
+                .collect(),
+            vec![],
+            vec![],
+        )
+    }
+
+    const PARITY_VIEW_TIMES: [f32; 6] = [1.0, 2.0, 3.0, 4.0, 5.0, 7.0];
+
+    /// `(t, hybrid x, hybrid y, follow x)`: `follow_view` from (0.4, 0.5) at 1.5×, the hybrid
+    /// camera (zone 0.7, τ 0.5 s) and the smooth follow (zone 0.2, τ 0.8 s).
+    const PARITY_VIEWS: [(f32, f32, f32, f32); 6] = [
+        (1.0, 0.504_451_45, 0.5, 0.552_585_96),
+        (2.0, 0.571_525_3, 0.5, 0.666_666_6),
+        (3.0, 0.554_215_67, 0.5, 0.531_418_9),
+        (4.0, 0.424_304_6, 0.5, 0.333_333_34),
+        (5.0, 0.424_304_6, 0.5, 0.372_680_84),
+        (7.0, 0.543_885_5, 0.5, 0.615_657_9),
+    ];
+
+    #[test]
+    fn the_following_views_match_the_golden_table() {
+        let track = parity_track();
+        for (t, hx, hy, fx) in PARITY_VIEWS {
+            let h = track
+                .follow_view((0.4, 0.5), 0.5, t, 6.0, 1.5, 0.7, 0.5)
+                .unwrap();
+            let f = track
+                .follow_view((0.4, 0.5), 0.5, t, 6.0, 1.5, 0.2, 0.8)
+                .unwrap();
+            assert!(
+                (h.0 - hx).abs() < 1e-4 && (h.1 - hy).abs() < 1e-4 && (f.0 - fx).abs() < 1e-4,
+                "t {t}: {h:?} {f:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_hybrid_view_holds_inside_its_wide_dead_zone_then_reframes_slowly() {
+        // At 1.5× the view is 0.667 wide; a 0.7 zone holds while the pointer stays within
+        // ±0.233 of the view's centre.
+        let track = CursorTrack::new(
+            (0..=300)
+                .map(|i| {
+                    let t = i as f32 / 30.0;
+                    let x = if t < 4.0 {
+                        0.5 + 0.2 * (t * 3.0).sin()
+                    } else {
+                        0.95
+                    };
+                    (t, x, 0.5)
+                })
+                .collect(),
+            vec![],
+            vec![],
+        );
+        let at = |t: f32| {
+            track
+                .follow_view((0.5, 0.5), 0.0, t, 10.0, 1.5, 0.7, 0.5)
+                .unwrap()
+                .0
+        };
+        for i in 0..40 {
+            assert_eq!(at(i as f32 / 10.0), 0.5, "t {}", i as f32 / 10.0);
+        }
+        // The pointer jumps to 0.95: the view follows, slowly, never past what 1.5× can reach.
+        assert!(at(4.2) > 0.5 && at(4.2) < at(5.0));
+        assert!((at(9.0) - (1.0 - 0.5 / 1.5)).abs() < 1e-3, "{}", at(9.0));
     }
 }

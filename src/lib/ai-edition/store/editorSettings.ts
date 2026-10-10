@@ -37,6 +37,11 @@ import {
 } from "@/lib/projectDefaults";
 import type { AspectRatio } from "@/utils/aspectRatioUtils";
 import type { AxcutDocument } from "../schema";
+import {
+	type AutoZoomSettings,
+	DEFAULT_AUTO_ZOOM_SETTINGS,
+	readAutoZoomSettings,
+} from "../timeline/zoom-motion";
 
 // ponytail: avoid dragging in lib/exporter full surface here — we only
 // need the type names. Wallpaper + cursor theme are stored as plain strings
@@ -131,6 +136,9 @@ export interface EditorSettingsSnapshot {
 	cursorAutoHide: boolean;
 	cursorTheme: string;
 	autoFocusAll: boolean;
+	/** How the automatic zooms are planned and move (`zoom-motion.ts`). One object for all of
+	 *  them: switching the camera here switches every automatic zoom at once. */
+	autoZoom: AutoZoomSettings;
 }
 
 export const DEFAULT_EDITOR_SETTINGS: EditorSettingsSnapshot = {
@@ -145,6 +153,7 @@ export const DEFAULT_EDITOR_SETTINGS: EditorSettingsSnapshot = {
 	webcamCropPan: DEFAULT_CROP_PAN,
 	audioGainDb: 0,
 	formatFollowCursor: null,
+	autoZoom: DEFAULT_AUTO_ZOOM_SETTINGS,
 };
 
 interface LegacyShape {
@@ -193,6 +202,8 @@ interface LegacyShape {
 	cursorAutoHide?: boolean;
 	cursorTheme?: string;
 	autoFocusAll?: boolean;
+	/** `unknown`: read into range by `readAutoZoomSettings`. */
+	autoZoom?: unknown;
 }
 function isShape(value: unknown): value is LegacyShape {
 	return typeof value === "object" && value !== null;
@@ -330,6 +341,7 @@ export function getEditorSettings(doc: AxcutDocument | null | undefined): Editor
 		// compositor only builds it for the default theme.
 		cursorTheme: normalizeCursorThemeId(legacy?.cursorTheme),
 		autoFocusAll: bool(legacy?.autoFocusAll, DEFAULT_EDITOR_SETTINGS.autoFocusAll),
+		autoZoom: readAutoZoomSettings(legacy?.autoZoom),
 	};
 }
 export interface EditorSettingsPatch {
@@ -362,6 +374,8 @@ export interface EditorSettingsPatch {
 	cursor?: Partial<CursorVisualSettings> & { theme?: string; show?: boolean; autoHide?: boolean };
 	cursorAutoHide?: boolean;
 	autoFocusAll?: boolean;
+	/** Merged into the stored settings: a patch names only what it changes. */
+	autoZoom?: Partial<AutoZoomSettings>;
 }
 
 function nextLegacy(current: LegacyShape | null, patch: EditorSettingsPatch): LegacyShape {
@@ -373,7 +387,7 @@ function nextLegacy(current: LegacyShape | null, patch: EditorSettingsPatch): Le
 	// The Pick keeps what the 16 `if`s used to check: a patch key with no
 	// LegacyShape counterpart fails to compile instead of leaking into the
 	// persisted blob.
-	const { cursor: _cursor, ...rest } = patch;
+	const { cursor: _cursor, autoZoom: _autoZoom, ...rest } = patch;
 	const defined = Object.fromEntries(
 		Object.entries(rest).filter(([, v]) => v !== undefined),
 	) as Partial<Pick<LegacyShape, keyof Omit<EditorSettingsPatch, "cursor">>>;
@@ -396,6 +410,12 @@ function nextLegacy(current: LegacyShape | null, patch: EditorSettingsPatch): Le
 		if (c.autoHide !== undefined) next.cursorAutoHide = c.autoHide;
 	}
 	if (patch.cursorAutoHide !== undefined) next.cursorAutoHide = patch.cursorAutoHide;
+	if (patch.autoZoom) {
+		const changed = Object.fromEntries(
+			Object.entries(patch.autoZoom).filter(([, v]) => v !== undefined),
+		);
+		next.autoZoom = readAutoZoomSettings({ ...readAutoZoomSettings(base.autoZoom), ...changed });
+	}
 	return next;
 }
 

@@ -437,5 +437,26 @@
 		"quality1440p": "1440p",
 		"finalizing": "所有帧已编码，正在写入音频并完成文件…",
 		"gpuReset": "由于显卡驱动已重置或 GPU 已移除，导出已停止。项目安然无恙，请重新导出。如果反复出现，请更新显卡驱动。"
+	},
+	"autoZoom": {
+		"title": "自动缩放",
+		"scope": "适用于本项目中的所有自动缩放。",
+		"camera": {
+			"title": "镜头",
+			"fixed": "固定 + 平移",
+			"hybrid": "混合",
+			"follow": "跟随鼠标",
+			"fixedHint": "停留在操作所在的画面，并平滑平移到下一个操作。",
+			"hybridHint": "保持不动，直到指针离开大部分视图，再缓慢重新取景。",
+			"followHint": "强力平滑地跟随指针。"
+		},
+		"transition": "过渡",
+		"maxScale": "最大缩放",
+		"hold": "最短停留",
+		"replanHint": "最大缩放和停留时间会在重新规划自动缩放时生效。",
+		"replan": "重新规划自动缩放",
+		"replanDone": "已规划 {{count}} 个自动缩放",
+		"replanNone": "没有找到适合自动缩放的时刻",
+		"replanFailed": "无法规划自动缩放"
 	}
 }

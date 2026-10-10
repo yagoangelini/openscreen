@@ -137,6 +137,9 @@ const DECLARED: WritePath[] = [
 		"save",
 		"gesture",
 	),
+	// "Re-plan automatic zooms" in the inspector of an automatic zoom: one undoable step that
+	// replaces every automatic zoom with a fresh plan.
+	w("src/components/ai-edition/v4/AutoZoomSettings.tsx", "replanAutoZooms", "save", "gesture"),
 	// Renaming the project from the title field.
 	w("src/components/ai-edition/NewEditorShell.tsx", "handleRenameProject", "save", "gesture"),
 	// Ctrl+S / File > Save.

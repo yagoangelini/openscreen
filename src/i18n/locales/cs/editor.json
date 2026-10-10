@@ -437,5 +437,26 @@
 		"quality1440p": "1440p",
 		"finalizing": "Všechny snímky jsou zakódovány. Zapisuje se zvuk a dokončuje soubor…",
 		"gpuReset": "Export se zastavil, protože se restartoval grafický ovladač nebo byla odebrána GPU. Projekt je v pořádku: exportujte znovu. Pokud se to opakuje, aktualizujte grafický ovladač."
+	},
+	"autoZoom": {
+		"title": "Automatické zoomy",
+		"scope": "Platí pro všechny automatické zoomy v tomto projektu.",
+		"camera": {
+			"title": "Kamera",
+			"fixed": "Pevná + posun",
+			"hybrid": "Hybridní",
+			"follow": "Sledovat myš",
+			"fixedHint": "Drží záběr akce a plynule se posune na další.",
+			"hybridHint": "Stojí, dokud ukazatel neopustí většinu pohledu, pak pomalu přerámuje.",
+			"followHint": "Sleduje ukazatel, silně vyhlazeně."
+		},
+		"transition": "Přechod",
+		"maxScale": "Maximální zoom",
+		"hold": "Minimální výdrž",
+		"replanHint": "Maximální zoom a výdrž platí při novém naplánování automatických zoomů.",
+		"replan": "Znovu naplánovat automatické zoomy",
+		"replanDone": "Naplánováno automatických zoomů: {{count}}",
+		"replanNone": "Nenalezen žádný okamžik pro automatický zoom",
+		"replanFailed": "Automatické zoomy se nepodařilo naplánovat"
 	}
 }

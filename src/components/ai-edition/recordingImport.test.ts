@@ -355,9 +355,9 @@ describe("fresh-recording auto-zoom", () => {
 		});
 		expect(next.zoomRanges).toHaveLength(1);
 		expect(next.zoomRanges[0]).toMatchObject({
-			startMs: 3500,
-			endMs: 5500,
-			focusMode: "auto",
+			startMs: 3600,
+			endMs: 6100,
+			source: "auto",
 		});
 		expect(await applyPendingFreshRecordingAutoZooms(next)).toBe(next);
 	});

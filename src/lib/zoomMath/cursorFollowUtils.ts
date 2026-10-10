@@ -40,6 +40,79 @@ export function interpolateCursorAt(
 }
 
 /**
+ * The view of an automatic zoom under a following camera, at `timeMs`: starts on `start` (the
+ * planned focus) at `t0Ms`, holds still while the pointer stays inside `deadZone` of the zoomed
+ * view (per axis), and once it leaves re-frames exponentially with time constant `tauSec`, just far
+ * enough to bring the pointer back to the zone's edge. Replayed over the raw samples from `t0Ms`
+ * to `tEndMs`, so it is a pure function of its arguments. Mirror of `CursorTrack::follow_view`
+ * (Rust, cursor.rs); `calmMotion.parity.test.ts` holds the two to the same numbers.
+ */
+export function followViewAt(
+	telemetry: CursorTelemetryPoint[],
+	start: ZoomFocus,
+	t0Ms: number,
+	timeMs: number,
+	tEndMs: number,
+	scale: number,
+	deadZone: number,
+	tauSec: number,
+): ZoomFocus | null {
+	if (telemetry.length === 0) return null;
+	const end = Math.max(tEndMs, t0Ms);
+	const t = Math.min(Math.max(timeMs, t0Ms), end);
+	const half = 0.5 / Math.max(1, scale);
+	const dead = half * Math.min(1, Math.max(0, deadZone));
+	const tau = Math.max(1e-3, tauSec);
+	const reach = (v: number) => Math.min(1 - half, Math.max(half, v));
+	const pull = (cursor: number, view: number) =>
+		cursor - Math.min(dead, Math.max(-dead, cursor - view));
+	const step = (view: ZoomFocus, cx: number, cy: number, dtMs: number): ZoomFocus => {
+		if (!(dtMs > 0)) return view;
+		const a = 1 - Math.exp(-dtMs / 1000 / tau);
+		return {
+			cx: view.cx + (pull(cx, view.cx) - view.cx) * a,
+			cy: view.cy + (pull(cy, view.cy) - view.cy) * a,
+		};
+	};
+	let view: ZoomFocus = { cx: reach(start.cx), cy: reach(start.cy) };
+	let at = t0Ms;
+	for (const sample of telemetry) {
+		if (sample.timeMs <= t0Ms) continue;
+		if (sample.timeMs > end) {
+			// The last state is interpolated at the window's end, toward the next sample.
+			if (at < end) {
+				const next = step(view, sample.cx, sample.cy, sample.timeMs - at);
+				const f = Math.min(1, Math.max(0, (end - at) / (sample.timeMs - at)));
+				const atEnd = {
+					cx: view.cx + (next.cx - view.cx) * f,
+					cy: view.cy + (next.cy - view.cy) * f,
+				};
+				if (t >= end) return atEnd;
+				const g = (t - at) / (end - at);
+				return { cx: view.cx + (atEnd.cx - view.cx) * g, cy: view.cy + (atEnd.cy - view.cy) * g };
+			}
+			break;
+		}
+		const raw = step(view, sample.cx, sample.cy, sample.timeMs - at);
+		const next = { cx: reach(raw.cx), cy: reach(raw.cy) };
+		if (sample.timeMs >= t) {
+			// Between two states, linear, like the renderer.
+			const f = sample.timeMs > at ? (t - at) / (sample.timeMs - at) : 1;
+			return { cx: view.cx + (next.cx - view.cx) * f, cy: view.cy + (next.cy - view.cy) * f };
+		}
+		view = next;
+		at = sample.timeMs;
+	}
+	if (t > at) {
+		// Past the last sample, the view keeps settling on the still pointer.
+		const last = telemetry[telemetry.length - 1];
+		const settled = step(view, last.cx, last.cy, t - at);
+		return { cx: reach(settled.cx), cy: reach(settled.cy) };
+	}
+	return view;
+}
+
+/**
  * Exponential smoothing to reduce jitter from high-frequency cursor data.
  * Lower factor = smoother/more lag, higher = more responsive.
  */

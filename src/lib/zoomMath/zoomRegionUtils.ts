@@ -12,10 +12,10 @@ import {
 } from "@/components/video-editor/types";
 import { type SpeedRegion, screenTimeMs } from "@/lib/ai-edition/timeline/speed";
 import { clamp01 } from "@/utils/math";
-import { zoomTransitionMs } from "./constants";
-import { interpolateCursorAt } from "./cursorFollowUtils";
+import { zoomTransitionMsFor } from "./constants";
+import { followViewAt, interpolateCursorAt } from "./cursorFollowUtils";
 import { clampFocusToScale } from "./focusUtils";
-import { cubicBezier, easeSpring, scaleLerp } from "./mathUtils";
+import { cubicBezier, easeSpring, scaleLerp, smootherstep } from "./mathUtils";
 
 const CHAINED_ZOOM_PAN_GAP_MS = 1500;
 const CONNECTED_ZOOM_PAN_DURATION_MS = 1000;
@@ -39,6 +39,8 @@ type ConnectedRegionPair = {
 	/** Screen ms, like the gap that chains the pair. */
 	transitionStart: number;
 	transitionEnd: number;
+	/** The pan eases with smootherstep (the calm motion). */
+	smooth: boolean;
 };
 
 type ConnectedPanTransition = {
@@ -69,21 +71,28 @@ export function computeRegionStrength(
 	const start = toScreen(region.startMs);
 	const end = toScreen(region.endMs);
 	const t = toScreen(timeMs);
-	const window = zoomTransitionMs(getZoomScale(region));
+	const window = zoomTransitionMsFor(getZoomScale(region), region.motion);
+	const ease = region.motion?.easing === "smooth" ? smootherstep : easeSpring;
 
 	if (t < start - window || t > end + window) {
 		return 0;
 	}
 
 	if (t < start) {
-		return easeSpring((t - (start - window)) / window);
+		return ease((t - (start - window)) / window);
 	}
 
 	if (t <= end) {
 		return 1;
 	}
 
-	return 1 - easeSpring((t - end) / window);
+	return 1 - ease((t - end) / window);
+}
+
+/** The motion that times the pan between two chained zooms: the arriving one's, else the
+ *  leaving one's. Mirror of `pan_motion` (Rust). */
+function panMotionOf(current: ZoomRegion, next: ZoomRegion) {
+	return next.motion ?? current.motion;
 }
 
 function getLinearFocus(start: ZoomFocus, end: ZoomFocus, amount: number): ZoomFocus {
@@ -106,6 +115,30 @@ function getResolvedFocus(
 	viewportRatio?: ViewportRatio,
 ): ZoomFocus {
 	let focus = region.focus;
+
+	// An automatic zoom under a following camera starts on its planned focus and re-frames with
+	// its motion's dead zone (`resolve_focus`, Rust). Its window opens with the ease-in; the
+	// screen clock's inverse is not mirrored here, so under a speed region it is approximate.
+	if (
+		region.motion &&
+		region.focusMode === "auto" &&
+		cursorTelemetry &&
+		cursorTelemetry.length > 0 &&
+		timeMs !== undefined
+	) {
+		const window = zoomTransitionMsFor(zoomScale, region.motion);
+		const view = followViewAt(
+			cursorTelemetry,
+			region.focus,
+			region.startMs - window,
+			timeMs,
+			region.endMs + window,
+			zoomScale,
+			region.motion.followDeadZone,
+			region.motion.followTauSec,
+		);
+		if (view) return clampFocusToScale(view, zoomScale, viewportRatio);
+	}
 
 	if (
 		region.focusMode === "auto" &&
@@ -131,8 +164,13 @@ function getConnectedRegionPairs(regions: ZoomRegion[], toScreen: ScreenClock) {
 		const nextRegion = sortedRegions[index + 1];
 		const transitionStart = toScreen(currentRegion.endMs);
 		const gapMs = toScreen(nextRegion.startMs) - transitionStart;
+		const motion = panMotionOf(currentRegion, nextRegion);
+		const maxGapMs = motion ? motion.panGapSec * 1000 : CHAINED_ZOOM_PAN_GAP_MS;
+		const durationMs = motion
+			? Math.max(50, motion.panDurationSec * 1000)
+			: CONNECTED_ZOOM_PAN_DURATION_MS;
 
-		if (gapMs > CHAINED_ZOOM_PAN_GAP_MS) {
+		if (gapMs > maxGapMs) {
 			continue;
 		}
 
@@ -140,7 +178,8 @@ function getConnectedRegionPairs(regions: ZoomRegion[], toScreen: ScreenClock) {
 			currentRegion,
 			nextRegion,
 			transitionStart,
-			transitionEnd: transitionStart + CONNECTED_ZOOM_PAN_DURATION_MS,
+			transitionEnd: transitionStart + durationMs,
+			smooth: motion?.easing === "smooth",
 		});
 	}
 
@@ -236,13 +275,13 @@ function getConnectedRegionTransition(
 	viewportRatio?: ViewportRatio,
 ) {
 	for (const pair of connectedPairs) {
-		const { currentRegion, nextRegion, transitionStart, transitionEnd } = pair;
+		const { currentRegion, nextRegion, transitionStart, transitionEnd, smooth } = pair;
 
 		if (screenMs < transitionStart || screenMs > transitionEnd) {
 			continue;
 		}
 
-		const transitionProgress = easeConnectedPan(
+		const transitionProgress = (smooth ? smootherstep : easeConnectedPan)(
 			clamp01((screenMs - transitionStart) / Math.max(1, transitionEnd - transitionStart)),
 		);
 		const currentScale = getZoomScale(currentRegion);

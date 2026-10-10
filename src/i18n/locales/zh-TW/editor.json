@@ -437,5 +437,26 @@
 		"quality1440p": "1440p",
 		"finalizing": "所有影格已編碼，正在寫入音訊並完成檔案…",
 		"gpuReset": "由於顯示卡驅動程式已重設或 GPU 已移除，匯出已停止。專案安然無恙，請重新匯出。如果反覆發生，請更新顯示卡驅動程式。"
+	},
+	"autoZoom": {
+		"title": "自動縮放",
+		"scope": "適用於本專案中的所有自動縮放。",
+		"camera": {
+			"title": "鏡頭",
+			"fixed": "固定 + 平移",
+			"hybrid": "混合",
+			"follow": "跟隨滑鼠",
+			"fixedHint": "停留在操作所在的畫面，並平滑平移到下一個操作。",
+			"hybridHint": "保持不動，直到指標離開大部分畫面，再緩慢重新取景。",
+			"followHint": "以強力平滑跟隨指標。"
+		},
+		"transition": "轉場",
+		"maxScale": "最大縮放",
+		"hold": "最短停留",
+		"replanHint": "最大縮放與停留時間會在重新規劃自動縮放時生效。",
+		"replan": "重新規劃自動縮放",
+		"replanDone": "已規劃 {{count}} 個自動縮放",
+		"replanNone": "找不到適合自動縮放的時刻",
+		"replanFailed": "無法規劃自動縮放"
 	}
 }

@@ -38,6 +38,37 @@ const baseDoc: AxcutDocument = {
 	legacyEditor: null,
 };
 
+describe("auto-zoom settings", () => {
+	it("default to the calm Tutorial preset, and read a stored value into range", () => {
+		expect(getEditorSettings(baseDoc).autoZoom).toEqual({
+			cameraMode: "fixed",
+			maxScale: 1.5,
+			transitionSec: 1.1,
+			holdSec: 2.5,
+		});
+		const doc = {
+			...baseDoc,
+			legacyEditor: { autoZoom: { cameraMode: "orbit", maxScale: 9, holdSec: "x" } },
+		};
+		expect(getEditorSettings(doc).autoZoom).toEqual({
+			cameraMode: "fixed",
+			maxScale: 2.2,
+			transitionSec: 1.1,
+			holdSec: 2.5,
+		});
+	});
+
+	it("merges a patch into what is stored and leaves the rest alone", () => {
+		const once = patchEditorSettings(baseDoc, { autoZoom: { cameraMode: "hybrid" } });
+		const twice = patchEditorSettings(once, { autoZoom: { maxScale: 1.8 }, padding: 10 });
+		expect(getEditorSettings(twice).autoZoom).toMatchObject({
+			cameraMode: "hybrid",
+			maxScale: 1.8,
+		});
+		expect(getEditorSettings(twice).padding).toBe(10);
+	});
+});
+
 describe("getEditorSettings", () => {
 	it("returns the defaults when the document has no legacyEditor", () => {
 		const snap = getEditorSettings(baseDoc);

@@ -1,4 +1,5 @@
 import type { StylePreset, StylePresetAppearance } from "../lib/ai-edition/stylePresets";
+import type { CursorInputSignal } from "../lib/cursor/inputSignals";
 
 export const NATIVE_BRIDGE_CHANNEL = "native-bridge:invoke";
 export const NATIVE_BRIDGE_VERSION = 1;
@@ -38,6 +39,8 @@ export interface CursorRecordingSample extends CursorTelemetryPoint {
 	 * CursorTelemetryPoint. The old narrow override ("move" | "click" | "mouseup")
 	 * legitimized coercing every other click kind to "move" at parse time. */
 	interactionType?: "move" | "click" | "double-click" | "right-click" | "middle-click" | "mouseup";
+	/** What the user did at this sample besides moving (Windows sampler). See `inputSignals.ts`. */
+	input?: CursorInputSignal;
 }
 
 export interface NativeCursorAsset {

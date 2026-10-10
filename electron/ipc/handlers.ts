@@ -753,7 +753,10 @@ function isTrustedProjectPath(filePath?: string | null) {
 }
 
 const CURSOR_SAMPLE_INTERVAL_MS = 33;
-const MAX_CURSOR_SAMPLES = 60 * 60 * 30; // 1 hour @ 30Hz
+// No cap. Every session drops its OLDEST sample past this, so a finite cap cut the start of a
+// long take (at 30 Hz, the first hour was gone from a 2 h recording) and its auto-zooms with it.
+// A sample is ~100 bytes: four hours is ~45 MB, far below what the take's video costs.
+const MAX_CURSOR_SAMPLES = Number.POSITIVE_INFINITY;
 
 let cursorRecordingSession: CursorRecordingSession | null = null;
 let pendingCursorRecordingData: CursorRecordingData | null = null;

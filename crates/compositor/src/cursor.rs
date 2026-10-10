@@ -57,7 +57,71 @@ pub struct CursorTrack {
         std::sync::Arc<std::sync::Mutex<Vec<(ViewKey, std::sync::Arc<Vec<(f32, f32, f32)>>)>>>,
 }
 
-type ViewKey = (u32, u32, u32);
+/// `(law, t0, fin, échelle, départ x, départ y, zone morte, τ)` en bits.
+type ViewKey = [u32; 8];
+
+/// How a dead-zone view re-frames (`view_states`).
+#[derive(Clone, Copy)]
+enum ViewLaw {
+    /// The classic auto-follow: starts on the smoothed pointer, `FOLLOW_DEAD_ZONE`,
+    /// distance-adaptive `follow_step`.
+    Classic,
+    /// An automatic zoom's following mode (`follow_view`).
+    Calm {
+        start: (f32, f32),
+        dead_zone: f32,
+        tau_s: f32,
+    },
+}
+
+impl ViewLaw {
+    fn key(self, t0: f32, t_end: f32, scale: f32) -> ViewKey {
+        let (law, (sx, sy), dz, tau) = match self {
+            ViewLaw::Classic => (0, (0.0, 0.0), 0.0, 0.0),
+            ViewLaw::Calm {
+                start,
+                dead_zone,
+                tau_s,
+            } => (1, start, dead_zone, tau_s),
+        };
+        [
+            law,
+            t0.to_bits(),
+            t_end.to_bits(),
+            scale.to_bits(),
+            f32::to_bits(sx),
+            f32::to_bits(sy),
+            f32::to_bits(dz),
+            f32::to_bits(tau),
+        ]
+    }
+
+    /// One step of the view toward the point that brings `cursor` back to the edge of the dead
+    /// zone (the view itself when the pointer is inside it), over `dt_ms`. `half` is half the
+    /// zoomed view's width.
+    fn step(self, view: (f32, f32), cursor: (f32, f32), dt_ms: f32, half: f32) -> (f32, f32) {
+        let zone = match self {
+            ViewLaw::Classic => FOLLOW_DEAD_ZONE,
+            ViewLaw::Calm { dead_zone, .. } => dead_zone,
+        };
+        let dead = half * zone;
+        let pull = |c: f32, v: f32| c - (c - v).clamp(-dead, dead);
+        let target = (pull(cursor.0, view.0), pull(cursor.1, view.1));
+        match self {
+            ViewLaw::Classic => follow_step(view, target, dt_ms),
+            ViewLaw::Calm { tau_s, .. } => {
+                if !(dt_ms > 0.0) {
+                    return view;
+                }
+                let a = 1.0 - (-(dt_ms / 1000.0) / tau_s).exp();
+                (
+                    view.0 + (target.0 - view.0) * a,
+                    view.1 + (target.1 - view.1) * a,
+                )
+            }
+        }
+    }
+}
 /// Assez pour toutes les régions auto d'un clip ; au-delà, la plus ancienne est rejouée.
 const VIEW_CACHE_LEN: usize = 32;
 
@@ -273,9 +337,46 @@ impl CursorTrack {
     /// fonction pure de `(t0, t, t_end)`, donc la même en preview et à l'export, après un seek
     /// comme en lecture. Le cache ne garde rien après la fenêtre de la région.
     pub fn follow_in_view(&self, t0: f32, t: f32, t_end: f32, scale: f32) -> Option<(f32, f32)> {
+        self.view_at(ViewLaw::Classic, t0, t, t_end, scale)
+    }
+
+    /// The view of an AUTOMATIC zoom under a following focus mode (`resolve_focus`): like
+    /// `follow_in_view`, but it starts on `start` (the planned focus) instead of on the pointer,
+    /// holds still while the pointer stays inside `dead_zone` of the view, per axis, and once it
+    /// leaves re-frames exponentially with time constant `tau_s`, just far enough to bring the
+    /// pointer back to the edge of that zone. A wide zone and a slow `tau_s` give the "hybrid"
+    /// camera, a narrow one the smooth follow. Same purity and cache as `follow_in_view`.
+    /// Mirror of `followViewAt` (TS, `cursorFollowUtils.ts`).
+    #[allow(clippy::too_many_arguments)]
+    pub fn follow_view(
+        &self,
+        start: (f32, f32),
+        t0: f32,
+        t: f32,
+        t_end: f32,
+        scale: f32,
+        dead_zone: f32,
+        tau_s: f32,
+    ) -> Option<(f32, f32)> {
+        let law = ViewLaw::Calm {
+            start,
+            dead_zone: dead_zone.clamp(0.0, 1.0),
+            tau_s: tau_s.max(1e-3),
+        };
+        self.view_at(law, t0, t, t_end, scale)
+    }
+
+    fn view_at(
+        &self,
+        law: ViewLaw,
+        t0: f32,
+        t: f32,
+        t_end: f32,
+        scale: f32,
+    ) -> Option<(f32, f32)> {
         let t_end = t_end.max(t0);
         let t = t.clamp(t0, t_end);
-        let states = self.view_states(t0, t_end, scale)?;
+        let states = self.view_states(law, t0, t_end, scale)?;
         let half = 0.5 / scale.max(1.0);
         let reach = |v: f32| v.clamp(half, 1.0 - half);
         // Après le dernier échantillon, la vue continue de rattraper le pointeur resté immobile
@@ -283,9 +384,7 @@ impl CursorTrack {
         let &(at, vx, vy) = states.last()?;
         if t > at {
             let (_, x, y) = *self.samples.last()?;
-            let dead = half * FOLLOW_DEAD_ZONE;
-            let pull = |cursor: f32, view: f32| cursor - (cursor - view).clamp(-dead, dead);
-            let (nx, ny) = follow_step((vx, vy), (pull(x, vx), pull(y, vy)), (t - at) * 1000.0);
+            let (nx, ny) = law.step((vx, vy), (x, y), (t - at) * 1000.0, half);
             return Some((reach(nx), reach(ny)));
         }
         if states.len() == 1 {
@@ -306,37 +405,40 @@ impl CursorTrack {
     /// interpolé à `t_end` si le curseur a encore des échantillons après cette fenêtre.
     fn view_states(
         &self,
+        law: ViewLaw,
         t0: f32,
         t_end: f32,
         scale: f32,
     ) -> Option<std::sync::Arc<Vec<(f32, f32, f32)>>> {
         let t_end = t_end.max(t0);
-        let key = (t0.to_bits(), t_end.to_bits(), scale.to_bits());
+        let key = law.key(t0, t_end, scale);
         if let Some((_, v)) = self.view_cache.lock().ok()?.iter().find(|(k, _)| *k == key) {
             return Some(v.clone());
         }
         let half = 0.5 / scale.max(1.0);
-        let dead = half * FOLLOW_DEAD_ZONE;
         let reach = |v: f32| v.clamp(half, 1.0 - half);
-        // La cible : le point qui ramène le pointeur au bord de la zone, la vue elle-même dedans.
-        let pull = |cursor: f32, view: f32| cursor - (cursor - view).clamp(-dead, dead);
-        let (x0, y0) = self.follow_at(t0)?;
+        let (x0, y0) = match law {
+            ViewLaw::Classic => self.follow_at(t0)?,
+            // Not on the pointer: the planned focus, which a track without samples cannot move.
+            ViewLaw::Calm { start, .. } => {
+                self.samples.first()?;
+                start
+            }
+        };
         let mut view = (reach(x0), reach(y0));
         let mut states = vec![(t0, view.0, view.1)];
         let first = self.samples.partition_point(|s| s.0 <= t0);
         let end = self.samples.partition_point(|s| s.0 <= t_end);
         for &(ts, x, y) in &self.samples[first..end] {
             let at = states.last().map_or(t0, |s| s.0);
-            let (nx, ny) =
-                follow_step(view, (pull(x, view.0), pull(y, view.1)), (ts - at) * 1000.0);
+            let (nx, ny) = law.step(view, (x, y), (ts - at) * 1000.0, half);
             view = (reach(nx), reach(ny));
             states.push((ts, view.0, view.1));
         }
         let at = states.last().map_or(t0, |s| s.0);
         if at < t_end {
             if let Some(&(ts, x, y)) = self.samples.get(end) {
-                let (nx, ny) =
-                    follow_step(view, (pull(x, view.0), pull(y, view.1)), (ts - at) * 1000.0);
+                let (nx, ny) = law.step(view, (x, y), (ts - at) * 1000.0, half);
                 let f = ((t_end - at) / (ts - at)).clamp(0.0, 1.0);
                 states.push((
                     t_end,
