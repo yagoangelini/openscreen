@@ -169,6 +169,17 @@ cut. The plans are then settled over the whole timeline, every recording at once
 zooms must leave a wide shot between them, even across a cut, and the edit's first and
 last seconds stay wide.
 
+Within a clip the planner thinks in actions, not clicks: a click with the element it hit
+and the popup it opened (Windows input signals, see `cursor.md`), typing that follows it,
+and slow exploration without a click (a light zoom on the whole explored area). Actions
+close in time share one held shot; two shots too close for a real wide shot are joined,
+either by holding the framing (the next target is near the middle of the view) or by a
+pan, which `regions.rs` plays as a connected pan between the two regions. The zooms it
+writes carry `source: "auto"` and no focus mode of their own: how they move (camera mode,
+ramp length and easing, pan) is the project's auto-zoom settings, resolved at render time
+by `resolveZoomRendering` (`zoom-motion.ts`) into each region's `motion` and focus mode, so
+one setting switches them all. Zooms drawn by hand keep the classic motion.
+
 ### The same ambiguity in the transcript pane
 
 Two clips over one media do not only share a source coordinate space — they share the
