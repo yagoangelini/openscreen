@@ -830,6 +830,8 @@ void AudioMixer::mixLoop() {
     std::vector<BYTE> mixedChunk;
     std::vector<BYTE> sourceChunk;
     std::vector<double> mixSum;
+    std::vector<BYTE> systemStemChunk;
+    std::vector<BYTE> microphoneStemChunk;
     std::chrono::steady_clock::time_point audioClockStart;
     bool audioClockAnchored = false;
 
@@ -883,12 +885,14 @@ void AudioMixer::mixLoop() {
                 if (includeSystem_) {
                     pop(systemQueue_, sourceChunk, chunkBytes);
                     accumulateAudio(mixSum, sourceChunk.data(), static_cast<DWORD>(sourceChunk.size()), format_, 1.0);
+                    if (systemStem_) systemStemChunk = sourceChunk;
                 }
                 if (includeMicrophone_) {
                     pop(microphoneQueue_, sourceChunk, chunkBytes);
                     accumulateAudio(
                         mixSum, sourceChunk.data(), static_cast<DWORD>(sourceChunk.size()), format_,
                         microphoneGain_);
+                    if (microphoneStem_) microphoneStemChunk = sourceChunk;
                 }
             }
             limiter_.process(mixSum.data(), chunkFrames, format_.channels, format_.sampleRate);
@@ -901,6 +905,15 @@ void AudioMixer::mixLoop() {
             if (!output_(mixedChunk.data(), static_cast<DWORD>(mixedChunk.size()), timestampHns, durationHns)) {
                 stopRequested_ = true;
                 break;
+            }
+            // The stems are extras: one that fails to write is dropped, the take goes on.
+            if (systemStem_ && includeSystem_ &&
+                !systemStem_(systemStemChunk.data(), static_cast<DWORD>(systemStemChunk.size()), timestampHns, durationHns)) {
+                systemStem_ = nullptr;
+            }
+            if (microphoneStem_ && includeMicrophone_ &&
+                !microphoneStem_(microphoneStemChunk.data(), static_cast<DWORD>(microphoneStemChunk.size()), timestampHns, durationHns)) {
+                microphoneStem_ = nullptr;
             }
             emittedFrames_ += chunkFrames;
         }

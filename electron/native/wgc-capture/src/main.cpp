@@ -1,3 +1,4 @@
+#include "aac_stem_writer.h"
 #include "audio_sample_utils.h"
 #include "desktop_icon_cover.h"
 #include "dpi_awareness.h"
@@ -37,6 +38,9 @@ struct CaptureConfig {
     std::string windowHandle;
     std::string outputPath;
     std::string webcamOutputPath;
+    // The voice and the computer sound on their own (.m4a), when the take records both.
+    std::string voiceOutputPath;
+    std::string systemOutputPath;
     int fps = 60;
     int width = 0;
     int height = 0;
@@ -626,6 +630,8 @@ bool parseConfig(const std::string& json, CaptureConfig& config) {
     config.webcamDeviceName = findString(json, "webcamDeviceName");
     config.webcamDirectShowClsid = findString(json, "webcamDirectShowClsid");
     config.webcamOutputPath = findString(json, "webcamPath");
+    config.voiceOutputPath = findString(json, "voicePath");
+    config.systemOutputPath = findString(json, "systemPath");
     config.webcamWidth = findInt(json, "webcamWidth", 0);
     config.webcamHeight = findInt(json, "webcamHeight", 0);
     config.webcamFps = findInt(json, "webcamFps", 0);
@@ -1410,6 +1416,8 @@ int wmain(int argc, wchar_t* argv[]) {
     };
 
     std::unique_ptr<AudioMixer> audioMixer;
+    AacStemWriter voiceStem;
+    AacStemWriter systemStem;
     auto startAudioCaptures = [&]() -> bool {
         if (!audioFormat) {
             return true;
@@ -1431,6 +1439,20 @@ int wmain(int argc, wchar_t* argv[]) {
             });
 
         audioMixer->setMicrophoneChannelMode(parseMicrophoneChannelMode(config.microphoneChannelMode));
+        // Stems only when there are two sources to tell apart; a failure to open one costs it alone.
+        if (config.captureMic && config.captureSystemAudio && !config.voiceOutputPath.empty() &&
+            !config.systemOutputPath.empty() &&
+            voiceStem.open(utf8ToWide(config.voiceOutputPath), encoderAudioFormat) &&
+            systemStem.open(utf8ToWide(config.systemOutputPath), encoderAudioFormat)) {
+            audioMixer->setStemOutputs(
+                [&](const BYTE* data, DWORD byteCount, int64_t timestampHns, int64_t durationHns) {
+                    return systemStem.write(data, byteCount, timestampHns, durationHns);
+                },
+                [&](const BYTE* data, DWORD byteCount, int64_t timestampHns, int64_t durationHns) {
+                    return voiceStem.write(data, byteCount, timestampHns, durationHns);
+                });
+            std::cerr << "[stems] writing the voice and the computer sound apart" << std::endl;
+        }
         if (!audioMixer->start()) {
             std::cerr << "ERROR: Failed to start native audio mixer" << std::endl;
             return false;
@@ -1796,6 +1818,9 @@ int wmain(int argc, wchar_t* argv[]) {
     beginStopStep("encoder-finalize", shutdownBudgetMs);
     const bool screenFinalized = encoder.finalize();
     logStopStep("encoder-finalize");
+    // After the mixer has stopped, so no chunk is still on its way to them.
+    const bool stemsFinalized =
+        voiceStem.isOpen() && systemStem.isOpen() && voiceStem.finalize() && systemStem.finalize();
     if (!screenFinalized) {
         std::cerr << "ERROR: Failed to finalize the recording" << std::endl;
     }
@@ -1828,6 +1853,10 @@ int wmain(int argc, wchar_t* argv[]) {
                   << jsonEscape(config.outputPath) << "\"";
         if (writeSeparateWebcam) {
             std::cout << ",\"webcamPath\":\"" << jsonEscape(config.webcamOutputPath) << "\"";
+        }
+        if (stemsFinalized) {
+            std::cout << ",\"voicePath\":\"" << jsonEscape(config.voiceOutputPath) << "\""
+                      << ",\"systemPath\":\"" << jsonEscape(config.systemOutputPath) << "\"";
         }
         if (encodeFailed) {
             std::cout << ",\"truncated\":true";
