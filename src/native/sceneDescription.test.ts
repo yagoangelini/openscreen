@@ -21,6 +21,7 @@ import type {
 } from "@/lib/ai-edition/schema";
 import { axcutSchemaVersion, parseDocumentFile } from "@/lib/ai-edition/schema";
 import { getEditorSettings } from "@/lib/ai-edition/store/editorSettings";
+import { resolveNativePosition } from "@/lib/ai-edition/timeline/timelineMap";
 import { autoZoomMotion, DEFAULT_AUTO_ZOOM_SETTINGS } from "@/lib/ai-edition/timeline/zoom-motion";
 import { CURSOR_KIND_IDS, DEFAULT_CURSOR_THEME_ID } from "@/lib/cursor/cursorThemes";
 import { DEVICE_FRAMES } from "@/lib/projectDefaults";
@@ -29,6 +30,7 @@ import { nativeBridgeClient } from "./client";
 import {
 	annotationFootageRect,
 	buildSceneDescription,
+	resolveVisibleClips,
 	wallpaperAcceptsMotion,
 	zoomScaleLimit,
 } from "./sceneDescription";
@@ -1040,7 +1042,8 @@ describe("buildSceneDescription.cameraFullscreenRegions", () => {
 
 	it("marks the cut edges of a region a trim splits, so it stays full across the cut", () => {
 		// Region raw [2, 8] over src [0, 10], trim removes [4, 6]. Each piece ramps only at the
-		// region's own edge: lead-in on the first, lead-out on the second, none at the cut.
+		// region's own edge: lead-in on the first, lead-out on the second, none at the cut. The
+		// removed middle rides along under the cut, full on both sides, for a parked playhead.
 		const doc = makeDoc({
 			assets: [makeAsset({ id: "a", originalPath: "/a.mp4" })],
 			clips: [
@@ -1065,6 +1068,14 @@ describe("buildSceneDescription.cameraFullscreenRegions", () => {
 		expect(buildSceneDescription(loadedFromV8(doc)).cameraFullscreenRegions).toEqual([
 			{ startSec: 2, endSec: 4, clipIndex: 0, continuesAfter: true },
 			{ startSec: 6, endSec: 8, clipIndex: 1, continuesBefore: true },
+			{
+				startSec: 4,
+				endSec: 6,
+				clipIndex: 0,
+				underTrim: true,
+				continuesBefore: true,
+				continuesAfter: true,
+			},
 		]);
 	});
 
@@ -2683,6 +2694,70 @@ describe("buildSceneDescription.annotations", () => {
 			clipIndex: 0,
 			underTrim: true,
 		});
+	});
+
+	it("blurs the cut stretch of a blur a trim splits, for a playhead parked on the trim", () => {
+		// B-10 (E2E 2.2.0): an auto-blur at raw [9,12] and a trim removing source [10,11.3]. The
+		// paused preview at 10.5 s shows the removed frame itself (`resolveNativePosition`), and
+		// only the two kept pieces reached native, so the e-mail came up sharp. The cut stretch
+		// now rides along under the trim, addressed to the same segment as the playhead.
+		const doc = makeDoc({
+			assets: [makeAsset({ id: "a1", originalPath: "/tmp/a1.mp4", durationSec: 20 })],
+			clips: [
+				makeClip({
+					id: "c1",
+					assetId: "a1",
+					sourceStartSec: 0,
+					sourceEndSec: 20,
+					timelineStartSec: 0,
+					timelineEndSec: 20,
+				}),
+			],
+			timeline: {
+				trimRanges: [
+					{ id: "t1", assetId: "a1", startSec: 10, endSec: 11.3, reason: "", origin: "user" },
+				],
+			},
+			annotations: [
+				{
+					id: "blur1",
+					startMs: 9000,
+					endMs: 12000,
+					type: "blur",
+					content: "",
+					position: { x: 10, y: 10 },
+					size: { width: 30, height: 5 },
+					style,
+					zIndex: 0,
+					blurData: {
+						type: "blur",
+						shape: "rectangle",
+						color: "white",
+						intensity: 12,
+						blockSize: 12,
+					},
+				},
+			],
+		});
+		const scene = buildSceneDescription(doc);
+		const parked = resolveNativePosition(10.5, resolveVisibleClips(doc), doc.timeline.clips);
+		if (!parked) throw new Error("no native position");
+		const covering = scene.annotations.filter(
+			(a) =>
+				a.kind === "blur" &&
+				a.clipIndex === parked.clipIndex &&
+				a.startSec <= parked.sourceTimeSec &&
+				parked.sourceTimeSec < a.endSec,
+		);
+		expect(covering).toHaveLength(1);
+		expect(covering[0]).toMatchObject({ startSec: 10, endSec: 11.3, underTrim: true });
+		// The kept pieces are untouched: what the export composes does not change.
+		expect(
+			scene.annotations.filter((a) => !a.underTrim).map((a) => [a.startSec, a.endSec, a.clipIndex]),
+		).toEqual([
+			[9, 10, 0],
+			[11.3, 12, 1],
+		]);
 	});
 
 	it("omits underTrim entirely when no trim sits under the annotation", () => {
