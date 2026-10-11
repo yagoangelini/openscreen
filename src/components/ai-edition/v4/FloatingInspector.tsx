@@ -559,6 +559,7 @@ export function ZoomLevelControl({
 						className={shell.control}
 						style={{ width: 56, textAlign: "right" }}
 					/>
+					<FieldUnit>×</FieldUnit>
 				</div>,
 			)}
 		</>
@@ -618,21 +619,24 @@ export function SpeedControl({
 			)}
 			{paneRow(
 				ts("speed.customPlaybackSpeed"),
-				<input
-					type="text"
-					inputMode="decimal"
-					placeholder={`${region.speed}×`}
-					value={draft}
-					onChange={(e) => setDraft(e.target.value)}
-					onBlur={commitDraft}
-					// Enter blurs, and the blur handler commits — one path, so a keyboard commit
-					// can't apply the same draft twice.
-					onKeyDown={(e) => {
-						if (e.key === "Enter") e.currentTarget.blur();
-					}}
-					className={shell.control}
-					style={{ width: 84, textAlign: "right" }}
-				/>,
+				<span style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
+					<input
+						type="text"
+						inputMode="decimal"
+						placeholder={`${region.speed}×`}
+						value={draft}
+						onChange={(e) => setDraft(e.target.value)}
+						onBlur={commitDraft}
+						// Enter blurs, and the blur handler commits — one path, so a keyboard commit
+						// can't apply the same draft twice.
+						onKeyDown={(e) => {
+							if (e.key === "Enter") e.currentTarget.blur();
+						}}
+						className={shell.control}
+						style={{ width: 84, textAlign: "right" }}
+					/>
+					<FieldUnit>×</FieldUnit>
+				</span>,
 			)}
 			{/* No hint past 16×. There is nothing for the user to do about it and nothing that
 			    changes in what they get: the export renders the true speed either way. The note
@@ -669,7 +673,17 @@ export function AnnotationSizeControl({
 				/>
 			</div>
 			<AnnotationSizeField label={ts("annotation.customSize")} size={size} onCommit={onChange} />
+			<FieldUnit>px</FieldUnit>
 		</div>,
+	);
+}
+
+/** The unit beside a free field. The placeholder alone loses it as soon as the user types. */
+function FieldUnit({ children }: { children: string }) {
+	return (
+		<span aria-hidden="true" style={{ fontSize: 11, opacity: 0.7 }}>
+			{children}
+		</span>
 	);
 }
 
