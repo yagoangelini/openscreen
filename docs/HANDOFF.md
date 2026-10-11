@@ -71,7 +71,7 @@ As decisões e o porquê de cada fase estão em [`PLANO-FORK.md`](PLANO-FORK.md)
 **O que a 2.1.0 trouxe do OpenScreen 2.0:**
 
 - o mixer escreve 100 ms atrás do tempo real, o que tira as microfalhas da voz;
-- H.264 High em BT.709 em todos os caminhos;
+- H.264 High em BT.709 em todos os caminhos da gravação (o export só ganhou isso no branch `fix/e2e-native`, ver abaixo);
 - o áudio termina junto com o vídeo;
 - a tela não apaga durante a gravação;
 - popups na gravação de janela;
@@ -97,7 +97,7 @@ As decisões e o porquê de cada fase estão em [`PLANO-FORK.md`](PLANO-FORK.md)
   - A câmera é nomeada pela lista de dispositivos (`webcamDeviceIdentityWithoutOpening`), sem o renderer abri-la antes.
   - Amostras do cursor anteriores ao primeiro quadro são descartadas, não empilhadas no 0 s (`shiftCursorTelemetry`).
   - O log `[native-wgc] capture started` traz `startTiming` (linhas `[start-timing]` do helper) e `afterCountdownMs`.
-  - **Medido:** sem câmera, 14 ms depois da contagem. Com a C920 escura (lente tampada, brilho ~20/255), o helper espera os 3 s do "primeiro quadro visível", e o take sai ~2 s atrasado. Com a câmera acesa isso cai dentro da contagem.
+  - **Medido:** sem câmera, 14 ms depois da contagem. Com a C920 escura (lente tampada), o helper esperava os 3 s do "primeiro quadro visível", e o take saía ~2 s atrasado. Corrigido no branch `fix/e2e-native` (abaixo): 13–17 ms com a C920 tampada.
 - **Auto-zoom corrigido**, com a análise quadro a quadro de um take real de 34 s contra a transcrição (`zoom-suggestions.ts`, `framePopups.ts`):
   - mão parada no começo não dá zoom: o hover precisa explorar 15% da tela, estar num menu aberto ou levar a um clique;
   - dois cliques no mesmo menu ficam num plano só (`MERGE_MIN_SCALE` 1.3);
@@ -105,6 +105,12 @@ As decisões e o porquê de cada fase estão em [`PLANO-FORK.md`](PLANO-FORK.md)
   - um clique que fecha menu não vira "popup novo" no scan de quadros;
   - escolher um item de menu termina o plano logo depois.
   - Melhorias que precisam da transcrição (palavras como "aqui", "clica", "nesse" como gatilho; ficar aberto na apresentação) ainda **não** foram feitas: o auto-zoom roda antes da transcrição.
+
+**Correções nativas do E2E da 2.2.0** (branch `fix/e2e-native`, relatório B-2 a B-5):
+
+- **Export em H.264 High com BT.709.** `crates/compositor/src/encoder_tags.rs` (`tag_bt709_and_profile`), chamado no `try_open` dos três pipelines antes do `avcodec_open2`: as quatro cores no contexto (primaries/trc/matrix BT.709, faixa TV) e, para H.264, `profile` High no contexto **e** na opção privada (o NVENC e o AMF leem a privada, cujo padrão Main vencia). Medido num export pela CLI com `h264_nvenc`: `profile=High`, `tv/bt709/bt709/bt709`, VUI do SPS com 1/1/1 e caixa `colr` nclx no MP4.
+- **Câmera escura não atrasa nem some.** No `main.cpp` a câmera começa a ler logo depois de aberta (não mais depois dos encoders), e a espera pelo quadro visível termina no fim da contagem, com no mínimo 1 s de câmera (sem contagem continua 3 s). Se só vierem quadros escuros, eles são gravados mesmo assim (arquivo válido e alinhado desde 0 s, preto até destampar) e o helper emite `{"event":"warning","code":"webcam-dark"}`. O main lê com `readWebcamDark` (`nativeWindowsCaptureStop.ts`), devolve `webcamDark` no resultado do start, e o renderer mostra o toast `recording.cameraDark`. O escritor não testa mais visibilidade durante o take: lente tampada no meio do take fica preta, em vez de congelar no último quadro claro. Um `-webcam.mp4` que ainda assim termine vazio é apagado, e o toast do fim passa a ser `recording.cameraNoFrames`.
+- **Formato da webcam.** `chooseWebcamFormat` (`webcam_format.cpp`) põe primeiro um modo que aguente o ritmo (24 fps, ou o alvo se for menor), depois o tamanho, o fps e por fim sem compressão > MJPEG > outro comprimido. Os modos comprimidos só entram no caminho NV12 (câmera em arquivo próprio); o BGRA mantém a regra antiga. A linha `INFO: Native webcam modes:` lista o que a câmera oferece. Na C920 pelo Media Foundation há NV12 1080p30 (decodificado pelo frame server do Windows): em 2160p a regra antiga escolhia YUY2 2304×1536 a 2 fps, o driver recusava e caía em 640×480; agora 1080p e 2160p dão `1920x1080@30 (uncompressed)`.
 
 Os PRs do fork são abertos e mesclados com `gh pr merge N --merge`, sem CI. Antes do merge, rode todo o portão de validação abaixo.
 
@@ -136,7 +142,7 @@ Os PRs do fork são abertos e mesclados com `gh pr merge N --merge`, sem CI. Ant
 | Capítulos e `.srt` | `chapters.ts`, `captions/srt.ts`, `YouTubeChapters.tsx`, IPC `write-subtitles-beside`, `electron/ai-edition/chapter-titles.ts` | no fim do export |
 | Loudness YouTube | `src/lib/ai-edition/deliveryLoudness.ts` (+2 dB, −16 → −14 LUFS); pref `youtubeLoudness` | ligado |
 | Esc/fechar durante um export | `ExportDialog` (`export-confirm-close`); proteção ao sair do app em `main.ts` (`exportJobs.isRunning`) | pergunta |
-| Webcam na contagem | `useScreenRecorder` (`deferWebcamToCountdown`, win32) | sempre |
+| Webcam na contagem | `useScreenRecorder` (`deferWebcamToCountdown`, win32); helper: espera do quadro visível até o fim da contagem, aviso `webcam-dark` → toast `recording.cameraDark` | sempre |
 | Diagnóstico | `handlers.ts`: `gpu: {compositor, chromium}` | — |
 | Trilha da câmera (schema v9) | `document.cameraSegments`; edições puras em `src/lib/ai-edition/document/cameraSegments.ts`; migração `upgradeV8DocumentToV9`; trilha `renderCameraTrack` em `V4Timeline.tsx`; painel do trecho em `FloatingInspector.tsx`; escritas em `useTimeline.ts` (`saveCameraEdit`); atalho `splitCamera` (B) | cada trecho PiP, Tela cheia ou Sem câmera |
 | Sem câmera | cena `cameraHiddenRegions`; Rust `camera_hidden_regions` + `webcam_hidden` (`frame_geometry.rs`, três backends); prévia em `PreviewCanvas.tsx` | — |
