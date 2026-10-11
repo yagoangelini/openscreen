@@ -156,6 +156,7 @@ import { ColorField } from "./ColorField";
 import { insertionsEnabled } from "./insertionsEnabled";
 import styles from "./NewEditorShell.module.css";
 import { useRecordedCursorTypes } from "./recordedCursorTypes";
+import { TranscriptAutoZoomBar } from "./TranscriptAutoZoomBar";
 import { useTranscriptionLabel } from "./TranscriptionStatus";
 import { transcriptionBusyLabel } from "./transcriptionBusyLabel";
 
@@ -1025,6 +1026,7 @@ export function TranscriptPane({
 			>
 				{editingHint}
 			</p>
+			<TranscriptAutoZoomBar />
 			{sections.map((section, idx) => (
 				<TranscriptClipBlock
 					key={section.clip.id}

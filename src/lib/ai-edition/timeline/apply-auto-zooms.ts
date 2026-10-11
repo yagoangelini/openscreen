@@ -6,6 +6,8 @@ import type { CursorTelemetryPoint } from "@/components/video-editor/types";
 import { createId } from "../document/ids";
 import type { AxcutAsset, AxcutDocument } from "../schema";
 import { getEditorSettings } from "../store/editorSettings";
+import { findAssetTranscript } from "../transcription/status";
+import type { SpokenWord } from "./speechCues";
 import { anchorRegionsWithDerivedMs } from "./timelineMap";
 import { autoZoomMotion, motionTransitionSec } from "./zoom-motion";
 import { effectiveZoomScale } from "./zoom-scale";
@@ -15,6 +17,72 @@ import { type AutoZoomSuggestion, buildAutoZoomSuggestionsForClips } from "./zoo
  *  the fresh-recording import narrows it to the take it is pending on, so a project
  *  that already holds other footage does not pay an IPC round trip per asset. */
 export type AutoZoomAssetFilter = (asset: AxcutAsset) => boolean;
+
+/** Each recording's transcript words in its own source ms, for the planner to follow. */
+export function transcriptWordsByAssetId(document: AxcutDocument): Map<string, SpokenWord[]> {
+	const byAsset = new Map<string, SpokenWord[]>();
+	for (const asset of document.assets) {
+		const words = findAssetTranscript(document, asset.id)?.words ?? [];
+		if (words.length === 0) continue;
+		byAsset.set(
+			asset.id,
+			words.map((word) => ({
+				startMs: word.startSec * 1000,
+				endMs: word.endSec * 1000,
+				text: word.text,
+			})),
+		);
+	}
+	return byAsset;
+}
+
+/**
+ * The transcript the automatic zooms would follow, as a short comparable string ("" for none):
+ * a word corrected, added or removed changes it. Stored on the document when the zooms are
+ * planned, so the editor can offer to plan them again once the transcript moved on.
+ */
+export function transcriptSignature(document: AxcutDocument): string {
+	let hash = 0x811c9dc5;
+	let count = 0;
+	for (const [assetId, words] of [...transcriptWordsByAssetId(document)].sort(([a], [b]) =>
+		a.localeCompare(b),
+	)) {
+		for (const word of [assetId, ...words.map((w) => `${w.text}@${Math.round(w.startMs)}`)]) {
+			for (let i = 0; i < word.length; i += 1) {
+				hash ^= word.charCodeAt(i);
+				hash = Math.imul(hash, 0x01000193) >>> 0;
+			}
+			count += 1;
+		}
+	}
+	return count === 0 ? "" : `${count}:${hash.toString(36)}`;
+}
+
+const PLANNED_TRANSCRIPT_KEY = "autoZoomTranscript";
+
+/** The transcript signature the automatic zooms were last planned with, or null if never. */
+export function plannedTranscriptSignature(document: AxcutDocument): string | null {
+	const value = document.legacyEditor?.[PLANNED_TRANSCRIPT_KEY];
+	return typeof value === "string" ? value : null;
+}
+
+/** The document, noting that its automatic zooms were planned with `signature`. */
+export function withPlannedTranscript(document: AxcutDocument, signature: string): AxcutDocument {
+	if (plannedTranscriptSignature(document) === signature) return document;
+	return {
+		...document,
+		legacyEditor: { ...(document.legacyEditor ?? {}), [PLANNED_TRANSCRIPT_KEY]: signature },
+	};
+}
+
+/**
+ * The automatic zooms were planned without the transcript the project has now (never with one,
+ * or with one since corrected): planning them again would follow it.
+ */
+export function autoZoomsBehindTranscript(document: AxcutDocument): boolean {
+	const current = transcriptSignature(document);
+	return current !== "" && plannedTranscriptSignature(document) !== current;
+}
 
 export async function collectAutoZoomSuggestionsForDocument(
 	document: AxcutDocument,
@@ -40,6 +108,8 @@ export async function collectAutoZoomSuggestionsForDocument(
 	const motion = autoZoomMotion(settings);
 	return buildAutoZoomSuggestionsForClips({
 		telemetryByAssetId,
+		// What was said guides the zooms too, whenever the project has a transcript.
+		wordsByAssetId: transcriptWordsByAssetId(document),
 		clips: document.timeline.clips,
 		settings,
 		existingRegions: document.zoomRanges.map((region) => {

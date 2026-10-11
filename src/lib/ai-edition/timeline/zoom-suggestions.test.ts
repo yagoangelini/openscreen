@@ -752,3 +752,81 @@ describe("buildAutoZoomSuggestionsForClips", () => {
 		});
 	});
 });
+
+describe("buildAutoZoomSuggestions: guided by what the speaker says", () => {
+	/** Words laid one after another from `fromMs`, `perWordMs` each, back to back. */
+	const said = (fromMs: number, text: string, perWordMs = 300) =>
+		text.split(" ").map((word, i) => ({
+			startMs: fromMs + i * perWordMs,
+			endMs: fromMs + (i + 1) * perWordMs - 20,
+			text: word,
+		}));
+	const planWith = (
+		cursorTelemetry: CursorTelemetryPoint[],
+		words: ReturnType<typeof said>,
+		totalMs = 13000,
+	) => buildAutoZoomSuggestions({ cursorTelemetry, totalMs, existingRegions: [], words });
+
+	// A small, slow drift over one spot: too little to count as exploring on its own.
+	const drift = take(
+		rest(0, 2966, [0.5, 0.48]),
+		sweep(3000, 6000, [0.5, 0.48], [0.56, 0.48]),
+		rest(6033, 12000, [0.56, 0.48]),
+	);
+
+	it("zooms on what the speaker points at, even with no click", () => {
+		expect(plan(drift, 13000)).toEqual([]);
+		const shots = planWith(drift, said(3200, "e aqui temos esse botão de configurações"));
+		expect(shots).toHaveLength(1);
+		expect(shots[0].span.start).toBeLessThan(4000);
+	});
+
+	it("stays wide while the speaker only sets the scene", () => {
+		expect(
+			planWith(drift, said(3200, "fala pessoal tudo bem testando aqui todo o recurso")),
+		).toEqual([]);
+	});
+
+	it("brings the zoom in with the words, before the hand gets there", () => {
+		const telemetry = take(
+			rest(0, 6000, [0.3, 0.3]),
+			[click(6000, 0.3, 0.3)],
+			rest(6033, 12000, [0.3, 0.3]),
+		);
+		const [withoutWords] = plan(telemetry, 13000);
+		const [withWords] = planWith(telemetry, said(3800, "agora clica nesse botão"));
+		expect(withWords.span.start).toBeLessThan(withoutWords.span.start);
+		expect(withWords.span.start).toBeGreaterThanOrEqual(6000 - 2500);
+	});
+
+	it("holds until the sentence ends, and goes wide in the pause", () => {
+		const telemetry = take(
+			rest(0, 4000, [0.3, 0.3]),
+			[click(4000, 0.3, 0.3)],
+			rest(4033, 12000, [0.3, 0.3]),
+		);
+		const [withoutWords] = plan(telemetry, 13000);
+		// A sentence running past the shot's usual end, then silence.
+		const words = said(
+			3500,
+			"aqui você escolhe o formato que quiser para o seu relatório final",
+			400,
+		);
+		const sentenceEnd = words[words.length - 1].endMs;
+		const [withWords] = planWith(telemetry, words);
+		expect(withoutWords.span.end).toBeLessThan(sentenceEnd);
+		expect(withWords.span.end).toBeGreaterThanOrEqual(sentenceEnd);
+	});
+
+	it("goes wide when the speaker says the view is moving on", () => {
+		const telemetry = take(
+			rest(0, 4000, [0.3, 0.3]),
+			[click(4000, 0.3, 0.3)],
+			rest(4033, 12000, [0.3, 0.3]),
+		);
+		const words = [...said(3600, "clica aqui"), ...said(5000, "e agora vamos rolar pra baixo")];
+		const rolar = words.find((word) => word.text === "rolar");
+		const [shot] = planWith(telemetry, words);
+		expect(shot.span.end).toBeLessThanOrEqual((rolar?.startMs ?? 0) + 1);
+	});
+});

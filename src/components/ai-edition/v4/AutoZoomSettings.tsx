@@ -3,54 +3,47 @@
 // transition apply at once, at render time; the maximum and the hold shape the PLAN, so they
 // apply when the automatic zooms are planned again (the button below).
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useScopedT } from "@/contexts/I18nContext";
 import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
 import { useEditorSettings } from "@/lib/ai-edition/store/useEditorSettings";
 import {
-	appendAutoZoomSuggestions,
-	collectAutoZoomSuggestionsForLatestDocument,
-	withoutAutoZooms,
+	autoZoomsBehindTranscript,
+	transcriptSignature,
 } from "@/lib/ai-edition/timeline/apply-auto-zooms";
-import { getTelemetryWithFramePopups } from "@/lib/ai-edition/timeline/framePopups";
 import {
 	AUTO_ZOOM_BOUNDS,
 	type AutoZoomCameraMode,
 	DEFAULT_AUTO_ZOOM_SETTINGS,
 } from "@/lib/ai-edition/timeline/zoom-motion";
-import { nativeBridgeClient } from "@/native/client";
+import {
+	type AutoZoomAfterRecording,
+	loadUserPreferences,
+	saveUserPreferences,
+} from "@/lib/userPreferences";
+import { replanAutoZooms } from "../autoZoomReplan";
 import shell from "../NewEditorShell.module.css";
 import { ChoiceRow, SliderCell } from "../RightPanes";
 
 const PANE_BUTTON = `${shell.btn} ${shell.btnSecondary}`;
-
-/** Drops every automatic zoom and plans them again with the current settings. Zooms drawn by
- *  hand stay, and the new plan keeps clear of them. Returns how many were planned, or null when
- *  the project changed or could not be saved. */
-async function replanAutoZooms(): Promise<number | null> {
-	const { projectId } = useProjectStore.getState();
-	const collected = await collectAutoZoomSuggestionsForLatestDocument(
-		() => {
-			const document = useProjectStore.getState().document;
-			return document ? withoutAutoZooms(document) : null;
-		},
-		(videoPath) =>
-			getTelemetryWithFramePopups(videoPath, (path) =>
-				nativeBridgeClient.cursor.getTelemetry(path),
-			),
-	);
-	const store = useProjectStore.getState();
-	if (!collected || store.projectId !== projectId) return null;
-	const next = appendAutoZoomSuggestions(collected.document, collected.suggestions);
-	return (await store.saveDocument(next, { history: true })) ? collected.suggestions.length : null;
-}
 
 export function AutoZoomSettings() {
 	const te = useScopedT("editor");
 	const { settings, set, setLive, commit } = useEditorSettings();
 	const autoZoom = settings.autoZoom;
 	const [busy, setBusy] = useState(false);
+	const document = useProjectStore((s) => s.document);
+	const transcript = useMemo(
+		() =>
+			document
+				? { has: transcriptSignature(document) !== "", behind: autoZoomsBehindTranscript(document) }
+				: { has: false, behind: false },
+		[document],
+	);
+	const [afterRecording, setAfterRecording] = useState<AutoZoomAfterRecording>(
+		() => loadUserPreferences().autoZoomAfterRecording,
+	);
 	const live = (patch: Partial<typeof autoZoom>) => setLive({ autoZoom: patch });
 	const done = () => void commit();
 
@@ -134,9 +127,30 @@ export function AutoZoomSettings() {
 				value={autoZoom.minWideSec === 1.5 ? "1.5" : "2.5"}
 				onChange={(choice) => void set({ autoZoom: { minWideSec: Number(choice) } })}
 			/>
-			<p className={shell.hint}>{te("autoZoom.replanHint")}</p>
+			<ChoiceRow<AutoZoomAfterRecording>
+				label={te("autoZoom.afterRecording.label")}
+				options={[
+					{ value: "ask", label: te("autoZoom.afterRecording.ask") },
+					{ value: "transcript", label: te("autoZoom.afterRecording.transcript") },
+					{ value: "cursor", label: te("autoZoom.afterRecording.cursor") },
+				]}
+				value={afterRecording}
+				onChange={(choice) => {
+					saveUserPreferences({ autoZoomAfterRecording: choice });
+					setAfterRecording(choice);
+				}}
+			/>
+			<p className={shell.hint}>
+				{te(
+					transcript.behind
+						? "autoZoom.transcriptBehind"
+						: transcript.has
+							? "autoZoom.followsTranscript"
+							: "autoZoom.replanHint",
+				)}
+			</p>
 			<button type="button" className={PANE_BUTTON} disabled={busy} onClick={() => void replan()}>
-				{te("autoZoom.replan")}
+				{te(transcript.has ? "autoZoom.replanWithTranscript" : "autoZoom.replan")}
 			</button>
 		</div>
 	);

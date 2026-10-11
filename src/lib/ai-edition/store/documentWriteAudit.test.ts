@@ -131,6 +131,9 @@ const DECLARED: WritePath[] = [
 	// It sits in `runLoadedMetadataWrite` rather than the handler because the handler
 	// only puts it on the write queue — the write itself, and its deadline, are there.
 	w("src/components/ai-edition/NewEditorShell.tsx", "runLoadedMetadataWrite", "save", "automatic"),
+	// Planning the automatic zooms again, with the transcript when there is one: the auto-zoom
+	// settings, the transcript pane and the dialog after a recording all call it. One undo step.
+	w("src/components/ai-edition/autoZoomReplan.ts", "replanAutoZooms", "save", "gesture"),
 	// The privacy blurs the OCR pass suggests for a freshly imported recording. Undoable
 	// for the same reason as the auto-zooms below: a suggestion the user may reject.
 	w(
@@ -150,7 +153,6 @@ const DECLARED: WritePath[] = [
 	),
 	// "Re-plan automatic zooms" in the inspector of an automatic zoom: one undoable step that
 	// replaces every automatic zoom with a fresh plan.
-	w("src/components/ai-edition/v4/AutoZoomSettings.tsx", "replanAutoZooms", "save", "gesture"),
 	// "Speed up the picked ones" under Auto-enhance > Speed up waits: the user ticked which.
 	w("src/components/ai-edition/v4/V4Timeline.tsx", "applyWaitSpeedUps", "save", "gesture"),
 	// "Apply to this project's transcripts" under the glossary: the user clicked it.

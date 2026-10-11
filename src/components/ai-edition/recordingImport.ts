@@ -56,6 +56,8 @@ let pendingFreshRecordingAutoZoom = false;
 let pendingFreshRecordingAutoZoomPath: string | null = null;
 let appliedFreshRecordingAutoZoomProjectId: string | null = null;
 let freshRecordingAutoZoomSaveChain: Promise<void> = Promise.resolve();
+/** The take just imported with zooms to plan, for the transcript offer: kept past the zoom pass. */
+let transcriptOfferTakePath: string | null = null;
 
 export function markFreshRecordingAutoZoomPending(assetPath: string): void {
 	pendingFreshRecordingAutoZoom = true;
@@ -66,6 +68,52 @@ export function markFreshRecordingAutoZoomPending(assetPath: string): void {
 function clearFreshRecordingAutoZoomPending(): void {
 	pendingFreshRecordingAutoZoom = false;
 	pendingFreshRecordingAutoZoomPath = null;
+}
+
+/**
+ * The take whose automatic zooms may follow its transcript: the one just recorded, when its
+ * zooms are on (the HUD's toggle), it has a cursor to plan from and the machine can transcribe.
+ * Null otherwise, and then nothing is asked.
+ */
+export async function freshRecordingTranscriptOffer(): Promise<{ assetId: string } | null> {
+	const takePath = transcriptOfferTakePath;
+	transcriptOfferTakePath = null;
+	if (!takePath) return null;
+	if (typeof window === "undefined" || typeof window.electronAPI?.stt?.transcribe !== "function") {
+		return null;
+	}
+	if (!(await readAutoZoomPref())) return null;
+	const document = useProjectStore.getState().document;
+	const asset = document?.assets.find((candidate) => candidate.originalPath === takePath);
+	return asset ? { assetId: asset.id } : null;
+}
+
+/**
+ * The take's automatic zooms are planned once its transcript is in (`replanAutoZooms`), not by
+ * the import's cursor-only pass: that pass stands down. If it already ran, the re-plan replaces
+ * what it wrote.
+ */
+export function handFreshRecordingAutoZoomsToTranscript(): void {
+	const document = useProjectStore.getState().document;
+	clearFreshRecordingAutoZoomPending();
+	if (document) appliedFreshRecordingAutoZoomProjectId = document.project.id;
+}
+
+/** Resolves once the asset's clips have their real length (true), or after `timeoutMs` (false). */
+export async function whenAssetDurationProbed(
+	assetId: string,
+	timeoutMs = 60_000,
+): Promise<boolean> {
+	const deadline = Date.now() + timeoutMs;
+	for (;;) {
+		const document = useProjectStore.getState().document;
+		const clips = document?.timeline.clips ?? [];
+		if (clips.length > 0 && !clips.some((clip) => clipAwaitsProbedDuration(clip, assetId))) {
+			return true;
+		}
+		if (Date.now() > deadline) return false;
+		await new Promise((resolve) => setTimeout(resolve, 250));
+	}
 }
 
 export function consumeFreshRecordingAutoZoomPending(): boolean {
@@ -486,6 +534,7 @@ export async function importPendingRecording(
 	// preference.
 	if (cursorCaptureMode !== "system") {
 		markFreshRecordingAutoZoomPending(screenPath);
+		transcriptOfferTakePath = screenPath;
 		// A head start on the frame scan the zoom pass will want, if it is going to run.
 		void readAutoZoomPref().then((enabled) => {
 			if (enabled) void prefetchFreshRecordingTelemetry();

@@ -3,9 +3,12 @@ import type { CursorTelemetryPoint } from "@/components/video-editor/types";
 import { type AxcutDocument, createEmptyDocument } from "../schema";
 import {
 	appendAutoZoomSuggestions,
+	autoZoomsBehindTranscript,
 	collectAutoZoomSuggestionsForDocument,
 	collectAutoZoomSuggestionsForLatestDocument,
+	transcriptSignature,
 	withoutAutoZooms,
+	withPlannedTranscript,
 } from "./apply-auto-zooms";
 
 // A click at `atMs`, in a take whose pointer moves on until 9.5 s: the click is not its last.
@@ -217,5 +220,45 @@ describe("collectAutoZoomSuggestionsForLatestDocument", () => {
 		const getTelemetry = vi.fn(async () => telemetry);
 		expect(await collectAutoZoomSuggestionsForLatestDocument(() => null, getTelemetry)).toBeNull();
 		expect(getTelemetry).not.toHaveBeenCalled();
+	});
+});
+
+describe("the transcript the automatic zooms were planned with", () => {
+	const withWords = (doc: AxcutDocument, texts: string[]): AxcutDocument => ({
+		...doc,
+		transcripts: [
+			{
+				assetId: "asset_1",
+				language: "pt",
+				segments: [],
+				words: texts.map((text, i) => ({
+					id: `w${i}`,
+					segmentId: `s${i}`,
+					startSec: i,
+					endSec: i + 0.5,
+					text,
+				})),
+			},
+		] as AxcutDocument["transcripts"],
+	});
+
+	it("has nothing to follow without a transcript", () => {
+		const doc = documentWithClip();
+		expect(transcriptSignature(doc)).toBe("");
+		expect(autoZoomsBehindTranscript(doc)).toBe(false);
+	});
+
+	it("is behind once a transcript arrives, and caught up once planned with it", () => {
+		const doc = withWords(documentWithClip(), ["clica", "aqui"]);
+		expect(autoZoomsBehindTranscript(doc)).toBe(true);
+		const planned = withPlannedTranscript(doc, transcriptSignature(doc));
+		expect(autoZoomsBehindTranscript(planned)).toBe(false);
+	});
+
+	it("is behind again when a word is corrected", () => {
+		const doc = withWords(documentWithClip(), ["voar", "pra", "baixo"]);
+		const planned = withPlannedTranscript(doc, transcriptSignature(doc));
+		const corrected = withWords(planned, ["rolar", "pra", "baixo"]);
+		expect(autoZoomsBehindTranscript(corrected)).toBe(true);
 	});
 });

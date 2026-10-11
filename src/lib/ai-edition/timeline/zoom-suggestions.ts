@@ -35,6 +35,16 @@ import {
 import { zoomTransitionMs } from "@/lib/zoomMath/constants";
 import type { AxcutClip } from "../schema";
 import {
+	pointingWordsBetween,
+	readSpeech,
+	type Speech,
+	type SpokenWord,
+	scrollingWordBetween,
+	sentenceAt,
+	speechWindow,
+	wordAt,
+} from "./speechCues";
+import {
 	type AutoZoomSettings,
 	autoZoomMotion,
 	DEFAULT_AUTO_ZOOM_SETTINGS,
@@ -71,6 +81,13 @@ export const SHOT_FIT_MARGIN = 0.12;
  * 1.5, two clicks in the same menu (1.42) became two shots, and the chain dropped the second.
  */
 export const MERGE_MIN_SCALE = 1.3;
+/** With a transcript: a pointing word ("clica aqui") this long before a click brings the zoom in
+ *  with the word, instead of with the hand. */
+export const SPEECH_LEAD_MAX_MS = 2500;
+/** A shot ending mid-sentence holds to the sentence's end, if that is at most this much later. */
+export const SENTENCE_HOLD_MAX_MS = 3000;
+/** A zoom-out landing inside a word waits for the word's end, if that is at most this much later. */
+export const WORD_SNAP_MS = 600;
 /** At most one camera move (ramp or pan) per this long. */
 export const MIN_CAMERA_MOVE_GAP_MS = 1500;
 /** A pan only when the next target leaves this central share of the current view. */
@@ -777,6 +794,7 @@ function timeShots(
 	wideUntilMs: number,
 	wideFromMs: number,
 	ctx: PlanContext,
+	speech?: Speech,
 ): Shot[] {
 	const timed: Shot[] = [];
 	for (const shot of shots) {
@@ -789,6 +807,14 @@ function timeShots(
 		const away = travelAwayMs(path, shot.lastActivityMs, end, shot.endPoint, TRAVEL_END_SHARE);
 		if (away !== null) end = Math.min(end, away);
 		if (shot.navigationEndMs !== undefined) end = Math.min(end, shot.navigationEndMs);
+		if (speech) {
+			end = speechAwareEnd(
+				speech,
+				shot.lastActivityMs,
+				end,
+				away !== null || shot.navigationEndMs !== undefined,
+			);
+		}
 		// Near the end of the axis, the zoom arrives earlier rather than holding too briefly.
 		const start = Math.max(Math.min(Math.round(shot.start), latest - minHold), earliest);
 		end = Math.min(Math.max(Math.round(end), start + minHold), latest);
@@ -801,6 +827,28 @@ function timeShots(
 		timed.push({ ...shot, start, end, arrivedMs: start, latestEnd: latest });
 	}
 	return timed;
+}
+
+/**
+ * Where a shot ends once the speaker is heard: wide as soon as they say the view moves on
+ * ("vamos rolar"), otherwise not mid-sentence (held to its end, within `SENTENCE_HOLD_MAX_MS`)
+ * and not mid-word. A shot the pointer or a page change already ended keeps that end.
+ */
+function speechAwareEnd(speech: Speech, activityEndMs: number, end: number, cut: boolean): number {
+	let out = end;
+	const scrolling = scrollingWordBetween(speech, activityEndMs, out + SENTENCE_HOLD_MAX_MS);
+	if (scrolling && scrolling.startMs < out + SENTENCE_HOLD_MAX_MS) {
+		return Math.min(out, Math.max(activityEndMs, scrolling.startMs));
+	}
+	if (!cut) {
+		const sentence = sentenceAt(speech, out);
+		if (sentence && sentence.endMs - out <= SENTENCE_HOLD_MAX_MS) out = sentence.endMs + 250;
+	}
+	const word = wordAt(speech, out);
+	if (word && word.endMs - out <= WORD_SNAP_MS && (!cut || word.endMs - out <= 200)) {
+		out = word.endMs + 100;
+	}
+	return out;
 }
 
 /** `inner` fits inside a view at `scale` framing `outer`, centred within its central share. */
@@ -896,23 +944,51 @@ function planAxis(
 	ignoreClicksFromMs: number,
 	ctx: PlanContext,
 	clip?: string,
+	speech?: Speech,
 ): Chain[] {
 	const signals = readSignals(normalizeCursorTelemetry(samples, totalMs), ignoreClicksFromMs);
 	const actions: Action[] = signals.clicks.map((click, i) =>
 		clickAction(click, signals.clicks[i + 1]?.timeMs ?? Number.POSITIVE_INFINITY, signals, ctx),
 	);
+	// "Clica aqui, nesse botão": the zoom arrives with the words, not seconds later with the hand.
+	if (speech) {
+		for (const action of actions) {
+			const [said] = pointingWordsBetween(
+				speech,
+				action.anchorMs - SPEECH_LEAD_MAX_MS,
+				action.anchorMs,
+			);
+			if (said) {
+				action.fullyInByMs = Math.min(
+					action.fullyInByMs,
+					Math.max(action.anchorMs - SPEECH_LEAD_MAX_MS, said.startMs + 300),
+				);
+			}
+		}
+	}
 	// A hover is worth a zoom when the pointer explores an area, inside an open menu, or on the
 	// way to a click near it. A hand resting during the introduction drifts like a hover, a few
 	// percent of the frame, and zoomed in on nothing.
-	const hoverLeadsSomewhere = (hover: Action) =>
-		Math.max(hover.box.maxX - hover.box.minX, hover.box.maxY - hover.box.minY) >=
-			HOVER_EXPLORE_EXTENT ||
+	const inPopup = (hover: Action) =>
 		signals.popups.some(
 			(popup) =>
 				popup.openMs <= hover.activityEndMs &&
 				popup.closeMs >= hover.anchorMs &&
 				rectContains(popup.rect, centreOf(hover.box), 0.02),
-		) ||
+		);
+	// Heard, the speaker says it: a hover is worth a zoom inside an open menu or while they point
+	// at what is under the pointer ("essa opção aqui"). Scene-setting sentences stay wide.
+	const pointedAt = (hover: Action, strictly: boolean) =>
+		pointingWordsBetween(
+			speech as Speech,
+			hover.anchorMs - 1000,
+			hover.activityEndMs + 500,
+			strictly,
+		).length > 0;
+	const hoverLeadsSomewhere = (hover: Action) =>
+		Math.max(hover.box.maxX - hover.box.minX, hover.box.maxY - hover.box.minY) >=
+			HOVER_EXPLORE_EXTENT ||
+		inPopup(hover) ||
 		signals.clicks.some(
 			(click) =>
 				click.timeMs >= hover.anchorMs &&
@@ -921,7 +997,12 @@ function planAxis(
 		);
 	actions.push(
 		...hoverActions(signals, Math.min(ignoreClicksFromMs, totalMs), ctx).filter(
-			hoverLeadsSomewhere,
+			speech
+				? (hover) =>
+						inPopup(hover) ||
+						pointedAt(hover, true) ||
+						(pointedAt(hover, false) && hoverLeadsSomewhere(hover))
+				: hoverLeadsSomewhere,
 		),
 	);
 	const tailOf = (shot: Shot) => (shot.clicks > 0 ? SHOT_TAIL_MS : HOVER_TAIL_MS);
@@ -933,6 +1014,7 @@ function planAxis(
 		wideUntilMs,
 		wideFromMs,
 		ctx,
+		speech,
 	);
 	return toChains(chainShots(shots, ctx), clip);
 }
@@ -1040,6 +1122,8 @@ export function buildAutoZoomSuggestions(options: {
 	wideFromMs?: number;
 	ignoreClicksFromMs?: number;
 	settings?: AutoZoomSettings;
+	/** What the speaker said, on the telemetry's axis: the zooms follow it too. */
+	words?: readonly SpokenWord[];
 }): AutoZoomSuggestion[] {
 	const { cursorTelemetry, totalMs, existingRegions } = options;
 	if (totalMs <= 0 || cursorTelemetry.length === 0) return [];
@@ -1051,6 +1135,8 @@ export function buildAutoZoomSuggestions(options: {
 		options.wideFromMs ?? Number.POSITIVE_INFINITY,
 		options.ignoreClicksFromMs ?? Number.POSITIVE_INFINITY,
 		ctx,
+		undefined,
+		options.words?.length ? readSpeech(options.words) : undefined,
 	);
 	return toSuggestions(resolveChains(chains, existingRegions, ctx));
 }
@@ -1084,6 +1170,8 @@ export function buildAutoZoomSuggestionsForClips(options: {
 	clips: AxcutClip[];
 	existingRegions: ReservedZoom[];
 	settings?: AutoZoomSettings;
+	/** Each recording's transcript words, in its own SOURCE time, by asset id. */
+	wordsByAssetId?: ReadonlyMap<string, readonly SpokenWord[]>;
 }): AutoZoomSuggestion[] {
 	const { telemetryByAssetId, clips, existingRegions } = options;
 	if (clips.length === 0) return [];
@@ -1104,6 +1192,10 @@ export function buildAutoZoomSuggestionsForClips(options: {
 			)
 			.map((sample) => ({ ...sample, timeMs: sample.timeMs - sourceOffsetMs }));
 		if (clipTelemetry.length === 0) continue;
+		const words = options.wordsByAssetId?.get(clip.assetId);
+		const clipWords = words?.length
+			? speechWindow(words, sourceOffsetMs, sourceOffsetMs + windowMs, sourceOffsetMs)
+			: [];
 		const clipChains = planAxis(
 			clipTelemetry,
 			windowMs,
@@ -1112,6 +1204,7 @@ export function buildAutoZoomSuggestionsForClips(options: {
 			lastSampleMs(telemetry) - STOP_CLICK_GUARD_MS - sourceOffsetMs,
 			ctx,
 			clip.id,
+			clipWords.length ? readSpeech(clipWords) : undefined,
 		);
 		for (const chain of clipChains) {
 			chains.push({

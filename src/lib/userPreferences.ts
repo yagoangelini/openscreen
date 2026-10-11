@@ -8,6 +8,9 @@ import { type AspectRatio, isAspectRatio } from "@/utils/aspectRatioUtils";
 
 const PREFS_KEY = "openscreen_user_preferences";
 
+/** What the automatic zooms of a new recording follow: asked each time, or a remembered answer. */
+export type AutoZoomAfterRecording = "ask" | "transcript" | "cursor";
+
 export interface UserPreferences {
 	/** Default padding % */
 	padding: number;
@@ -39,6 +42,11 @@ export interface UserPreferences {
 	autoRedact: boolean;
 	/** Terms the transcription is corrected to, one per line (`transcription/glossary.ts`). */
 	glossary: string;
+	/**
+	 * After a take: ask whether its automatic zooms follow the transcript too (transcribed first,
+	 * before the editor opens up), or apply a remembered answer.
+	 */
+	autoZoomAfterRecording: AutoZoomAfterRecording;
 }
 
 export const DEFAULT_PREFS: UserPreferences = {
@@ -55,6 +63,7 @@ export const DEFAULT_PREFS: UserPreferences = {
 	youtubeLoudness: true,
 	autoRedact: true,
 	glossary: DEFAULT_GLOSSARY,
+	autoZoomAfterRecording: "ask",
 };
 
 /** Parses stored preferences without throwing on malformed JSON. */
@@ -124,6 +133,10 @@ export function loadUserPreferences(): UserPreferences {
 				: DEFAULT_PREFS.youtubeLoudness,
 		autoRedact: typeof raw.autoRedact === "boolean" ? raw.autoRedact : DEFAULT_PREFS.autoRedact,
 		glossary: typeof raw.glossary === "string" ? raw.glossary : DEFAULT_PREFS.glossary,
+		autoZoomAfterRecording:
+			raw.autoZoomAfterRecording === "transcript" || raw.autoZoomAfterRecording === "cursor"
+				? raw.autoZoomAfterRecording
+				: DEFAULT_PREFS.autoZoomAfterRecording,
 	};
 }
 
