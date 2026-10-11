@@ -69,6 +69,12 @@ export type NativeWindowsRecordingStartResult = {
 	 */
 	webcamUnavailable?: boolean;
 	/**
+	 * The camera opened but delivered only dark frames before the take started
+	 * (a covered lens). Its frames are recorded anyway, black until the lens
+	 * opens; the user is told so they can still fix it.
+	 */
+	webcamDark?: boolean;
+	/**
 	 * A microphone was asked for but could not be named, so the helper captured
 	 * whatever Windows calls the default input. The take is fine; the voice on it
 	 * probably is not the one the user chose.

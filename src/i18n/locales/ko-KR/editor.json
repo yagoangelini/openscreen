@@ -48,6 +48,8 @@
 		"cameraDisconnected": "웹캠 연결이 끊어졌습니다.",
 		"cameraNotFound": "카메라를 찾을 수 없습니다.",
 		"cameraCaptureUnavailable": "카메라를 열 수 없습니다. 카메라 없이 녹화합니다.",
+		"cameraDark": "카메라가 어둡거나 가려져 있습니다. 녹화는 계속됩니다. 렌즈를 열거나, 중지하고 다시 녹화하세요.",
+		"cameraNoFrames": "카메라에서 영상이 오지 않아 이 테이크는 카메라 없이 저장되었습니다.",
 		"microphoneDefaulted": "선택한 마이크를 확인할 수 없습니다. 기본 입력을 녹음합니다.",
 		"microphoneUnavailable": "이 버전의 macOS에서는 마이크를 녹음할 수 없습니다. 마이크 없이 녹화합니다.",
 		"restartFailed": "새 녹화를 시작할 수 없습니다. 이전 녹화는 삭제되었습니다.",

@@ -115,6 +115,17 @@ export function readWebcamUnavailable(output: string) {
 }
 
 /**
+ * Did the camera deliver nothing but dark frames before the take started?
+ *
+ * A covered lens or a closed privacy shutter. The helper records those frames
+ * anyway, so the take keeps a valid camera track that stays black until the lens
+ * opens -- but the user is told now, while uncovering it or restarting is cheap.
+ */
+export function readWebcamDark(output: string) {
+	return output.includes('"code":"webcam-dark"');
+}
+
+/**
  * Did the helper record the Windows default input instead of the microphone
  * that was asked for?
  *

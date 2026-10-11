@@ -13,6 +13,7 @@ import {
 	readSecondaryWindowsApplied,
 	readStemsFinalized,
 	readStoppedPath,
+	readWebcamDark,
 	readWebcamFormat,
 	readWebcamUnavailable,
 	terminateNativeWindowsCapture,
@@ -136,6 +137,25 @@ describe("readWebcamUnavailable", () => {
 			'{"event":"webcam-format","schemaVersion":2,"width":1920,"height":1080,"fps":30,"deviceName":"Camera (NVIDIA Broadcast)"}\n' +
 			"Recording started\n";
 		expect(readWebcamUnavailable(output)).toBe(false);
+	});
+});
+
+describe("readWebcamDark", () => {
+	it("sees the helper reporting a dark camera", () => {
+		const output =
+			'{"event":"webcam-format","schemaVersion":2,"width":1920,"height":1080,"fps":30,"deviceName":"HD Pro Webcam C920"}\n' +
+			"WARNING: Native webcam frames are dark; recording them anyway\n" +
+			'{"event":"warning","code":"webcam-dark","message":"The camera delivers only dark frames"}\n' +
+			"Recording started\n";
+		expect(readWebcamDark(output)).toBe(true);
+		expect(readWebcamUnavailable(output)).toBe(false);
+	});
+
+	it("is false for a camera that showed a picture", () => {
+		const output =
+			'{"event":"webcam-format","schemaVersion":2,"width":1920,"height":1080,"fps":30,"deviceName":"HD Pro Webcam C920"}\n' +
+			"Recording started\n";
+		expect(readWebcamDark(output)).toBe(false);
 	});
 });
 

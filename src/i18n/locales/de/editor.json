@@ -47,6 +47,8 @@
 		"cameraDisconnected": "Webcam getrennt.",
 		"cameraNotFound": "Kamera nicht gefunden.",
 		"cameraCaptureUnavailable": "Die Kamera konnte nicht geöffnet werden. Die Aufnahme läuft ohne sie.",
+		"cameraDark": "Die Kamera ist dunkel oder abgedeckt. Sie wird trotzdem aufgenommen: Objektiv freigeben oder stoppen und neu aufnehmen.",
+		"cameraNoFrames": "Die Kamera hat kein Bild geliefert, daher wurde die Aufnahme ohne sie gespeichert.",
 		"microphoneDefaulted": "Das gewählte Mikrofon konnte nicht identifiziert werden. Es wird der Standardeingang aufgenommen.",
 		"microphoneUnavailable": "Diese macOS-Version kann das Mikrofon nicht aufnehmen. Die Aufnahme läuft ohne Mikrofon.",
 		"restartFailed": "Die neue Aufnahme konnte nicht starten. Die vorherige wurde gelöscht.",

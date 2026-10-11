@@ -47,6 +47,8 @@
 		"cameraDisconnected": "摄像头已断开连接。",
 		"cameraNotFound": "未找到摄像头。",
 		"cameraCaptureUnavailable": "无法打开摄像头，正在不使用摄像头录制。",
+		"cameraDark": "摄像头画面很暗或被遮挡。仍在录制：请移开遮挡，或停止后重新录制。",
+		"cameraNoFrames": "摄像头没有传来任何画面，因此本次录制已在没有摄像头的情况下保存。",
 		"microphoneDefaulted": "无法识别所选麦克风，正在录制默认输入设备。",
 		"microphoneUnavailable": "此版本的 macOS 无法录制麦克风，正在不使用麦克风录制。",
 		"restartFailed": "无法开始新的录制。之前的录制已被删除。",

@@ -788,7 +788,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				// because this callback has to stay referentially stable — see the ref's
 				// own comment.
 				if (result.webcamDropped) {
-					toast.error(tRef.current("recording.cameraCaptureUnavailable"));
+					toast.error(tRef.current("recording.cameraNoFrames"));
 				}
 				for (const drop of result.audioDrops ?? []) {
 					const seconds = String(Math.max(1, Math.round((drop.silentMs ?? 0) / 1000)));
@@ -1382,6 +1382,9 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			// editor, long after the moment was gone.
 			if (result.webcamUnavailable) {
 				toast.error(t("recording.cameraCaptureUnavailable"));
+			}
+			if (result.webcamDark) {
+				toast.warning(t("recording.cameraDark"), { duration: 15_000 });
 			}
 			if (result.microphoneDefaulted) {
 				toast.error(t("recording.microphoneDefaulted"));

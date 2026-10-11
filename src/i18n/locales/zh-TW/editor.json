@@ -48,6 +48,8 @@
 		"cameraDisconnected": "網路攝影機已中斷連線。",
 		"cameraNotFound": "找不到攝影機。",
 		"cameraCaptureUnavailable": "無法開啟攝影機，將在沒有攝影機的情況下錄製。",
+		"cameraDark": "攝影機畫面很暗或被遮住。仍在錄製：請移開遮擋，或停止後重新錄製。",
+		"cameraNoFrames": "攝影機沒有傳來任何畫面，因此這次錄製已在沒有攝影機的情況下儲存。",
 		"microphoneDefaulted": "無法辨識所選麥克風，將錄製預設輸入裝置。",
 		"microphoneUnavailable": "此版本的 macOS 無法錄製麥克風，將在沒有麥克風的情況下錄製。",
 		"restartFailed": "無法開始新的錄製。先前的錄製已被刪除。",

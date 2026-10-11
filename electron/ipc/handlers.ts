@@ -143,6 +143,7 @@ import {
 	readMicrophoneUnavailable,
 	readSecondaryWindowsApplied,
 	readStemsFinalized,
+	readWebcamDark,
 	readWebcamFormat,
 	readWebcamUnavailable,
 	terminateNativeWindowsCapture,
@@ -3354,6 +3355,17 @@ export function registerIpcHandlers(
 						deviceName: request.webcam.deviceName,
 					});
 				}
+				// The camera opened but shows only black (a covered lens): the take keeps
+				// a camera track, black until the lens opens, and the user hears it now.
+				const webcamDark =
+					request.webcam.enabled &&
+					!webcamUnavailable &&
+					readWebcamDark(nativeWindowsCaptureOutput);
+				if (webcamDark) {
+					console.warn("[native-wgc] the camera delivers only dark frames", {
+						deviceName: request.webcam.deviceName,
+					});
+				}
 
 				// Checked again while the take runs: the free space at start says
 				// nothing about another program filling the disk an hour in. Stopped
@@ -3387,6 +3399,7 @@ export function registerIpcHandlers(
 					// know this take has lost that protection.
 					containerFormat: encoderSelection?.container ?? null,
 					webcamUnavailable,
+					webcamDark,
 					microphoneDefaulted,
 					lowDiskSpaceMinutes: freeSpace?.level === "low" ? freeSpace.minutesLeft : null,
 				};
@@ -4010,6 +4023,9 @@ export function registerIpcHandlers(
 						console.warn("[native-wgc] the webcam file is empty; saving without a camera", {
 							path: preferredWebcamPath,
 						});
+						// Nothing to keep: no demuxer opens it, and left beside the take it
+						// reads as a camera recording that is not there.
+						await fs.rm(preferredWebcamPath, { force: true }).catch(() => undefined);
 					}
 				} catch {
 					webcamVideoPath = undefined;

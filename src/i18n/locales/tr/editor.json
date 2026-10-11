@@ -40,6 +40,8 @@
 		"cameraDisconnected": "Webcam bağlantısı kesildi.",
 		"cameraNotFound": "Kamera bulunamadı.",
 		"cameraCaptureUnavailable": "Kamera açılamadı. Kamerasız kaydediliyor.",
+		"cameraDark": "Kamera karanlık veya kapalı. Yine de kaydediliyor: lensi açın ya da durdurup yeniden kaydedin.",
+		"cameraNoFrames": "Kamera hiç görüntü göndermedi, bu yüzden kayıt kamerasız kaydedildi.",
 		"microphoneDefaulted": "Seçilen mikrofon belirlenemedi. Varsayılan giriş kaydediliyor.",
 		"microphoneUnavailable": "Bu macOS sürümü mikrofonu kaydedemiyor. Mikrofonsuz kaydediliyor.",
 		"restartFailed": "Yeni kayıt başlatılamadı. Önceki kayıt silindi.",
