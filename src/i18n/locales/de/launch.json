@@ -75,6 +75,14 @@
 		"saving": "Wird gespeichert…",
 		"markerAdded": "Markierung {{count}} hinzugefügt"
 	},
+	"cameraLayout": {
+		"name": "Gesicht: nur die Kamera",
+		"faceTip": "Gesicht: nur die Kamera, im Vollbild. Klicke, um den Bildschirm mit der Kamera zu zeigen.",
+		"screenTip": "Bildschirm + Kamera: dein Bildschirm, mit der Kamera in einer Ecke. Klicke, um nur die Kamera im Vollbild zu zeigen.",
+		"face": "Gesicht",
+		"screen": "Bildschirm + Kamera",
+		"switched": "Jetzt: {{layout}}"
+	},
 	"language": "Sprache",
 	"languageWithName": "Sprache: {{language}}",
 	"systemLanguagePrompt": {

@@ -2237,3 +2237,87 @@ describe("LaunchWindow software encoder fallback notice", () => {
 		expect(recorderState.value.dismissSoftwareEncoderFallbackNotice).toHaveBeenCalledWith(true);
 	});
 });
+
+describe("LaunchWindow camera layout ('Rosto / Tela + câmera')", () => {
+	let layoutListeners: Array<
+		(change: { layout: "face" | "screen"; source: "hud" | "shortcut" }) => void
+	> = [];
+
+	function stubLayoutBridge(initial: "face" | "screen") {
+		let current = initial;
+		const api = window.electronAPI as typeof window.electronAPI;
+		api.getRecordingCameraLayout = vi.fn(async () => current);
+		api.setRecordingCameraLayout = vi.fn(async (layout) => {
+			current = layout;
+			return layout;
+		});
+		api.onRecordingCameraLayoutChanged = vi.fn((callback) => {
+			layoutListeners.push(callback);
+			return () => {
+				layoutListeners = layoutListeners.filter((listener) => listener !== callback);
+			};
+		});
+		return api;
+	}
+
+	beforeEach(() => {
+		platformState.value = "win32";
+		resetLaunchMocks();
+		layoutListeners = [];
+	});
+
+	afterEach(() => {
+		cleanup();
+		vi.unstubAllGlobals();
+	});
+
+	it("is offered only with the camera on, on Windows", async () => {
+		stubLayoutBridge("screen");
+		recorderState.value.webcamEnabled = false;
+		const { unmount } = renderLaunchWindow();
+		await screen.findByTestId("launch-webcam-button");
+		expect(screen.queryByTestId("launch-camera-layout-button")).toBeNull();
+		unmount();
+
+		recorderState.value.webcamEnabled = true;
+		renderLaunchWindow();
+		expect(await screen.findByTestId("launch-camera-layout-button")).toBeInTheDocument();
+		cleanup();
+
+		platformState.value = "darwin";
+		renderLaunchWindow();
+		await screen.findByTestId("launch-webcam-button");
+		await waitFor(() => expect(nativeBridgeClient.system.getPlatform).toHaveBeenCalled());
+		expect(screen.queryByTestId("launch-camera-layout-button")).toBeNull();
+	});
+
+	it("starts on the saved layout and switches on a click, during the take as well", async () => {
+		const api = stubLayoutBridge("face");
+		recorderState.value.webcamEnabled = true;
+		recorderState.value.recording = true;
+		renderLaunchWindow();
+		const button = await screen.findByTestId("launch-camera-layout-button");
+		await waitFor(() => expect(button).toHaveAttribute("data-layout", "face"));
+		expect(button).toHaveAttribute("aria-pressed", "true");
+		// Not locked like the toggles beside it: switching mid-take is the point.
+		expect(button).not.toHaveAttribute("aria-disabled");
+		expect(await tooltipOn("launch-camera-layout-button")).toBe("cameraLayout.faceTip");
+
+		fireEvent.click(button);
+		await waitFor(() => expect(button).toHaveAttribute("data-layout", "screen"));
+		expect(api.setRecordingCameraLayout).toHaveBeenCalledWith("screen");
+		expect(button).toHaveAttribute("aria-pressed", "false");
+	});
+
+	it("follows a switch the shortcut made in the main process", async () => {
+		stubLayoutBridge("screen");
+		recorderState.value.webcamEnabled = true;
+		renderLaunchWindow();
+		const button = await screen.findByTestId("launch-camera-layout-button");
+		await waitFor(() => expect(layoutListeners.length).toBeGreaterThan(0));
+		act(() => {
+			for (const listener of layoutListeners) listener({ layout: "face", source: "shortcut" });
+		});
+		expect(button).toHaveAttribute("data-layout", "face");
+	});
+});

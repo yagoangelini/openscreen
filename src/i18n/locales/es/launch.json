@@ -75,6 +75,14 @@
 		"saving": "Guardando...",
 		"markerAdded": "Marcador {{count}} añadido"
 	},
+	"cameraLayout": {
+		"name": "Rostro: solo la cámara",
+		"faceTip": "Rostro: solo la cámara, a pantalla completa. Haz clic para mostrar la pantalla con la cámara.",
+		"screenTip": "Pantalla + cámara: tu pantalla, con la cámara en una esquina. Haz clic para mostrar solo la cámara, a pantalla completa.",
+		"face": "Rostro",
+		"screen": "Pantalla + cámara",
+		"switched": "Ahora: {{layout}}"
+	},
 	"language": "Idioma",
 	"languageWithName": "Idioma: {{language}}",
 	"systemLanguagePrompt": {

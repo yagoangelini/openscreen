@@ -128,6 +128,8 @@ The in-app source selector below is the Windows one, and the macOS one before 15
 - [ ] Activate the cancel action while recording and confirm recording ends without opening an editor for the canceled take.
 - [ ] Confirm stopping opens the editor with the recorded screen asset loaded.
 - [ ] On Windows, stop once with system audio, microphone, webcam, and cursor all disabled and confirm the editor opens within a few seconds.
+- [ ] **Fork** — On Windows with the camera on, confirm `[data-testid="launch-camera-layout-button"]` sits beside the camera toggle (absent with the camera off, and on macOS and Linux) and stays clickable while recording. Start a take on *Face*, switch to *Screen + camera* with a real click mid-take, back with Ctrl+Shift+F7, once more while paused, then stop. `<take>.mp4.layout.json` lists the switches in media ms (since the first frame, pauses left out; the paused one at the pause's ms), the camera track shows a *Full Camera* piece over each face span, no automatic zoom sits inside one, and an export shows the camera full screen from frame 0 to each switch.
+- [ ] **Fork** — Quit mid-take through the tray's *Quit*, relaunch, and confirm the *Recover recording* dialog offers the take; *Open in editor* opens it with its camera and its face pieces. Repeat after killing the main process mid-take: the take comes back with its camera and cursor.
 - [ ] Record once with microphone only and confirm the resulting playback contains audible microphone audio.
 - [ ] Record once with system audio only and confirm the resulting playback contains audible system audio.
 - [ ] Record with microphone and system audio enabled and confirm both sources are audible and reasonably balanced.

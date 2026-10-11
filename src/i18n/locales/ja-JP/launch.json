@@ -75,6 +75,14 @@
 		"saving": "保存中...",
 		"markerAdded": "マーカー {{count}} を追加しました"
 	},
+	"cameraLayout": {
+		"name": "顔：カメラのみ",
+		"faceTip": "顔：カメラだけを全画面で表示します。クリックすると画面とカメラを表示します。",
+		"screenTip": "画面＋カメラ：画面と、隅にカメラを表示します。クリックするとカメラだけを全画面で表示します。",
+		"face": "顔",
+		"screen": "画面＋カメラ",
+		"switched": "現在：{{layout}}"
+	},
 	"language": "言語",
 	"languageWithName": "言語：{{language}}",
 	"systemLanguagePrompt": {

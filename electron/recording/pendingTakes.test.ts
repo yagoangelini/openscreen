@@ -9,6 +9,7 @@ import {
 	RECOVERABLE_TAKE_MIN_BYTES,
 	readPendingTakes,
 	recordPendingTake,
+	settlePendingTakeHandOff,
 } from "./pendingTakes";
 
 let dir: string;
@@ -99,6 +100,33 @@ describe("collectRecoverableTakes", () => {
 		await recordPendingTake(dir, { screenVideoPath: live, createdAt: 1 });
 
 		expect(await collectRecoverableTakes(dir, { excludeScreenVideoPath: live })).toEqual([]);
+		expect(await readPendingTakes(dir)).toHaveLength(1);
+	});
+});
+
+describe("the hand-off to the editor", () => {
+	it("keeps a stopped take journaled until the editor has put it in a project", async () => {
+		const screen = await writeFile("recording-7.mp4", RECOVERABLE_TAKE_MIN_BYTES);
+		const session = { screenVideoPath: screen, createdAt: 7 };
+		await recordPendingTake(dir, session);
+
+		// The stop parks it for the editor; the editor (re)reads it: nothing settled yet.
+		await settlePendingTakeHandOff(dir, null, session);
+		await settlePendingTakeHandOff(dir, session, session);
+		// The app dies here, before the import saved a project. The next launch offers it.
+		expect((await collectRecoverableTakes(dir)).map((take) => take.screenVideoPath)).toEqual([
+			screen,
+		]);
+
+		// The import consumed it: the take is in a project now.
+		await settlePendingTakeHandOff(dir, session, null);
+		expect(await collectRecoverableTakes(dir)).toEqual([]);
+	});
+
+	it("leaves the journal alone when nothing was parked", async () => {
+		const screen = await writeFile("recording-8.mp4", RECOVERABLE_TAKE_MIN_BYTES);
+		await recordPendingTake(dir, { screenVideoPath: screen, createdAt: 8 });
+		await settlePendingTakeHandOff(dir, null, null);
 		expect(await readPendingTakes(dir)).toHaveLength(1);
 	});
 });

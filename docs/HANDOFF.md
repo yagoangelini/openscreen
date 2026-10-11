@@ -113,6 +113,18 @@ As decisões e o porquê de cada fase estão em [`PLANO-FORK.md`](PLANO-FORK.md)
 - **Câmera escura não atrasa nem some.** No `main.cpp` a câmera começa a ler logo depois de aberta (não mais depois dos encoders), e a espera pelo quadro visível termina no fim da contagem, com no mínimo 1 s de câmera (sem contagem continua 3 s). Se só vierem quadros escuros, eles são gravados mesmo assim (arquivo válido e alinhado desde 0 s, preto até destampar) e o helper emite `{"event":"warning","code":"webcam-dark"}`. O main lê com `readWebcamDark` (`nativeWindowsCaptureStop.ts`), devolve `webcamDark` no resultado do start, e o renderer mostra o toast `recording.cameraDark`. O escritor não testa mais visibilidade durante o take: lente tampada no meio do take fica preta, em vez de congelar no último quadro claro. Um `-webcam.mp4` que ainda assim termine vazio é apagado, e o toast do fim passa a ser `recording.cameraNoFrames`.
 - **Formato da webcam.** `chooseWebcamFormat` (`webcam_format.cpp`) põe primeiro um modo que aguente o ritmo (24 fps, ou o alvo se for menor), depois o tamanho, o fps e por fim sem compressão > MJPEG > outro comprimido. Os modos comprimidos só entram no caminho NV12 (câmera em arquivo próprio); o BGRA mantém a regra antiga. A linha `INFO: Native webcam modes:` lista o que a câmera oferece. Na C920 pelo Media Foundation há NV12 1080p30 (decodificado pelo frame server do Windows): em 2160p a regra antiga escolhia YUY2 2304×1536 a 2 fps, o driver recusava e caía em 640×480; agora 1080p e 2160p dão `1920x1080@30 (uncompressed)`.
 
+**Branch `feat/hud-camera-layout`** (ainda não mesclado nem publicado): a fase 4 da trilha da câmera e a recuperação de um take salvo ao sair.
+
+- **Rosto / Tela + câmera no HUD.** Um botão ao lado da câmera (só no Windows, só com a câmera ligada) e o atalho global **Ctrl+Shift+F7** (`cameraLayoutToggle`, configurável). A captura não muda: tela e câmera são sempre gravadas.
+  - Antes do take, a escolha é a pref `cameraLayout` ("screen" ou "face"), de onde o próximo take começa. Durante o take, o main registra cada troca no relógio dos marcadores: ms desde o primeiro quadro, sem as pausas, parado durante a pausa. Uma troca durante a contagem muda o começo do take e a pref.
+  - As trocas durante o take **não** mudam a pref: o próximo take começa de novo no que estava escolhido antes (para quem sempre abre com o rosto).
+  - O sidecar `<take>.mp4.layout.json` é reescrito a cada troca e no fim, então um take recuperado depois de um crash também volta com o rosto. Sem câmera no fim do take, o arquivo é apagado.
+  - Na importação vira `asset.cameraLayout` e, depois da duração medida, pedaços "Tela cheia" (origin `system`) numa escrita desfazível (`applyFreshRecordingCameraLayout`). O auto-zoom do take espera esses pedaços e não planeja zoom dentro de um trecho de câmera cheia, nem logo depois dele (fica aberto por `minWideSec`); vale também para o replanejamento pela transcrição.
+  - Um trecho de câmera cheia que abre ou fecha o vídeo não tem rampa daquele lado (`holdAtProgrammeEdges` em `sceneDescription.ts`, e a prévia web no começo): o take que começa no rosto mostra o rosto já no primeiro quadro.
+  - **Medido** (instância isolada, take real de 13,3 s, export 1080p60 pela CLI, fração de pixels pretos com a câmera tampada): 100 % do quadro 0 até 6,5 s (rosto), rampa de saída 6,5–7,8 s terminando na troca registrada em 7816 ms, PiP (2,5 %, a caixa da câmera) de 7,8 a 9,9 s, rosto curto de 9886 a 10 300 ms (a troca feita com o take pausado ficou no ms da pausa), PiP até o fim. Troca pelo mouse real (SetCursorPos/mouse_event no HUD click-through) e pelo atalho (keybd_event).
+- **Take salvo ao sair ou num crash é oferecido de novo.** O diário `.pending-takes.json` era apagado quando o editor *pedia* o take; se o app morresse antes de o projeto ser salvo (por exemplo o editor aberto pelo stop que o main faz quando o HUD morre, e o resto do app morto em seguida), o take ficava salvo e nunca mais era oferecido. Agora ele sai do diário só quando o take está num projeto salvo (`settlePendingTakeHandOff`, no `set-current-recording-session(null)` da importação) ou quando o `record` da CLI termina. Um take reaberto pela oferta sem `.session.json` (crash) ganha o manifesto antes de abrir, e o editor liga a câmera dele (antes voltava só a tela).
+  - **Verificado:** sair pelo `app.quit` (o Sair da bandeja) no meio do take → ao abrir de novo, a janela "Recover recording" → "Open in editor" abre o take com câmera e o pedaço de rosto. Matar o processo main no meio do take → idem, com a câmera e o cursor do checkpoint. O log do main agora diz `[recovery] offering a take` e `[recovery] answer`.
+
 Os PRs do fork são abertos e mesclados com `gh pr merge N --merge`, sem CI. Antes do merge, rode todo o portão de validação abaixo.
 
 ## Onde mora cada recurso do fork
@@ -120,7 +132,7 @@ Os PRs do fork são abertos e mesclados com `gh pr merge N --merge`, sem CI. Ant
 | Recurso | Arquivos principais | Padrão |
 |---|---|---|
 | Pasta de gravações | `defaultCaptureOutputDir()` em `electron/ipc/handlers.ts`; setting `recording.recordingsFolder`; UI no modo Record (`RecStage.tsx`) | `Vídeos\OpenScreen` |
-| Atalhos globais | `DEFAULT_SHORTCUTS` em `src/lib/shortcuts.ts`; `electron/globalShortcut.ts` | Ctrl+Shift+F9 grava/para; F10 pausa; F8 marcador; F12 mostra o app |
+| Atalhos globais | `DEFAULT_SHORTCUTS` em `src/lib/shortcuts.ts`; `electron/globalShortcut.ts` | Ctrl+Shift+F9 grava/para; F10 pausa; F8 marcador; F7 Rosto / Tela + câmera; F12 mostra o app |
 | Marcadores | `<take>.mp4.markers.json` (handlers.ts, `RECORDING_MARKERS_SUFFIX`) | — |
 | Cursor salvo durante a gravação | `electron/recording/cursorCheckpoint.ts` (`<take>.mp4.cursor.ndjson` a cada 5 s, recuperado ao abrir o app) | sempre |
 | Reinício do leitor de cursor | `windowsNativeRecordingSession.ts` (`MAX_HELPER_RESTARTS = 5`) | sempre |
@@ -147,6 +159,7 @@ Os PRs do fork são abertos e mesclados com `gh pr merge N --merge`, sem CI. Ant
 | Diagnóstico | `handlers.ts`: `gpu: {compositor, chromium}` | — |
 | Trilha da câmera (schema v9) | `document.cameraSegments`; edições puras em `src/lib/ai-edition/document/cameraSegments.ts`; migração `upgradeV8DocumentToV9`; trilha `renderCameraTrack` em `V4Timeline.tsx`; painel do trecho em `FloatingInspector.tsx`; escritas em `useTimeline.ts` (`saveCameraEdit`); atalho `splitCamera` (B) | cada trecho PiP, Tela cheia ou Sem câmera |
 | Sem câmera | cena `cameraHiddenRegions`; Rust `camera_hidden_regions` + `webcam_hidden` (`frame_geometry.rs`, três backends); prévia em `PreviewCanvas.tsx` | — |
+| Rosto / Tela + câmera (HUD) | botão `HudCameraLayoutButton` (`HudControls.tsx`, só no Windows e com a câmera ligada) e atalho `cameraLayoutToggle`; pref `cameraLayout` (`app-settings.ts`); no main `switchRecordingCameraLayout` (`handlers.ts`) e `TakeCameraLayoutLog` / `takeMediaTimeMs` (`electron/recording/takeCameraLayout.ts`); sidecar `<take>.mp4.layout.json` (`src/lib/recordingLayout.ts`); `asset.cameraLayout` (`readRecordingLayout` no `document-service.ts`); peças em `cameraSegmentsFromRecordingLayout` (`cameraSegments.ts`), gravadas por `applyFreshRecordingCameraLayout` (`recordingImport.ts`); auto-zoom reserva os trechos de câmera cheia (`apply-auto-zooms.ts`) | Tela + câmera |
 | Aparência por trecho da câmera | `overrides` em `document.cameraSegments` (sem subir o schema); edições `setCameraPieceLook` / `clearCameraPieceLook` / `setCameraPieceStyle` e `deriveCameraLookRuns` em `cameraSegments.ts`; cena `cameraLayoutRegions`; Rust `camera_layout_regions` (`scene.rs`), `camera_look_at` (`regions.rs`), `resolve_camera_look` e `FrameGeometry::webcam_mirror`; controles `CameraLookControls` (`RightPanes.tsx`), painel do trecho `CameraPieceLook` (`FloatingInspector.tsx`); escritas `setCameraLook` / `updateCameraLookLive` / `commitCameraLook` / `clearCameraLook` / `setCameraStyle` (`useTimeline.ts`) | cada trecho segue os ajustes globais até ganhar os seus ("Este trecho") |
 
 **Arquivos que podem aparecer ao lado de cada gravação:**
@@ -155,6 +168,7 @@ Os PRs do fork são abertos e mesclados com `gh pr merge N --merge`, sem CI. Ant
 - `<take>.mp4.cursor.json`
 - `<take>.mp4.cursor.ndjson`
 - `<take>.mp4.markers.json`
+- `<take>.mp4.layout.json` (Rosto / Tela + câmera; só quando o take não ficou em "Tela + câmera" do início ao fim)
 - `<take>.voice.m4a`
 - `<take>.system.m4a`
 
@@ -367,11 +381,11 @@ O fork acompanha `getopenscreen/openscreen`. O último merge (2.1.0) foi até `1
 
 ### Próximo passo: 2.2.0, trilha da câmera, câmera e vinheta
 
-**Pedido de 11/10:** a câmera numa trilha própria da timeline, com cortes e cada pedaço editável. O plano completo, em fases, está em [`PLANO-TRILHA-CAMERA.md`](PLANO-TRILHA-CAMERA.md). Ele absorve os itens 1 e 2 abaixo: o HUD escreve pedaços da trilha, e "Sem câmera" é um modo do pedaço. **As fases 0, 1 e 2 estão no branch `feat/camera-track`** (schema v9, trilha, Sem câmera); a tabela de status está no plano. A fase 3 (aparência por pedaço) está no branch `feat/camera-look`. Falta a 4 (o HUD escrevendo pedaços, item 1 abaixo).
+**Pedido de 11/10:** a câmera numa trilha própria da timeline, com cortes e cada pedaço editável. O plano completo, em fases, está em [`PLANO-TRILHA-CAMERA.md`](PLANO-TRILHA-CAMERA.md). Ele absorve os itens 1 e 2 abaixo: o HUD escreve pedaços da trilha, e "Sem câmera" é um modo do pedaço. As fases 0 a 3 estão na `main` (2.2.0 e 2.3.0); a tabela de status está no plano. **A fase 4 (o HUD escrevendo pedaços, item 1 abaixo) está no branch `feat/hud-camera-layout`**, descrito em "Estado atual". Falta só a vinheta (item 3).
 
 O que o usuário pediu está em `PLANO-FORK.md`, "Decisões de 10/10/2026 (tarde)". O que já foi levantado no código:
 
-1. **"Rosto / Tela + câmera" no HUD, mais um atalho global** (sugestão: Ctrl+Shift+F7, configurável).
+1. **"Rosto / Tela + câmera" no HUD, mais um atalho global** (Ctrl+Shift+F7, configurável). **Feito** no branch `feat/hud-camera-layout`; o que segue é o levantamento original.
    - Gravar sempre tela e câmera.
    - O main guarda as trocas como os marcadores (`nativeWindowsMarkersMs` em `handlers.ts`) e grava um sidecar `<take>.mp4.layout.json`.
    - A importação vira esse sidecar em `legacyEditor.cameraFullscreenRegions`, com `anchorRegionsWithDerivedMs`, como `addCameraFullscreen` em `useTimeline.ts`.
