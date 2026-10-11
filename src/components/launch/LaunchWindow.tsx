@@ -1233,6 +1233,12 @@ export function LaunchWindow() {
 						onPointerDown={enableHudMouseEvents}
 						onMouseEnter={enableHudMouseEvents}
 						onMouseLeave={handlePointerLeave}
+						// A click leaves no keyboard focus on the bar's buttons: the HUD keeps the window's focus
+						// after one, and the user then typing into what they think is another app pressed the
+						// focused button again with Space or Enter (five layout switches in one take).
+						onMouseDown={(event) => {
+							if ((event.target as Element).closest("button")) event.preventDefault();
+						}}
 					>
 						<HudDragHandle
 							vertical={isVertical}
