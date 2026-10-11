@@ -15,8 +15,9 @@ vi.mock("@/components/ui/tooltip", () => ({
 
 beforeEach(() => {
 	// `setLocale` persists its choice, and `I18nProvider` reads it back on mount — without
-	// this, the one test that switches language would leak into every test after it.
-	localStorage.removeItem(LOCALE_STORAGE_KEY);
+	// this, the one test that switches language would leak into every test after it. English,
+	// not the app's pt-BR default: the assertions read the English copy.
+	localStorage.setItem(LOCALE_STORAGE_KEY, "en");
 });
 
 function createEditor(): Editor {

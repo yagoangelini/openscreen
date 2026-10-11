@@ -13,6 +13,8 @@ type TimelineApi = ReturnType<typeof useTimeline>;
 describe("AudioTrackPane reset button", () => {
 	beforeEach(() => {
 		localStorage.clear();
+		// The app starts in pt-BR; these assertions read the English copy.
+		localStorage.setItem(LOCALE_STORAGE_KEY, "en");
 	});
 
 	afterEach(() => {

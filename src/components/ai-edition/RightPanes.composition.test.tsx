@@ -78,6 +78,8 @@ function frameSettings() {
 
 beforeEach(() => {
 	localStorage.clear();
+	// The app starts in pt-BR; these assertions read the English copy.
+	localStorage.setItem(LOCALE_STORAGE_KEY, "en");
 	useProjectStore.setState({ document: null });
 	// jsdom has none, and a Radix tooltip measures its trigger when it opens.
 	vi.stubGlobal(
