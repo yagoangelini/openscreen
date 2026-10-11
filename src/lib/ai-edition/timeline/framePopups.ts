@@ -35,11 +35,20 @@ function clickTimes(telemetry: CursorTelemetryPoint[]): number[] {
 		.sort((a, b) => a - b);
 }
 
-/** The clicks no popup signal follows: the ones worth looking at in the frames. */
+/** A popup UI Automation saw closing this close to a click: what changed is the menu going. */
+const CLOSED_BY_CLICK_MS = 300;
+
+/**
+ * The clicks no popup signal explains: the ones worth looking at in the frames. A click that
+ * closed a menu is explained too. The frames do change around it, but the change is the menu
+ * going away, and read as a new menu it held a zoom on the empty spot for ten seconds.
+ */
 export function clicksToScan(telemetry: CursorTelemetryPoint[]): number[] {
 	const opens = telemetry.filter((p) => p.input?.kind === "popup-open").map((p) => p.timeMs);
+	const closes = telemetry.filter((p) => p.input?.kind === "popup-close").map((p) => p.timeMs);
 	return clickTimes(telemetry)
 		.filter((t) => !opens.some((o) => o >= t - 150 && o <= t + EXPLAINED_WITHIN_MS))
+		.filter((t) => !closes.some((c) => c >= t - 150 && c <= t + CLOSED_BY_CLICK_MS))
 		.slice(0, MAX_SCANNED_CLICKS);
 }
 
