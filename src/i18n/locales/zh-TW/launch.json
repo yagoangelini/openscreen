@@ -75,6 +75,14 @@
 		"saving": "正在儲存...",
 		"markerAdded": "已新增標記 {{count}}"
 	},
+	"cameraLayout": {
+		"name": "人像：僅攝影機",
+		"faceTip": "人像：僅顯示攝影機，全螢幕。按一下可顯示螢幕與攝影機。",
+		"screenTip": "螢幕 + 攝影機：顯示你的螢幕，攝影機位於角落。按一下可僅以全螢幕顯示攝影機。",
+		"face": "人像",
+		"screen": "螢幕 + 攝影機",
+		"switched": "目前：{{layout}}"
+	},
 	"language": "語言",
 	"languageWithName": "語言：{{language}}",
 	"systemLanguagePrompt": {

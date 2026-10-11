@@ -3,6 +3,7 @@
 // this file only collects per-asset telemetry and appends the resulting regions.
 
 import type { CursorTelemetryPoint } from "@/components/video-editor/types";
+import { readCameraFullscreenRegions } from "../document/cameraSegments";
 import { createId } from "../document/ids";
 import type { AxcutAsset, AxcutDocument } from "../schema";
 import { getEditorSettings } from "../store/editorSettings";
@@ -112,17 +113,36 @@ export async function collectAutoZoomSuggestionsForDocument(
 		wordsByAssetId: transcriptWordsByAssetId(document),
 		clips: document.timeline.clips,
 		settings,
-		existingRegions: document.zoomRanges.map((region) => {
-			const scale = effectiveZoomScale(region);
-			return {
-				startMs: region.startMs,
-				endMs: region.endMs,
-				scale,
-				// An automatic zoom moves with the project's motion, and ramps for that long.
-				...(region.source === "auto" ? { rampMs: motionTransitionSec(motion, scale) * 1000 } : {}),
-			};
-		}),
+		existingRegions: [
+			...document.zoomRanges.map((region) => {
+				const scale = effectiveZoomScale(region);
+				return {
+					startMs: region.startMs,
+					endMs: region.endMs,
+					scale,
+					// An automatic zoom moves with the project's motion, and ramps for that long.
+					...(region.source === "auto"
+						? { rampMs: motionTransitionSec(motion, scale) * 1000 }
+						: {}),
+				};
+			}),
+			...cameraFullscreenReservations(document),
+		],
 	});
+}
+
+/**
+ * The Full Camera spans ("Rosto" in the HUD) as spans the planner keeps clear of: they show no
+ * screen, so a zoom there zooms into nothing. Planned like a zoom already on the timeline with
+ * no ramp of its own, so the screen also comes back wide for a moment before the first zoom
+ * after one.
+ */
+function cameraFullscreenReservations(document: AxcutDocument) {
+	return readCameraFullscreenRegions(document).map((run) => ({
+		startMs: run.startMs,
+		endMs: run.endMs,
+		rampMs: 0,
+	}));
 }
 
 /** The automatic zooms of a document, replaced by a fresh plan: what "re-plan" does after the

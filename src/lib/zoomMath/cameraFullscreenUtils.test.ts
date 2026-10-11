@@ -125,10 +125,18 @@ describe("computeCameraFullscreenProgress", () => {
 		);
 	});
 
+	it("holds a span that opens the video from its first frame, easing out at its end only", () => {
+		const opening = makeRegion(0, 3000);
+		expect(computeCameraFullscreenProgress([opening], 0)).toBe(1);
+		expect(computeCameraFullscreenProgress([opening], 1000)).toBe(1);
+		expect(computeCameraFullscreenProgress([opening], 2900)).toBeLessThan(1);
+		expect(computeCameraFullscreenProgress([opening], 3000)).toBe(0);
+	});
+
 	it("handles multiple disjoint regions independently", () => {
-		const first = makeRegion(0, 1000);
+		const first = makeRegion(1000, 2000);
 		const second = makeRegion(10000, 12000);
-		expect(computeCameraFullscreenProgress([first, second], 500)).toBe(1);
+		expect(computeCameraFullscreenProgress([first, second], 1500)).toBe(1);
 		expect(computeCameraFullscreenProgress([first, second], 5000)).toBe(0);
 		expect(computeCameraFullscreenProgress([first, second], 11000)).toBe(1);
 	});

@@ -869,6 +869,41 @@ function sceneCameraRegion(region: {
 	};
 }
 
+/**
+ * A camera span at the very start or end of the video has nothing to ease from or to: the video
+ * opens (or closes) on it. Held there like a span cut by a trim, so a take recorded starting on
+ * "Rosto" shows the face full screen on its first frame, not a corner bubble that then grows.
+ * Spans are in their clip's source ms (`projectRegionsToSource`).
+ */
+function holdAtProgrammeEdges<
+	T extends {
+		startMs: number;
+		endMs: number;
+		clipIndex?: number;
+		continuesBefore?: boolean;
+		continuesAfter?: boolean;
+	},
+>(regions: T[], visibleClips: readonly AxcutClip[]): T[] {
+	const first = visibleClips[0];
+	const lastIndex = visibleClips.length - 1;
+	const last = visibleClips[lastIndex];
+	if (!first || !last) return regions;
+	return regions.map((region) => {
+		const index = region.clipIndex ?? 0;
+		const opens = index === 0 && region.startMs <= first.sourceStartSec * 1000 + 1;
+		const closes =
+			index === lastIndex &&
+			last.sourceEndSec !== undefined &&
+			region.endMs >= last.sourceEndSec * 1000 - 1;
+		if (!opens && !closes) return region;
+		return {
+			...region,
+			...(opens ? { continuesBefore: true } : {}),
+			...(closes ? { continuesAfter: true } : {}),
+		};
+	});
+}
+
 /** Serialize a document into a {@link SceneDescription}. No per-frame math; the one side effect is
  *  handing the click cues to the preview, which has no document of its own to read them from. */
 export function buildSceneDescription(
@@ -1642,8 +1677,13 @@ export function buildSceneDescription(
 			})
 			// Ascending zIndex so the compositor paints in order without sorting per frame.
 			.sort((a, b) => a.zIndex - b.zIndex),
-		cameraFullscreenRegions: projectedCameraFullscreenRegions.map(sceneCameraRegion),
-		cameraHiddenRegions: projectedCameraHiddenRegions.map(sceneCameraRegion),
+		cameraFullscreenRegions: holdAtProgrammeEdges(
+			projectedCameraFullscreenRegions,
+			visibleClips,
+		).map(sceneCameraRegion),
+		cameraHiddenRegions: holdAtProgrammeEdges(projectedCameraHiddenRegions, visibleClips).map(
+			sceneCameraRegion,
+		),
 		cameraLayoutRegions,
 		// Speed is the one modifier with nothing to show for itself on a parked playhead: a
 		// still frame has no rate. So the entries under a trim are dropped here rather than

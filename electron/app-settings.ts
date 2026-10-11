@@ -6,6 +6,11 @@ import {
 	type WebcamQualityId,
 	webcamQualityFrom,
 } from "../src/hooks/webcamCaptureTarget";
+import {
+	DEFAULT_RECORDING_CAMERA_LAYOUT,
+	isRecordingCameraLayout,
+	type RecordingCameraLayout,
+} from "../src/lib/recordingLayout";
 import type { CursorCaptureMode } from "../src/lib/recordingSession";
 
 export interface RecordingPreferences {
@@ -41,6 +46,12 @@ export interface RecordingPreferences {
 	 * copies the live one over it; the others force it (`MicrophoneChannelPicker`).
 	 */
 	micChannelMode: MicChannelMode;
+	/**
+	 * How a take with the camera starts: "screen" (the screen with the camera in a corner)
+	 * or "face" (only the camera, full screen). Switched on the HUD before the take; the
+	 * switches during a take belong to that take and leave this alone.
+	 */
+	cameraLayout: RecordingCameraLayout;
 }
 
 export const MIC_CHANNEL_MODES = ["auto", "left", "right", "mix"] as const;
@@ -64,6 +75,7 @@ export const DEFAULT_RECORDING_PREFERENCES: RecordingPreferences = {
 	recordingsFolder: null,
 	countdownSeconds: 3,
 	micChannelMode: "auto",
+	cameraLayout: DEFAULT_RECORDING_CAMERA_LAYOUT,
 };
 
 export interface RecordingSourceDescriptor {
@@ -155,6 +167,9 @@ function parseRecording(raw: RawSettings): RecordingPreferences {
 		micChannelMode: (MIC_CHANNEL_MODES as readonly unknown[]).includes(raw.micChannelMode)
 			? (raw.micChannelMode as MicChannelMode)
 			: DEFAULT_RECORDING_PREFERENCES.micChannelMode,
+		cameraLayout: isRecordingCameraLayout(raw.cameraLayout)
+			? raw.cameraLayout
+			: DEFAULT_RECORDING_PREFERENCES.cameraLayout,
 	};
 }
 
@@ -227,6 +242,9 @@ function validateRecordingPatch(patch: Partial<RecordingPreferences>): void {
 		}
 		if (key === "micChannelMode" && !(MIC_CHANNEL_MODES as readonly unknown[]).includes(value)) {
 			throw new TypeError("micChannelMode must be auto, left, right or mix");
+		}
+		if (key === "cameraLayout" && !isRecordingCameraLayout(value)) {
+			throw new TypeError("cameraLayout must be screen or face");
 		}
 		// Rejected here rather than coerced on read, so a bad write is a visible
 		// error at its source instead of a resolution that silently is not the

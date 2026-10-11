@@ -75,6 +75,14 @@
 		"saving": "Kaydediliyor...",
 		"markerAdded": "{{count}}. işaret eklendi"
 	},
+	"cameraLayout": {
+		"name": "Yüz: yalnızca kamera",
+		"faceTip": "Yüz: yalnızca kamera, tam ekran. Ekranı kamerayla göstermek için tıklayın.",
+		"screenTip": "Ekran + kamera: ekranınız, köşede kamerayla. Yalnızca kamerayı tam ekran göstermek için tıklayın.",
+		"face": "Yüz",
+		"screen": "Ekran + kamera",
+		"switched": "Şimdi: {{layout}}"
+	},
 	"language": "Dil",
 	"languageWithName": "Dil: {{language}}",
 	"systemLanguagePrompt": {

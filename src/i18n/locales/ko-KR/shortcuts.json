@@ -19,6 +19,7 @@
 		"recordToggle": "녹화 시작 / 중지",
 		"pauseToggle": "녹화 일시정지 / 재개",
 		"addMarker": "녹화 중 마커 추가",
+		"cameraLayoutToggle": "얼굴 / 화면 + 카메라 전환",
 		"addZoom": "줌 추가",
 		"addTrim": "트림 추가",
 		"addSpeed": "속도 추가",

@@ -123,3 +123,21 @@ export async function collectRecoverableTakes(
 	}
 	return recoverable.sort((left, right) => right.createdAt - left.createdAt);
 }
+
+/**
+ * The editor's hand-off slot changed (`set-current-recording-session`). A take leaves the
+ * journal when the editor CONSUMES it -- sets the slot to null once the take is in a project
+ * it saved -- and not before: not when a stop parks it there, and not when the editor merely
+ * asks for it. The app can die between the ask and the save (the editor a stop opened for a
+ * renderer that died, killed with the rest of the app), and a journal cleared on the ask left
+ * a saved take that no launch ever offered again.
+ */
+export async function settlePendingTakeHandOff(
+	recordingsDir: string,
+	parked: Pick<PendingTake, "screenVideoPath"> | null,
+	next: unknown,
+) {
+	if (next === null && parked) {
+		await clearPendingTake(recordingsDir, parked.screenVideoPath);
+	}
+}

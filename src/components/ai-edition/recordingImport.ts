@@ -15,6 +15,10 @@
 // after this point is the CLI runner, which lives in its own process.
 
 import type { CursorTelemetryPoint } from "@/components/video-editor/types";
+import {
+	cameraSegmentsFromRecordingLayout,
+	readCameraSegments,
+} from "@/lib/ai-edition/document/cameraSegments";
 import { createId } from "@/lib/ai-edition/document/ids";
 import { clipAwaitsProbedDuration } from "@/lib/ai-edition/document/timeline";
 import {
@@ -58,6 +62,12 @@ let appliedFreshRecordingAutoZoomProjectId: string | null = null;
 let freshRecordingAutoZoomSaveChain: Promise<void> = Promise.resolve();
 /** The take just imported with zooms to plan, for the transcript offer: kept past the zoom pass. */
 let transcriptOfferTakePath: string | null = null;
+/**
+ * The take whose "Rosto / Tela + câmera" pieces are still to be written. Its automatic zooms
+ * wait for them: a "face" span shows no screen, so they are planned around it
+ * (`collectAutoZoomSuggestionsForDocument`), and that needs the pieces on the document first.
+ */
+let pendingFreshRecordingCameraLayoutPath: string | null = null;
 
 export function markFreshRecordingAutoZoomPending(assetPath: string): void {
 	pendingFreshRecordingAutoZoom = true;
@@ -239,6 +249,13 @@ function hasProbedDurationForPendingAsset(document: AxcutDocument): boolean {
 
 function canApplyFreshRecordingAutoZooms(document: AxcutDocument): boolean {
 	if (!pendingFreshRecordingAutoZoom) return false;
+	// The camera pieces come first; their pass asks for the zooms again once it is done.
+	if (
+		pendingFreshRecordingCameraLayoutPath !== null &&
+		pendingFreshRecordingCameraLayoutPath === pendingFreshRecordingAutoZoomPath
+	) {
+		return false;
+	}
 	if (appliedFreshRecordingAutoZoomProjectId === document.project.id) return false;
 	if ((document.zoomRanges?.length ?? 0) > 0) return false;
 	if ((document.timeline?.clips?.length ?? 0) === 0) return false;
@@ -499,6 +516,81 @@ export async function applyFreshRecordingRedactions(
 	return 0;
 }
 
+export type FreshRecordingCameraLayoutDeps = {
+	/** How long to wait for the take's real length before giving up. Tests shorten it. */
+	probeWaitMs?: number;
+	saveTimeoutMs?: number;
+	waitTimeoutMs?: number;
+	/** The zoom pass asked for again once the pieces are in. Tests stub it. */
+	autoZoom?: (document: AxcutDocument) => Promise<unknown>;
+};
+
+/**
+ * "Rosto / Tela + câmera" for a fresh take: the layout the HUD logged (`asset.cameraLayout`,
+ * read from the take's .layout.json at import) becomes camera pieces -- full screen over each
+ * "face" span, the default picture-in-picture elsewhere -- in ONE undoable write. Returns how
+ * many pieces were stored.
+ *
+ * Written once the take's real length is known, as the privacy blur is, so a span past the
+ * placeholder length is not lost; not over an edit that landed meanwhile; never over camera
+ * pieces already on the document. The fresh take's automatic zooms wait for it (see
+ * `pendingFreshRecordingCameraLayoutPath`) and are asked for again when it is done.
+ */
+export async function applyFreshRecordingCameraLayout(
+	screenPath: string,
+	deps: FreshRecordingCameraLayoutDeps = {},
+): Promise<number> {
+	const first = useProjectStore.getState().document;
+	if (!first?.assets.find((a) => a.originalPath === screenPath)?.cameraLayout) return 0;
+	// Set before the first await: the zoom pass must not slip in ahead of the pieces.
+	pendingFreshRecordingCameraLayoutPath = screenPath;
+	try {
+		const deadline = Date.now() + (deps.probeWaitMs ?? 60_000);
+		for (let attempt = 0; attempt < 3; ) {
+			if ((await waitForDocumentSaves(deps.waitTimeoutMs)) === "timeout") return 0;
+			const latest = useProjectStore.getState().document;
+			const asset = latest?.assets.find((a) => a.originalPath === screenPath);
+			if (!latest || !asset?.cameraLayout) return 0;
+			if (readCameraSegments(latest).length > 0) return 0;
+			if (
+				latest.timeline.clips.length === 0 ||
+				latest.timeline.clips.some((clip) => clipAwaitsProbedDuration(clip, asset.id))
+			) {
+				if (Date.now() > deadline) return 0;
+				await new Promise((resolve) => setTimeout(resolve, 250));
+				continue;
+			}
+			const placed = cameraSegmentsFromRecordingLayout(
+				readCameraSegments(latest),
+				latest.timeline.clips,
+				asset.id,
+				asset.cameraLayout,
+			);
+			if (placed.ids.length === 0) return 0;
+			const next: AxcutDocument = { ...latest, cameraSegments: placed.segments };
+			if ((await waitForDocumentSaves(deps.waitTimeoutMs)) === "timeout") return 0;
+			if (useProjectStore.getState().document !== latest) {
+				attempt += 1;
+				continue;
+			}
+			const saved = await saveWithDeadline(
+				useProjectStore.getState().saveDocument(next, { history: true }),
+				deps.saveTimeoutMs ?? DOCUMENT_SAVES_WAIT_TIMEOUT_MS,
+			);
+			return saved === true ? placed.ids.length : 0;
+		}
+		return 0;
+	} finally {
+		if (pendingFreshRecordingCameraLayoutPath === screenPath) {
+			pendingFreshRecordingCameraLayoutPath = null;
+		}
+		const document = useProjectStore.getState().document;
+		if (document && pendingFreshRecordingAutoZoom) {
+			void (deps.autoZoom ?? maybeSaveFreshRecordingAutoZooms)(document);
+		}
+	}
+}
+
 export async function importPendingRecording(
 	/**
 	 * Called once the import succeeded, with why the take ended before it was
@@ -523,6 +615,10 @@ export async function importPendingRecording(
 	const label = screenPath.split(/[\\/]/).pop() || "Recording";
 	await useProjectStore.getState().createProject(`Recording ${new Date().toLocaleString()}`);
 	await useProjectStore.getState().addAsset(screenPath, label);
+	// Before the zoom hand-off below, so the zooms wait for the "face" spans to be pieces.
+	void applyFreshRecordingCameraLayout(screenPath).catch((error) => {
+		console.warn("[recording] the take's camera layout could not be applied:", error);
+	});
 	// Mark before the video element can fire `loadedmetadata`. The asset path is
 	// already on the document; waiting until the 60s seed finished let the first
 	// metadata pass consume nothing and the second never arrive.

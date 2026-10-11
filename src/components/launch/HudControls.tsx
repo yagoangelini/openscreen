@@ -1,4 +1,4 @@
-import { Check, Languages, NotepadText, Settings } from "lucide-react";
+import { Check, Languages, NotepadText, PictureInPicture2, ScanFace, Settings } from "lucide-react";
 import {
 	createContext,
 	memo,
@@ -322,6 +322,45 @@ export const HudCameraButton = memo(function HudCameraButton({
 				onClick={locked ? undefined : onClick}
 			>
 				<CameraIcon off={!enabled} className={enabled ? "text-[#10b981]" : ""} />
+			</button>
+		</HudTooltip>
+	);
+});
+
+/**
+ * "Rosto / Tela + câmera". Unlike the toggles beside it, never locked: switching DURING the take
+ * is the point. Its icon is the layout now shown; the tooltip says it and what a click does.
+ */
+export const HudCameraLayoutButton = memo(function HudCameraLayoutButton({
+	layout,
+	name,
+	tooltip,
+	disabled,
+	onClick,
+}: {
+	layout: "face" | "screen";
+	name: string;
+	tooltip: string;
+	disabled: boolean;
+	onClick: () => void;
+}) {
+	return (
+		<HudTooltip content={tooltip}>
+			<button
+				type="button"
+				data-testid="launch-camera-layout-button"
+				data-layout={layout}
+				className={hudIconBtnClasses}
+				aria-label={name}
+				aria-pressed={layout === "face"}
+				disabled={disabled}
+				onClick={onClick}
+			>
+				{layout === "face" ? (
+					<ScanFace size={ICON_SIZE} className="text-[#10b981]" />
+				) : (
+					<PictureInPicture2 size={ICON_SIZE} className="text-[#10b981]" />
+				)}
 			</button>
 		</HudTooltip>
 	);

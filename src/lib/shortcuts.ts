@@ -3,6 +3,7 @@ export const SHORTCUT_ACTIONS = [
 	"recordToggle",
 	"pauseToggle",
 	"addMarker",
+	"cameraLayoutToggle",
 	"addZoom",
 	"addTrim",
 	"addSpeed",
@@ -28,6 +29,7 @@ export const GLOBAL_SHORTCUT_ACTIONS = [
 	"recordToggle",
 	"pauseToggle",
 	"addMarker",
+	"cameraLayoutToggle",
 ] as const;
 
 export type GlobalShortcutAction = (typeof GLOBAL_SHORTCUT_ACTIONS)[number];
@@ -40,6 +42,7 @@ export function pickGlobalShortcuts(config: ShortcutsConfig): GlobalShortcutsCon
 		recordToggle: config.recordToggle,
 		pauseToggle: config.pauseToggle,
 		addMarker: config.addMarker,
+		cameraLayoutToggle: config.cameraLayoutToggle,
 	};
 }
 
@@ -146,6 +149,9 @@ export const DEFAULT_SHORTCUTS: ShortcutsConfig = {
 	recordToggle: { key: "f9", ctrl: true, shift: true },
 	pauseToggle: { key: "f10", ctrl: true, shift: true },
 	addMarker: { key: "f8", ctrl: true, shift: true },
+	// "Rosto / Tela + câmera" during the take. F7 is caret browsing in Chrome and Edge only
+	// without modifiers, and nothing claims Ctrl+Shift+F7 in Office, Teams or VS Code.
+	cameraLayoutToggle: { key: "f7", ctrl: true, shift: true },
 	addZoom: { key: "z" },
 	addTrim: { key: "t" },
 	addSpeed: { key: "s" },
@@ -167,6 +173,7 @@ export const SHORTCUT_LABELS: Record<ShortcutAction, string> = {
 	recordToggle: "Start / Stop Recording",
 	pauseToggle: "Pause / Resume Recording",
 	addMarker: "Add Marker While Recording",
+	cameraLayoutToggle: "Switch Face / Screen + Camera",
 	addZoom: "Add Zoom",
 	addTrim: "Add Trim",
 	addSpeed: "Add Speed",
