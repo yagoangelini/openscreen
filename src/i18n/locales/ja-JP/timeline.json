@@ -135,6 +135,13 @@
 		"syncHint": "カメラは画面と同期したままです。この区間では表示方法だけが変わります。",
 		"splitAtPlayhead": "再生位置で分割",
 		"mergeWithNext": "次の区間と結合",
-		"reset": "既定に戻す"
+		"reset": "既定に戻す",
+		"look": "見た目",
+		"lookScopePiece": "この区間",
+		"lookScopeAll": "すべての区間",
+		"lookPieceHint": "ここでの変更はこの区間だけに適用されます。カメラはこの見た目へなめらかに移り、元に戻ります。",
+		"lookAllHint": "ここでの変更は、独自の見た目がないすべての区間に適用されます。",
+		"lookRestore": "既定の見た目に戻す",
+		"ownLook": "独自の見た目"
 	}
 }

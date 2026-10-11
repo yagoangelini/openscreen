@@ -135,6 +135,13 @@
 		"syncHint": "Die Kamera bleibt synchron zum Bildschirm. Dieses Stück ändert nur, wie sie gezeigt wird.",
 		"splitAtPlayhead": "Am Abspielkopf teilen",
 		"mergeWithNext": "Mit dem nächsten verbinden",
-		"reset": "Auf Standard zurücksetzen"
+		"reset": "Auf Standard zurücksetzen",
+		"look": "Aussehen",
+		"lookScopePiece": "Dieses Stück",
+		"lookScopeAll": "Alle Stücke",
+		"lookPieceHint": "Änderungen hier gelten nur für dieses Stück. Die Kamera gleitet sanft in sein Aussehen und zurück.",
+		"lookAllHint": "Änderungen hier gelten für alle Stücke ohne eigenes Aussehen.",
+		"lookRestore": "Standard-Aussehen wiederherstellen",
+		"ownLook": "Eigenes Aussehen"
 	}
 }

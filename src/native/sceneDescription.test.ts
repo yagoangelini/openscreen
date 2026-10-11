@@ -20,6 +20,7 @@ import type {
 	AxcutZoomRegion,
 } from "@/lib/ai-edition/schema";
 import { axcutSchemaVersion, parseDocumentFile } from "@/lib/ai-edition/schema";
+import { getEditorSettings } from "@/lib/ai-edition/store/editorSettings";
 import { autoZoomMotion, DEFAULT_AUTO_ZOOM_SETTINGS } from "@/lib/ai-edition/timeline/zoom-motion";
 import { CURSOR_KIND_IDS, DEFAULT_CURSOR_THEME_ID } from "@/lib/cursor/cursorThemes";
 import { DEVICE_FRAMES } from "@/lib/projectDefaults";
@@ -1205,6 +1206,153 @@ describe("buildSceneDescription.cameraHiddenRegions", () => {
 	it("is empty when no piece hides the camera", () => {
 		expect(buildSceneDescription(doc("fullscreen")).cameraHiddenRegions).toEqual([]);
 		expect(buildSceneDescription(makeDoc()).cameraHiddenRegions).toEqual([]);
+	});
+});
+
+// --- cameraLayoutRegions (phase 3: a camera piece's own look) -----------------
+
+describe("buildSceneDescription.cameraLayoutRegions", () => {
+	const piece = (
+		id: string,
+		startSec: number,
+		endSec: number,
+		overrides?: NonNullable<AxcutDocument["cameraSegments"]>[number]["overrides"],
+	) => ({
+		id,
+		segmentId: `s-${id}`,
+		startMs: startSec * 1000,
+		endMs: endSec * 1000,
+		clipId: "c1",
+		sourceStartSec: startSec,
+		sourceEndSec: endSec,
+		mode: "pip" as const,
+		origin: "user" as const,
+		...(overrides ? { overrides } : {}),
+	});
+	const doc = (cameraSegments: AxcutDocument["cameraSegments"]) =>
+		makeDoc({
+			assets: [
+				makeAsset({
+					id: "a",
+					originalPath: "/a.mp4",
+					cameraTrack: { sourcePath: "/cam.mp4", startMs: 0, offsetMs: 0, visible: true },
+				}),
+			],
+			clips: [
+				makeClip({
+					id: "c1",
+					assetId: "a",
+					sourceStartSec: 0,
+					sourceEndSec: 10,
+					timelineStartSec: 0,
+					timelineEndSec: 10,
+				}),
+			],
+			cameraSegments,
+		});
+
+	it("is empty when no piece overrides the look, and the rest of the scene is unchanged", () => {
+		const plain = buildSceneDescription(doc([piece("p1", 2, 4)]));
+		expect(plain.cameraLayoutRegions).toEqual([]);
+		const looked = buildSceneDescription(doc([piece("p1", 2, 4, { webcamAnchor: "top-left" })]));
+		expect({ ...looked, cameraLayoutRegions: [] }).toEqual(plain);
+	});
+
+	it("resolves the piece's merged look with the same layout as the clip's own", () => {
+		const scene = buildSceneDescription(
+			doc([piece("p1", 2, 4, { webcamAnchor: "top-left", webcamSizePreset: 25 })]),
+		);
+		expect(scene.cameraLayoutRegions).toHaveLength(1);
+		const [region] = scene.cameraLayoutRegions;
+		expect(region).toMatchObject({
+			startSec: 2,
+			endSec: 4,
+			clipIndex: 0,
+			look: { webcamAnchor: "top-left" },
+		});
+		expect(region.look.webcamMirror).toBeUndefined();
+		const base = scene.layout.layoutByClip?.[0]?.webcamRect;
+		expect(base).toBeTruthy();
+		// Top-left at the same margin the default bottom-right keeps from its corner, and smaller.
+		expect(region.look.webcamRect.x).toBeLessThan(0.1);
+		expect(region.look.webcamRect.y).toBeLessThan(0.1);
+		expect(region.look.webcamRect.width).toBeLessThan(base?.width ?? 0);
+		// The same settings as the global ones resolve to exactly the clip's own box.
+		const same = buildSceneDescription(
+			doc([piece("p1", 2, 4, { webcamAnchor: getEditorSettings(makeDoc()).webcamAnchor })]),
+		);
+		expect(same.cameraLayoutRegions[0].look.webcamRect).toEqual(base);
+	});
+
+	it("ships a mirror only when the piece overrides it", () => {
+		const scene = buildSceneDescription(doc([piece("p1", 2, 4, { webcamMirrored: true })]));
+		expect(scene.cameraLayoutRegions[0].look.webcamMirror).toBe(true);
+	});
+
+	it("chains two touching looks so the camera moves straight between them", () => {
+		const scene = buildSceneDescription(
+			doc([
+				piece("p1", 2, 4, { webcamAnchor: "top-left" }),
+				piece("p2", 4, 7, { webcamAnchor: "top-right" }),
+			]),
+		);
+		const [first, second] = scene.cameraLayoutRegions;
+		expect(first).toMatchObject({ startSec: 2, endSec: 4, continuesAfter: true });
+		expect(first.from).toBeUndefined();
+		expect(second).toMatchObject({ startSec: 4, endSec: 7 });
+		expect(second.from).toEqual(first.look);
+	});
+
+	it("holds one look across the seam of two clips, with no ramp on either side", () => {
+		const twoClips = {
+			...doc([]),
+			timeline: {
+				...doc([]).timeline,
+				clips: [
+					makeClip({
+						id: "c1",
+						assetId: "a",
+						sourceStartSec: 0,
+						sourceEndSec: 10,
+						timelineStartSec: 0,
+						timelineEndSec: 10,
+					}),
+					makeClip({
+						id: "c2",
+						assetId: "a",
+						sourceStartSec: 20,
+						sourceEndSec: 30,
+						timelineStartSec: 10,
+						timelineEndSec: 20,
+					}),
+				],
+			},
+			cameraSegments: [
+				{ ...piece("p1", 8, 10, { webcamAnchor: "top-left" }) },
+				{
+					...piece("p2", 20, 23, { webcamAnchor: "top-left" }),
+					clipId: "c2",
+					startMs: 10_000,
+					endMs: 13_000,
+					segmentId: "s-p1",
+				},
+			],
+		};
+		const [first, second] = buildSceneDescription(twoClips).cameraLayoutRegions;
+		expect(first).toMatchObject({ clipIndex: 0, startSec: 8, endSec: 10, continuesAfter: true });
+		expect(second).toMatchObject({ clipIndex: 1, startSec: 20, endSec: 23, continuesBefore: true });
+		expect(second.from).toBeUndefined();
+	});
+
+	it("joins touching pieces with the same look into one span", () => {
+		const scene = buildSceneDescription(
+			doc([
+				piece("p1", 2, 4, { webcamAnchor: "top-left" }),
+				{ ...piece("p2", 4, 7, { webcamAnchor: "top-left" }), mode: "fullscreen" },
+			]),
+		);
+		expect(scene.cameraLayoutRegions).toHaveLength(1);
+		expect(scene.cameraLayoutRegions[0]).toMatchObject({ startSec: 2, endSec: 7 });
 	});
 });
 

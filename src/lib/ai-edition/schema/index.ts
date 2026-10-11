@@ -632,6 +632,45 @@ export const audioTrackSchema = endGteStart(
 // one, which then merges with any touching fragment of its mode.
 export const cameraSegmentModeSchema = z.enum(["pip", "fullscreen", "hidden"]);
 
+// A piece's own LOOK (phase 3): the camera settings this piece shows differently from the
+// rest. Each key is optional; an absent key follows the project's camera settings ("All
+// pieces"), so the effective look is `{...global, ...overrides}`. Values are read into their
+// bound like the settings themselves, and one that cannot be read is dropped on its own
+// rather than refusing the document.
+//
+// Additive inside v9, no version bump: a 2.2.0 build's zod object strips the unknown key, so
+// such a build opens the project with every piece following the global look, and drops the
+// overrides if it saves.
+export const cameraLookSchema = z.object({
+	webcamAnchor: z
+		.enum([
+			"top-left",
+			"top",
+			"top-right",
+			"left",
+			"right",
+			"bottom-left",
+			"bottom",
+			"bottom-right",
+		])
+		.optional()
+		.catch(undefined),
+	webcamSizePreset: z
+		.number()
+		.finite()
+		.transform((size) => clampToBound(size, "webcamSizePreset"))
+		.optional()
+		.catch(undefined),
+	webcamMaskShape: z.enum(["rectangle", "square"]).optional().catch(undefined),
+	webcamRoundness: z
+		.number()
+		.finite()
+		.transform((roundness) => clampToBound(roundness, "webcamRoundness"))
+		.optional()
+		.catch(undefined),
+	webcamMirrored: z.boolean().optional().catch(undefined),
+});
+
 export const cameraSegmentSchema = endGteStart(
 	z.object({
 		id: z.string().min(1),
@@ -640,6 +679,7 @@ export const cameraSegmentSchema = endGteStart(
 		endMs: z.number().nonnegative(),
 		...clipAnchorShape,
 		mode: cameraSegmentModeSchema.default("pip"),
+		overrides: cameraLookSchema.optional().catch(undefined),
 		origin: z.enum(["system", "agent", "user"]).default("user"),
 	}),
 	"endMs",
@@ -1402,6 +1442,7 @@ export type AxcutCameraTrack = z.infer<typeof cameraTrackSchema>;
 export type AxcutAudioTrack = z.infer<typeof audioTrackSchema>;
 export type AxcutCameraSegment = z.infer<typeof cameraSegmentSchema>;
 export type AxcutCameraMode = z.infer<typeof cameraSegmentModeSchema>;
+export type AxcutCameraLook = z.infer<typeof cameraLookSchema>;
 export type AxcutLegacyEditor = z.infer<typeof legacyEditorSchema>;
 export type AxcutDocument = z.infer<typeof documentSchema>;
 export type AxcutDocumentInput = z.input<typeof documentSchema>;

@@ -797,6 +797,60 @@ describe("useTimeline camera track", () => {
 		});
 		expect(bridgeMocks.save).not.toHaveBeenCalled();
 	});
+
+	it("gives a piece its own look in one undo step, and restores the default", async () => {
+		const { result } = renderTimeline();
+		const implicit = result.current.cameraPieces[0].key;
+		await act(async () => {
+			await result.current.setCameraLook(implicit, { webcamAnchor: "top-left" });
+		});
+		const piece = result.current.cameraPieces[0];
+		expect(piece).toMatchObject({ implicit: false, overrides: { webcamAnchor: "top-left" } });
+		expect(result.current.selection).toEqual({ kind: "camera", id: piece.key });
+		expect(past).toHaveLength(1);
+		await act(async () => {
+			await result.current.clearCameraLook(piece.key);
+		});
+		expect(result.current.cameraPieces[0].overrides).toBeUndefined();
+		expect(past).toHaveLength(2);
+	});
+
+	it("drags a slider live and commits one undo step, following an implicit piece's new key", async () => {
+		const { result } = renderTimeline();
+		const implicit = result.current.cameraPieces[0].key;
+		act(() => {
+			result.current.updateCameraLookLive(implicit, { webcamSizePreset: 30 });
+		});
+		// The move after the first one still names the implicit key the drag started on.
+		act(() => {
+			result.current.updateCameraLookLive(implicit, { webcamSizePreset: 33 });
+		});
+		expect(result.current.cameraPieces).toHaveLength(1);
+		expect(result.current.cameraPieces[0].overrides).toEqual({ webcamSizePreset: 33 });
+		expect(bridgeMocks.save).not.toHaveBeenCalled();
+		await act(async () => {
+			await result.current.commitCameraLook();
+		});
+		expect(bridgeMocks.save).toHaveBeenCalledTimes(1);
+		expect(past).toHaveLength(1);
+		expect((past[0].doc as typeof sampleDoc).cameraSegments).toEqual([]);
+	});
+
+	it("pastes a style: mode and look together", async () => {
+		const { result } = renderTimeline();
+		const key = result.current.cameraPieces[0].key;
+		await act(async () => {
+			await result.current.setCameraStyle(key, {
+				mode: "fullscreen",
+				overrides: { webcamMirrored: true },
+			});
+		});
+		expect(result.current.cameraPieces[0]).toMatchObject({
+			mode: "fullscreen",
+			overrides: { webcamMirrored: true },
+		});
+		expect(past).toHaveLength(1);
+	});
 });
 
 describe("useTimeline.addAnnotation", () => {

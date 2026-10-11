@@ -135,6 +135,13 @@
 		"syncHint": "摄像头始终与屏幕同步。此片段只改变它的显示方式。",
 		"splitAtPlayhead": "在播放头处拆分",
 		"mergeWithNext": "与下一段合并",
-		"reset": "恢复默认"
+		"reset": "恢复默认",
+		"look": "外观",
+		"lookScopePiece": "此片段",
+		"lookScopeAll": "所有片段",
+		"lookPieceHint": "此处的更改只作用于此片段。摄像头会平滑过渡到它的外观，然后再回来。",
+		"lookAllHint": "此处的更改作用于所有没有自己外观的片段。",
+		"lookRestore": "恢复默认外观",
+		"ownLook": "自有外观"
 	}
 }

@@ -2496,7 +2496,7 @@ impl Compositor {
             // intervalle a l'envers suffit -- aucune retouche du WGSL. Apres le
             // cover-crop les deux bornes sont strictement a l'interieur de la
             // texture, donc le sampler ClampToEdge ne bave pas sur les bords.
-            let (u0, u1) = if lp.webcam_mirror { (cu1, cu0) } else { (cu0, cu1) };
+            let (u0, u1) = if g.webcam_mirror { (cu1, cu0) } else { (cu0, cu1) };
             // `src_prev` doit valoir EXACTEMENT le `src` de ce draw, miroir
             // compris : le shader s'en sert pour reconstruire l'UV de la frame
             // precedente, et un rect source qui ne correspond pas au calque

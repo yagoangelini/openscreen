@@ -135,6 +135,13 @@
 		"syncHint": "A câmera continua sincronizada com a tela. Este trecho muda só a forma como ela aparece.",
 		"splitAtPlayhead": "Dividir no cursor",
 		"mergeWithNext": "Juntar com o próximo",
-		"reset": "Voltar ao padrão"
+		"reset": "Voltar ao padrão",
+		"look": "Aparência",
+		"lookScopePiece": "Este trecho",
+		"lookScopeAll": "Todos os trechos",
+		"lookPieceHint": "As mudanças aqui valem só para este trecho. A câmera vai até essa aparência e volta com uma transição suave.",
+		"lookAllHint": "As mudanças aqui valem para todos os trechos que não têm aparência própria.",
+		"lookRestore": "Restaurar padrão",
+		"ownLook": "Aparência própria"
 	}
 }

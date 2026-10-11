@@ -135,6 +135,13 @@
 		"syncHint": "Kamera ekranla senkron kalır. Bu parça yalnızca nasıl gösterildiğini değiştirir.",
 		"splitAtPlayhead": "İmleçte böl",
 		"mergeWithNext": "Sonrakiyle birleştir",
-		"reset": "Varsayılana dön"
+		"reset": "Varsayılana dön",
+		"look": "Görünüm",
+		"lookScopePiece": "Bu parça",
+		"lookScopeAll": "Tüm parçalar",
+		"lookPieceHint": "Buradaki değişiklikler yalnızca bu parçaya uygulanır. Kamera bu görünüme yumuşakça geçer ve geri döner.",
+		"lookAllHint": "Buradaki değişiklikler kendi görünümü olmayan tüm parçalara uygulanır.",
+		"lookRestore": "Varsayılan görünümü geri yükle",
+		"ownLook": "Kendi görünümü"
 	}
 }

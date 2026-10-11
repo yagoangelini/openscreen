@@ -1105,7 +1105,7 @@ export function NewEditorShell() {
 		}
 
 		// A camera piece is pasted as a STYLE: the piece under the playhead takes the copied
-		// mode, and keeps its own span. The camera track has no free space to paste into.
+		// mode and look, and keeps its own span. The camera track has no free space to paste into.
 		if (snapshot.kind === "camera") {
 			const { cameraPieceAt } = await import("@/lib/ai-edition/document/cameraSegments");
 			const piece = cameraPieceAt(
@@ -1113,7 +1113,7 @@ export function NewEditorShell() {
 				Math.round(useProjectStore.getState().currentTimeSec * 1000),
 			);
 			if (!piece) return;
-			if (await tl.setCameraMode(piece.key, snapshot.region.mode)) {
+			if (await tl.setCameraStyle(piece.key, snapshot.region)) {
 				toast.success(toastText("editor", "shellToasts.regionPasted"));
 			}
 			return;
@@ -1259,7 +1259,10 @@ export function NewEditorShell() {
 			const { findCameraPiece } = await import("@/lib/ai-edition/document/cameraSegments");
 			const piece = findCameraPiece(tl.cameraPieces, sel.id);
 			if (!piece) return;
-			copyRegion({ kind: "camera", region: { mode: piece.mode } });
+			copyRegion({
+				kind: "camera",
+				region: { mode: piece.mode, ...(piece.overrides ? { overrides: piece.overrides } : {}) },
+			});
 			setCopiedClipId(null);
 			toast.success(toastText("editor", "shellToasts.regionCopied"));
 			return;
@@ -1697,6 +1700,8 @@ export function NewEditorShell() {
 									speedRegions={tl.speedRegions}
 									cameraFullscreenRegions={tl.cameraFullscreenRegions}
 									cameraHiddenRegions={tl.cameraHiddenRegions}
+									onCameraLookLive={tl.updateCameraLookLive}
+									onCameraLookCommit={() => void tl.commitCameraLook()}
 									trimRanges={tl.trimRanges}
 									selectedZoomRegionId={tl.selection?.kind === "zoom" ? tl.selection.id : null}
 									onZoomFocusChange={tl.updateZoomFocusLive}

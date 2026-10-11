@@ -23,7 +23,7 @@
 // as the user resizes the workbench.
 
 import type { PointerEvent as ReactPointerEvent } from "react";
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import {
 	type CameraFullscreenRegion,
 	type CropRegion,
@@ -33,6 +33,15 @@ import {
 	type ZoomFocus,
 } from "@/components/video-editor/types";
 import { useScopedT } from "@/contexts/I18nContext";
+import {
+	type CameraLook,
+	cameraPieceAt,
+	cameraPieces,
+	cameraTimelineEndMs,
+	mergeCameraLook,
+	readCameraLookRegions,
+	readCameraSegments,
+} from "@/lib/ai-edition/document/cameraSegments";
 import {
 	isFormatFillActive,
 	resolveAspectRatioValue,
@@ -57,10 +66,13 @@ import {
 	resolveWebcamLayoutPreset,
 	type WebcamCompositeLayout,
 } from "@/lib/compositeLayout";
-import { webcamAnchorAt } from "@/lib/projectDefaults";
+import { type WebcamAnchor, webcamAnchorAt } from "@/lib/projectDefaults";
 import { wallpaperStyle } from "@/lib/wallpaper";
 import { getCssClipPath } from "@/lib/webcamMaskShapes";
-import { computeCameraFullscreenProgress } from "@/lib/zoomMath/cameraFullscreenUtils";
+import {
+	computeCameraFullscreenProgress,
+	computeCameraLookBlend,
+} from "@/lib/zoomMath/cameraFullscreenUtils";
 import { webcamBoxSourceSize } from "@/native/sceneDescription";
 import {
 	getWebcamNativeSize,
@@ -89,6 +101,10 @@ interface PreviewCanvasProps {
 	/** The camera track's "no camera" spans (schema v9): the camera fades out of the overlay
 	 *  there, on the envelope the compositor shrinks it on. */
 	cameraHiddenRegions?: CameraFullscreenRegion[];
+	/** A drag of the camera over a piece that has its own position moves THAT piece (phase 3):
+	 *  a live write per snap, one commit on release. Absent: the drag always moves the global one. */
+	onCameraLookLive?: (key: string, patch: { webcamAnchor: WebcamAnchor }) => void;
+	onCameraLookCommit?: () => void;
 	trimRanges?: AxcutTrimRange[];
 	/** Relayed to `VirtualPreview` so a clip carrying added words plays their extensions. */
 	transcripts?: AxcutTranscript[];
@@ -258,61 +274,112 @@ export function PreviewCanvas(props: PreviewCanvasProps) {
 	);
 
 	const formatFill = useMemo(() => (document ? isFormatFillActive(document) : false), [document]);
-	const layout = useMemo(() => {
-		// A clip with no camera lays out as "no-webcam", whatever the panel says. Hiding
-		// only the webcam slot is not enough: the block presets size the SCREEN off the
-		// block, so the screen stayed squeezed into its half with nothing beside it.
-		const preset = resolveWebcamLayoutPreset(
-			settings.webcamLayoutPreset as WebcamLayoutPreset,
-			activeClipHasCamera,
-		);
-		const mask = settings.webcamMaskShape as WebcamMaskShape;
-		// Padding shrinks the available content area for ALL layouts (PiP/dual/stack),
-		// through the same `paddedContentSize` the scene description uses.
-		const maxContentSize = paddedContentSize(
+	// The layout for one set of camera settings: the global ones, or a camera piece's merged look.
+	const resolveLayout = useCallback(
+		(
+			look: Pick<
+				typeof settings,
+				"webcamSizePreset" | "webcamAnchor" | "webcamMaskShape" | "webcamRoundness"
+			>,
+		) => {
+			// A clip with no camera lays out as "no-webcam", whatever the panel says. Hiding
+			// only the webcam slot is not enough: the block presets size the SCREEN off the
+			// block, so the screen stayed squeezed into its half with nothing beside it.
+			const preset = resolveWebcamLayoutPreset(
+				settings.webcamLayoutPreset as WebcamLayoutPreset,
+				activeClipHasCamera,
+			);
+			const mask = look.webcamMaskShape as WebcamMaskShape;
+			// Padding shrinks the available content area for ALL layouts (PiP/dual/stack),
+			// through the same `paddedContentSize` the scene description uses.
+			const maxContentSize = paddedContentSize(
+				frameSize,
+				settings.padding,
+				settings.aspectRatio === "auto",
+			);
+			// The screen box must be fit to the CROPPED aspect ratio, not the full
+			// source frame's — otherwise VirtualPreview's crop math (which assumes
+			// its container is already correctly proportioned for the crop) would
+			// stretch the video to fill a mis-shaped box.
+			const fullScreenSize = screenNativeSize ?? SCREEN_SOURCE_SIZE;
+			const croppedScreenSize = {
+				width: Math.max(1, Math.round(fullScreenSize.width * cropRegion.width)),
+				height: Math.max(1, Math.round(fullScreenSize.height * cropRegion.height)),
+			};
+			return computeCompositeLayout({
+				canvasSize: frameSize,
+				maxContentSize,
+				// Same box as the scene: a filled format gives the screen the whole padded area.
+				screenSize: formatFill ? maxContentSize : croppedScreenSize,
+				webcamSize: preset === "no-webcam" ? null : webcamSourceSize,
+				layoutPreset: preset,
+				webcamSizePreset: look.webcamSizePreset,
+				// Picture-in-picture only: the block layouts place and round their own camera.
+				webcamAnchor: look.webcamAnchor,
+				webcamMaskShape: mask,
+				webcamRoundness: look.webcamRoundness,
+				frame: settings.frame,
+			});
+		},
+		[
 			frameSize,
+			screenNativeSize,
+			cropRegion,
+			activeClipHasCamera,
+			webcamSourceSize,
+			settings.webcamLayoutPreset,
 			settings.padding,
-			settings.aspectRatio === "auto",
-		);
-		// The screen box must be fit to the CROPPED aspect ratio, not the full
-		// source frame's — otherwise VirtualPreview's crop math (which assumes
-		// its container is already correctly proportioned for the crop) would
-		// stretch the video to fill a mis-shaped box.
-		const fullScreenSize = screenNativeSize ?? SCREEN_SOURCE_SIZE;
-		const croppedScreenSize = {
-			width: Math.max(1, Math.round(fullScreenSize.width * cropRegion.width)),
-			height: Math.max(1, Math.round(fullScreenSize.height * cropRegion.height)),
+			settings.aspectRatio,
+			formatFill,
+			settings.frame,
+		],
+	);
+	const layout = useMemo(
+		() =>
+			resolveLayout({
+				webcamSizePreset: settings.webcamSizePreset,
+				webcamAnchor: settings.webcamAnchor,
+				webcamMaskShape: settings.webcamMaskShape,
+				webcamRoundness: settings.webcamRoundness,
+			}),
+		[
+			resolveLayout,
+			settings.webcamSizePreset,
+			settings.webcamAnchor,
+			settings.webcamMaskShape,
+			settings.webcamRoundness,
+		],
+	);
+	// A camera piece with a look of its own (phase 3): the camera box eases from the global
+	// layout to the piece's merged one and back, on the envelope the compositor uses
+	// (`computeCameraLookBlend` / `camera_look_at`), so the drag hitbox stays on the camera.
+	const lookRuns = useMemo(() => readCameraLookRegions(document), [document]);
+	const lookBlend = useMemo(
+		() =>
+			computeCameraLookBlend(lookRuns, Math.round(props.currentTimeSec * 1000), props.speedRegions),
+		[lookRuns, props.currentTimeSec, props.speedRegions],
+	);
+	const lookedLayout = useMemo<WebcamCompositeLayout | null>(() => {
+		if (!layout?.webcamRect || !lookBlend) return layout;
+		const lookOf = (run: { overrides: CameraLook } | null) =>
+			run ? resolveLayout(mergeCameraLook(settings, run.overrides)) : layout;
+		const a = lookOf(lookBlend.from)?.webcamRect;
+		const b = lookOf(lookBlend.to)?.webcamRect;
+		if (!a || !b) return layout;
+		const k = lookBlend.k;
+		const lerp = (x: number, y: number) => x + (y - x) * k;
+		return {
+			...layout,
+			webcamRect: {
+				...(k >= 0.5 ? b : a),
+				x: lerp(a.x, b.x),
+				y: lerp(a.y, b.y),
+				width: lerp(a.width, b.width),
+				height: lerp(a.height, b.height),
+				borderRadius: lerp(a.borderRadius, b.borderRadius),
+			},
 		};
-		return computeCompositeLayout({
-			canvasSize: frameSize,
-			maxContentSize,
-			// Same box as the scene: a filled format gives the screen the whole padded area.
-			screenSize: formatFill ? maxContentSize : croppedScreenSize,
-			webcamSize: preset === "no-webcam" ? null : webcamSourceSize,
-			layoutPreset: preset,
-			webcamSizePreset: settings.webcamSizePreset,
-			// Picture-in-picture only: the block layouts place and round their own camera.
-			webcamAnchor: settings.webcamAnchor,
-			webcamMaskShape: mask,
-			webcamRoundness: settings.webcamRoundness,
-			frame: settings.frame,
-		});
-	}, [
-		frameSize,
-		screenNativeSize,
-		cropRegion,
-		activeClipHasCamera,
-		webcamSourceSize,
-		settings.webcamLayoutPreset,
-		settings.webcamMaskShape,
-		settings.webcamSizePreset,
-		settings.webcamAnchor,
-		settings.webcamRoundness,
-		settings.padding,
-		settings.aspectRatio,
-		formatFill,
-		settings.frame,
-	]);
+	}, [layout, lookBlend, resolveLayout, settings]);
 
 	// Full Camera: during a cameraFullscreen region the webcam takes the whole
 	// frame and eases back. Same `computeCameraFullscreenRect` call as both
@@ -339,16 +406,16 @@ export function PreviewCanvas(props: PreviewCanvasProps) {
 		[props.cameraHiddenRegions, props.currentTimeSec, props.speedRegions],
 	);
 	const effectiveLayout = useMemo<WebcamCompositeLayout | null>(() => {
-		if (!layout?.webcamRect || cameraFullscreenProgress <= 0) return layout;
+		if (!lookedLayout?.webcamRect || cameraFullscreenProgress <= 0) return lookedLayout;
 		return {
-			...layout,
+			...lookedLayout,
 			webcamRect: computeCameraFullscreenRect(
-				layout.webcamRect,
+				lookedLayout.webcamRect,
 				frameSize,
 				cameraFullscreenProgress,
 			),
 		};
-	}, [layout, cameraFullscreenProgress, frameSize]);
+	}, [lookedLayout, cameraFullscreenProgress, frameSize]);
 
 	// The stage hosting the interactive overlays is the CONTENT rect: the compositor draws the
 	// frame around it (grown outward, or laid out beside the camera in a block layout), so every
@@ -411,9 +478,19 @@ export function PreviewCanvas(props: PreviewCanvasProps) {
 		const offsetY = event.clientY - (slotRect.top + slotRect.height / 2);
 		slot.setPointerCapture(event.pointerId);
 
+		// The piece under the playhead may have a position of its own: the drag moves that one.
+		const piece = document
+			? cameraPieceAt(
+					cameraPieces(readCameraSegments(document), cameraTimelineEndMs(document.timeline.clips)),
+					Math.round(props.currentTimeSec * 1000),
+				)
+			: undefined;
+		const pieceAnchor = piece?.overrides?.webcamAnchor;
+		const writePiece =
+			piece && pieceAnchor !== undefined && props.onCameraLookLive ? props.onCameraLookLive : null;
 		// The camera snaps to the anchor nearest where it would sit if it followed the pointer,
 		// so it is always somewhere it can be left: a corner or an edge middle.
-		let anchor = settings.webcamAnchor;
+		let anchor = (writePiece ? pieceAnchor : undefined) ?? settings.webcamAnchor;
 		const handleMove = (e: PointerEvent) => {
 			const frameNow = frameRef.current?.getBoundingClientRect();
 			if (!frameNow) return;
@@ -423,7 +500,8 @@ export function PreviewCanvas(props: PreviewCanvasProps) {
 			);
 			if (next === anchor) return;
 			anchor = next;
-			setLive({ webcamAnchor: next });
+			if (writePiece && piece) writePiece(piece.key, { webcamAnchor: next });
+			else setLive({ webcamAnchor: next });
 		};
 		const handleUp = () => {
 			slot.removeEventListener("pointermove", handleMove);
@@ -434,7 +512,8 @@ export function PreviewCanvas(props: PreviewCanvasProps) {
 			} catch {
 				// pointer already released
 			}
-			void commit();
+			if (writePiece) props.onCameraLookCommit?.();
+			else void commit();
 		};
 		slot.addEventListener("pointermove", handleMove);
 		slot.addEventListener("pointerup", handleUp);

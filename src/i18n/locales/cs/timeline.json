@@ -135,6 +135,13 @@
 		"syncHint": "Kamera zůstává synchronní s obrazovkou. Tento díl mění jen to, jak se zobrazuje.",
 		"splitAtPlayhead": "Rozdělit u kurzoru",
 		"mergeWithNext": "Spojit s dalším",
-		"reset": "Zpět na výchozí"
+		"reset": "Zpět na výchozí",
+		"look": "Vzhled",
+		"lookScopePiece": "Tento úsek",
+		"lookScopeAll": "Všechny úseky",
+		"lookPieceHint": "Změny zde platí jen pro tento úsek. Kamera do jeho vzhledu plynule přejde a zase se vrátí.",
+		"lookAllHint": "Změny zde platí pro všechny úseky bez vlastního vzhledu.",
+		"lookRestore": "Obnovit výchozí vzhled",
+		"ownLook": "Vlastní vzhled"
 	}
 }

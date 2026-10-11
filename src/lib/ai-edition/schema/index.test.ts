@@ -5,6 +5,7 @@ import {
 	assetSchema,
 	audioTrackSchema,
 	axcutSchemaVersion,
+	cameraSegmentSchema,
 	clipSchema,
 	createAudioTrack,
 	createEmptyDocument,
@@ -1328,5 +1329,36 @@ describe("v8 -> v9 camera track", () => {
 		expect(parseDocumentFile(once)).toEqual(once);
 		const fresh = createEmptyDocument({ projectId: "p", title: "t" });
 		expect(upgradeV8DocumentToV9(fresh)).toBe(fresh);
+	});
+});
+
+// --- a camera piece's own look (phase 3, additive inside v9) ----------------------
+
+describe("cameraSegmentSchema.overrides", () => {
+	const piece = (overrides: unknown) =>
+		cameraSegmentSchema.parse({ id: "p", startMs: 0, endMs: 1000, mode: "pip", overrides });
+
+	it("keeps a valid look and reads numbers into their bounds", () => {
+		expect(
+			piece({
+				webcamAnchor: "top-left",
+				webcamSizePreset: 99,
+				webcamRoundness: -1,
+				webcamMirrored: true,
+			}).overrides,
+		).toEqual({
+			webcamAnchor: "top-left",
+			webcamSizePreset: 60,
+			webcamRoundness: 0,
+			webcamMirrored: true,
+		});
+	});
+
+	it("drops a key it cannot read on its own, never the piece", () => {
+		expect(piece({ webcamAnchor: "middle", webcamMaskShape: "square" }).overrides).toEqual({
+			webcamMaskShape: "square",
+		});
+		expect(piece("nonsense").overrides).toBeUndefined();
+		expect(piece(undefined).overrides).toBeUndefined();
 	});
 });

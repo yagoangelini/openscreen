@@ -20,13 +20,55 @@
 // Every edit works on RAW ruler milliseconds and re-anchors the pieces it touches with
 // `anchorRegionsWithDerivedMs`, the same door every other region kind goes through.
 //
+// A piece can also have a LOOK of its own (`overrides`): position, size, shape, roundness or
+// mirror, each key optional. What a piece shows is `{...global camera settings, ...overrides}`;
+// a piece with none follows the global settings, and so do implicit pieces. The overrides are
+// part of the piece's payload, so they travel with it through every edit here: both halves of
+// a split keep them, the joined piece keeps the left one's, a roll keeps each side's.
+//
 // Relative imports only: the main process (agent tools) imports this module.
 
-import type { AxcutCameraMode, AxcutCameraSegment, AxcutClip, AxcutDocument } from "../schema";
-import { anchorRegionsWithDerivedMs, coalesceRegionsForRuler } from "../timeline/timelineMap";
+import type {
+	AxcutCameraLook,
+	AxcutCameraMode,
+	AxcutCameraSegment,
+	AxcutClip,
+	AxcutDocument,
+} from "../schema";
+import {
+	anchorRegionsWithDerivedMs,
+	coalesceRegionsForRuler,
+	regionIdentityKey,
+} from "../timeline/timelineMap";
 import { createId } from "./ids";
 
 export type CameraMode = AxcutCameraMode;
+export type CameraLook = AxcutCameraLook;
+
+/** Every key a piece's look may override, in the order the inspector shows them. */
+export const CAMERA_LOOK_KEYS = [
+	"webcamMirrored",
+	"webcamMaskShape",
+	"webcamRoundness",
+	"webcamSizePreset",
+	"webcamAnchor",
+] as const satisfies readonly (keyof CameraLook)[];
+
+/** A look with its unset keys dropped, or `undefined` when nothing is left to override. */
+export function normalizeCameraLook(look: CameraLook | null | undefined): CameraLook | undefined {
+	if (!look) return undefined;
+	const out: Record<string, unknown> = {};
+	for (const key of CAMERA_LOOK_KEYS) {
+		if (look[key] !== undefined) out[key] = look[key];
+	}
+	return Object.keys(out).length > 0 ? (out as CameraLook) : undefined;
+}
+
+/** What a piece shows: the global settings with the piece's own keys over them. */
+export function mergeCameraLook<T extends object>(global: T, overrides: CameraLook | undefined): T {
+	const own = normalizeCameraLook(overrides);
+	return own ? { ...global, ...own } : global;
+}
 
 /** Every mode a piece can take, in the order the inspector offers them. */
 export const CAMERA_MODES: readonly CameraMode[] = ["pip", "fullscreen", "hidden"];
@@ -46,6 +88,8 @@ export interface CameraPiece {
 	startMs: number;
 	endMs: number;
 	mode: CameraMode;
+	/** The piece's own look, absent when it follows the global camera settings. */
+	overrides?: CameraLook;
 	implicit: boolean;
 }
 
@@ -60,7 +104,10 @@ export interface CameraModeRun {
 	sourceEndSec?: number;
 }
 
-type Payload = Pick<AxcutCameraSegment, "mode" | "origin"> & { segmentId?: string };
+type Payload = Pick<AxcutCameraSegment, "mode" | "origin"> & {
+	segmentId?: string;
+	overrides?: CameraLook;
+};
 
 const IMPLICIT_PREFIX = "implicit:";
 
@@ -96,6 +143,9 @@ export function cameraPieces(
 			startMs: Math.round(pill.start * 1000),
 			endMs: Math.round(pill.end * 1000),
 			mode: pill.member.mode,
+			...(normalizeCameraLook(pill.member.overrides)
+				? { overrides: normalizeCameraLook(pill.member.overrides) }
+				: {}),
 			implicit: false,
 		}))
 		.sort((a, b) => a.startMs - b.startMs);
@@ -147,6 +197,9 @@ function payloadOf(segments: readonly AxcutCameraSegment[], piece: CameraPiece):
 				mode: member.mode,
 				origin: member.origin,
 				...(member.segmentId ? { segmentId: member.segmentId } : {}),
+				...(normalizeCameraLook(member.overrides)
+					? { overrides: normalizeCameraLook(member.overrides) }
+					: {}),
 			}
 		: { mode: "pip", origin: "user" };
 }
@@ -309,6 +362,82 @@ export function setCameraPieceMode(
 	return { segments: [...segments, ...placed], key: placed[0].id };
 }
 
+/**
+ * Give one piece the mode and look a style names, in one write: what pasting a copied piece
+ * does. `overrides` replaces the piece's own look whole (absent: the piece follows the global
+ * settings again). An implicit piece is stored for it. `null` for an unknown piece.
+ */
+export function setCameraPieceStyle(
+	segments: readonly AxcutCameraSegment[],
+	clips: AxcutClip[],
+	keyOrId: string,
+	style: { mode: CameraMode; overrides?: CameraLook },
+): { segments: AxcutCameraSegment[]; key: string } | null {
+	const piece = findCameraPiece(cameraPieces(segments, cameraTimelineEndMs(clips)), keyOrId);
+	if (!piece) return null;
+	const overrides = normalizeCameraLook(style.overrides);
+	const restyle = (segment: AxcutCameraSegment): AxcutCameraSegment => {
+		const { overrides: _old, ...rest } = segment;
+		return { ...rest, mode: style.mode, ...(overrides ? { overrides } : {}) };
+	};
+	if (!piece.implicit) {
+		const under = new Set(piece.ids);
+		return {
+			segments: segments.map((s) => (under.has(s.id) ? restyle(s) : s)),
+			key: piece.key,
+		};
+	}
+	const placed = placePiece(
+		{
+			mode: style.mode,
+			origin: "user",
+			segmentId: createId("camseg"),
+			...(overrides ? { overrides } : {}),
+		},
+		createId("cam"),
+		piece.startMs,
+		piece.endMs,
+		clips,
+	);
+	if (placed.length === 0) return null;
+	return { segments: [...segments, ...placed], key: placed[0].id };
+}
+
+/**
+ * Change some keys of one piece's own look, keeping its mode. A key patched to `undefined`
+ * stops being overridden (the piece follows the global setting for it again). An implicit
+ * piece is stored for it. `key` is the piece's key afterwards. `null` for an unknown piece.
+ */
+export function setCameraPieceLook(
+	segments: readonly AxcutCameraSegment[],
+	clips: AxcutClip[],
+	keyOrId: string,
+	patch: Partial<Record<keyof CameraLook, unknown>>,
+): { segments: AxcutCameraSegment[]; key: string } | null {
+	const piece = findCameraPiece(cameraPieces(segments, cameraTimelineEndMs(clips)), keyOrId);
+	if (!piece) return null;
+	const next: Record<string, unknown> = { ...(piece.overrides ?? {}) };
+	for (const [key, value] of Object.entries(patch)) {
+		if (value === undefined) delete next[key];
+		else next[key] = value;
+	}
+	return setCameraPieceStyle(segments, clips, keyOrId, {
+		mode: piece.mode,
+		overrides: next as CameraLook,
+	});
+}
+
+/** "Restore default": the piece keeps its span and mode, and follows the global look again. */
+export function clearCameraPieceLook(
+	segments: readonly AxcutCameraSegment[],
+	clips: AxcutClip[],
+	keyOrId: string,
+): { segments: AxcutCameraSegment[]; key: string } | null {
+	const piece = findCameraPiece(cameraPieces(segments, cameraTimelineEndMs(clips)), keyOrId);
+	if (!piece || piece.implicit || !piece.overrides) return null;
+	return setCameraPieceStyle(segments, clips, keyOrId, { mode: piece.mode });
+}
+
 /** Put a piece back to the default: its stored fragments go, and the gap left is an
  *  implicit picture-in-picture piece. An implicit piece is already there. */
 export function removeCameraPiece(
@@ -388,6 +517,70 @@ export function moveCameraBoundary(
 	return out;
 }
 
+/** A run's clip anchor is complete: it is joined on source time rather than ruler time. */
+function anchoredRun(r: CameraModeRun): boolean {
+	return (
+		typeof r.clipId === "string" &&
+		typeof r.sourceStartSec === "number" &&
+		typeof r.sourceEndSec === "number"
+	);
+}
+
+function runOf(segment: AxcutCameraSegment): CameraModeRun {
+	return {
+		id: segment.id,
+		startMs: segment.startMs,
+		endMs: segment.endMs,
+		...(segment.clipId !== undefined ? { clipId: segment.clipId } : {}),
+		...(segment.sourceStartSec !== undefined ? { sourceStartSec: segment.sourceStartSec } : {}),
+		...(segment.sourceEndSec !== undefined ? { sourceEndSec: segment.sourceEndSec } : {}),
+	};
+}
+
+/**
+ * Touching fragments of the same clip joined into runs, when `same` says the two show the
+ * camera alike. Across a clip junction they stay apart. Sorted by start.
+ */
+function joinTouchingFragments<T extends CameraModeRun>(
+	fragments: readonly T[],
+	same: (a: T, b: T) => boolean,
+): T[] {
+	const ordered = [...fragments].sort((a, b) =>
+		anchoredRun(a) && anchoredRun(b) && a.clipId === b.clipId
+			? (a.sourceStartSec as number) - (b.sourceStartSec as number)
+			: a.startMs - b.startMs,
+	);
+	const out: T[] = [];
+	for (const fragment of ordered) {
+		const joins = out.find(
+			(run) =>
+				same(run, fragment) &&
+				(anchoredRun(run) && anchoredRun(fragment)
+					? run.clipId === fragment.clipId &&
+						(fragment.sourceStartSec as number) <= (run.sourceEndSec as number) + 0.001 &&
+						(fragment.sourceEndSec as number) >= (run.sourceStartSec as number) - 0.001
+					: !anchoredRun(run) &&
+						!anchoredRun(fragment) &&
+						fragment.startMs <= run.endMs + 1 &&
+						fragment.endMs >= run.startMs - 1),
+		);
+		if (!joins) {
+			out.push({ ...fragment });
+			continue;
+		}
+		joins.startMs = Math.min(joins.startMs, fragment.startMs);
+		joins.endMs = Math.max(joins.endMs, fragment.endMs);
+		if (anchoredRun(joins)) {
+			joins.sourceStartSec = Math.min(
+				joins.sourceStartSec as number,
+				fragment.sourceStartSec as number,
+			);
+			joins.sourceEndSec = Math.max(joins.sourceEndSec as number, fragment.sourceEndSec as number);
+		}
+	}
+	return out.sort((a, b) => a.startMs - b.startMs);
+}
+
 /**
  * The spans in one mode, as the scene and the preview read them: touching fragments of the
  * same clip are joined whichever piece they belong to, so two side-by-side full-camera
@@ -399,52 +592,41 @@ export function deriveCameraModeRuns(
 	segments: readonly AxcutCameraSegment[],
 	mode: CameraMode,
 ): CameraModeRun[] {
-	const fragments: CameraModeRun[] = segments
-		.filter((segment) => segment.mode === mode)
-		.map((segment) => ({
-			id: segment.id,
-			startMs: segment.startMs,
-			endMs: segment.endMs,
-			...(segment.clipId !== undefined ? { clipId: segment.clipId } : {}),
-			...(segment.sourceStartSec !== undefined ? { sourceStartSec: segment.sourceStartSec } : {}),
-			...(segment.sourceEndSec !== undefined ? { sourceEndSec: segment.sourceEndSec } : {}),
-		}));
-	const anchored = (r: CameraModeRun) =>
-		typeof r.clipId === "string" &&
-		typeof r.sourceStartSec === "number" &&
-		typeof r.sourceEndSec === "number";
-	const ordered = [...fragments].sort((a, b) =>
-		anchored(a) && anchored(b) && a.clipId === b.clipId
-			? (a.sourceStartSec as number) - (b.sourceStartSec as number)
-			: a.startMs - b.startMs,
+	return joinTouchingFragments(
+		segments.filter((segment) => segment.mode === mode).map(runOf),
+		() => true,
 	);
-	const out: CameraModeRun[] = [];
-	for (const fragment of ordered) {
-		const joins = out.find((run) =>
-			anchored(run) && anchored(fragment)
-				? run.clipId === fragment.clipId &&
-					(fragment.sourceStartSec as number) <= (run.sourceEndSec as number) + 0.001 &&
-					(fragment.sourceEndSec as number) >= (run.sourceStartSec as number) - 0.001
-				: !anchored(run) &&
-					!anchored(fragment) &&
-					fragment.startMs <= run.endMs + 1 &&
-					fragment.endMs >= run.startMs - 1,
-		);
-		if (!joins) {
-			out.push({ ...fragment });
-			continue;
-		}
-		joins.startMs = Math.min(joins.startMs, fragment.startMs);
-		joins.endMs = Math.max(joins.endMs, fragment.endMs);
-		if (anchored(joins)) {
-			joins.sourceStartSec = Math.min(
-				joins.sourceStartSec as number,
-				fragment.sourceStartSec as number,
-			);
-			joins.sourceEndSec = Math.max(joins.sourceEndSec as number, fragment.sourceEndSec as number);
-		}
+}
+
+/** A span where the camera has a look of its own, as the scene and the preview read it. */
+export interface CameraLookRun extends CameraModeRun {
+	overrides: CameraLook;
+}
+
+/**
+ * The spans whose pieces override the camera's look, whatever their mode. Touching fragments
+ * of one clip with the SAME look are joined (a piece split in two and given another mode keeps
+ * one look across the seam, so the camera does not move away and back there); two touching
+ * spans with different looks stay apart, and the scene eases from one straight to the other.
+ * Sorted by start.
+ */
+export function deriveCameraLookRuns(segments: readonly AxcutCameraSegment[]): CameraLookRun[] {
+	const fragments: CameraLookRun[] = [];
+	for (const segment of segments) {
+		const overrides = normalizeCameraLook(segment.overrides);
+		if (overrides) fragments.push({ ...runOf(segment), overrides });
 	}
-	return out.sort((a, b) => a.startMs - b.startMs);
+	return joinTouchingFragments(
+		fragments,
+		(a, b) => regionIdentityKey(a.overrides) === regionIdentityKey(b.overrides),
+	);
+}
+
+/** The document's spans with a look of their own, derived from its camera pieces. */
+export function readCameraLookRegions(
+	document: Pick<AxcutDocument, "cameraSegments"> | null | undefined,
+): CameraLookRun[] {
+	return deriveCameraLookRuns(readCameraSegments(document));
 }
 
 /** The document's Full Camera spans, derived from its camera pieces. */

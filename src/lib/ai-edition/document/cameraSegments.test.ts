@@ -5,16 +5,22 @@ import {
 	cameraPieces,
 	cameraTimelineEndMs,
 	carveCameraSpan,
+	clearCameraPieceLook,
+	deriveCameraLookRuns,
 	deriveCameraModeRuns,
 	findCameraPiece,
 	MIN_CAMERA_PIECE_MS,
+	mergeCameraLook,
 	mergeCameraPieceWithNext,
 	moveCameraBoundary,
+	normalizeCameraLook,
 	readCameraFullscreenRegions,
 	readCameraHiddenRegions,
 	removeCameraPiece,
 	setCameraModeOverSpan,
+	setCameraPieceLook,
 	setCameraPieceMode,
+	setCameraPieceStyle,
 	splitCameraAt,
 } from "./cameraSegments";
 
@@ -252,5 +258,111 @@ describe("deriveCameraModeRuns", () => {
 	it("reads nothing from a document without a track", () => {
 		expect(readCameraFullscreenRegions(null)).toEqual([]);
 		expect(readCameraFullscreenRegions({} as never)).toEqual([]);
+	});
+});
+
+describe("a piece's own look (overrides)", () => {
+	const look = { webcamAnchor: "top-left" as const, webcamSizePreset: 25 };
+
+	it("stores an implicit piece to give it a look, and patches and unsets keys", () => {
+		const set = setCameraPieceLook([], clips, "implicit:0", { webcamAnchor: "top-left" });
+		expect(set).not.toBeNull();
+		const piece = findCameraPiece(cameraPieces(set?.segments ?? [], END), set?.key ?? "");
+		expect(piece).toMatchObject({
+			mode: "pip",
+			implicit: false,
+			overrides: { webcamAnchor: "top-left" },
+		});
+		const more = setCameraPieceLook(set?.segments ?? [], clips, set?.key ?? "", {
+			webcamMirrored: true,
+			webcamAnchor: undefined,
+		});
+		expect(
+			findCameraPiece(cameraPieces(more?.segments ?? [], END), more?.key ?? "")?.overrides,
+		).toEqual({
+			webcamMirrored: true,
+		});
+	});
+
+	it("keeps the mode, and both halves of a split keep the look", () => {
+		const base = [{ ...onC1("p", 2000, 8000, "fullscreen"), overrides: look }];
+		const split = splitCameraAt(base, clips, 5000);
+		const pieces = cameraPieces(split?.segments ?? [], END).filter((p) => !p.implicit);
+		expect(pieces.map((p) => [p.startMs, p.endMs, p.mode, p.overrides])).toEqual([
+			[2000, 5000, "fullscreen", look],
+			[5000, 8000, "fullscreen", look],
+		]);
+		expect(setCameraPieceMode(base, clips, "p", "pip")?.segments[0].overrides).toEqual(look);
+	});
+
+	it("survives a roll and a join (the left one's look wins)", () => {
+		const base = [{ ...onC1("a", 0, 4000, "pip"), overrides: look }, onC1("b", 4000, 8000, "pip")];
+		const rolled = moveCameraBoundary(base, clips, "a", 6000) ?? [];
+		expect(findCameraPiece(cameraPieces(rolled, END), "a")).toMatchObject({
+			endMs: 6000,
+			overrides: look,
+		});
+		expect(findCameraPiece(cameraPieces(rolled, END), "b")?.overrides).toBeUndefined();
+		const joined = mergeCameraPieceWithNext(base, clips, "a");
+		expect(findCameraPiece(cameraPieces(joined?.segments ?? [], END), "a")).toMatchObject({
+			startMs: 0,
+			endMs: 8000,
+			overrides: look,
+		});
+	});
+
+	it("clears the look and keeps the span and mode", () => {
+		const base = [{ ...onC1("p", 2000, 8000, "hidden"), overrides: look }];
+		const cleared = clearCameraPieceLook(base, clips, "p");
+		expect(cleared?.segments[0]).toMatchObject({ mode: "hidden", startMs: 2000, endMs: 8000 });
+		expect(cleared?.segments[0].overrides).toBeUndefined();
+		expect(clearCameraPieceLook(cleared?.segments ?? [], clips, "p")).toBeNull();
+	});
+
+	it("pastes a style: mode and look in one write, replacing the look whole", () => {
+		const base = [{ ...onC1("p", 2000, 8000, "pip"), overrides: look }];
+		const pasted = setCameraPieceStyle(base, clips, "p", {
+			mode: "fullscreen",
+			overrides: { webcamMirrored: true },
+		});
+		expect(pasted?.segments[0]).toMatchObject({
+			mode: "fullscreen",
+			overrides: { webcamMirrored: true },
+		});
+		const plain = setCameraPieceStyle(base, clips, "p", { mode: "pip" });
+		expect(plain?.segments[0].overrides).toBeUndefined();
+	});
+
+	it("keeps two touching pieces with different looks as two pills", () => {
+		const base = [
+			{ ...onC1("a", 0, 4000, "pip", "same"), overrides: look },
+			{ ...onC1("b", 4000, 8000, "pip", "same"), overrides: { webcamMirrored: true } },
+		];
+		expect(cameraPieces(base, END).filter((p) => !p.implicit)).toHaveLength(2);
+	});
+
+	it("derives the look spans: same look joined across a mode change, different looks apart", () => {
+		const runs = deriveCameraLookRuns([
+			{ ...onC1("a", 0, 3000, "pip"), overrides: look },
+			{ ...onC1("b", 3000, 5000, "fullscreen"), overrides: { ...look } },
+			{ ...onC1("c", 5000, 7000, "pip"), overrides: { webcamMirrored: true } },
+			onC1("d", 7000, 9000, "pip"),
+		]);
+		expect(runs.map((r) => [r.startMs, r.endMs, r.overrides])).toEqual([
+			[0, 5000, look],
+			[5000, 7000, { webcamMirrored: true }],
+		]);
+	});
+
+	it("merges a look over the global settings, ignoring unset keys", () => {
+		const global = { webcamAnchor: "bottom-right", webcamSizePreset: 40, webcamMirrored: false };
+		expect(
+			mergeCameraLook(global, { webcamAnchor: "top-left", webcamMirrored: undefined }),
+		).toEqual({
+			...global,
+			webcamAnchor: "top-left",
+		});
+		expect(mergeCameraLook(global, undefined)).toBe(global);
+		expect(normalizeCameraLook({})).toBeUndefined();
 	});
 });

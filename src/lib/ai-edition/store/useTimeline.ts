@@ -22,10 +22,12 @@ import {
 	trackGroupId,
 } from "../document/audioTracks";
 import {
+	type CameraLook,
 	type CameraMode,
 	cameraPieceAt,
 	cameraPieces,
 	cameraTimelineEndMs,
+	clearCameraPieceLook,
 	findCameraPiece,
 	mergeCameraPieceWithNext,
 	moveCameraBoundary,
@@ -34,7 +36,9 @@ import {
 	readCameraSegments,
 	removeCameraPiece,
 	setCameraModeOverSpan,
+	setCameraPieceLook,
 	setCameraPieceMode,
+	setCameraPieceStyle,
 	splitCameraAt,
 } from "../document/cameraSegments";
 import { createId } from "../document/ids";
@@ -177,6 +181,11 @@ export function useTimeline() {
 	} | null>(null);
 	const annotationRollbackRef = useRef<AxcutDocument | null>(null);
 	const annotationLiveRef = useRef<AxcutDocument | null>(null);
+	// A camera piece's look, dragged on a slider: the same live/commit pair as the annotations.
+	const cameraLookRollbackRef = useRef<AxcutDocument | null>(null);
+	const cameraLookLiveRef = useRef<AxcutDocument | null>(null);
+	// The key an implicit piece took when a drag stored it, for the moves that still name it.
+	const cameraLookKeyRef = useRef<{ from: string; to: string } | null>(null);
 
 	// A drag does not always end in a commit: `ZoomFocusOverlay` unmounts the moment
 	// `focusMode` flips to "auto", so `endDrag` never runs and the snapshot outlives the
@@ -191,6 +200,8 @@ export function useTimeline() {
 		zoomFocusEditRef.current = null;
 		annotationRollbackRef.current = null;
 		annotationLiveRef.current = null;
+		cameraLookRollbackRef.current = null;
+		cameraLookLiveRef.current = null;
 	}, [projectId]);
 
 	const hasDoc = document !== null && projectId !== null;
@@ -696,6 +707,78 @@ export function useTimeline() {
 				);
 				return { segments: removed, key: after?.key };
 			}),
+		[saveCameraEdit],
+	);
+
+	// ── A piece's own look ("Este trecho") ──────────────────────────────────
+	// Position, size, shape, roundness and mirror for one piece only, over the global camera
+	// settings. A toggle or a choice is one undoable save; a slider writes live while dragged
+	// and commits once on release, like an annotation drag. None of these call
+	// `setNativeParam`: those params are the GLOBAL look, and the piece's own reaches the
+	// native preview through the scene (`cameraLayoutRegions`).
+	const setCameraLook = useCallback(
+		(key: string, patch: Partial<Record<keyof CameraLook, unknown>>) =>
+			saveCameraEdit((doc) =>
+				setCameraPieceLook(readCameraSegments(doc), doc.timeline.clips, key, patch),
+			),
+		[saveCameraEdit],
+	);
+
+	const updateCameraLookLive = useCallback(
+		(key: string, patch: Partial<Record<keyof CameraLook, unknown>>) => {
+			const doc = useProjectStore.getState().document;
+			if (!doc || !hasAnyClipWithCamera(doc.assets, doc.timeline.clips)) return;
+			const stored = cameraLookKeyRef.current;
+			const target = stored && stored.from === key ? stored.to : key;
+			const set = setCameraPieceLook(readCameraSegments(doc), doc.timeline.clips, target, patch);
+			if (!set) return;
+			// One undo step per drag, recorded by the commit — see `updateAnnotationLive`.
+			if (cameraLookLiveRef.current !== doc) cameraLookRollbackRef.current = doc;
+			const next: AxcutDocument = { ...doc, cameraSegments: set.segments };
+			setDocument(next, { history: false });
+			cameraLookLiveRef.current = next;
+			// An implicit piece is stored by its first write, and changes key: keep it selected.
+			if (set.key !== target) {
+				cameraLookKeyRef.current = { from: key, to: set.key };
+				const handle = { kind: "camera" as const, id: set.key };
+				setMultiSelection([handle]);
+				setSelection(handle);
+			}
+		},
+		[setDocument],
+	);
+
+	const commitCameraLook = useCallback(async () => {
+		const doc = useProjectStore.getState().document;
+		if (!doc) return;
+		// See `commitAnnotationChange`: the snapshot counts only while the document on screen
+		// is still the one the live writes produced, and is put back if the save fails.
+		const rollback = cameraLookLiveRef.current === doc ? cameraLookRollbackRef.current : null;
+		cameraLookRollbackRef.current = null;
+		cameraLookLiveRef.current = null;
+		if (!rollback) return;
+		if (!(await saveDocument(doc, { history: true, historyBase: rollback }))) {
+			useProjectStore.setState((state) =>
+				state.document === doc ? { document: rollback, revision: state.revision + 1 } : {},
+			);
+		}
+	}, [saveDocument]);
+
+	// "Restaurar padrão": the piece keeps its span and mode, and follows the global look again.
+	const clearCameraLook = useCallback(
+		(key: string) =>
+			saveCameraEdit((doc) =>
+				clearCameraPieceLook(readCameraSegments(doc), doc.timeline.clips, key),
+			),
+		[saveCameraEdit],
+	);
+
+	// Ctrl+V of a copied piece: its mode and its look, in one undoable write.
+	const setCameraStyle = useCallback(
+		(key: string, style: { mode: CameraMode; overrides?: CameraLook }) =>
+			saveCameraEdit((doc) =>
+				setCameraPieceStyle(readCameraSegments(doc), doc.timeline.clips, key, style),
+			),
 		[saveCameraEdit],
 	);
 
@@ -1779,6 +1862,11 @@ export function useTimeline() {
 		moveCameraEdge,
 		deleteCameraPiece,
 		resetCameraPiece,
+		setCameraLook,
+		updateCameraLookLive,
+		commitCameraLook,
+		clearCameraLook,
+		setCameraStyle,
 		removeRegion,
 		removeRegions,
 		hasEditRegions,

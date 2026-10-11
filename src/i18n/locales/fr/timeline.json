@@ -135,6 +135,13 @@
 		"syncHint": "La caméra reste synchronisée avec l'écran. Ce morceau ne change que sa façon d'apparaître.",
 		"splitAtPlayhead": "Couper au curseur",
 		"mergeWithNext": "Joindre au suivant",
-		"reset": "Revenir au défaut"
+		"reset": "Revenir au défaut",
+		"look": "Apparence",
+		"lookScopePiece": "Ce morceau",
+		"lookScopeAll": "Tous les morceaux",
+		"lookPieceHint": "Les changements ici ne valent que pour ce morceau. La caméra y passe et en revient en douceur.",
+		"lookAllHint": "Les changements ici valent pour tous les morceaux sans apparence propre.",
+		"lookRestore": "Rétablir l'apparence par défaut",
+		"ownLook": "Apparence propre"
 	}
 }

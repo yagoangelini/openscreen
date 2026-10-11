@@ -135,6 +135,13 @@
 		"syncHint": "The camera stays in sync with the screen. This piece only changes how it is shown.",
 		"splitAtPlayhead": "Split at playhead",
 		"mergeWithNext": "Join with next piece",
-		"reset": "Back to default"
+		"reset": "Back to default",
+		"look": "Look",
+		"lookScopePiece": "This piece",
+		"lookScopeAll": "All pieces",
+		"lookPieceHint": "Changes here apply to this piece only. The camera moves smoothly into its look and back.",
+		"lookAllHint": "Changes here apply to every piece without a look of its own.",
+		"lookRestore": "Restore default look",
+		"ownLook": "Own look"
 	}
 }

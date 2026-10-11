@@ -135,6 +135,13 @@
 		"syncHint": "La camera resta sincronizzata con lo schermo. Questo pezzo cambia solo come viene mostrata.",
 		"splitAtPlayhead": "Dividi al cursore",
 		"mergeWithNext": "Unisci al successivo",
-		"reset": "Torna al predefinito"
+		"reset": "Torna al predefinito",
+		"look": "Aspetto",
+		"lookScopePiece": "Questo pezzo",
+		"lookScopeAll": "Tutti i pezzi",
+		"lookPieceHint": "Le modifiche qui valgono solo per questo pezzo. La camera passa al suo aspetto e torna indietro con una transizione morbida.",
+		"lookAllHint": "Le modifiche qui valgono per tutti i pezzi senza un aspetto proprio.",
+		"lookRestore": "Ripristina aspetto predefinito",
+		"ownLook": "Aspetto proprio"
 	}
 }
