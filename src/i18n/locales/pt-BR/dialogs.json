@@ -110,5 +110,11 @@
 	"recording": {
 		"lowDiskSpace": "Espaço em disco insuficiente para iniciar a gravação (apenas {{availableMb}} MB livres). Libere espaço ou escolha outra pasta de gravações e tente novamente.",
 		"folderUnavailable": "Não é possível acessar a pasta de gravações {{path}}. Reconecte a unidade dela ou escolha outra pasta no modo Gravar."
+	},
+	"quitWhileRecording": {
+		"title": "Gravação em andamento",
+		"message": "Uma gravação está em andamento. Parar agora e abrir no editor?",
+		"stopAndOpen": "Parar e abrir no editor",
+		"keepRecording": "Continuar gravando"
 	}
 }

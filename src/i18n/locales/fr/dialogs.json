@@ -110,5 +110,11 @@
 	"recording": {
 		"lowDiskSpace": "Espace disque insuffisant pour démarrer l'enregistrement (seulement {{availableMb}} Mo disponibles). Libérez de l'espace ou choisissez un autre dossier d'enregistrements, puis réessayez.",
 		"folderUnavailable": "Le dossier des enregistrements {{path}} est inaccessible. Rebranchez son disque, ou choisissez un autre dossier dans le mode Enregistrement."
+	},
+	"quitWhileRecording": {
+		"title": "Recording in progress",
+		"message": "A recording is in progress. Stop it now and open it in the editor?",
+		"stopAndOpen": "Stop and open in the editor",
+		"keepRecording": "Keep recording"
 	}
 }

@@ -1,7 +1,7 @@
 {
 	"tooltips": {
 		"hideHUD": "Hide recording bar",
-		"hideHUDTip": "Hide the recording bar. Show it again from the tray icon.",
+		"hideHUDTip": "Hide the recording bar. Show it again from the taskbar or the tray icon.",
 		"closeApp": "Quit OpenScreen",
 		"restartRecording": "Delete this recording and start a new one",
 		"cancelRecording": "Stop and delete this recording",

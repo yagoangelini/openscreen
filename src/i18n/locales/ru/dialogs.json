@@ -110,5 +110,11 @@
 	"recording": {
 		"lowDiskSpace": "Недостаточно места на диске для начала записи (доступно только {{availableMb}} МБ). Освободите место или выберите другую папку для записей и повторите попытку.",
 		"folderUnavailable": "Папка для записей {{path}} недоступна. Подключите её диск снова или выберите другую папку в режиме «Запись»."
+	},
+	"quitWhileRecording": {
+		"title": "Recording in progress",
+		"message": "A recording is in progress. Stop it now and open it in the editor?",
+		"stopAndOpen": "Stop and open in the editor",
+		"keepRecording": "Keep recording"
 	}
 }

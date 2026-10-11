@@ -77,6 +77,17 @@ describe("cursor checkpoint", () => {
 		await fs.rm(dir, { recursive: true, force: true });
 	});
 
+	it("writes nothing once discarded, even from a flush scheduled before", async () => {
+		const video = path.join(dir, "take.mp4");
+		const file = `${video}${CURSOR_CHECKPOINT_SUFFIX}`;
+		const writer = new CursorCheckpointWriter(file);
+		const pending = writer.flush({ samples: [sample(100)], assets: [] });
+		await writer.discard();
+		await pending;
+		await writer.flush({ samples: [sample(100), sample(200)], assets: [] });
+		await expect(fs.stat(file)).rejects.toThrow();
+	});
+
 	it("appends only what is new, and rebuilds what the stop would have written", async () => {
 		const video = path.join(dir, "take.mp4");
 		const writer = new CursorCheckpointWriter(`${video}${CURSOR_CHECKPOINT_SUFFIX}`);

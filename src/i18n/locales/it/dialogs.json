@@ -110,5 +110,11 @@
 	"recording": {
 		"lowDiskSpace": "Spazio su disco insufficiente per avviare la registrazione (solo {{availableMb}} MB disponibili). Libera spazio o scegli un'altra cartella per le registrazioni, quindi riprova.",
 		"folderUnavailable": "Impossibile raggiungere la cartella registrazioni {{path}}. Ricollega la sua unità o scegli un'altra cartella in modalità Registra."
+	},
+	"quitWhileRecording": {
+		"title": "Recording in progress",
+		"message": "A recording is in progress. Stop it now and open it in the editor?",
+		"stopAndOpen": "Stop and open in the editor",
+		"keepRecording": "Keep recording"
 	}
 }
