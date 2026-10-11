@@ -46,6 +46,7 @@ import {
 } from "@/lib/ai-edition/timeline/trim-mapping";
 import { firstTimelineBusyView } from "@/lib/ai-edition/transcription/status";
 import { isTextEditingTarget, matchesShortcut } from "@/lib/shortcuts";
+import { loadUserPreferences } from "@/lib/userPreferences";
 import { nativeBridgeClient } from "@/native";
 import type { AiEditionProjectSummary } from "@/native/contracts";
 import { resolveVisibleClips } from "@/native/sceneDescription";
@@ -64,10 +65,12 @@ import {
 } from "./Modals";
 import { Preview } from "./Preview";
 import {
+	freshRecordingTranscriptOffer,
 	importPendingRecording,
 	maybeSaveFreshRecordingAutoZooms,
 	prefetchFreshRecordingTelemetry,
 } from "./recordingImport";
+import { TranscriptAutoZoomDialog } from "./TranscriptAutoZoomDialog";
 import { AddAudioLayerDialog } from "./v4/AddAudioLayerDialog";
 import v4 from "./v4/EditorShellV4.module.css";
 import { type EditorMode, EditorTopBar } from "./v4/EditorTopBar";
@@ -264,6 +267,8 @@ export function NewEditorShell() {
 	// mounted per trigger site.
 	const [editClipTarget, setEditClipTarget] = useState<AxcutClip | null>(null);
 	const [exportOpen, setExportOpen] = useState(false);
+	// The take just recorded, while its automatic zooms wait on the transcript question.
+	const [transcriptZoomOffer, setTranscriptZoomOffer] = useState<{ assetId: string } | null>(null);
 	const [unsavedPrompt, setUnsavedPrompt] = useState<{
 		action: "close" | "new" | "open" | "record";
 		resolve: (choice: UnsavedChoice) => void;
@@ -404,6 +409,11 @@ export function NewEditorShell() {
 					)
 				) {
 					toast.success(toastText("editor", "shellToasts.recordingAddedToNewProject"));
+					// Asked unless the user answered "only the cursor" for good.
+					if (loadUserPreferences().autoZoomAfterRecording !== "cursor") {
+						const offer = await freshRecordingTranscriptOffer();
+						if (offer) setTranscriptZoomOffer(offer);
+					}
 					return;
 				}
 			} catch (err) {
@@ -1795,6 +1805,10 @@ export function NewEditorShell() {
 				onChoose={handleConfirmUnsaved}
 			/>
 			<ExportDialog open={exportOpen} onClose={() => setExportOpen(false)} document={document} />
+			<TranscriptAutoZoomDialog
+				offer={transcriptZoomOffer}
+				onClose={() => setTranscriptZoomOffer(null)}
+			/>
 			<AddAudioLayerDialog
 				open={voiceoverFlow !== null}
 				maxDurationSec={voiceoverFlow?.maxDurationSec ?? 0}
