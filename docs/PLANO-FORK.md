@@ -141,7 +141,7 @@ Medido pela investigação: hoje passam cerca de 5 a 8 s entre o clique em grava
 - **Spotlight:** implementar, opcional na edição (desligado por padrão).
 - **Auto-zoom:** escolher entre abrir após 2,5 s (calmo) ou 1,5 s; rolagem como está; modo de câmera e transição valem para todos os zooms, inclusive os manuais; sliders continuam valendo só com "Replanejar"; detectar menus de sites por diferença de quadros.
 - **NVENC na RTX por padrão** ao gravar o monitor da RTX.
-- **Kaspersky:** o usuário vai criar a exclusão do OpenScreen (lembrar); depois reativar o modo armado.
+- **Kaspersky:** o usuário vai criar a exclusão do OpenScreen (lembrar). O início durante a contagem voltou na 2.1.1 sem ler o stdin (veja abaixo).
 - **Webcam:** abrir só na contagem regressiva.
 - **16:9** também nos projetos antigos que nunca escolheram formato.
 - **Esc/fechar a janela de exportação** durante um export pergunta antes de cancelar.
@@ -161,7 +161,7 @@ O que fazer a seguir e como fazer está em [`HANDOFF.md`](HANDOFF.md).
 ### O que ficou diferente do plano
 
 - **Faixas separadas.** As faixas de voz e de computador **não** estão dentro do MP4. São dois arquivos `.m4a` ao lado da gravação (`<take>.voice.m4a` e `<take>.system.m4a`), e o MP4 continua com a faixa mixada. O resultado para o usuário é o pedido: dois volumes no editor, e o export mixa com eles.
-- **Início armado durante a contagem.** Foi feito e depois **revertido** (commit c956ea4e): o Kaspersky põe em quarentena um gravador que fica esperando no stdin. Volta quando o usuário criar a exclusão.
+- **Início armado durante a contagem.** Foi feito e depois **revertido** (commit c956ea4e): o Kaspersky põe em quarentena um gravador que fica esperando no stdin. **Voltou na 2.1.1 de outro jeito:** o helper recebe a hora do fim da contagem (`startAtEpochMs`), abre tudo e dorme até lá.
 - **Modelo padrão da transcrição.** O large-v3-turbo **não** virou o padrão; o padrão continua `ggml-small-q8_0.bin`. Falta espaço em disco e a decisão de quando baixar.
 - **Spotlight.** Só existe no Windows (Direct3D 11). Os shaders Metal e wgpu não têm o modo do spotlight (20 desde o merge do 2.0; o 19 é o Glass Lens do upstream).
 - **Preset "Tutorial".** Não há um seletor de preset com esse nome. O próprio padrão é o preset: 1,5x, transição de 1,1 s e no mínimo 2,5 s parado. Os sliders ajustam esses valores, e "restaurar padrão" volta a eles.
@@ -210,7 +210,7 @@ O que fazer a seguir e como fazer está em [`HANDOFF.md`](HANDOFF.md).
 
 | Item | Status | Nota |
 |---|---|---|
-| Gravador armado durante a contagem | Revertido | Kaspersky. |
+| Gravador armado durante a contagem | Feito (2.1.1) | Com `startAtEpochMs` e `sleep_until`, sem stdin. |
 | Leitor do cursor em paralelo | Feito | |
 | Webcam aberta só na contagem | Feito | |
 | Janela da contagem antecipada; cache do `reg.exe` | Feito | |
