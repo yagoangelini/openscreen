@@ -47,6 +47,8 @@
 		"cameraDisconnected": "Webkamera odpojena.",
 		"cameraNotFound": "Kamera nenalezena.",
 		"cameraCaptureUnavailable": "Kameru se nepodařilo otevřít. Nahrávání probíhá bez ní.",
+		"cameraDark": "Kamera je tmavá nebo zakrytá. Přesto se nahrává: odkryjte objektiv, nebo nahrávání zastavte a začněte znovu.",
+		"cameraNoFrames": "Kamera neposlala žádný obraz, proto byl záznam uložen bez ní.",
 		"microphoneDefaulted": "Vybraný mikrofon se nepodařilo identifikovat. Nahrávání bude pokračovat s výchozím vstupem.",
 		"microphoneUnavailable": "Tato verze macOS neumí nahrávat mikrofon. Nahrávání probíhá bez něj.",
 		"restartFailed": "Novou nahrávku se nepodařilo spustit. Předchozí byla smazána.",

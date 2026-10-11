@@ -47,6 +47,8 @@
 		"cameraDisconnected": "Webcam bị ngắt kết nối.",
 		"cameraNotFound": "Không tìm thấy máy ảnh.",
 		"cameraCaptureUnavailable": "Không thể mở máy ảnh. Đang ghi mà không có máy ảnh.",
+		"cameraDark": "Camera đang tối hoặc bị che. Camera vẫn đang được ghi: hãy mở ống kính, hoặc dừng và ghi lại.",
+		"cameraNoFrames": "Camera không gửi hình ảnh nào, nên bản ghi đã được lưu mà không có camera.",
 		"microphoneDefaulted": "Không xác định được micrô đã chọn. Đang ghi từ đầu vào mặc định.",
 		"microphoneUnavailable": "Phiên bản macOS này không thể ghi micrô. Đang ghi mà không có micrô.",
 		"restartFailed": "Không thể bắt đầu bản ghi hình mới. Bản trước đã bị xóa.",

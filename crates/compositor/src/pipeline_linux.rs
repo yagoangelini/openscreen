@@ -289,6 +289,7 @@ impl VideoEncoder {
         // encodeurs, pas seulement pour celui qui a le défaut cassé.
         (*ctx).gop_size = (fps * 2).max(1);
         Self::tune_openh264(ctx, name);
+        crate::encoder_tags::tag_bt709_and_profile(ctx, name);
         // MP4 : header global dans l'extradata (pas par-paquet).
         (*ctx).flags |= AV_CODEC_FLAG_GLOBAL_HEADER as i32;
         if let Err(e) = averr(avcodec_open2(ctx, enc, ptr::null_mut()), "avcodec_open2(enc)") {

@@ -28,28 +28,59 @@ bool betterFps(int candidate, int best, int targetFps) {
     return candidateReaches ? candidate < best : candidate > best;
 }
 
+// 0 for uncompressed, 1 for MJPEG, 2 for any other compressed mode: lower is
+// cheaper to decode and safer to pin.
+int decodeRank(const WebcamFormat& format) {
+    if (!format.compressed) {
+        return 0;
+    }
+    return format.mjpeg ? 1 : 2;
+}
+
 }  // namespace
 
 WebcamFormat chooseWebcamFormat(
     const std::vector<WebcamFormat>& available,
     int targetWidth,
     int targetHeight,
-    int targetFps) {
+    int targetFps,
+    bool acceptCompressed) {
     const WebcamFormat target{targetWidth, targetHeight, targetFps, false};
+    const int smoothFps = std::min(std::max(1, targetFps), kSmoothWebcamFps);
 
-    // Compressed modes are a last resort, so they are only considered when the
-    // camera offers nothing else at all.
+    // Without `acceptCompressed`, compressed modes are a last resort, only
+    // considered when the camera offers nothing else at all.
     const bool anyUncompressed = std::any_of(available.begin(), available.end(), [](const WebcamFormat& format) {
         return isUsable(format) && !format.compressed;
     });
 
     const auto eligible = [&](const WebcamFormat& format) {
-        return isUsable(format) && !(anyUncompressed && format.compressed);
+        return isUsable(format) && (acceptCompressed || !(anyUncompressed && format.compressed));
     };
 
     const bool anyFits = std::any_of(available.begin(), available.end(), [&](const WebcamFormat& format) {
         return eligible(format) && fitsTarget(format, targetWidth, targetHeight);
     });
+
+    // True when `candidate` should replace `best`; false on a full tie, so the
+    // first mode the camera lists wins it.
+    const auto beats = [&](const WebcamFormat& candidate, const WebcamFormat& best) {
+        const bool candidateSmooth = candidate.fps >= smoothFps;
+        const bool bestSmooth = best.fps >= smoothFps;
+        if (candidateSmooth != bestSmooth) {
+            return candidateSmooth;
+        }
+        if (!candidateSmooth && candidate.fps != best.fps) {
+            return candidate.fps > best.fps;
+        }
+        if (pixels(candidate) != pixels(best)) {
+            return anyFits ? pixels(candidate) > pixels(best) : pixels(candidate) < pixels(best);
+        }
+        if (candidate.fps != best.fps) {
+            return betterFps(candidate.fps, best.fps, targetFps);
+        }
+        return decodeRank(candidate) < decodeRank(best);
+    };
 
     const WebcamFormat* best = nullptr;
     for (const WebcamFormat& format : available) {
@@ -62,18 +93,7 @@ WebcamFormat chooseWebcamFormat(
         if (anyFits != fitsTarget(format, targetWidth, targetHeight)) {
             continue;
         }
-        if (best == nullptr) {
-            best = &format;
-            continue;
-        }
-        if (pixels(format) != pixels(*best)) {
-            const bool wins = anyFits ? pixels(format) > pixels(*best) : pixels(format) < pixels(*best);
-            if (wins) {
-                best = &format;
-            }
-            continue;
-        }
-        if (betterFps(format.fps, best->fps, targetFps)) {
+        if (best == nullptr || beats(format, *best)) {
             best = &format;
         }
     }

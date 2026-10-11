@@ -45,6 +45,8 @@
 		"cameraDisconnected": "Webcam déconnectée.",
 		"cameraNotFound": "Caméra introuvable.",
 		"cameraCaptureUnavailable": "Impossible d'ouvrir la caméra. Enregistrement sans elle.",
+		"cameraDark": "La caméra est sombre ou masquée. Elle est quand même enregistrée : découvrez l’objectif, ou arrêtez et recommencez.",
+		"cameraNoFrames": "La caméra n’a envoyé aucune image : la prise a été enregistrée sans elle.",
 		"microphoneDefaulted": "Micro choisi non identifié. Enregistrement de l'entrée par défaut.",
 		"microphoneUnavailable": "Cette version de macOS ne permet pas d'enregistrer le micro. Enregistrement sans lui.",
 		"restartFailed": "Le nouvel enregistrement n'a pas pu démarrer. Le précédent a été supprimé.",

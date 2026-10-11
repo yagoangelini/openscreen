@@ -11,6 +11,9 @@
 #include <chrono>
 #include <cwctype>
 #include <iostream>
+#include <set>
+#include <sstream>
+#include <string>
 
 namespace {
 
@@ -295,6 +298,10 @@ bool isCompressedVideoSubtype(const GUID& subtype) {
  */
 std::vector<WebcamFormat> readNativeFormats(IMFSourceReader* reader) {
     std::vector<WebcamFormat> formats;
+    // Each size and subtype once, at the first (highest) rate the camera lists
+    // it at: a C920 enumerates every size at seven rates in four subtypes.
+    std::ostringstream modes;
+    std::set<std::string> listed;
     for (DWORD index = 0;; ++index) {
         Microsoft::WRL::ComPtr<IMFMediaType> nativeType;
         const HRESULT hr =
@@ -318,13 +325,27 @@ std::vector<WebcamFormat> readNativeFormats(IMFSourceReader* reader) {
         }
 
         GUID subtype{};
-        const bool compressed = SUCCEEDED(nativeType->GetGUID(MF_MT_SUBTYPE, &subtype))
-                                    ? isCompressedVideoSubtype(subtype)
-                                    : true;
+        const bool hasSubtype = SUCCEEDED(nativeType->GetGUID(MF_MT_SUBTYPE, &subtype));
+        const bool compressed = hasSubtype ? isCompressedVideoSubtype(subtype) : true;
+        const bool mjpeg = hasSubtype && subtype == MFVideoFormat_MJPG;
 
         formats.push_back(
-            WebcamFormat{static_cast<int>(width), static_cast<int>(height), fps, compressed});
+            WebcamFormat{static_cast<int>(width), static_cast<int>(height), fps, compressed, mjpeg});
+        // Media Foundation subtypes are FourCC GUIDs: Data1 spells YUY2, NV12, MJPG, H264.
+        std::string fourcc(4, '?');
+        for (int i = 0; i < 4 && hasSubtype; ++i) {
+            const char c = static_cast<char>((subtype.Data1 >> (8 * i)) & 0xff);
+            fourcc[static_cast<size_t>(i)] = c >= 0x20 && c < 0x7f ? c : '?';
+        }
+        std::ostringstream mode;
+        mode << width << 'x' << height << '/' << fourcc;
+        if (listed.insert(mode.str()).second) {
+            modes << ' ' << width << 'x' << height << '@' << fps << '/' << fourcc;
+        }
     }
+    // Everything the choice below was made from, in one line: what a support
+    // report needs to tell "the camera cannot" from "we picked badly".
+    std::cerr << "INFO: Native webcam modes:" << modes.str() << std::endl;
     return formats;
 }
 
@@ -355,7 +376,8 @@ void selectNativeFormat(IMFSourceReader* reader, const WebcamFormat& wanted) {
 
         GUID subtype{};
         if (FAILED(nativeType->GetGUID(MF_MT_SUBTYPE, &subtype)) ||
-            isCompressedVideoSubtype(subtype) != wanted.compressed) {
+            isCompressedVideoSubtype(subtype) != wanted.compressed ||
+            (subtype == MFVideoFormat_MJPG) != wanted.mjpeg) {
             continue;
         }
 
@@ -425,13 +447,22 @@ bool WebcamCapture::configureReader(
     // already selected, so the camera keeps running at 640x480 and the size we
     // asked for is quietly dropped. Selecting the native type first is what
     // actually reconfigures the camera.
+    //
+    // Compressed modes are only accepted on the NV12 path: there the reader
+    // decodes MJPEG straight into the encoder's format, which is how a C920
+    // reaches 1080p at 30 fps at all (its uncompressed 1080p is 5 fps). The
+    // RGB32 path keeps the uncompressed-first rule that its "no samples at all"
+    // hosts taught (see chooseWebcamFormat).
     const WebcamFormat chosen = chooseWebcamFormat(
         readNativeFormats(sourceReader_.Get()),
         requestedWidth > 0 ? requestedWidth : 1920,
         requestedHeight > 0 ? requestedHeight : 1080,
-        std::max(1, requestedFps));
+        std::max(1, requestedFps),
+        preferNv12);
     std::cerr << "INFO: Native webcam format " << chosen.width << "x" << chosen.height << "@"
-              << chosen.fps << (chosen.compressed ? " (compressed)" : " (uncompressed)") << std::endl;
+              << chosen.fps
+              << (chosen.mjpeg ? " (mjpeg)" : chosen.compressed ? " (compressed)" : " (uncompressed)")
+              << std::endl;
     selectNativeFormat(sourceReader_.Get(), chosen);
 
     MFSetAttributeSize(

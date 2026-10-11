@@ -48,6 +48,8 @@
 		"cameraDisconnected": "ウェブカメラが切断されました。",
 		"cameraNotFound": "カメラが見つかりません。",
 		"cameraCaptureUnavailable": "カメラを開けませんでした。カメラなしで録画します。",
+		"cameraDark": "カメラが暗いか、覆われています。録画は続いています。レンズの覆いを外すか、停止して録り直してください。",
+		"cameraNoFrames": "カメラから映像が届かなかったため、このテイクはカメラなしで保存されました。",
 		"microphoneDefaulted": "選択したマイクを特定できませんでした。既定の入力を録音します。",
 		"microphoneUnavailable": "このバージョンの macOS ではマイクを録音できません。マイクなしで録画します。",
 		"restartFailed": "新しい録画を開始できませんでした。前の録画は削除されました。",

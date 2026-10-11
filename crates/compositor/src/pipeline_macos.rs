@@ -894,6 +894,7 @@ impl VideoEncoder {
         (*ctx).framerate = crate::ffi::AVRational { num: fps, den: 1 };
         (*ctx).bit_rate = bit_rate;
         (*ctx).flags |= crate::ffi::AV_CODEC_FLAG_GLOBAL_HEADER as i32;
+        crate::encoder_tags::tag_bt709_and_profile(ctx, candidate.name);
 
         // VT : on attache le hw_frames_ctx. En pratique le call-site (run_composited_multi)
         // nous passera un `hw_frames_ctx` pré-construit lié au même device VideoToolbox

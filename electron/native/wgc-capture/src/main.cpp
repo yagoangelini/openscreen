@@ -802,6 +802,7 @@ int wmain(int argc, wchar_t* argv[]) {
 
     WebcamCapture webcamCapture;
     bool webcamActive = false;
+    auto webcamStartedAt = std::chrono::steady_clock::now();
     // Decided before initialize(), not after: it selects the capture pixel
     // format, and only a camera going to its own file can use NV12 -- an inline
     // picture-in-picture composite needs the frame as BGRA.
@@ -835,6 +836,16 @@ int wmain(int argc, wchar_t* argv[]) {
                       << ",\"deviceName\":\"" << jsonEscape(wideToUtf8(webcamCapture.selectedDeviceName()))
                       << "\"}" << std::endl;
             // writeSeparateWebcam was decided above, before the pixel format.
+            //
+            // Started now rather than once the encoders are built: the camera's
+            // warm-up (and the visible-frame wait below) then overlaps the ~0.5 s
+            // of encoder and audio setup instead of following it, which is what
+            // lets a countdown take start on time.
+            if (!webcamCapture.start()) {
+                std::cerr << "ERROR: Failed to start native webcam capture" << std::endl;
+                return 1;
+            }
+            webcamStartedAt = std::chrono::steady_clock::now();
         }
     }
 
@@ -1096,7 +1107,10 @@ int wmain(int argc, wchar_t* argv[]) {
     int latestWebcamWidth = 0;
     int latestWebcamHeight = 0;
     uint64_t latestWebcamSequence = 0;
-    bool hasVisibleWebcamFrame = false;
+    // Set once the camera has a frame worth showing: a visible one, or -- when
+    // the pre-roll wait below runs out on a dark or covered lens -- the dark one
+    // it has. From then on every frame is taken as it comes.
+    bool hasWebcamFrame = false;
 
     // Legacy-path-only state. frameMutex guards latestFrameTexture/
     // legacyLatestFrameTimestampHns between WGC's callback thread (writer)
@@ -1271,19 +1285,24 @@ int wmain(int argc, wchar_t* argv[]) {
                     }
                 }
                 if (webcamActive) {
+                    // No visibility test here. The warm-up frames it used to skip are
+                    // already behind us (the pre-roll wait below consumed them), and
+                    // skipping dark frames for the whole take meant a covered lens
+                    // never wrote a single one: the camera file came out empty and the
+                    // take silently lost its camera. A lens covered mid-take now shows
+                    // black, as it should, instead of freezing on the last bright frame.
                     WebcamFrameSnapshot candidateWebcamFrame;
-                    if (webcamCapture.copyLatestFrame(candidateWebcamFrame, latestWebcamSequence) &&
-                        hasVisibleWebcamContent(candidateWebcamFrame.data, webcamCapture.deliversNv12())) {
+                    if (webcamCapture.copyLatestFrame(candidateWebcamFrame, latestWebcamSequence)) {
                         latestWebcamFrame = std::move(candidateWebcamFrame.data);
                         latestWebcamWidth = candidateWebcamFrame.width;
                         latestWebcamHeight = candidateWebcamFrame.height;
                         latestWebcamSequence = candidateWebcamFrame.sequence;
-                        hasVisibleWebcamFrame = true;
+                        hasWebcamFrame = true;
                         pictureChanged = pictureChanged || !writeSeparateWebcam;
                     }
                 }
                 const BgraFrameView webcamFrame{
-                    hasVisibleWebcamFrame && !latestWebcamFrame.empty() ? latestWebcamFrame.data() : nullptr,
+                    hasWebcamFrame && !latestWebcamFrame.empty() ? latestWebcamFrame.data() : nullptr,
                     latestWebcamWidth,
                     latestWebcamHeight,
                 };
@@ -1566,34 +1585,52 @@ int wmain(int argc, wchar_t* argv[]) {
         return 1;
     }
     if (config.webcamEnabled) {
-        if (!webcamCapture.start()) {
-            microphoneCapture.stop();
-            loopbackCapture.stop();
-            stopDeviceWatchIfActive();
-            stopRenderKeepAliveIfActive();
-            if (audioMixer) {
-                audioMixer->stop();
-            }
-            std::cerr << "ERROR: Failed to start native webcam capture" << std::endl;
-            return 1;
-        }
         webcamActive = true;
-        const auto webcamDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
-        while (std::chrono::steady_clock::now() < webcamDeadline && !hasVisibleWebcamFrame) {
+        // Wait for a frame with a picture in it, so the take does not open on a
+        // camera's black warm-up frames. Without a countdown that is up to 3 s.
+        // With one, the wait ends with the countdown -- the camera opened during
+        // it, so the warm-up is normally over by then -- and a dark lens no longer
+        // holds the take back past it (a covered C920 started it 1.7 s late). The
+        // camera still gets at least 1 s from its own start.
+        auto webcamDeadline = webcamStartedAt + std::chrono::seconds(3);
+        if (config.startAtEpochMs > 0) {
+            const auto untilCountdownEnds = std::chrono::duration_cast<std::chrono::steady_clock::duration>(
+                std::chrono::system_clock::time_point(
+                    std::chrono::milliseconds(static_cast<int64_t>(config.startAtEpochMs))) -
+                std::chrono::system_clock::now());
+            webcamDeadline = std::clamp(
+                webcamStartedAt + untilCountdownEnds,
+                webcamStartedAt + std::chrono::seconds(1),
+                webcamStartedAt + std::chrono::seconds(15));
+        }
+        bool sawDarkWebcamFrame = false;
+        while (std::chrono::steady_clock::now() < webcamDeadline) {
             WebcamFrameSnapshot candidateWebcamFrame;
-            if (webcamCapture.copyLatestFrame(candidateWebcamFrame, latestWebcamSequence) &&
-                hasVisibleWebcamContent(candidateWebcamFrame.data, webcamCapture.deliversNv12())) {
-                latestWebcamFrame = std::move(candidateWebcamFrame.data);
-                latestWebcamWidth = candidateWebcamFrame.width;
-                latestWebcamHeight = candidateWebcamFrame.height;
-                latestWebcamSequence = candidateWebcamFrame.sequence;
-                hasVisibleWebcamFrame = true;
-                break;
+            if (webcamCapture.copyLatestFrame(candidateWebcamFrame, latestWebcamSequence)) {
+                if (hasVisibleWebcamContent(candidateWebcamFrame.data, webcamCapture.deliversNv12())) {
+                    latestWebcamFrame = std::move(candidateWebcamFrame.data);
+                    latestWebcamWidth = candidateWebcamFrame.width;
+                    latestWebcamHeight = candidateWebcamFrame.height;
+                    latestWebcamSequence = candidateWebcamFrame.sequence;
+                    hasWebcamFrame = true;
+                    break;
+                }
+                sawDarkWebcamFrame = true;
             }
             std::this_thread::sleep_for(std::chrono::milliseconds(20));
         }
-        if (!hasVisibleWebcamFrame) {
-            std::cerr << "WARNING: Native webcam started but no visible frame was available before screen capture"
+        if (!hasWebcamFrame && sawDarkWebcamFrame) {
+            // Frames arrive, all dark: a covered lens, a privacy shutter, a black
+            // room. The writer records them anyway -- the camera file stays valid
+            // and aligned from 0 s, black until the lens opens -- and the app is
+            // told, so the user can still uncover it or restart while the take is
+            // young.
+            std::cerr << "WARNING: Native webcam frames are dark; recording them anyway" << std::endl;
+            std::cout << "{\"event\":\"warning\",\"code\":\"webcam-dark\",\"message\":"
+                         "\"The camera delivers only dark frames\"}"
+                      << std::endl;
+        } else if (!hasWebcamFrame) {
+            std::cerr << "WARNING: Native webcam started but no frame was available before screen capture"
                       << std::endl;
         }
     }

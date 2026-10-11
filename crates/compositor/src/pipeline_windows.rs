@@ -1647,6 +1647,7 @@ impl VideoEncoder {
         // d'ajouter n'émettent pas d'extradata sans ce drapeau, et personne ici n'a de machine
         // pour constater le MP4 bancal qui en sortirait.
         (*ctx).flags |= AV_CODEC_FLAG_GLOBAL_HEADER as i32;
+        crate::encoder_tags::tag_bt709_and_profile(ctx, name);
         if pix_fmt == AVPixelFormat::AV_PIX_FMT_D3D11 {
             (*ctx).hw_frames_ctx = av_buffer_ref(hw_frames);
         }
