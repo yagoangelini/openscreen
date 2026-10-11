@@ -34,6 +34,8 @@ pub mod camera;
 pub mod config;
 pub mod cursor;
 pub mod cursor_sdf;
+// Profil H.264 High et VUI BT.709 limité, communs aux encodeurs d'export des trois plateformes.
+pub(crate) mod encoder_tags;
 pub mod export_control;
 pub mod export_probe;
 pub mod ffi;
