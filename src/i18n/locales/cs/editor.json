@@ -65,7 +65,11 @@
 		"audioDeviceLostMicrophone": "Mikrofon se během nahrávání odpojil a nevrátil se: zbytek záznamu je bez hlasu.",
 		"audioDeviceLostSystemAudio": "Systémové zvukové zařízení se během nahrávání odpojilo a nevrátilo se: zbytek záznamu je bez zvuku počítače.",
 		"audioDeviceBackMicrophone": "Mikrofon se odpojil a znovu připojil: asi {{seconds}} s záznamu je bez hlasu.",
-		"audioDeviceBackSystemAudio": "Systémové zvukové zařízení se odpojilo a znovu připojilo: asi {{seconds}} s záznamu je bez zvuku počítače."
+		"audioDeviceBackSystemAudio": "Systémové zvukové zařízení se odpojilo a znovu připojilo: asi {{seconds}} s záznamu je bez zvuku počítače.",
+		"stopFailed": "Couldn't save the recording",
+		"webcamNotSaved": "Camera not saved. The screen recording was kept.",
+		"pauseFailed": "Couldn't pause or resume the recording",
+		"startFailed": "Couldn't start the recording"
 	},
 	"emptyState": {
 		"title": "Žádný projekt není otevřen",
@@ -249,7 +253,8 @@
 		"confirmCloseTitle": "Zrušit export?",
 		"confirmCloseBody": "Zavřením se export zastaví a video se neuloží.",
 		"keepExporting": "Pokračovat v exportu",
-		"cancelAndClose": "Zrušit a zavřít"
+		"cancelAndClose": "Zrušit a zavřít",
+		"cancelFailed": "Couldn't cancel the export"
 	},
 	"inspector": {
 		"resetFocusPoint": "Obnovit bod zaostření",
@@ -406,7 +411,8 @@
 			"description": "Video nelze dekódovat. Soubor může být poškozen, stále se zapisuje nebo již není tam, kde ho projekt očekává. Váš projekt je v pořádku.",
 			"retry": "Zkusit znovu",
 			"detail": "Podrobnosti: {{detail}}"
-		}
+		},
+		"attachVideo": "Attach a video to start previewing."
 	},
 	"annotationOverlay": {
 		"imageAlt": "Anotace",
@@ -441,7 +447,16 @@
 		"disconnect": "Odpojit",
 		"cancel": "Zrušit",
 		"save": "Uložit",
-		"saveAndUse": "Uložit a použít"
+		"saveAndUse": "Uložit a použít",
+		"effort": {
+			"none": "None",
+			"minimal": "Minimal",
+			"low": "Low",
+			"medium": "Medium",
+			"high": "High",
+			"xhigh": "Extra high",
+			"on": "On"
+		}
 	},
 	"mcpServer": {
 		"title": "MCP server",
@@ -488,7 +503,9 @@
 		"cameraCheckFailed": "Could not check for a camera recording near {{name}}",
 		"sensitiveBlurred": "Automaticky rozmazané citlivé oblasti: {{count}}. Zkontrolujte je na časové ose.",
 		"sensitiveScanFailed": "Automatické rozmazání u této nahrávky neproběhlo, nic na obrazovce nebylo rozmazáno.",
-		"sensitiveScanPartial": "Automatické rozmazání zkontrolovalo tuto nahrávku jen do {{covered}}. Zbytek zkontrolujte ručně."
+		"sensitiveScanPartial": "Automatické rozmazání zkontrolovalo tuto nahrávku jen do {{covered}}. Zbytek zkontrolujte ručně.",
+		"projectOpened": "Project opened",
+		"legacyProjectOpened": "Legacy project migrated and loaded"
 	},
 	"exportPipeline": {
 		"quality1440p": "1440p",
@@ -560,5 +577,10 @@
 		"save": "Uložit titulky (.srt)",
 		"saved": "Titulky uloženy: {{path}}",
 		"failed": "Titulky se nepodařilo uložit"
+	},
+	"projectNames": {
+		"recording": "Recording {{date}}",
+		"project": "Project {{date}}",
+		"asset": "Recording"
 	}
 }

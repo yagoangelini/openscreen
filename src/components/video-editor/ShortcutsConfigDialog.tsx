@@ -81,7 +81,12 @@ export function ShortcutsConfigDialog() {
 			setCaptureFor(null);
 
 			if (found?.type === "fixed") {
-				toast.error(t("reservedShortcut", { label: found.label }));
+				const fixed = FIXED_SHORTCUTS.find((shortcut) => shortcut.label === found.label);
+				toast.error(
+					t("reservedShortcut", {
+						label: fixed ? t(`fixedActions.${fixed.i18nKey}`) : found.label,
+					}),
+				);
 				return;
 			}
 

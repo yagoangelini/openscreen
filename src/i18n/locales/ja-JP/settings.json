@@ -260,7 +260,13 @@
 	"gifSettings": {
 		"frameRate": "GIF フレームレート",
 		"loop": "GIF をループする",
-		"size": "GIF サイズ"
+		"size": "GIF サイズ",
+		"sizes": {
+			"small": "Small (480p)",
+			"medium": "Medium (720p)",
+			"large": "Large (1080p)",
+			"original": "Original"
+		}
 	},
 	"exportQuality": {
 		"title": "書き出し解像度",

@@ -116,7 +116,9 @@ describe("useScreenRecorder native macOS start warnings", () => {
 		expect(api.checkRecordingStorage).toHaveBeenCalledOnce();
 		expect(api.startNativeMacRecording).not.toHaveBeenCalled();
 		expect(view.result.current.recording).toBe(false);
-		expect(toast.error).toHaveBeenCalledWith("only 12 MB free");
+		expect(toast.error).toHaveBeenCalledWith("recording.startFailed", {
+			description: "only 12 MB free",
+		});
 	});
 
 	it("says so when the helper records without the microphone", async () => {

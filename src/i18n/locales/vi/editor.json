@@ -65,7 +65,11 @@
 		"audioDeviceLostMicrophone": "Micrô bị ngắt kết nối khi đang ghi và không kết nối lại: phần còn lại của bản ghi không có giọng nói.",
 		"audioDeviceLostSystemAudio": "Thiết bị âm thanh hệ thống bị ngắt kết nối khi đang ghi và không kết nối lại: phần còn lại của bản ghi không có âm thanh máy tính.",
 		"audioDeviceBackMicrophone": "Micrô bị ngắt rồi kết nối lại: khoảng {{seconds}} giây của bản ghi không có giọng nói.",
-		"audioDeviceBackSystemAudio": "Thiết bị âm thanh hệ thống bị ngắt rồi kết nối lại: khoảng {{seconds}} giây của bản ghi không có âm thanh máy tính."
+		"audioDeviceBackSystemAudio": "Thiết bị âm thanh hệ thống bị ngắt rồi kết nối lại: khoảng {{seconds}} giây của bản ghi không có âm thanh máy tính.",
+		"stopFailed": "Couldn't save the recording",
+		"webcamNotSaved": "Camera not saved. The screen recording was kept.",
+		"pauseFailed": "Couldn't pause or resume the recording",
+		"startFailed": "Couldn't start the recording"
 	},
 	"emptyState": {
 		"title": "Không có dự án nào được mở",
@@ -249,7 +253,8 @@
 		"confirmCloseTitle": "Hủy lượt xuất?",
 		"confirmCloseBody": "Đóng sẽ dừng lượt xuất và video sẽ không được lưu.",
 		"keepExporting": "Tiếp tục xuất",
-		"cancelAndClose": "Hủy và đóng"
+		"cancelAndClose": "Hủy và đóng",
+		"cancelFailed": "Couldn't cancel the export"
 	},
 	"inspector": {
 		"resetFocusPoint": "Đặt lại điểm lấy nét",
@@ -406,7 +411,8 @@
 			"description": "Không thể giải mã video. Tệp có thể đã hỏng, vẫn đang được ghi, hoặc không còn ở nơi dự án mong đợi — dự án của bạn vẫn nguyên vẹn.",
 			"retry": "Thử lại",
 			"detail": "Chi tiết: {{detail}}"
-		}
+		},
+		"attachVideo": "Attach a video to start previewing."
 	},
 	"annotationOverlay": {
 		"imageAlt": "Chú thích",
@@ -441,7 +447,16 @@
 		"disconnect": "Ngắt kết nối",
 		"cancel": "Hủy",
 		"save": "Lưu",
-		"saveAndUse": "Lưu và dùng"
+		"saveAndUse": "Lưu và dùng",
+		"effort": {
+			"none": "None",
+			"minimal": "Minimal",
+			"low": "Low",
+			"medium": "Medium",
+			"high": "High",
+			"xhigh": "Extra high",
+			"on": "On"
+		}
 	},
 	"mcpServer": {
 		"title": "Máy chủ MCP",
@@ -488,7 +503,9 @@
 		"cameraCheckFailed": "Could not check for a camera recording near {{name}}",
 		"sensitiveBlurred": "Vùng nhạy cảm đã tự động làm mờ: {{count}}. Hãy kiểm tra trên dòng thời gian.",
 		"sensitiveScanFailed": "Làm mờ tự động không chạy trên bản ghi này nên chưa có gì trên màn hình được làm mờ.",
-		"sensitiveScanPartial": "Làm mờ tự động chỉ kiểm tra bản ghi này đến {{covered}}. Hãy tự kiểm tra phần còn lại."
+		"sensitiveScanPartial": "Làm mờ tự động chỉ kiểm tra bản ghi này đến {{covered}}. Hãy tự kiểm tra phần còn lại.",
+		"projectOpened": "Project opened",
+		"legacyProjectOpened": "Legacy project migrated and loaded"
 	},
 	"exportPipeline": {
 		"quality1440p": "1440p",
@@ -560,5 +577,10 @@
 		"save": "Lưu phụ đề (.srt)",
 		"saved": "Đã lưu phụ đề: {{path}}",
 		"failed": "Không thể lưu phụ đề"
+	},
+	"projectNames": {
+		"recording": "Recording {{date}}",
+		"project": "Project {{date}}",
+		"asset": "Recording"
 	}
 }

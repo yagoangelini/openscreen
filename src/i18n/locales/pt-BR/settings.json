@@ -6,7 +6,7 @@
 		"motionAurora": "Aurora",
 		"motionWaves": "Ondas",
 		"gradientLabel": "Gradiente {{index}}",
-		"uploadCustom": "Enviar Personalizada",
+		"uploadCustom": "Enviar personalizada",
 		"unsupportedImage": "Imagem não suportada. Use um arquivo JPG ou PNG.",
 		"title": "Fundo",
 		"imageLabel": "Fundo {{index}}",
@@ -17,22 +17,22 @@
 		"gradient": "Gradiente",
 		"colorLabel": "Cor {{color}}",
 		"customWallpaper": "Papel de parede personalizado",
-		"colorPalette": "Paleta de Cores",
+		"colorPalette": "Paleta de cores",
 		"imageReadFailed": "Não foi possível ler esse arquivo de imagem.",
 		"image": "Imagem",
 		"presets": "Predefinições",
 		"color": "Cor",
-		"colorWheel": "Roda de Cores"
+		"colorWheel": "Roda de cores"
 	},
 	"customFont": {
-		"namePlaceholder": "Minha Fonte Personalizada",
+		"namePlaceholder": "Minha fonte personalizada",
 		"failedToAdd": "Falha ao adicionar fonte",
 		"addingButton": "Adicionando...",
 		"errorInvalidUrl": "Por favor, insira uma URL válida do Google Fonts",
-		"urlHelp": "Pegue isso no Google Fonts: Selecione uma fonte → Clique em \"Get font\" → Copie a URL @import",
-		"urlLabel": "URL de Importação do Google Fonts",
+		"urlHelp": "Pegue isso no Google Fonts: Selecione uma fonte → clique em \"Get font\" → copie a URL @import",
+		"urlLabel": "URL de importação do Google Fonts",
 		"successMessage": "Fonte \"{{fontName}}\" adicionada com sucesso",
-		"nameLabel": "Nome de Exibição",
+		"nameLabel": "Nome de exibição",
 		"errorEmptyName": "Por favor, insira um nome para a fonte",
 		"nameHelp": "É assim que a fonte aparecerá no seletor de fontes",
 		"errorEmptyUrl": "Por favor, insira uma URL de importação do Google Fonts",
@@ -41,7 +41,7 @@
 		"dialogTitle": "Adicionar Google Font",
 		"errorTimeout": "A fonte demorou muito para carregar. Por favor, verifique a URL e tente novamente.",
 		"errorLoadFailed": "A fonte não pôde ser carregada. Por favor, verifique se a URL do Google Fonts está correta.",
-		"addButton": "Adicionar Fonte"
+		"addButton": "Adicionar fonte"
 	},
 	"imageUpload": {
 		"invalidFileType": "Tipo de arquivo inválido",
@@ -55,44 +55,44 @@
 		"size": "Tamanho",
 		"customSize": "Tamanho personalizado",
 		"tipShiftTabCycle": "Use Shift+Tab para alternar para trás.",
-		"clearBackground": "Limpar Fundo",
-		"colorPalette": "Paleta de Cores",
+		"clearBackground": "Limpar fundo",
+		"colorPalette": "Paleta de cores",
 		"invalidImageType": "Tipo de imagem inválido",
 		"background": "Fundo",
 		"typeText": "Texto",
 		"active": "Ativo",
 		"color": "Cor",
-		"blurShapeFreehand": "Mão Livre",
-		"arrowDirection": "Direção da Seta",
+		"blurShapeFreehand": "Mão livre",
+		"arrowDirection": "Direção da seta",
 		"blurTypeMosaic": "Mosaico",
-		"colorWheel": "Roda de Cores",
-		"textColor": "Cor do Texto",
-		"title": "Configurações de Anotação",
-		"blurType": "Tipo de Desfoque",
+		"colorWheel": "Roda de cores",
+		"textColor": "Cor do texto",
+		"title": "Configurações de anotação",
+		"blurType": "Tipo de desfoque",
 		"typeBlur": "Desfoque",
-		"blurIntensity": "Intensidade do Desfoque",
+		"blurIntensity": "Intensidade do desfoque",
 		"selectStyle": "Selecionar estilo",
-		"textContent": "Conteúdo do Texto",
+		"textContent": "Conteúdo do texto",
 		"typeArrow": "Seta",
 		"none": "Nenhum",
-		"blurColor": "Cor do Desfoque",
-		"customFonts": "Fontes Personalizadas",
+		"blurColor": "Cor do desfoque",
+		"customFonts": "Fontes personalizadas",
 		"imageUploadSuccess": "Imagem enviada com sucesso!",
 		"type": "Tipo",
-		"arrowColor": "Cor da Seta",
+		"arrowColor": "Cor da seta",
 		"textPlaceholder": "Digite seu texto...",
 		"imageFormatsOnly": "Por favor, envie um arquivo de imagem JPG, PNG, GIF ou WebP.",
-		"blurShape": "Formato do Desfoque",
-		"uploadImage": "Enviar Imagem",
+		"blurShape": "Formato do desfoque",
+		"uploadImage": "Enviar imagem",
 		"blurTypeBlur": "Gaussiano",
 		"tipTabCycle": "Use Tab para alternar entre itens sobrepostos.",
-		"shortcutsAndTips": "Atalhos e Dicas",
-		"deleteAnnotation": "Excluir Anotação",
-		"fontStyle": "Estilo da Fonte",
+		"shortcutsAndTips": "Atalhos e dicas",
+		"deleteAnnotation": "Excluir anotação",
+		"fontStyle": "Estilo da fonte",
 		"defaultText": "Olá",
-		"mosaicBlockSize": "Tamanho do Bloco do Mosaico",
+		"mosaicBlockSize": "Tamanho do bloco do mosaico",
 		"blurColorBlack": "Preto",
-		"strokeWidth": "Largura do Traço: {{width}}px",
+		"strokeWidth": "Largura do traço: {{width}}px",
 		"blurShapeOval": "Oval",
 		"blurColorWhite": "Branco",
 		"tipMovePlayhead": "Mova o cursor de reprodução para a seção de anotação sobreposta e selecione um item.",
@@ -104,7 +104,7 @@
 		"shadow": "Sombra",
 		"off": "desativado",
 		"on": "ativado",
-		"blurBg": "Desfocar Fundo",
+		"blurBg": "Desfocar fundo",
 		"help": "Estilo do quadro da gravação: desfoque de fundo, sombra, desfoque de movimento, raio dos cantos e margem em volta do vídeo.",
 		"fitClipOne": "{{count}} clipe",
 		"formatAuto": "Auto",
@@ -118,7 +118,7 @@
 		"motion": "Movimento",
 		"padding": "Espaçamento",
 		"format": "Formato",
-		"motionBlur": "Desfoque de Movimento",
+		"motionBlur": "Desfoque de movimento",
 		"depthOfField": "Profundidade de campo",
 		"depthOfFieldTip": "Desfoca o lado distante de uma tela inclinada",
 		"roundness": "Arredondamento",
@@ -250,20 +250,26 @@
 		"help": "Ajuda"
 	},
 	"speed": {
-		"deleteRegion": "Excluir Região de Velocidade",
+		"deleteRegion": "Excluir região de velocidade",
 		"maxSpeedError": "A velocidade não pode ser superior a {{max}}×",
 		"selectRegion": "Selecione uma região de velocidade para ajustar",
-		"playbackSpeed": "Velocidade de Reprodução",
-		"customPlaybackSpeed": "Velocidade Personalizada",
+		"playbackSpeed": "Velocidade de reprodução",
+		"customPlaybackSpeed": "Velocidade personalizada",
 		"previewFrameSteppingHint": "Acima de {{native}}×, a prévia avança quadro a quadro e sem som. A exportação não é afetada."
 	},
 	"gifSettings": {
-		"frameRate": "Taxa de Quadros do GIF",
+		"frameRate": "Taxa de quadros do GIF",
 		"loop": "Loop no GIF",
-		"size": "Tamanho do GIF"
+		"size": "Tamanho do GIF",
+		"sizes": {
+			"small": "Pequeno (480p)",
+			"medium": "Médio (720p)",
+			"large": "Grande (1080p)",
+			"original": "Original"
+		}
 	},
 	"exportQuality": {
-		"title": "Qualidade de Exportação",
+		"title": "Qualidade de exportação",
 		"low": "Baixa",
 		"high": "Alta",
 		"medium": "Média"
@@ -282,7 +288,7 @@
 	},
 	"layout": {
 		"help": "Como a webcam é composta com a tela: picture-in-picture, pilha vertical, quadro duplo, formato, arredondamento, tamanho, posição e espelhamento.",
-		"mirrorWebcam": "Espelhar Webcam",
+		"mirrorWebcam": "Espelhar webcam",
 		"webcamFraming": "Enquadramento da webcam",
 		"webcamFramingDrag": "Arraste o quadro para movê-lo, ou um canto para dar zoom.",
 		"shapes": {
@@ -309,25 +315,25 @@
 		},
 		"webcamBlurIntensity": "Intensidade do desfoque",
 		"preset": "Predefinição",
-		"webcamSize": "Tamanho da Webcam",
-		"dualFrame": "Quadro Duplo",
-		"verticalStack": "Empilhamento Vertical",
-		"pictureInPicture": "Picture in Picture",
-		"webcamShape": "Formato da Câmera",
+		"webcamSize": "Tamanho da webcam",
+		"dualFrame": "Quadro duplo",
+		"verticalStack": "Empilhamento vertical",
+		"pictureInPicture": "Picture in picture",
+		"webcamShape": "Formato da câmera",
 		"reactiveWebcam": "Encolher ao ampliar",
 		"reactiveWebcamTip": "A câmera diminui enquanto o vídeo está ampliado",
 		"webcamBackground": "Plano de fundo da câmera",
-		"helpNoWebcam": "Este projeto não tem câmera, então os controles de layout estão desativados e a predefinição mostra “Sem Webcam”. Seu layout salvo é mantido para quando você adicionar uma câmera.",
+		"helpNoWebcam": "Este projeto não tem câmera, então os controles de layout estão desativados e a predefinição mostra “Sem webcam”. Seu layout salvo é mantido para quando você adicionar uma câmera.",
 		"title": "Layout da câmera",
-		"noWebcam": "Sem Webcam"
+		"noWebcam": "Sem webcam"
 	},
 	"textAnimation": {
-		"slideLeft": "Deslizar à Esquerda",
+		"slideLeft": "Deslizar à esquerda",
 		"pulse": "Pulsar",
-		"typewriter": "Máquina de Escrever",
+		"typewriter": "Máquina de escrever",
 		"selectAnimation": "Selecionar animação",
 		"fade": "Esmaecer",
-		"title": "Animação de Texto",
+		"title": "Animação de texto",
 		"none": "Nenhuma",
 		"pop": "Aparecer",
 		"rise": "Subir"
@@ -350,22 +356,22 @@
 		"dragInstruction": "Arraste cada lado para ajustar a área de corte",
 		"done": "Concluir",
 		"ratio": "Proporção",
-		"cropVideo": "Cortar Vídeo",
+		"cropVideo": "Cortar vídeo",
 		"lockAspectRatio": "Bloquear proporção"
 	},
 	"zoom": {
 		"position": {
 			"y": "Y (%)",
 			"hint": "0 = mais à esquerda / topo, 100 = mais à direita / inferior",
-			"title": "Posição do Foco",
+			"title": "Posição do foco",
 			"x": "X (%)"
 		},
-		"deleteZoom": "Excluir Zoom",
+		"deleteZoom": "Excluir zoom",
 		"focusMode": {
-			"lockedDisclaimer": "Controlado pelo interruptor global de Foco Automático na linha do tempo. Desative-o para definir o modo de foco por zoom.",
+			"lockedDisclaimer": "Controlado pelo interruptor global de foco automático na linha do tempo. Desative-o para definir o modo de foco por zoom.",
 			"auto": "Automático",
 			"manual": "Manual",
-			"title": "Modo de Foco"
+			"title": "Modo de foco"
 		},
 		"camera": {
 			"title": "Câmera 3D",
@@ -376,8 +382,8 @@
 				"orbit": "Órbita 3D"
 			}
 		},
-		"level": "Nível de Zoom",
-		"customScale": "Zoom Personalizado",
+		"level": "Nível de zoom",
+		"customScale": "Zoom personalizado",
 		"customScaleRange": "O zoom vai de {{min}}× a {{max}}×",
 		"selectRegion": "Selecione uma região de zoom para ajustar",
 		"cursor": {
@@ -398,14 +404,14 @@
 		"title": "Idioma"
 	},
 	"project": {
-		"new": "Novo Projeto",
-		"load": "Carregar Projeto",
-		"save": "Salvar Projeto"
+		"new": "Novo projeto",
+		"load": "Carregar projeto",
+		"save": "Salvar projeto"
 	},
 	"support": {
-		"starOnGithub": "Dar Estrela no GitHub",
-		"saveDiagnostics": "Salvar Diagnósticos",
-		"reportBug": "Relatar Bug"
+		"starOnGithub": "Dar estrela no GitHub",
+		"saveDiagnostics": "Salvar diagnósticos",
+		"reportBug": "Relatar bug"
 	},
 	"cursor": {
 		"smoothing": "Suavização",
@@ -447,11 +453,11 @@
 	},
 	"export": {
 		"gifButton": "Exportar GIF",
-		"chooseSaveLocation": "Escolher Local para Salvar",
-		"videoButton": "Exportar Vídeo"
+		"chooseSaveLocation": "Escolher local para salvar",
+		"videoButton": "Exportar vídeo"
 	},
 	"trim": {
-		"deleteRegion": "Excluir Região de Recorte"
+		"deleteRegion": "Excluir região de recorte"
 	},
 	"textPlate": {
 		"none": "Nenhuma",

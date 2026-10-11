@@ -260,7 +260,13 @@
 	"gifSettings": {
 		"frameRate": "Snímkový kmitočet GIF",
 		"loop": "Opakovat GIF",
-		"size": "Velikost GIF"
+		"size": "Velikost GIF",
+		"sizes": {
+			"small": "Small (480p)",
+			"medium": "Medium (720p)",
+			"large": "Large (1080p)",
+			"original": "Original"
+		}
 	},
 	"exportQuality": {
 		"title": "Rozlišení exportu",

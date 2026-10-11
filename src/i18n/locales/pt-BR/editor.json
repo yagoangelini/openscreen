@@ -1,6 +1,6 @@
 {
 	"newRecording": {
-		"title": "Voltar ao Gravador",
+		"title": "Voltar ao gravador",
 		"description": "Sua sessão atual foi salva.",
 		"cancel": "Cancelar",
 		"confirm": "Confirmar"
@@ -65,7 +65,11 @@
 		"audioDeviceLostMicrophone": "O microfone desconectou durante a gravação e não voltou: o resto do take ficou sem voz.",
 		"audioDeviceLostSystemAudio": "O dispositivo de áudio do sistema desconectou durante a gravação e não voltou: o resto do take ficou sem o som do computador.",
 		"audioDeviceBackMicrophone": "O microfone desconectou e voltou: cerca de {{seconds}} s do take ficaram sem voz.",
-		"audioDeviceBackSystemAudio": "O dispositivo de áudio do sistema desconectou e voltou: cerca de {{seconds}} s do take ficaram sem o som do computador."
+		"audioDeviceBackSystemAudio": "O dispositivo de áudio do sistema desconectou e voltou: cerca de {{seconds}} s do take ficaram sem o som do computador.",
+		"stopFailed": "Não foi possível salvar a gravação",
+		"webcamNotSaved": "A câmera não foi salva. A gravação da tela foi mantida.",
+		"pauseFailed": "Não foi possível pausar ou retomar a gravação",
+		"startFailed": "Não foi possível iniciar a gravação"
 	},
 	"emptyState": {
 		"title": "Nenhum projeto aberto",
@@ -80,9 +84,9 @@
 		"dragDropHint": "ou arraste e solte um arquivo de projeto .openscreen aqui",
 		"dropOverlay": "Solte o arquivo de projeto para abrir",
 		"dropErrors": {
-			"unsupportedFormatTitle": "Formato Não Suportado",
-			"unsupportedFormatMessage": "Somente arquivos de projeto .openscreen podem ser soltos aqui. Para importar um vídeo, use o botão \"Importar Arquivo de Vídeo…\" nesta tela.",
-			"couldNotOpenTitle": "Não Foi Possível Abrir o Arquivo",
+			"unsupportedFormatTitle": "Formato não suportado",
+			"unsupportedFormatMessage": "Somente arquivos de projeto .openscreen podem ser soltos aqui. Para importar um vídeo, use o botão \"Importar arquivo de vídeo…\" nesta tela.",
+			"couldNotOpenTitle": "Não foi possível abrir o arquivo",
 			"couldNotOpenMessage": "O arquivo de projeto não pôde ser aberto. O vídeo referenciado pode ter sido movido ou excluído."
 		}
 	},
@@ -177,7 +181,7 @@
 		"added": "{{label}} adicionado",
 		"addToTimeline": "Adicionar à linha do tempo",
 		"addedToTimeline": "{{label}} adicionado à linha do tempo",
-		"sourceTranscript": "Transcrição da Fonte",
+		"sourceTranscript": "Transcrição da fonte",
 		"close": "Fechar",
 		"transcriptReady": "Transcrição pronta",
 		"regenerateAs": "Regenerar em",
@@ -249,7 +253,8 @@
 		"confirmCloseTitle": "Cancelar a exportação?",
 		"confirmCloseBody": "Fechar interrompe a exportação, e o vídeo não será salvo.",
 		"keepExporting": "Continuar exportando",
-		"cancelAndClose": "Cancelar e fechar"
+		"cancelAndClose": "Cancelar e fechar",
+		"cancelFailed": "Não foi possível cancelar a exportação"
 	},
 	"inspector": {
 		"resetFocusPoint": "Redefinir ponto de foco",
@@ -406,7 +411,8 @@
 			"description": "Não foi possível decodificar o vídeo. O arquivo pode estar danificado, ainda sendo gravado ou não estar mais onde o projeto espera — seu projeto continua intacto.",
 			"retry": "Tentar novamente",
 			"detail": "Detalhes: {{detail}}"
-		}
+		},
+		"attachVideo": "Adicione um vídeo para ver a prévia."
 	},
 	"annotationOverlay": {
 		"imageAlt": "Anotação",
@@ -441,7 +447,16 @@
 		"disconnect": "Desconectar",
 		"cancel": "Cancelar",
 		"save": "Salvar",
-		"saveAndUse": "Salvar e usar"
+		"saveAndUse": "Salvar e usar",
+		"effort": {
+			"none": "Nenhum",
+			"minimal": "Mínimo",
+			"low": "Baixo",
+			"medium": "Médio",
+			"high": "Alto",
+			"xhigh": "Muito alto",
+			"on": "Ligado"
+		}
 	},
 	"mcpServer": {
 		"title": "Servidor MCP",
@@ -488,7 +503,9 @@
 		"cameraCheckFailed": "Não foi possível procurar uma gravação de câmera junto de {{name}}",
 		"sensitiveBlurred": "Áreas sensíveis desfocadas automaticamente: {{count}}. Confira na timeline.",
 		"sensitiveScanFailed": "O desfoque automático não rodou neste take: nada na tela foi desfocado.",
-		"sensitiveScanPartial": "O desfoque automático só verificou este take até {{covered}}. Confira o resto à mão."
+		"sensitiveScanPartial": "O desfoque automático só verificou este take até {{covered}}. Confira o resto à mão.",
+		"projectOpened": "Projeto aberto",
+		"legacyProjectOpened": "Projeto antigo convertido e aberto"
 	},
 	"exportPipeline": {
 		"quality1440p": "1440p",
@@ -560,5 +577,10 @@
 		"save": "Salvar legendas (.srt)",
 		"saved": "Legendas salvas: {{path}}",
 		"failed": "Não foi possível salvar as legendas"
+	},
+	"projectNames": {
+		"recording": "Gravação {{date}}",
+		"project": "Projeto {{date}}",
+		"asset": "Gravação"
 	}
 }

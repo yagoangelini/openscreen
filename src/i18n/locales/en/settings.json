@@ -260,7 +260,13 @@
 	"gifSettings": {
 		"frameRate": "GIF Frame Rate",
 		"loop": "Loop GIF",
-		"size": "GIF size"
+		"size": "GIF size",
+		"sizes": {
+			"small": "Small (480p)",
+			"medium": "Medium (720p)",
+			"large": "Large (1080p)",
+			"original": "Original"
+		}
 	},
 	"exportQuality": {
 		"title": "Export resolution",

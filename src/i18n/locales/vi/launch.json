@@ -40,7 +40,8 @@
 	"audio": {
 		"systemAudio": "Âm thanh hệ thống",
 		"microphone": "Micro",
-		"inputDevice": "Thiết bị đầu vào"
+		"inputDevice": "Thiết bị đầu vào",
+		"unlabeledMicrophone": "Microphone {{id}}"
 	},
 	"webcam": {
 		"searching": "Đang tìm kiếm...",
@@ -51,7 +52,8 @@
 		"quality": "Chất lượng camera",
 		"quality1080p": "1080p",
 		"quality1440p": "1440p",
-		"quality2160p": "4K"
+		"quality2160p": "4K",
+		"unlabeledCamera": "Camera {{id}}"
 	},
 	"sourceSelector": {
 		"loading": "Đang tải nguồn...",

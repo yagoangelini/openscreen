@@ -89,7 +89,8 @@
 		"openscreenProject": "OpenScreen 프로젝트",
 		"allFiles": "모든 파일",
 		"chooseRecordingsFolder": "새 녹화를 저장할 폴더 선택",
-		"selectRecordingsFolder": "녹화 폴더 선택"
+		"selectRecordingsFolder": "녹화 폴더 선택",
+		"saveDiagnostics": "Save Diagnostic File"
 	},
 	"recovery": {
 		"title": "녹화 복구",
@@ -116,5 +117,10 @@
 		"message": "A recording is in progress. Stop it now and open it in the editor?",
 		"stopAndOpen": "Stop and open in the editor",
 		"keepRecording": "Keep recording"
+	},
+	"ai": {
+		"noProvider": "No AI provider is configured. Connect one in the agent settings first.",
+		"noApiKey": "No API key for {{provider}}. Add one in the agent settings.",
+		"conversationTitle": "Conversation {{index}}"
 	}
 }

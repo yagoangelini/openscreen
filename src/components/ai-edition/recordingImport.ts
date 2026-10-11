@@ -15,6 +15,7 @@
 // after this point is the CLI runner, which lives in its own process.
 
 import type { CursorTelemetryPoint } from "@/components/video-editor/types";
+import { toastText } from "@/i18n/toastText";
 import { createId } from "@/lib/ai-edition/document/ids";
 import { clipAwaitsProbedDuration } from "@/lib/ai-edition/document/timeline";
 import {
@@ -520,8 +521,12 @@ export async function importPendingRecording(
 	const cursorCaptureMode = result.success ? result.session?.cursorCaptureMode : undefined;
 	const warning = result.success ? result.warning : undefined;
 
-	const label = screenPath.split(/[\\/]/).pop() || "Recording";
-	await useProjectStore.getState().createProject(`Recording ${new Date().toLocaleString()}`);
+	const label = screenPath.split(/[\\/]/).pop() || toastText("editor", "projectNames.asset");
+	await useProjectStore
+		.getState()
+		.createProject(
+			toastText("editor", "projectNames.recording", { date: new Date().toLocaleString() }),
+		);
 	await useProjectStore.getState().addAsset(screenPath, label);
 	// Mark before the video element can fire `loadedmetadata`. The asset path is
 	// already on the document; waiting until the 60s seed finished let the first

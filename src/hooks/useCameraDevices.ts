@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { toastText } from "@/i18n/toastText";
 
 export interface CameraDevice {
 	deviceId: string;
@@ -65,7 +66,9 @@ export function useCameraDevices(
 					.filter((device) => device.kind === "videoinput")
 					.map((device) => ({
 						deviceId: device.deviceId,
-						label: device.label || `Camera ${device.deviceId.slice(0, 8)}`,
+						label:
+							device.label ||
+							toastText("launch", "webcam.unlabeledCamera", { id: device.deviceId.slice(0, 8) }),
 						groupId: device.groupId,
 					}));
 

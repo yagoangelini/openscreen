@@ -260,7 +260,13 @@
 	"gifSettings": {
 		"frameRate": "GIF 帧率",
 		"loop": "循环 GIF",
-		"size": "GIF 尺寸"
+		"size": "GIF 尺寸",
+		"sizes": {
+			"small": "Small (480p)",
+			"medium": "Medium (720p)",
+			"large": "Large (1080p)",
+			"original": "Original"
+		}
 	},
 	"exportQuality": {
 		"title": "导出分辨率",

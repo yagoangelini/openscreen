@@ -260,7 +260,13 @@
 	"gifSettings": {
 		"frameRate": "GIF Kare Hızı",
 		"loop": "GIF Döngüsü",
-		"size": "GIF Boyutu"
+		"size": "GIF Boyutu",
+		"sizes": {
+			"small": "Small (480p)",
+			"medium": "Medium (720p)",
+			"large": "Large (1080p)",
+			"original": "Original"
+		}
 	},
 	"exportQuality": {
 		"title": "Dışa aktarma çözünürlüğü",

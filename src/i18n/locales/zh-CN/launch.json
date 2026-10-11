@@ -40,7 +40,8 @@
 	"audio": {
 		"systemAudio": "系统音频",
 		"microphone": "麦克风",
-		"inputDevice": "输入设备"
+		"inputDevice": "输入设备",
+		"unlabeledMicrophone": "Microphone {{id}}"
 	},
 	"webcam": {
 		"searching": "正在搜索...",
@@ -51,7 +52,8 @@
 		"quality": "摄像头画质",
 		"quality1080p": "1080p",
 		"quality1440p": "1440p",
-		"quality2160p": "4K"
+		"quality2160p": "4K",
+		"unlabeledCamera": "Camera {{id}}"
 	},
 	"cursor": {
 		"name": "可编辑光标",

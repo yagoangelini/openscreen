@@ -65,7 +65,11 @@
 		"audioDeviceLostMicrophone": "Il microfono si è scollegato durante la registrazione e non è tornato: il resto della ripresa non ha voce.",
 		"audioDeviceLostSystemAudio": "Il dispositivo audio di sistema si è scollegato durante la registrazione e non è tornato: il resto della ripresa non ha l'audio del computer.",
 		"audioDeviceBackMicrophone": "Il microfono si è scollegato ed è tornato: circa {{seconds}} s della ripresa non hanno voce.",
-		"audioDeviceBackSystemAudio": "Il dispositivo audio di sistema si è scollegato ed è tornato: circa {{seconds}} s della ripresa non hanno l'audio del computer."
+		"audioDeviceBackSystemAudio": "Il dispositivo audio di sistema si è scollegato ed è tornato: circa {{seconds}} s della ripresa non hanno l'audio del computer.",
+		"stopFailed": "Couldn't save the recording",
+		"webcamNotSaved": "Camera not saved. The screen recording was kept.",
+		"pauseFailed": "Couldn't pause or resume the recording",
+		"startFailed": "Couldn't start the recording"
 	},
 	"emptyState": {
 		"title": "Nessun progetto aperto",
@@ -249,7 +253,8 @@
 		"confirmCloseTitle": "Annullare l'esportazione?",
 		"confirmCloseBody": "Chiudere interrompe l'esportazione e il video non verrà salvato.",
 		"keepExporting": "Continua a esportare",
-		"cancelAndClose": "Annulla e chiudi"
+		"cancelAndClose": "Annulla e chiudi",
+		"cancelFailed": "Couldn't cancel the export"
 	},
 	"inspector": {
 		"resetFocusPoint": "Reimposta punto di messa a fuoco",
@@ -406,7 +411,8 @@
 			"description": "Non è stato possibile decodificare il video. Il file potrebbe essere danneggiato, ancora in scrittura o non più dove il progetto lo cerca: il progetto è intatto.",
 			"retry": "Riprova",
 			"detail": "Dettagli: {{detail}}"
-		}
+		},
+		"attachVideo": "Attach a video to start previewing."
 	},
 	"annotationOverlay": {
 		"imageAlt": "Annotazione",
@@ -441,7 +447,16 @@
 		"disconnect": "Disconnetti",
 		"cancel": "Annulla",
 		"save": "Salva",
-		"saveAndUse": "Salva e usa"
+		"saveAndUse": "Salva e usa",
+		"effort": {
+			"none": "None",
+			"minimal": "Minimal",
+			"low": "Low",
+			"medium": "Medium",
+			"high": "High",
+			"xhigh": "Extra high",
+			"on": "On"
+		}
 	},
 	"mcpServer": {
 		"title": "Server MCP",
@@ -488,7 +503,9 @@
 		"cameraCheckFailed": "Impossibile cercare una registrazione della fotocamera vicino a {{name}}",
 		"sensitiveBlurred": "Aree sensibili sfocate automaticamente: {{count}}. Controllale sulla timeline.",
 		"sensitiveScanFailed": "La sfocatura automatica non è stata eseguita su questa registrazione: non è stato sfocato nulla.",
-		"sensitiveScanPartial": "La sfocatura automatica ha controllato questa registrazione solo fino a {{covered}}. Controlla il resto a mano."
+		"sensitiveScanPartial": "La sfocatura automatica ha controllato questa registrazione solo fino a {{covered}}. Controlla il resto a mano.",
+		"projectOpened": "Project opened",
+		"legacyProjectOpened": "Legacy project migrated and loaded"
 	},
 	"exportPipeline": {
 		"quality1440p": "1440p",
@@ -560,5 +577,10 @@
 		"save": "Salva sottotitoli (.srt)",
 		"saved": "Sottotitoli salvati: {{path}}",
 		"failed": "Impossibile salvare i sottotitoli"
+	},
+	"projectNames": {
+		"recording": "Recording {{date}}",
+		"project": "Project {{date}}",
+		"asset": "Recording"
 	}
 }

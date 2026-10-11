@@ -357,7 +357,7 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 			const message = err instanceof Error ? err.message : String(err);
 			setError(message);
 			setPhase("error");
-			toast.error(message);
+			toast.error(t("exportDialog.cancelFailed"), { description: message });
 		}
 	};
 
@@ -554,7 +554,7 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 
 	const isBusy = phase === "rendering" || phase === "writing" || phase === "configuring";
 	const pct = progress?.percentage ?? 0;
-	const gifSizeLabel = GIF_SIZE_PRESETS[gifSize].label;
+	const gifSizeLabel = ts(`gifSettings.sizes.${gifSize}`);
 
 	return (
 		<ModalShell
@@ -700,7 +700,7 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 										onClick={() => setGifSize(s)}
 										style={segStyle(gifSize === s)}
 									>
-										{GIF_SIZE_PRESETS[s].label}
+										{ts(`gifSettings.sizes.${s}`)}
 									</button>
 								))}
 							</div>

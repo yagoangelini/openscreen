@@ -89,7 +89,8 @@
 		"openscreenProject": "Projekt OpenScreen",
 		"allFiles": "Všechny soubory",
 		"chooseRecordingsFolder": "Vyberte složku pro nové nahrávky",
-		"selectRecordingsFolder": "Vybrat složku pro nahrávky"
+		"selectRecordingsFolder": "Vybrat složku pro nahrávky",
+		"saveDiagnostics": "Save Diagnostic File"
 	},
 	"recovery": {
 		"title": "Obnovit nahrávku",
@@ -116,5 +117,10 @@
 		"message": "A recording is in progress. Stop it now and open it in the editor?",
 		"stopAndOpen": "Stop and open in the editor",
 		"keepRecording": "Keep recording"
+	},
+	"ai": {
+		"noProvider": "No AI provider is configured. Connect one in the agent settings first.",
+		"noApiKey": "No API key for {{provider}}. Add one in the agent settings.",
+		"conversationTitle": "Conversation {{index}}"
 	}
 }

@@ -40,7 +40,8 @@
 	"audio": {
 		"systemAudio": "صوت النظام",
 		"microphone": "الميكروفون",
-		"inputDevice": "جهاز الإدخال"
+		"inputDevice": "جهاز الإدخال",
+		"unlabeledMicrophone": "Microphone {{id}}"
 	},
 	"webcam": {
 		"searching": "جاري البحث...",
@@ -51,7 +52,8 @@
 		"quality": "جودة الكاميرا",
 		"quality1080p": "1080p",
 		"quality1440p": "1440p",
-		"quality2160p": "4K"
+		"quality2160p": "4K",
+		"unlabeledCamera": "Camera {{id}}"
 	},
 	"sourceSelector": {
 		"loading": "جاري تحميل المصادر...",

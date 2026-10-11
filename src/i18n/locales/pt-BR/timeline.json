@@ -3,11 +3,11 @@
 		"addZoom": "Adicionar um zoom no momento atual",
 		"autoFocusAll": "Foco automático para todos os zooms",
 		"autoFocusAllTip": "Todos os zooms seguem o cursor. Desativado: você escolhe o foco de cada zoom.",
-		"clearTimeline": "Remover todos os zooms, recortes, velocidades, anotações e Câmera em Tela Cheia. Clipes, áudio e legendas permanecem.",
+		"clearTimeline": "Remover todos os zooms, recortes, velocidades, anotações e câmera em tela cheia. Clipes, áudio e legendas permanecem.",
 		"addTrim": "Adicionar um recorte: remove uma parte do vídeo no momento atual",
 		"addAnnotation": "Adicionar texto, seta, imagem ou desfoque no momento atual",
 		"addSpeed": "Adicionar uma mudança de velocidade no momento atual",
-		"addCameraFullscreen": "Adicionar Câmera em Tela Cheia: mostra a câmera em tela cheia no momento atual",
+		"addCameraFullscreen": "Adicionar câmera em tela cheia: mostra a câmera em tela cheia no momento atual",
 		"splitCamera": "Dividir a câmera no momento atual: cada pedaço passa a ser editado separadamente"
 	},
 	"hints": {
@@ -16,7 +16,7 @@
 		"pressAnnotation": "Pressione {{key}} para adicionar anotação",
 		"pressAudio": "Pressione {{audioKey}} para adicionar áudio, {{voiceoverKey}} para gravar uma narração",
 		"pressSpeed": "Pressione {{key}} para adicionar velocidade",
-		"pressCameraFullscreen": "Pressione {{key}} para adicionar um segmento de Câmera em Tela Cheia"
+		"pressCameraFullscreen": "Pressione {{key}} para adicionar um segmento de câmera em tela cheia"
 	},
 	"labels": {
 		"pan": "Mover",
@@ -31,8 +31,8 @@
 		"annotationItem": "Anotação",
 		"imageItem": "Imagem",
 		"emptyText": "Texto vazio",
-		"cameraFullscreen": "Câmera em Tela Cheia",
-		"cameraFullscreenItem": "Câmera em Tela Cheia {{index}}",
+		"cameraFullscreen": "Câmera em tela cheia",
+		"cameraFullscreenItem": "Câmera em tela cheia {{index}}",
 		"marker": "Marcador em {{time}}",
 		"cameraTrack": "Câmera",
 		"cameraPip": "PiP",
@@ -48,7 +48,7 @@
 		"pan": "Panorâmica: a visão vai direto para o próximo zoom"
 	},
 	"emptyState": {
-		"noVideo": "Nenhum Vídeo Carregado",
+		"noVideo": "Nenhum vídeo carregado",
 		"dragAndDrop": "Arraste e solte um vídeo para começar a editar"
 	},
 	"errors": {
@@ -67,8 +67,8 @@
 		"trimExistsAtLocation": "Já existe um recorte neste local ou não há espaço suficiente disponível.",
 		"cannotPlaceSpeed": "Não é possível colocar velocidade aqui",
 		"speedExistsAtLocation": "Já existe uma região de velocidade neste local ou não há espaço suficiente disponível.",
-		"cannotPlaceCameraFullscreen": "Não é possível colocar Câmera em Tela Cheia aqui",
-		"cameraFullscreenExistsAtLocation": "Já existe um segmento de Câmera em Tela Cheia neste local ou não há espaço suficiente disponível."
+		"cannotPlaceCameraFullscreen": "Não é possível colocar câmera em tela cheia aqui",
+		"cameraFullscreenExistsAtLocation": "Já existe um segmento de câmera em tela cheia neste local ou não há espaço suficiente disponível."
 	},
 	"success": {
 		"addedZoomSuggestions": "Adicionada {{count}} sugestão de zoom baseada no cursor",

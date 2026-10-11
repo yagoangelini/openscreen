@@ -89,7 +89,8 @@
 		"openscreenProject": "Progetto OpenScreen",
 		"allFiles": "Tutti i file",
 		"chooseRecordingsFolder": "Scegli la cartella per le nuove registrazioni",
-		"selectRecordingsFolder": "Seleziona cartella registrazioni"
+		"selectRecordingsFolder": "Seleziona cartella registrazioni",
+		"saveDiagnostics": "Save Diagnostic File"
 	},
 	"recovery": {
 		"title": "Recupera registrazione",
@@ -116,5 +117,10 @@
 		"message": "A recording is in progress. Stop it now and open it in the editor?",
 		"stopAndOpen": "Stop and open in the editor",
 		"keepRecording": "Keep recording"
+	},
+	"ai": {
+		"noProvider": "No AI provider is configured. Connect one in the agent settings first.",
+		"noApiKey": "No API key for {{provider}}. Add one in the agent settings.",
+		"conversationTitle": "Conversation {{index}}"
 	}
 }

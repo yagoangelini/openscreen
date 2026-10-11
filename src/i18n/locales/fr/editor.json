@@ -63,7 +63,11 @@
 		"audioDeviceLostMicrophone": "Le micro s'est déconnecté pendant l'enregistrement et n'est pas revenu : le reste de la prise n'a pas de voix.",
 		"audioDeviceLostSystemAudio": "Le périphérique audio système s'est déconnecté pendant l'enregistrement et n'est pas revenu : le reste de la prise n'a pas le son de l'ordinateur.",
 		"audioDeviceBackMicrophone": "Le micro s'est déconnecté puis est revenu : environ {{seconds}} s de la prise n'ont pas de voix.",
-		"audioDeviceBackSystemAudio": "Le périphérique audio système s'est déconnecté puis est revenu : environ {{seconds}} s de la prise n'ont pas le son de l'ordinateur."
+		"audioDeviceBackSystemAudio": "Le périphérique audio système s'est déconnecté puis est revenu : environ {{seconds}} s de la prise n'ont pas le son de l'ordinateur.",
+		"stopFailed": "Couldn't save the recording",
+		"webcamNotSaved": "Camera not saved. The screen recording was kept.",
+		"pauseFailed": "Couldn't pause or resume the recording",
+		"startFailed": "Couldn't start the recording"
 	},
 	"loadingVideo": "Chargement de la vidéo...",
 	"loadingEditor": "Chargement de l'éditeur...",
@@ -249,7 +253,8 @@
 		"confirmCloseTitle": "Annuler l'export ?",
 		"confirmCloseBody": "Fermer arrête l'export, et la vidéo ne sera pas enregistrée.",
 		"keepExporting": "Continuer l'export",
-		"cancelAndClose": "Annuler et fermer"
+		"cancelAndClose": "Annuler et fermer",
+		"cancelFailed": "Couldn't cancel the export"
 	},
 	"inspector": {
 		"resetFocusPoint": "Réinitialiser le point de focus",
@@ -406,7 +411,8 @@
 			"description": "La vidéo n'a pas pu être décodée. Le fichier est peut-être endommagé, en cours d'écriture, ou plus à l'emplacement attendu — votre projet, lui, est intact.",
 			"retry": "Réessayer",
 			"detail": "Détails : {{detail}}"
-		}
+		},
+		"attachVideo": "Attach a video to start previewing."
 	},
 	"annotationOverlay": {
 		"imageAlt": "Annotation",
@@ -441,7 +447,16 @@
 		"disconnect": "Déconnecter",
 		"cancel": "Annuler",
 		"save": "Enregistrer",
-		"saveAndUse": "Enregistrer et utiliser"
+		"saveAndUse": "Enregistrer et utiliser",
+		"effort": {
+			"none": "None",
+			"minimal": "Minimal",
+			"low": "Low",
+			"medium": "Medium",
+			"high": "High",
+			"xhigh": "Extra high",
+			"on": "On"
+		}
 	},
 	"mcpServer": {
 		"title": "Serveur MCP",
@@ -488,7 +503,9 @@
 		"cameraCheckFailed": "Impossible de chercher un enregistrement caméra près de {{name}}",
 		"sensitiveBlurred": "Zones sensibles floutées automatiquement : {{count}}. Vérifiez-les sur la timeline.",
 		"sensitiveScanFailed": "Le floutage automatique n'a pas tourné sur cette prise : rien à l'écran n'a été flouté.",
-		"sensitiveScanPartial": "Le floutage automatique n'a vérifié cette prise que jusqu'à {{covered}}. Vérifiez la suite à la main."
+		"sensitiveScanPartial": "Le floutage automatique n'a vérifié cette prise que jusqu'à {{covered}}. Vérifiez la suite à la main.",
+		"projectOpened": "Project opened",
+		"legacyProjectOpened": "Legacy project migrated and loaded"
 	},
 	"exportPipeline": {
 		"quality1440p": "1440p",
@@ -560,5 +577,10 @@
 		"save": "Enregistrer les sous-titres (.srt)",
 		"saved": "Sous-titres enregistrés : {{path}}",
 		"failed": "Impossible d'enregistrer les sous-titres"
+	},
+	"projectNames": {
+		"recording": "Recording {{date}}",
+		"project": "Project {{date}}",
+		"asset": "Recording"
 	}
 }
