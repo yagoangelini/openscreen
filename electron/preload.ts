@@ -305,6 +305,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	startNativeWindowsRecording: (request: NativeWindowsRecordingRequest) => {
 		return ipcRenderer.invoke("start-native-windows-recording", request);
 	},
+	cancelNativeWindowsPendingStart: () => {
+		return ipcRenderer.invoke("cancel-native-windows-pending-start") as Promise<boolean>;
+	},
 	stopNativeWindowsRecording: (discard?: boolean) => {
 		return ipcRenderer.invoke("stop-native-windows-recording", discard);
 	},

@@ -48,9 +48,23 @@ describe("cursor pause and offset", () => {
 		expect(out.samples.map((s) => s.timeMs)).toEqual([100, 2000]);
 	});
 
-	it("moves everything onto the first frame, never before zero", () => {
+	it("moves everything onto the first frame, keeping only the last position before it", () => {
 		const out = shiftCursorTelemetry(data([300, 100, 900]), 400);
-		expect(out.samples.map((s) => s.timeMs)).toEqual([0, 0, 500]);
+		expect(out.samples.map((s) => s.timeMs)).toEqual([0, 500]);
+	});
+
+	it("drops a click made before the first frame, keeping where the cursor was", () => {
+		const out = shiftCursorTelemetry(
+			{
+				...data([]),
+				samples: [sample(1000, { interactionType: "click", cx: 0.2 }), sample(4000)],
+			},
+			3000,
+		);
+		expect(out.samples).toHaveLength(2);
+		expect(out.samples[0]).toMatchObject({ timeMs: 0, cx: 0.2 });
+		expect(out.samples[0].interactionType).toBeUndefined();
+		expect(out.samples[1].timeMs).toBe(1000);
 	});
 });
 

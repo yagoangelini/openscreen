@@ -880,6 +880,8 @@ let nativeWindowsDiskWatch: ReturnType<typeof setInterval> | null = null;
 const NATIVE_WINDOWS_DISK_WATCH_MS = 30_000;
 /** Wall clock of the first captured frame, the zero of the take's media time. */
 let nativeWindowsCaptureStartedAtMs: number | null = null;
+/** Set by a countdown cancelled while the helper was still opening its devices. */
+let nativeWindowsStartCancelled = false;
 /** Paused time so far, kept apart from the cursor's ranges, which only exist in editable mode. */
 let nativeWindowsPausedTotalMs = 0;
 let nativeWindowsPausedSinceMs: number | null = null;
@@ -1424,8 +1426,22 @@ async function resolveDirectShowWebcamClsid(deviceName?: string) {
 	return clsid;
 }
 
+/**
+ * The registry read, started while the countdown runs so the take's start doesn't wait on a
+ * reg.exe spawn (100-200 ms on the first take of a run). Used once: a later lookup reads the
+ * registry again, so a camera plugged in since is found.
+ */
+let directShowRegistryPrefetch: Promise<string> | null = null;
+
+function prefetchDirectShowVideoInputRegistry() {
+	if (process.platform !== "win32" || directShowRegistryPrefetch) return;
+	directShowRegistryPrefetch = queryDirectShowVideoInputRegistry();
+}
+
 async function lookupDirectShowWebcamClsid(deviceName: string) {
-	const output = await queryDirectShowVideoInputRegistry();
+	const prefetched = directShowRegistryPrefetch;
+	directShowRegistryPrefetch = null;
+	const output = await (prefetched ?? queryDirectShowVideoInputRegistry());
 	let current: { friendlyName?: string; clsid?: string } = {};
 	const entries: Array<{ friendlyName?: string; clsid?: string }> = [];
 	for (const rawLine of output.split(/\r?\n/)) {
@@ -1601,12 +1617,20 @@ function completeNativeWindowsCursorPauseRange(endMs = Date.now()) {
 	nativeWindowsPauseStartedAtMs = null;
 }
 
-function waitForNativeWindowsCaptureStart(proc: ChildProcessWithoutNullStreams) {
+/** The helper's `[start-timing] step=… elapsed_ms=…` lines, as "step=ms" pairs. */
+export function readStartTiming(output: string) {
+	return [...output.matchAll(/\[start-timing\] step=(\S+) elapsed_ms=(\d+)/g)]
+		.map((match) => `${match[1]}=${match[2]}`)
+		.join(" ");
+}
+
+function waitForNativeWindowsCaptureStart(proc: ChildProcessWithoutNullStreams, delayMs = 0) {
 	return new Promise<void>((resolve, reject) => {
+		// The countdown the helper waits out is not time it spent failing to start.
 		const timer = setTimeout(() => {
 			cleanup();
 			reject(new Error("Timed out waiting for native Windows capture to start"));
-		}, 12000);
+		}, 12000 + delayMs);
 
 		// Observes only. `attachNativeWindowsCaptureOutputDrain` is the single
 		// writer of `nativeWindowsCaptureOutput` and is registered first, so the
@@ -2685,6 +2709,7 @@ export function registerIpcHandlers(
 	});
 
 	ipcMain.handle("countdown-overlay-show", async (_, value: number, runId: number) => {
+		prefetchDirectShowVideoInputRegistry();
 		const overlayWindow = getCountdownOverlayWindow?.() ?? createCountdownOverlayWindow();
 		if (overlayWindow.isDestroyed()) {
 			return;
@@ -3048,6 +3073,16 @@ export function registerIpcHandlers(
 	ipcMain.handle(
 		"start-native-windows-recording",
 		async (_, request: NativeWindowsRecordingRequest) => {
+			nativeWindowsStartCancelled = false;
+			// The end of the countdown, if the renderer sent one that makes sense: the helper
+			// opens everything now and starts the take then.
+			const startAtEpochMs =
+				typeof request?.startAtEpochMs === "number" &&
+				Number.isFinite(request.startAtEpochMs) &&
+				request.startAtEpochMs > Date.now() &&
+				request.startAtEpochMs < Date.now() + 15_000
+					? request.startAtEpochMs
+					: undefined;
 			try {
 				if (!isWindowsGraphicsCaptureOsSupported()) {
 					return {
@@ -3159,6 +3194,7 @@ export function registerIpcHandlers(
 					hideDesktopIcons:
 						request.source.type === "display" &&
 						appSettings.getSnapshot().recording.hideDesktopIcons,
+					...(startAtEpochMs ? { startAtEpochMs } : {}),
 					outputs: {
 						screenPath: outputPath,
 						webcamPath: webcamOutputPath,
@@ -3251,7 +3287,13 @@ export function registerIpcHandlers(
 					console.warn("[native-wgc] could not journal the take:", error);
 				});
 
-				await Promise.all([waitForNativeWindowsCaptureStart(proc), cursorSamplerReady]);
+				await Promise.all([
+					waitForNativeWindowsCaptureStart(
+						proc,
+						startAtEpochMs ? Math.max(0, startAtEpochMs - Date.now()) : 0,
+					),
+					cursorSamplerReady,
+				]);
 				const captureStartedAtMs = Date.now();
 				nativeWindowsCaptureStartedAtMs = captureStartedAtMs;
 				nativeWindowsCursorOffsetMs =
@@ -3274,6 +3316,10 @@ export function registerIpcHandlers(
 					// Logged only: menus missing from a window take on Windows before 11
 					// 24H2 are a platform limit, not something to put in front of the user.
 					secondaryWindowsApplied: readSecondaryWindowsApplied(nativeWindowsCaptureOutput),
+					// What the user waited through after the countdown, step by step.
+					startTiming: readStartTiming(nativeWindowsCaptureOutput),
+					// How long after the countdown the first frame came (0 or a few ms when on time).
+					...(startAtEpochMs ? { afterCountdownMs: captureStartedAtMs - startAtEpochMs } : {}),
 				});
 
 				const source = selectedSource || { name: "Screen" };
@@ -3345,7 +3391,9 @@ export function registerIpcHandlers(
 					lowDiskSpaceMinutes: freeSpace?.level === "low" ? freeSpace.minutesLeft : null,
 				};
 			} catch (error) {
-				console.error("Failed to start native Windows recording:", error);
+				const cancelled = nativeWindowsStartCancelled;
+				nativeWindowsStartCancelled = false;
+				if (!cancelled) console.error("Failed to start native Windows recording:", error);
 				const failedProc = nativeWindowsCaptureProcess;
 				const failedOutputPaths = [
 					nativeWindowsCaptureTargetPath,
@@ -3364,10 +3412,42 @@ export function registerIpcHandlers(
 					}
 				}
 				await stopCursorRecording();
+				if (cancelled) {
+					// Not a take: no frame was captured. What the helper had opened goes, with the
+					// journal line that would offer it back on the next launch.
+					const [screenPath, webcamPath] = failedOutputPaths;
+					const leftovers = screenPath
+						? [
+								screenPath,
+								screenPath.replace(/\.mp4$/i, ".voice.m4a"),
+								screenPath.replace(/\.mp4$/i, ".system.m4a"),
+								webcamPath,
+							]
+						: [webcamPath];
+					for (const leftover of leftovers) {
+						if (leftover) await fs.rm(leftover, { force: true }).catch(() => undefined);
+					}
+					if (screenPath) {
+						await clearPendingTake(RECORDINGS_DIR, screenPath).catch(() => undefined);
+					}
+					return { success: false, cancelled: true };
+				}
 				return { success: false, error: String(error) };
 			}
 		},
 	);
+
+	// A countdown cancelled while the helper opens its devices: it is ended before any frame,
+	// and the start above cleans up what it opened.
+	ipcMain.handle("cancel-native-windows-pending-start", () => {
+		const proc = nativeWindowsCaptureProcess;
+		if (!proc || nativeWindowsCaptureStartedAtMs !== null) {
+			return false;
+		}
+		nativeWindowsStartCancelled = true;
+		proc.kill();
+		return true;
+	});
 
 	ipcMain.handle("start-native-mac-recording", async (_, request: NativeMacRecordingRequest) => {
 		try {

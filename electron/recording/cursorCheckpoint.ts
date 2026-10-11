@@ -59,7 +59,12 @@ export function compactCursorPauseRanges(
 	return { ...data, samples: samples.sort((a, b) => a.timeMs - b.timeMs) };
 }
 
-/** Moves the telemetry from the sampler's clock onto the video's first frame. */
+/**
+ * Moves the telemetry from the sampler's clock onto the video's first frame. What came before
+ * the first frame is dropped, all but the last position, which becomes the cursor at 0: the
+ * sampler starts with the countdown, and a click during it piled up at 0 s was one auto-zoom
+ * then zoomed in on before the take had begun.
+ */
 export function shiftCursorTelemetry(
 	data: CursorRecordingData,
 	offsetMs: number,
@@ -67,12 +72,17 @@ export function shiftCursorTelemetry(
 	if (!Number.isFinite(offsetMs) || offsetMs <= 0) {
 		return data;
 	}
-	return {
-		...data,
-		samples: data.samples
-			.map((sample) => ({ ...sample, timeMs: Math.max(0, sample.timeMs - offsetMs) }))
-			.sort((a, b) => a.timeMs - b.timeMs),
-	};
+	const sorted = [...data.samples].sort((a, b) => a.timeMs - b.timeMs);
+	const before = sorted.filter((sample) => sample.timeMs < offsetMs);
+	const samples = sorted
+		.filter((sample) => sample.timeMs >= offsetMs)
+		.map((sample) => ({ ...sample, timeMs: sample.timeMs - offsetMs }));
+	const last = before.at(-1);
+	if (last && samples[0]?.timeMs !== 0) {
+		const { interactionType: _click, input: _input, ...position } = last;
+		samples.unshift({ ...position, timeMs: 0 });
+	}
+	return { ...data, samples };
 }
 
 /** Appends what is new since the last flush; reads the session's live arrays. */

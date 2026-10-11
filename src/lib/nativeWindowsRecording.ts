@@ -37,10 +37,18 @@ export type NativeWindowsRecordingRequest = {
 	cursor: {
 		mode: import("./recordingSession").CursorCaptureMode;
 	};
+	/**
+	 * When the take starts, in Unix ms: the end of the countdown. Sent as the countdown begins,
+	 * so the helper opens the camera, the encoders and the audio during it and the take starts
+	 * on time. Absent: as soon as everything is open, as before.
+	 */
+	startAtEpochMs?: number;
 };
 
 export type NativeWindowsRecordingStartResult = {
 	success: boolean;
+	/** The countdown was cancelled before the take began; nothing was kept. */
+	cancelled?: boolean;
 	recordingId?: number;
 	path?: string;
 	helperPath?: string;
