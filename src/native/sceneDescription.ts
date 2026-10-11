@@ -33,8 +33,10 @@ import {
 import { clickSoundForDocument } from "@/lib/ai-edition/clickSound";
 import { collapseTracksToPills, trackGroupId } from "@/lib/ai-edition/document/audioTracks";
 import {
+	mergeCameraLook,
 	readCameraFullscreenRegions,
 	readCameraHiddenRegions,
+	readCameraLookRegions,
 } from "@/lib/ai-edition/document/cameraSegments";
 import { createId } from "@/lib/ai-edition/document/ids";
 import { isFormatFillActive, pickOutputDims } from "@/lib/ai-edition/document/outputFormat";
@@ -145,6 +147,32 @@ export interface SceneCameraFullscreenRegion {
 	continuesBefore?: boolean;
 	/** Same at the end: no lead-out at the cut. Omitted when false. */
 	continuesAfter?: boolean;
+}
+
+/**
+ * A camera piece's own look, resolved for one clip by the same `computeCompositeLayout` call as
+ * `layoutByClip`, on the piece's merged settings (`{...global, ...overrides}`). Mirrors
+ * `SceneCameraLook` in scene.rs.
+ */
+export interface SceneCameraLook {
+	webcamRect: SceneRect;
+	webcamRadiusFrac: number | null;
+	webcamShape: "rectangle" | "circle" | "square" | "rounded";
+	webcamAnchor: WebcamAnchor;
+	/** Only when the piece overrides it: absent, native follows the global (live) mirror. */
+	webcamMirror?: boolean;
+}
+
+/**
+ * A span of the camera track whose piece has a look of its own (phase 3): the camera eases into
+ * `look` from the clip's default (or from `from`, the look of a piece that ends exactly where
+ * this one starts) and back out, within the span. Same bounds and cut flags as a Full Camera
+ * region; `continuesAfter` is also set when the next look touches this one, as that one makes
+ * the move.
+ */
+export interface SceneCameraLayoutRegion extends SceneCameraFullscreenRegion {
+	look: SceneCameraLook;
+	from?: SceneCameraLook;
 }
 
 /** A speed region projected onto each clip's source time. The native compositor matches
@@ -499,6 +527,12 @@ export interface SceneDescription {
 	 * region (`camera_hidden_regions`, scene.rs). Empty when none set.
 	 */
 	cameraHiddenRegions: SceneCameraFullscreenRegion[];
+	/**
+	 * The camera track's per-piece looks (phase 3): position, size, shape, roundness and mirror
+	 * of a piece that overrides the global camera settings, with a smooth move in and out
+	 * (`camera_layout_regions`, scene.rs). Empty when no piece overrides anything.
+	 */
+	cameraLayoutRegions: SceneCameraLayoutRegion[];
 	/**
 	 * Speed regions projected onto each clip's source time (one entry per
 	 * source-time span after `projectRegionsToSourceTime`). Empty when none set.
@@ -1226,6 +1260,11 @@ export function buildSceneDescription(
 		screenSize: { width: number; height: number },
 		hasCamera: boolean,
 		camSize: { width: number; height: number },
+		// The camera settings to lay out with: the global ones, or a piece's merged look.
+		look: Pick<
+			typeof settings,
+			"webcamSizePreset" | "webcamAnchor" | "webcamMaskShape" | "webcamRoundness"
+		> = settings,
 	) => {
 		const preset = resolveWebcamLayoutPreset(settings.webcamLayoutPreset, hasCamera);
 		return computeCompositeLayout({
@@ -1235,10 +1274,10 @@ export function buildSceneDescription(
 			screenSize: formatFill ? maxContentSize : screenSize,
 			webcamSize: preset === "no-webcam" ? null : camSize,
 			layoutPreset: preset,
-			webcamSizePreset: settings.webcamSizePreset,
-			webcamAnchor: settings.webcamAnchor,
-			webcamMaskShape: settings.webcamMaskShape,
-			webcamRoundness: settings.webcamRoundness,
+			webcamSizePreset: look.webcamSizePreset,
+			webcamAnchor: look.webcamAnchor,
+			webcamMaskShape: look.webcamMaskShape,
+			webcamRoundness: look.webcamRoundness,
 			frame: settings.frame,
 		});
 	};
@@ -1288,6 +1327,79 @@ export function buildSceneDescription(
 		? toFrameFractions(computedLayout.webcamRect)
 		: null;
 	const screenRect = computedLayout ? toFrameFractions(computedLayout.screenRect) : null;
+	// Per-piece looks (phase 3): each span of the camera track whose piece overrides a camera
+	// setting, resolved per clip exactly like that clip's own entry in `layoutByClip`, only on
+	// the merged settings. A clip with no camera box has nothing to restyle and gets no region.
+	const lookOfClip = (
+		clipIndex: number,
+		overrides: Parameters<typeof mergeCameraLook>[1],
+	): SceneCameraLook | null => {
+		const clip = visibleClips[clipIndex];
+		if (!clip) return null;
+		const merged = mergeCameraLook(settings, overrides);
+		const layout = layoutForClip(
+			screenSourceSizeOf(clip, clipIndex),
+			clipHasCamera(clip),
+			webcamSourceSizeOf(clip),
+			merged,
+		);
+		if (!layout?.webcamRect) return null;
+		return {
+			webcamRect: toFrameFractions(layout.webcamRect),
+			webcamRadiusFrac: radiusFractionOf(layout.webcamRect, layout.webcamRect.borderRadius),
+			webcamShape: layout.webcamRect.maskShape ?? merged.webcamMaskShape,
+			webcamAnchor: merged.webcamAnchor,
+			...(overrides?.webcamMirrored !== undefined
+				? { webcamMirror: overrides.webcamMirrored }
+				: {}),
+		};
+	};
+	const cameraLayoutRegions: SceneCameraLayoutRegion[] = [];
+	// Which piece look each region comes from, to tell "the same look carried on" from "another".
+	const lookIdentity = new Map<SceneCameraLayoutRegion, string>();
+	for (const region of projectRegionsToSource(
+		readCameraLookRegions(document),
+		visibleClips,
+		document.timeline.clips,
+		() => createId("camlook"),
+	)) {
+		const look =
+			region.clipIndex === undefined ? null : lookOfClip(region.clipIndex, region.overrides);
+		if (!look) continue;
+		const scene = { ...sceneCameraRegion(region), look };
+		cameraLayoutRegions.push(scene);
+		lookIdentity.set(scene, JSON.stringify(region.overrides));
+	}
+	// Two looks that meet in the programme: on one clip, or across the seam of two consecutive
+	// visible segments. The same look carried on holds across the seam (no ramp on either side);
+	// another one takes over straight from the first: the first holds to its end
+	// (`continuesAfter`) and the second starts from it (`from`), so the camera never goes back
+	// to the default box in between.
+	const near = (a: number, b: number) => Math.abs(a - b) <= 0.0015;
+	const meet = (prev: SceneCameraLayoutRegion, next: SceneCameraLayoutRegion) => {
+		if (prev.underTrim || next.underTrim || prev.clipIndex === undefined) return false;
+		if (prev.clipIndex === next.clipIndex) return near(next.startSec, prev.endSec);
+		const left = visibleClips[prev.clipIndex];
+		const right = visibleClips[prev.clipIndex + 1];
+		return (
+			next.clipIndex === prev.clipIndex + 1 &&
+			left !== undefined &&
+			right !== undefined &&
+			near(prev.endSec, left.sourceEndSec ?? left.sourceStartSec) &&
+			near(next.startSec, right.sourceStartSec)
+		);
+	};
+	cameraLayoutRegions.sort(
+		(a, b) => (a.clipIndex ?? 0) - (b.clipIndex ?? 0) || a.startSec - b.startSec,
+	);
+	for (let i = 1; i < cameraLayoutRegions.length; i++) {
+		const prev = cameraLayoutRegions[i - 1];
+		const next = cameraLayoutRegions[i];
+		if (prev.continuesAfter || next.continuesBefore || !meet(prev, next)) continue;
+		prev.continuesAfter = true;
+		if (lookIdentity.get(prev) === lookIdentity.get(next)) next.continuesBefore = true;
+		else next.from = prev.look;
+	}
 	// The deepest zoom each clip takes before its recording blurs (`zoomScaleLimitOf`).
 	const zoomLimitByClip = visibleClips.map((clip, index) =>
 		zoomScaleLimitOf(
@@ -1532,6 +1644,7 @@ export function buildSceneDescription(
 			.sort((a, b) => a.zIndex - b.zIndex),
 		cameraFullscreenRegions: projectedCameraFullscreenRegions.map(sceneCameraRegion),
 		cameraHiddenRegions: projectedCameraHiddenRegions.map(sceneCameraRegion),
+		cameraLayoutRegions,
 		// Speed is the one modifier with nothing to show for itself on a parked playhead: a
 		// still frame has no rate. So the entries under a trim are dropped here rather than
 		// shipped inert — `speed_at` (regions.rs) matches on clipIndex + time with no window

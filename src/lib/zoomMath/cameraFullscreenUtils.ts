@@ -70,3 +70,61 @@ export function computeCameraFullscreenProgress(
 	}
 	return strongest;
 }
+
+/** Where the camera is between two looks of the camera track at one moment: `k` 0 = `from`
+ *  (`null`: the global look), 1 = `to`. Mirrors `camera_look_at` (regions.rs). */
+export interface CameraLookBlend<T> {
+	from: T | null;
+	to: T;
+	k: number;
+}
+
+function smoothstep01(x: number): number {
+	const t = Math.min(1, Math.max(0, x));
+	return t * t * (3 - 2 * t);
+}
+
+/**
+ * The per-piece look under `timeMs` (raw ruler ms), for the preview's overlay. The same
+ * envelope the compositor runs on: contained in the span, `TRANSITION_WINDOW_MS` each way and
+ * at most half the span, smoothstep. A span that ends where the next one starts holds to its
+ * end, and the next one eases from it, so the camera goes straight from one look to the other.
+ */
+export function computeCameraLookBlend<T extends { startMs: number; endMs: number }>(
+	runs: readonly T[],
+	timeMs: number,
+	speedRegions: readonly SpeedRegion[] = [],
+): CameraLookBlend<T> | null {
+	const sorted = [...runs].sort((a, b) => a.startMs - b.startMs);
+	for (let i = 0; i < sorted.length; i++) {
+		const run = sorted[i];
+		const prev = sorted[i - 1];
+		const next = sorted[i + 1];
+		const chainedBefore = prev !== undefined && Math.abs(run.startMs - prev.endMs) <= 1;
+		const chainedAfter = next !== undefined && Math.abs(next.startMs - run.endMs) <= 1;
+		if (timeMs <= run.startMs || (chainedAfter ? timeMs > run.endMs : timeMs >= run.endMs)) {
+			continue;
+		}
+		const start = screenTimeMs(speedRegions, run.startMs);
+		const end = screenTimeMs(speedRegions, run.endMs);
+		const t = screenTimeMs(speedRegions, timeMs);
+		const span = end - start;
+		const leadIn = chainedAfter
+			? Math.min(TRANSITION_WINDOW_MS, span)
+			: Math.min(TRANSITION_WINDOW_MS, span / 2);
+		const leadOut = chainedAfter ? 0 : Math.min(TRANSITION_WINDOW_MS, span / 2);
+		const phase =
+			t < start + leadIn
+				? leadIn > 0
+					? (t - start) / leadIn
+					: 1
+				: t <= end - leadOut
+					? 1
+					: leadOut > 0
+						? (end - t) / leadOut
+						: 0;
+		const rising = chainedAfter || t < start + span / 2;
+		return { from: rising && chainedBefore ? prev : null, to: run, k: smoothstep01(phase) };
+	}
+	return null;
+}

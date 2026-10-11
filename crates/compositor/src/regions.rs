@@ -1133,6 +1133,72 @@ pub fn camera_fullscreen_shape_at(
     1.0 - smoothstep(0.5, 1.0, camera_fullscreen_phase_at(regions, t, clock))
 }
 
+/// L'aspect par morceau au temps `t` : vers quoi la caméra va (`to`), d'où (`from`, `None` =
+/// l'aspect par défaut du clip) et où elle en est (`k`, 0 = `from`, 1 = `to`, déjà adouci).
+pub struct CameraLookBlend<'a> {
+    pub from: Option<&'a crate::scene::SceneCameraLook>,
+    pub to: &'a crate::scene::SceneCameraLook,
+    pub k: f32,
+}
+
+/// L'enveloppe d'une région d'aspect : même confinement que Full Camera (montée depuis
+/// `start_sec`, descente jusqu'à `end_sec`, aucune rampe du côté d'une coupe), fenêtres de
+/// `TRANSITION_WINDOW_S` des deux côtés, bornées à la moitié de la région. Renvoie la phase
+/// linéaire et si `t` est dans la première moitié (la montée, qui part de `from`).
+fn camera_look_region_phase(
+    region: &crate::scene::SceneCameraLayoutRegion,
+    t: f32,
+    clock: &ScreenClock,
+) -> Option<(f32, bool)> {
+    let start = region.start_sec as f32;
+    let end = region.end_sec as f32;
+    let before_start = if region.continues_before { t < start } else { t <= start };
+    let after_end = if region.continues_after { t > end } else { t >= end };
+    if before_start || after_end {
+        return None;
+    }
+    let (start, end, t) = (clock.at(start), clock.at(end), clock.at(t));
+    let span = end - start;
+    let half = span * 0.5;
+    let (lead_in, lead_out) = match (region.continues_before, region.continues_after) {
+        (false, false) => (TRANSITION_WINDOW_S.min(half), TRANSITION_WINDOW_S.min(half)),
+        (false, true) => (TRANSITION_WINDOW_S.min(span), 0.0),
+        (true, false) => (0.0, TRANSITION_WINDOW_S.min(span)),
+        (true, true) => (0.0, 0.0),
+    };
+    let rising = t < start + half || region.continues_after;
+    let phase = if t < start + lead_in {
+        if lead_in > 0.0 { (t - start) / lead_in } else { 1.0 }
+    } else if t <= end - lead_out {
+        1.0
+    } else if lead_out > 0.0 {
+        (end - t) / lead_out
+    } else {
+        0.0
+    };
+    Some((phase.clamp(0.0, 1.0), rising))
+}
+
+/// L'aspect par morceau au temps `t`, `None` hors de toute région. Les régions ne se
+/// chevauchent pas (un morceau de la piste n'a qu'un aspect) ; à la frontière de deux régions
+/// qui se touchent, la suivante commence à 0 depuis l'aspect de la précédente, donc la
+/// caméra va droit de l'une à l'autre, sans repasser par l'aspect par défaut. Courbe : un
+/// smoothstep, symétrique, comme un déplacement (pas l'ease-out de Full Camera, qui grandit).
+pub fn camera_look_at<'a>(
+    regions: &'a [crate::scene::SceneCameraLayoutRegion],
+    t: f32,
+    clock: &ScreenClock,
+) -> Option<CameraLookBlend<'a>> {
+    regions.iter().find_map(|r| {
+        let (phase, rising) = camera_look_region_phase(r, t, clock)?;
+        Some(CameraLookBlend {
+            from: if rising { r.from.as_ref() } else { None },
+            to: &r.look,
+            k: smoothstep(0.0, 1.0, phase),
+        })
+    })
+}
+
 // ============ Rotation 3D (tilt perspective, présets iso/left/right) ================
 // Port de `computeRotation3DContainScale` (TS, `types.ts`) — même formule, même ordre de
 // composition ("CSS rotateX rotateY rotateZ s'applique droite-à-gauche : Z d'abord, puis Y,

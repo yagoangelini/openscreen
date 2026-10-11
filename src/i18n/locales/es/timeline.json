@@ -135,6 +135,13 @@
 		"syncHint": "La cámara sigue sincronizada con la pantalla. Este tramo solo cambia cómo se muestra.",
 		"splitAtPlayhead": "Dividir en el cursor",
 		"mergeWithNext": "Unir con el siguiente",
-		"reset": "Volver al predeterminado"
+		"reset": "Volver al predeterminado",
+		"look": "Aspecto",
+		"lookScopePiece": "Este fragmento",
+		"lookScopeAll": "Todos los fragmentos",
+		"lookPieceHint": "Los cambios aquí solo se aplican a este fragmento. La cámara pasa a su aspecto y vuelve con una transición suave.",
+		"lookAllHint": "Los cambios aquí se aplican a todos los fragmentos sin aspecto propio.",
+		"lookRestore": "Restablecer aspecto",
+		"ownLook": "Aspecto propio"
 	}
 }

@@ -159,7 +159,7 @@ pub struct ResolvedClipLayout {
 }
 
 /// Rect normalisé 0..1 du cadre de sortie : x, y en haut-gauche ; width, height.
-#[derive(Debug, Clone, Copy, Deserialize)]
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct SceneRect {
     pub x: f32,
@@ -585,6 +585,63 @@ pub struct SceneCameraFullscreenRegion {
     pub continues_after: bool,
 }
 
+/// L'aspect de la caméra qu'un morceau de la piste caméra impose (phase 3) : boîte, rayon,
+/// forme, ancre et miroir, déjà RÉSOLUS côté app par `computeCompositeLayout` sur les réglages
+/// fusionnés `{...globaux, ...overrides}` du morceau, pour le clip de la région.
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SceneCameraLook {
+    /// Boîte de la caméra, mêmes fractions de la sortie que `SceneLayout::webcam_rect`.
+    pub webcam_rect: SceneRect,
+    /// Rayon des coins en fraction du petit côté de la boîte (cf. `webcam_radius_frac`).
+    #[serde(default)]
+    pub webcam_radius_frac: Option<f32>,
+    #[serde(default)]
+    pub webcam_shape: Option<String>,
+    /// Ancre de la caméra (même vocabulaire que `SceneLayout::webcam_anchor`).
+    #[serde(default)]
+    pub webcam_anchor: Option<String>,
+    /// Miroir, seulement quand le morceau le change : absent, la caméra suit le miroir global,
+    /// y compris celui que l'inspector pousse en direct (`LiveParams::webcam_mirror`).
+    #[serde(default)]
+    pub webcam_mirror: Option<bool>,
+}
+
+impl SceneCameraLook {
+    /// Ancre en fractions de la boîte, comme `SceneLayout::webcam_anchor_fractions`.
+    pub fn anchor_fractions(&self) -> Option<[f32; 2]> {
+        let anchor = self.webcam_anchor.as_deref()?;
+        let side = |low: bool, high: bool| if low { 0.0 } else if high { 1.0 } else { 0.5 };
+        Some([
+            side(anchor.ends_with("left"), anchor.ends_with("right")),
+            side(anchor.starts_with("top"), anchor.starts_with("bottom")),
+        ])
+    }
+}
+
+/// Une région « aspect par morceau » : pendant `[start_sec, end_sec]` (temps source du clip),
+/// la caméra prend `look`, en douceur depuis l'aspect par défaut du clip (ou depuis `from`, le
+/// morceau voisin qui la touche) puis y revient. Mêmes bornes et mêmes drapeaux de coupe
+/// qu'une zone Full Camera ; `continues_after` est aussi levé quand le morceau suivant touche
+/// celui-ci : c'est lui qui fait la transition, depuis cet aspect-ci (`from`).
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SceneCameraLayoutRegion {
+    #[serde(default)]
+    pub clip_index: Option<usize>,
+    pub start_sec: f64,
+    pub end_sec: f64,
+    #[serde(default)]
+    pub continues_before: bool,
+    #[serde(default)]
+    pub continues_after: bool,
+    pub look: SceneCameraLook,
+    /// L'aspect d'où part la montée : celui du morceau qui finit pile au début de celui-ci.
+    /// Absent : l'aspect par défaut du clip.
+    #[serde(default)]
+    pub from: Option<SceneCameraLook>,
+}
+
 /// Rendu du curseur.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -848,6 +905,11 @@ pub struct Scene {
     /// Full Camera. `#[serde(default)]` : absent de toute scène écrite avant la piste.
     #[serde(default)]
     pub camera_hidden_regions: Vec<SceneCameraFullscreenRegion>,
+    /// Aspect par morceau de la piste caméra (phase 3) : position, taille, forme, arrondi et
+    /// miroir propres à un morceau, avec transition. `#[serde(default)]` : absent de toute scène
+    /// écrite avant, et d'un projet dont aucun morceau ne change l'aspect.
+    #[serde(default)]
+    pub camera_layout_regions: Vec<SceneCameraLayoutRegion>,
     pub cursor: SceneCursor,
     /// Global audio finishing. Default keeps old scene payloads bit-for-bit compatible.
     #[serde(default)]
@@ -914,6 +976,9 @@ impl Scene {
             belongs(region.clip_index, region.start_sec, region.end_sec)
         });
         scene.camera_hidden_regions.retain(|region| {
+            belongs(region.clip_index, region.start_sec, region.end_sec)
+        });
+        scene.camera_layout_regions.retain(|region| {
             belongs(region.clip_index, region.start_sec, region.end_sec)
         });
         scene.annotations.retain(|annotation| {
@@ -1304,6 +1369,27 @@ mod annotation_tests {
             filtered.annotations.iter().map(|a| a.id.as_str()).collect::<Vec<_>>(),
             vec!["keep", "under-trim"]
         );
+    }
+
+    #[test]
+    fn for_clip_window_keeps_only_the_camera_looks_of_the_composed_clip() {
+        let look = r#"{"webcamRect":{"x":0.1,"y":0.1,"width":0.2,"height":0.2},"webcamAnchor":"top-left"}"#;
+        let json = scene_json("[]").replace(
+            r#""annotations":[],"#,
+            &format!(
+                r#""annotations":[],"cameraLayoutRegions":[{{"clipIndex":0,"startSec":1.0,"endSec":2.0,"look":{look}}},{{"clipIndex":1,"startSec":1.0,"endSec":2.0,"look":{look},"from":{look}}}],"#
+            ),
+        );
+        let scene = Scene::from_json(&json).expect("parse");
+        assert_eq!(scene.camera_layout_regions.len(), 2);
+        assert!(scene.camera_layout_regions[1].from.is_some());
+        let filtered = scene.for_clip_window(0, 0.0, 10.0);
+        assert_eq!(filtered.camera_layout_regions.len(), 1);
+        let only = &filtered.camera_layout_regions[0];
+        assert_eq!(only.look.anchor_fractions(), Some([0.0, 0.0]));
+        assert_eq!(only.look.webcam_mirror, None);
+        // Une scène écrite avant le champ le lit vide.
+        assert!(Scene::from_json(&scene_json("[]")).expect("parse").camera_layout_regions.is_empty());
     }
 
     #[test]

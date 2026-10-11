@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CameraFullscreenRegion } from "@/components/video-editor/types";
-import { computeCameraFullscreenProgress } from "./cameraFullscreenUtils";
+import { computeCameraFullscreenProgress, computeCameraLookBlend } from "./cameraFullscreenUtils";
 import { TRANSITION_WINDOW_MS } from "./constants";
 
 function makeRegion(startMs: number, endMs: number): CameraFullscreenRegion {
@@ -131,5 +131,37 @@ describe("computeCameraFullscreenProgress", () => {
 		expect(computeCameraFullscreenProgress([first, second], 500)).toBe(1);
 		expect(computeCameraFullscreenProgress([first, second], 5000)).toBe(0);
 		expect(computeCameraFullscreenProgress([first, second], 11000)).toBe(1);
+	});
+});
+
+describe("computeCameraLookBlend", () => {
+	const run = (startMs: number, endMs: number, name: string) => ({ startMs, endMs, name });
+
+	it("is null outside every span, and holds the look in the middle of one", () => {
+		const runs = [run(4000, 8000, "a")];
+		expect(computeCameraLookBlend(runs, 3000)).toBeNull();
+		expect(computeCameraLookBlend(runs, 4000)).toBeNull();
+		expect(computeCameraLookBlend(runs, 8000)).toBeNull();
+		expect(computeCameraLookBlend(runs, 6000)).toEqual({ from: null, to: runs[0], k: 1 });
+	});
+
+	it("eases in from the global look and back out, within the span", () => {
+		const runs = [run(4000, 8000, "a")];
+		const rising = computeCameraLookBlend(runs, 4000 + TRANSITION_WINDOW_MS / 2);
+		expect(rising?.from).toBeNull();
+		expect(rising?.k).toBeCloseTo(0.5, 5);
+		const falling = computeCameraLookBlend(runs, 8000 - TRANSITION_WINDOW_MS / 2);
+		expect(falling?.k).toBeCloseTo(0.5, 5);
+	});
+
+	it("goes straight from one touching look to the next", () => {
+		const runs = [run(4000, 8000, "a"), run(8000, 12000, "b")];
+		// The first holds to its end.
+		expect(computeCameraLookBlend(runs, 7999)?.k).toBe(1);
+		expect(computeCameraLookBlend(runs, 8000)).toEqual({ from: null, to: runs[0], k: 1 });
+		const across = computeCameraLookBlend(runs, 8000 + TRANSITION_WINDOW_MS / 2);
+		expect(across?.from).toBe(runs[0]);
+		expect(across?.to).toBe(runs[1]);
+		expect(across?.k).toBeCloseTo(0.5, 5);
 	});
 });

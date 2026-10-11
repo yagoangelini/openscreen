@@ -2801,6 +2801,158 @@ const CAMERA_BACKGROUND_MODES: Array<{
 	},
 ];
 
+/** The camera's look: what "All pieces" (the Layout pane) and one camera piece both edit. */
+export interface CameraLookValues {
+	webcamMirrored: boolean;
+	webcamMaskShape: WebcamMask;
+	webcamRoundness: number;
+	webcamSizePreset: number;
+	webcamAnchor: WebcamAnchor;
+}
+
+/**
+ * The camera's look controls, shared by the Layout pane, which edits the global settings, and
+ * a camera piece's pane, which edits that piece's own look. Only the global scope pushes the
+ * native live params (`pushNativeParams`): those ARE the global look, so a piece writing them
+ * would restyle every other piece in the preview. A piece's look reaches the native preview
+ * through the scene instead (`cameraLayoutRegions`).
+ *
+ * `children` lands under the mirror row (the Layout pane's "Shrink on zoom" toggle).
+ */
+export function CameraLookControls({
+	values,
+	isPip,
+	disabled,
+	pushNativeParams = false,
+	onSet,
+	onSetLive,
+	onCommit,
+	children,
+}: {
+	values: CameraLookValues;
+	/** Shape, size and position only exist in picture-in-picture: a block layout places its own. */
+	isPip: boolean;
+	disabled: boolean;
+	pushNativeParams?: boolean;
+	/** One edit, persisted (a toggle, a choice). */
+	onSet: (patch: Partial<CameraLookValues>) => void;
+	/** One step of a slider drag, not persisted; `onCommit` follows on release. */
+	onSetLive: (patch: Partial<CameraLookValues>) => void;
+	onCommit: () => void;
+	children?: React.ReactNode;
+}) {
+	const ts = useScopedT("settings");
+	const native = pushNativeParams && isNativeCompositorActive();
+	return (
+		<>
+			<div className={styles.paneRow}>
+				<span className={styles.label}>{ts("layout.mirrorWebcam")}</span>
+				<Toggle
+					checked={values.webcamMirrored}
+					disabled={disabled}
+					onChange={(v) => {
+						onSet({ webcamMirrored: v });
+						if (native) setNativeParam("webcamMirror", v);
+					}}
+				/>
+			</div>
+			{children}
+			{isPip ? (
+				<>
+					<div className={styles.sectionLabel}>{ts("layout.webcamShape")}</div>
+					<div style={{ padding: "0 var(--sp-4) 12px" }}>
+						<ChoiceRow<WebcamMask>
+							label={ts("layout.webcamShape")}
+							display="both"
+							tiles
+							options={CAMERA_SHAPES.map((shape) => ({
+								value: shape.value,
+								label: ts(shape.labelKey),
+								icon: (
+									<svg
+										viewBox="0 0 24 24"
+										width={22}
+										height={22}
+										fill="none"
+										stroke="currentColor"
+										strokeWidth="2"
+										aria-hidden="true"
+									>
+										<rect
+											x={shape.x}
+											y={shape.y}
+											width={shape.w}
+											height={shape.h}
+											rx={(values.webcamRoundness * Math.min(shape.w, shape.h)) / 2}
+										/>
+									</svg>
+								),
+							}))}
+							value={values.webcamMaskShape}
+							disabled={disabled}
+							onChange={(shape) => {
+								// An untouched roundness follows the shape to its own default; a tuned one stays.
+								const untouched =
+									values.webcamRoundness === DEFAULT_WEBCAM_ROUNDNESS[values.webcamMaskShape];
+								onSet({
+									webcamMaskShape: shape,
+									...(untouched ? { webcamRoundness: DEFAULT_WEBCAM_ROUNDNESS[shape] } : {}),
+								});
+								if (native) setNativeParam("webcamShape", shape);
+							}}
+						/>
+					</div>
+					<div className={styles.sliderGrid}>
+						<SliderCell
+							full
+							label={ts("effects.roundness")}
+							value={Math.round(values.webcamRoundness * 100)}
+							min={0}
+							max={100}
+							defaultValue={Math.round(DEFAULT_WEBCAM_ROUNDNESS[values.webcamMaskShape] * 100)}
+							suffix="%"
+							disabled={disabled}
+							onChange={(next) => onSetLive({ webcamRoundness: next / 100 })}
+							onCommit={onCommit}
+						/>
+						<SliderCell
+							full
+							label={ts("layout.webcamSize")}
+							value={values.webcamSizePreset}
+							min={WEBCAM_SIZE_MIN}
+							max={WEBCAM_SIZE_MAX}
+							defaultValue={DEFAULT_EDITOR_SETTINGS.webcamSizePreset}
+							step={1}
+							suffix="%"
+							disabled={disabled}
+							onChange={(next) => {
+								onSetLive({ webcamSizePreset: next });
+								if (native) setNativeParam("webcamSize", next / NATIVE_WEBCAM_BASE_PCT);
+							}}
+							onCommit={onCommit}
+						/>
+					</div>
+					<div className={styles.sectionLabel}>{ts("layout.webcamPosition")}</div>
+					<div style={{ padding: "0 var(--sp-4) 12px" }}>
+						<ChoiceRow<WebcamAnchor>
+							label={ts("layout.webcamPosition")}
+							columns={3}
+							options={WEBCAM_ANCHOR_GRID.flat().map((anchor) =>
+								anchor === null
+									? null
+									: { value: anchor, label: ts(ANCHOR_KEYS[anchor]), icon: anchorIcon(anchor) },
+							)}
+							value={values.webcamAnchor}
+							disabled={disabled}
+							onChange={(anchor) => onSet({ webcamAnchor: anchor })}
+						/>
+					</div>
+				</>
+			) : null}
+		</>
+	);
+}
+
 export function LayoutPane() {
 	const canSegmentCamera = useCanSegmentCamera();
 	const ts = useScopedT("settings");
@@ -2912,127 +3064,28 @@ export function LayoutPane() {
 					onChange={(preset) => void set({ webcamLayoutPreset: preset })}
 				/>
 			</div>
-			<div className={styles.paneRow}>
-				<span className={styles.label}>{ts("layout.mirrorWebcam")}</span>
-				<Toggle
-					checked={settings.webcamMirrored}
-					disabled={layoutControlsDisabled}
-					onChange={(v) => {
-						void set({ webcamMirrored: v });
-						if (isNativeCompositorActive()) {
-							setNativeParam("webcamMirror", v);
-						}
-					}}
-				/>
-			</div>
-			{supportsReactiveZoom ? (
-				<div className={styles.paneRow}>
-					<span className={styles.label}>{ts("layout.reactiveWebcam")}</span>
-					<Toggle
-						checked={settings.webcamReactiveZoom}
-						ariaLabel={ts("layout.reactiveWebcam")}
-						tooltip={ts("layout.reactiveWebcamTip")}
-						disabled={layoutControlsDisabled}
-						onChange={(v) => void set({ webcamReactiveZoom: v })}
-					/>
-				</div>
-			) : null}
-			{isPip ? (
-				<>
-					<div className={styles.sectionLabel}>{ts("layout.webcamShape")}</div>
-					<div style={{ padding: "0 var(--sp-4) 12px" }}>
-						<ChoiceRow<WebcamMask>
-							label={ts("layout.webcamShape")}
-							display="both"
-							tiles
-							options={CAMERA_SHAPES.map((shape) => ({
-								value: shape.value,
-								label: ts(shape.labelKey),
-								icon: (
-									<svg
-										viewBox="0 0 24 24"
-										width={22}
-										height={22}
-										fill="none"
-										stroke="currentColor"
-										strokeWidth="2"
-										aria-hidden="true"
-									>
-										<rect
-											x={shape.x}
-											y={shape.y}
-											width={shape.w}
-											height={shape.h}
-											rx={(settings.webcamRoundness * Math.min(shape.w, shape.h)) / 2}
-										/>
-									</svg>
-								),
-							}))}
-							value={settings.webcamMaskShape}
+			<CameraLookControls
+				values={settings}
+				isPip={isPip}
+				disabled={layoutControlsDisabled}
+				pushNativeParams
+				onSet={(patch) => void set(patch)}
+				onSetLive={setLive}
+				onCommit={() => void commit()}
+			>
+				{supportsReactiveZoom ? (
+					<div className={styles.paneRow}>
+						<span className={styles.label}>{ts("layout.reactiveWebcam")}</span>
+						<Toggle
+							checked={settings.webcamReactiveZoom}
+							ariaLabel={ts("layout.reactiveWebcam")}
+							tooltip={ts("layout.reactiveWebcamTip")}
 							disabled={layoutControlsDisabled}
-							onChange={(shape) => {
-								// An untouched roundness follows the shape to its own default; a tuned one stays.
-								const untouched =
-									settings.webcamRoundness === DEFAULT_WEBCAM_ROUNDNESS[settings.webcamMaskShape];
-								void set({
-									webcamMaskShape: shape,
-									...(untouched ? { webcamRoundness: DEFAULT_WEBCAM_ROUNDNESS[shape] } : {}),
-								});
-								if (isNativeCompositorActive()) {
-									setNativeParam("webcamShape", shape);
-								}
-							}}
+							onChange={(v) => void set({ webcamReactiveZoom: v })}
 						/>
 					</div>
-					<div className={styles.sliderGrid}>
-						<SliderCell
-							full
-							label={ts("effects.roundness")}
-							value={Math.round(settings.webcamRoundness * 100)}
-							min={0}
-							max={100}
-							defaultValue={Math.round(DEFAULT_WEBCAM_ROUNDNESS[settings.webcamMaskShape] * 100)}
-							suffix="%"
-							disabled={layoutControlsDisabled}
-							onChange={(next) => setLive({ webcamRoundness: next / 100 })}
-							onCommit={() => void commit()}
-						/>
-						<SliderCell
-							full
-							label={ts("layout.webcamSize")}
-							value={settings.webcamSizePreset}
-							min={WEBCAM_SIZE_MIN}
-							max={WEBCAM_SIZE_MAX}
-							defaultValue={DEFAULT_EDITOR_SETTINGS.webcamSizePreset}
-							step={1}
-							suffix="%"
-							disabled={layoutControlsDisabled}
-							onChange={(next) => {
-								setLive({ webcamSizePreset: next });
-								if (isNativeCompositorActive()) {
-									setNativeParam("webcamSize", next / NATIVE_WEBCAM_BASE_PCT);
-								}
-							}}
-							onCommit={() => void commit()}
-						/>
-					</div>
-					<div className={styles.sectionLabel}>{ts("layout.webcamPosition")}</div>
-					<div style={{ padding: "0 var(--sp-4) 12px" }}>
-						<ChoiceRow<WebcamAnchor>
-							label={ts("layout.webcamPosition")}
-							columns={3}
-							options={WEBCAM_ANCHOR_GRID.flat().map((anchor) =>
-								anchor === null
-									? null
-									: { value: anchor, label: ts(ANCHOR_KEYS[anchor]), icon: anchorIcon(anchor) },
-							)}
-							value={settings.webcamAnchor}
-							disabled={layoutControlsDisabled}
-							onChange={(anchor) => void set({ webcamAnchor: anchor })}
-						/>
-					</div>
-				</>
-			) : null}
+				) : null}
+			</CameraLookControls>
 			{/* Le seul contrôle de l'éditeur dont l'effet dépend d'un binaire optionnel : sans la
 			    bibliothèque ONNX Runtime, le compositeur dessine la webcam telle quelle et le réglage
 			    ne fait rien. On demande donc à la machine plutôt que de deviner depuis la plateforme —

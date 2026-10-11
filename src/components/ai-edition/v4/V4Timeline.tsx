@@ -1965,6 +1965,7 @@ export function V4Timeline({
 							const durSec = Math.max(0, (piece.endMs - piece.startMs) / 1000);
 							const { roomForLabel } = pillAffordance(durSec, pxPerSec);
 							const label = cameraModeLabel(piece.mode);
+							const title = piece.overrides ? `${label} · ${t("cameraPiece.ownLook")}` : label;
 							const selected = isSelected(piece);
 							const modeClass =
 								piece.mode === "fullscreen"
@@ -1978,8 +1979,8 @@ export function V4Timeline({
 									role="button"
 									tabIndex={0}
 									aria-pressed={selected}
-									aria-label={`${t("labels.cameraTrack")}: ${label}`}
-									title={label}
+									aria-label={`${t("labels.cameraTrack")}: ${title}`}
+									title={title}
 									data-camera-piece={piece.implicit ? "implicit" : "stored"}
 									className={`${styles.cameraPiece} ${modeClass}${
 										piece.implicit ? ` ${styles.cameraPieceImplicit}` : ""
@@ -2006,6 +2007,13 @@ export function V4Timeline({
 											{cameraModeIcon(piece.mode)}
 											<span className={styles.lanePillLabel}>{label}</span>
 										</>
+									) : null}
+									{piece.overrides ? (
+										<span
+											className={styles.cameraPieceLookDot}
+											data-camera-look="own"
+											aria-hidden
+										/>
 									) : null}
 								</div>
 							);

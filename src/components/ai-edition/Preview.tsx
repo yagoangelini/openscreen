@@ -1,3 +1,4 @@
+import type { ComponentProps } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { CameraFullscreenRegion, ZoomFocus } from "@/components/video-editor/types";
 import { useScopedT } from "@/contexts/I18nContext";
@@ -40,6 +41,9 @@ interface PreviewProps {
 	cameraFullscreenRegions?: CameraFullscreenRegion[];
 	/** The camera track's "no camera" spans (schema v9), same shape as Full Camera. */
 	cameraHiddenRegions?: CameraFullscreenRegion[];
+	/** A camera drag over a piece with its own position (see PreviewCanvas). */
+	onCameraLookLive?: ComponentProps<typeof PreviewCanvas>["onCameraLookLive"];
+	onCameraLookCommit?: () => void;
 	trimRanges?: AxcutTrimRange[];
 	transcripts?: AxcutTranscript[];
 	selectedZoomRegionId?: string | null;
@@ -76,6 +80,8 @@ export function Preview({
 	speedRegions,
 	cameraFullscreenRegions,
 	cameraHiddenRegions,
+	onCameraLookLive,
+	onCameraLookCommit,
 	trimRanges,
 	transcripts,
 	selectedZoomRegionId,
@@ -220,6 +226,8 @@ export function Preview({
 						speedRegions={speedRegions}
 						cameraFullscreenRegions={cameraFullscreenRegions}
 						cameraHiddenRegions={cameraHiddenRegions}
+						onCameraLookLive={onCameraLookLive}
+						onCameraLookCommit={onCameraLookCommit}
 						trimRanges={trimRanges}
 						transcripts={transcripts}
 						selectedZoomRegionId={selectedZoomRegionId}

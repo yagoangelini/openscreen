@@ -2678,7 +2678,7 @@ impl Compositor {
                 scene_ref.as_ref().and_then(|scene| scene.layout.webcam_crop),
                 g.w_px[0] / g.w_px[1].max(0.0001),
             );
-            let (u0, u1) = if lp.webcam_mirror { (cu1, cu0) } else { (cu0, cu1) };
+            let (u0, u1) = if g.webcam_mirror { (cu1, cu0) } else { (cu0, cu1) };
             let webcam_is_block = matches!(
                 g.scene_preset.as_deref(),
                 Some("dual-frame") | Some("vertical-stack")

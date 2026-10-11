@@ -5,6 +5,7 @@
 // this path).
 
 import { useCallback, useEffect, useState } from "react";
+import type { AxcutCameraLook } from "../schema";
 
 export type RegionSnapshot =
 	| { kind: "zoom"; region: Record<string, unknown> }
@@ -12,7 +13,11 @@ export type RegionSnapshot =
 	| { kind: "speed"; region: Record<string, unknown> }
 	// A camera piece copies how it shows the camera, never a span: a paste restyles the
 	// piece under the playhead (the track is continuous, there is no free space to paste in).
-	| { kind: "camera"; region: { mode: "pip" | "fullscreen" | "hidden" } }
+	// Its own look (position, size, shape...) travels with the mode.
+	| {
+			kind: "camera";
+			region: { mode: "pip" | "fullscreen" | "hidden"; overrides?: AxcutCameraLook };
+	  }
 	// An audio track copies its whole payload (asset, gain, fades, loop) so a
 	// paste is a second placement of the same audio, like every other kind. The
 	// snapshot is the COLLAPSED pill, never a stored fragment.

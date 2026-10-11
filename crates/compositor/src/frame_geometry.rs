@@ -1968,6 +1968,10 @@ pub struct FrameGeometry {
     /// Une zone "Sans caméra" (`camera_hidden_regions`) a fini de retirer la webcam : sa boîte
     /// est vide, et aucun backend ne la dessine, ni elle ni son ombre.
     pub webcam_hidden: bool,
+    /// Miroir horizontal de la webcam à cette frame : celui d'un morceau qui le change
+    /// (`camera_layout_regions`), sinon le global (`LiveParams::webcam_mirror`). Les backends le
+    /// lisent ici, plus dans les live params.
+    pub webcam_mirror: bool,
     /// Cadre autour de l'écran : chrome de fenêtre plat (mode 14) ou appareil modelé (mode 17).
     /// `None` : aucun, et le rendu est celui d'avant le cadre, à l'octet. `Some` : `s_dst` est
     /// déjà la boîte rétrécie, et `s_radius` le rayon des coins de l'écran — des seuls coins BAS
@@ -2976,6 +2980,58 @@ fn pad_rect(r: [f32; 4], render_px: [f32; 2], pad_px: f32) -> [f32; 4] {
 /// contenaient pas un seul appel D3D11. Les deux backends doivent produire ces
 /// placements au pixel près (la propriété « iso-render » que le projet mesure), et la
 /// seule façon fiable d'y arriver est qu'ils appellent la même fonction.
+/// Un aspect de la caméra prêt à poser : boîte de base (fractions de la sortie), rayon en
+/// fraction de son petit côté, ancre en fractions de la boîte, miroir.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ResolvedCameraLook {
+    pub rect: [f32; 4],
+    pub radius_frac: Option<f32>,
+    pub anchor: [f32; 2],
+    pub mirror: bool,
+}
+
+/// L'aspect à une frame, entre deux bouts d'une transition d'aspect par morceau (`camera_look_at`).
+/// La boîte, le rayon et l'ancre glissent ensemble — une forme carrée qui devient « originale »
+/// change donc de ratio en chemin, et la coupe source suit le ratio réel de la boîte à chaque
+/// frame comme pendant Full Camera : jamais étirée. Le miroir ne se glisse pas : il bascule au
+/// milieu du mouvement, ou dès la première frame du morceau quand la boîte ne bouge pas.
+pub fn resolve_camera_look(
+    default: ResolvedCameraLook,
+    blend: &crate::regions::CameraLookBlend,
+) -> ResolvedCameraLook {
+    let endpoint = |look: Option<&crate::scene::SceneCameraLook>| match look {
+        Some(l) => ResolvedCameraLook {
+            rect: [l.webcam_rect.x, l.webcam_rect.y, l.webcam_rect.width, l.webcam_rect.height],
+            radius_frac: l.webcam_radius_frac.or(default.radius_frac),
+            anchor: l.anchor_fractions().unwrap_or(default.anchor),
+            mirror: l.webcam_mirror.unwrap_or(default.mirror),
+        },
+        None => default,
+    };
+    let a = endpoint(blend.from);
+    let b = endpoint(Some(blend.to));
+    let k = blend.k.clamp(0.0, 1.0);
+    let lerp = |x: f32, y: f32| x + (y - x) * k;
+    let rect = [
+        lerp(a.rect[0], b.rect[0]),
+        lerp(a.rect[1], b.rect[1]),
+        lerp(a.rect[2], b.rect[2]),
+        lerp(a.rect[3], b.rect[3]),
+    ];
+    let radius_frac = match (a.radius_frac, b.radius_frac) {
+        (Some(x), Some(y)) => Some(lerp(x, y)),
+        (x, y) => if k >= 0.5 { y } else { x },
+    };
+    let still = a.rect == b.rect;
+    let mirror = if (still && k > 0.0) || k >= 0.5 { b.mirror } else { a.mirror };
+    ResolvedCameraLook {
+        rect,
+        radius_frac,
+        anchor: [lerp(a.anchor[0], b.anchor[0]), lerp(a.anchor[1], b.anchor[1])],
+        mirror,
+    }
+}
+
 pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
     let (rw, rh) = (input.render_px[0], input.render_px[1]);
     let (stw, sth) = (input.screen_tex_px[0], input.screen_tex_px[1]);
@@ -3054,6 +3110,35 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
             .map(|s| crate::regions::ScreenClock::new(&s.speed_regions, s.active_clip_index))
             .unwrap_or_default();
         let source_t_prev = clock.source_at(clock.at(source_t) - 1.0 / FPS);
+        // Aspect par morceau (phase 3 de la piste caméra) : la boîte de base de la caméra, son
+        // rayon, son ancre et son miroir glissent de l'aspect par défaut du clip (le rect que
+        // l'app a résolu) vers celui du morceau, puis reviennent (`camera_look_at`). Seulement
+        // quand l'app a résolu la boîte : le placement de repli (bench) n'a pas d'aspect à fusionner.
+        let default_webcam_radius_frac = scene.and_then(|s| s.layout.webcam_radius_frac);
+        let default_webcam_anchor =
+            scene.map(|s| s.layout.webcam_anchor_fractions()).unwrap_or([0.5, 0.5]);
+        let empty_looks: Vec<crate::scene::SceneCameraLayoutRegion> = Vec::new();
+        let look_regions = scene.map(|s| &s.camera_layout_regions).unwrap_or(&empty_looks);
+        let look_at = |t: f32| -> Option<ResolvedCameraLook> {
+            let base = app_webcam_rect?;
+            let blend = crate::regions::camera_look_at(look_regions, t, &clock)?;
+            Some(resolve_camera_look(
+                ResolvedCameraLook {
+                    rect: base,
+                    radius_frac: default_webcam_radius_frac,
+                    anchor: default_webcam_anchor,
+                    mirror: lp.webcam_mirror,
+                },
+                &blend,
+            ))
+        };
+        let look = look_at(source_t);
+        if let Some(l) = look {
+            p.webcam.dst = l.rect;
+        }
+        if let Some(l) = look_at(source_t_prev) {
+            pp.webcam.dst = l.rect;
+        }
         // le focus "auto" (suivi curseur) réutilise la même piste que le rendu du curseur.
         let cursor_for_zoom = cursor;
         // `pp` porte le zoom de la frame précédente, pour le flou de mouvement ; celui du plan
@@ -3196,7 +3281,7 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
         // sa marge aux deux bords, une caméra de milieu de bord reste centrée sur lui. Rétrécir
         // vers son propre centre l'arrachait de son coin pendant chaque zoom. Sans ancre (vieux
         // payload), le centre.
-        let anchor = scene.map(|s| s.layout.webcam_anchor_fractions()).unwrap_or([0.5, 0.5]);
+        let anchor = look.map(|l| l.anchor).unwrap_or(default_webcam_anchor);
         let scale_anchored = |dst: [f32; 4], s: f32| -> [f32; 4] {
             let (ax, ay) = (dst[0] + dst[2] * anchor[0], dst[1] + dst[3] * anchor[1]);
             let (nw, nh) = (dst[2] * s, dst[3] * s);
@@ -3532,7 +3617,8 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
         // l'écran consommant déjà `screen_radius_frac` du même calcul. La table ci-dessous en
         // était une SECONDE, indépendante — fraction différente (0.12 vs 0.06 côté web) et sans
         // bornes — donc écran et caméra ne pouvaient pas s'accorder.
-        let app_webcam_radius_frac = scene.and_then(|s| s.layout.webcam_radius_frac);
+        let app_webcam_radius_frac =
+            look.map(|l| l.radius_frac).unwrap_or(default_webcam_radius_frac);
         // Full Camera dissout la forme en prenant le cadre : le rayon fond vers 0, donc le cercle
         // devient un rect à coins de plus en plus francs puis un plein cadre net — aucun masque
         // ne survit au plein écran. Il fond sur sa propre courbe, en retard sur le rect
@@ -3583,6 +3669,7 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
         w_radius,
         shape_fade,
         webcam_hidden,
+        webcam_mirror: look.map(|l| l.mirror).unwrap_or(lp.webcam_mirror),
         window_frame,
         screen_mask,
     }
@@ -6843,6 +6930,109 @@ mod tests {
         assert_eq!(outside.w_dst, at(&plain, 6.0).w_dst);
     }
 
+    /// Aspect par morceau (phase 3) : au milieu de la région la caméra est à la boîte, au rayon,
+    /// à l'ancre et au miroir du morceau ; elle y glisse depuis la boîte par défaut pendant la
+    /// montée et en revient pendant la descente, sans saut ; hors de la région, au bit près la
+    /// caméra d'une scène sans région.
+    #[test]
+    fn a_camera_look_region_moves_the_camera_there_and_back_smoothly() {
+        let cfg = crate::config::all().pop().expect("au moins une config");
+        let layout = r#""webcamReactiveZoom":false,"webcamAnchor":"bottom-right","webcamRadiusFrac":0.1,"webcamRect":{"x":0.77,"y":0.77,"width":0.2,"height":0.2}}"#;
+        let plain = golden_scene_json_with(layout, "");
+        let at = |json: &str, t: f32| {
+            let scene = Scene::from_json(json).expect("scène");
+            let mut input = golden_input(&scene, &cfg);
+            input.timeline_t_override = Some(t);
+            plan_frame(&input)
+        };
+        let looked = golden_scene_json_with(
+            layout,
+            r#","cameraLayoutRegions":[{"clipIndex":0,"startSec":2.0,"endSec":6.0,
+                "look":{"webcamRect":{"x":0.03,"y":0.03,"width":0.3,"height":0.3},
+                        "webcamRadiusFrac":0.5,"webcamShape":"square","webcamAnchor":"top-left","webcamMirror":true}}]"#,
+        );
+        let mid = at(&looked, 4.0);
+        assert!(mid.w_dst.iter().zip([0.03, 0.03, 0.3, 0.3]).all(|(g, w)| (g - w).abs() < 1e-5), "{:?}", mid.w_dst);
+        assert!(mid.webcam_mirror);
+        let mid_min = (0.3 * 1170.0f32).min(0.3 * 658.0);
+        assert!((mid.w_radius - 0.5 * mid_min).abs() < 1e-2, "{} vs {}", mid.w_radius, 0.5 * mid_min);
+        // Hors de la région (avant et après) : exactement la caméra d'une scène sans région.
+        for t in [1.0, 6.5] {
+            let (got, want) = (at(&looked, t), at(&plain, t));
+            assert_eq!(got.w_dst, want.w_dst, "t={t}");
+            assert_eq!(got.w_radius, want.w_radius, "t={t}");
+            assert!(!got.webcam_mirror, "t={t}");
+        }
+        // La montée est continue et monotone : x part de 0,77 et descend vers 0,03, frame après frame.
+        let mut last = 0.77f32;
+        let mut t = 2.0f32;
+        while t < 3.2 {
+            let x = at(&looked, t).w_dst[0];
+            assert!(x <= last + 1e-6, "t={t} : {x} > {last}");
+            assert!(last - x < 0.05, "saut à t={t} : {last} → {x}");
+            last = x;
+            t += 1.0 / 60.0;
+        }
+        assert!((last - 0.03).abs() < 1e-5);
+        // Le miroir bascule au milieu du déplacement, pas au bord.
+        assert!(!at(&looked, 2.1).webcam_mirror);
+        // La descente ramène la boîte par défaut à la fin.
+        let late = at(&looked, 5.99).w_dst;
+        assert!((late[0] - 0.77).abs() < 0.01, "{late:?}");
+    }
+
+    /// Deux morceaux qui se touchent : le second part de l'aspect du premier (`from`) et le premier
+    /// ne redescend pas (`continuesAfter`) : la caméra va droit de l'un à l'autre, sans repasser
+    /// par le coin par défaut.
+    #[test]
+    fn two_touching_looks_go_straight_from_one_to_the_other() {
+        let cfg = crate::config::all().pop().expect("au moins une config");
+        let layout = r#""webcamReactiveZoom":false,"webcamAnchor":"bottom-right","webcamRect":{"x":0.77,"y":0.77,"width":0.2,"height":0.2}}"#;
+        let a = r#"{"webcamRect":{"x":0.03,"y":0.03,"width":0.2,"height":0.2},"webcamAnchor":"top-left"}"#;
+        let b = r#"{"webcamRect":{"x":0.77,"y":0.03,"width":0.2,"height":0.2},"webcamAnchor":"top-right"}"#;
+        let json = golden_scene_json_with(
+            layout,
+            &format!(
+                r#","cameraLayoutRegions":[{{"clipIndex":0,"startSec":1.0,"endSec":4.0,"continuesAfter":true,"look":{a}}},
+                    {{"clipIndex":0,"startSec":4.0,"endSec":8.0,"look":{b},"from":{a}}}]"#
+            ),
+        );
+        let scene = Scene::from_json(&json).expect("scène");
+        let at = |t: f32| {
+            let mut input = golden_input(&scene, &cfg);
+            input.timeline_t_override = Some(t);
+            plan_frame(&input).w_dst
+        };
+        // Au bord et juste après, la caméra est en haut (y = 0,03) : elle ne redescend jamais.
+        let mut t = 3.5f32;
+        while t < 5.5 {
+            let w = at(t);
+            assert!((w[1] - 0.03).abs() < 1e-5, "t={t} : {w:?}");
+            t += 1.0 / 60.0;
+        }
+        assert!((at(4.0)[0] - 0.03).abs() < 1e-5);
+        assert!((at(6.0)[0] - 0.77).abs() < 1e-5);
+    }
+
+    /// Un miroir que le morceau ne change pas suit le global, y compris celui poussé en direct.
+    #[test]
+    fn a_look_without_a_mirror_follows_the_live_mirror() {
+        let cfg = crate::config::all().pop().expect("au moins une config");
+        let layout = r#""webcamReactiveZoom":false,"webcamRect":{"x":0.77,"y":0.77,"width":0.2,"height":0.2}}"#;
+        let json = golden_scene_json_with(
+            layout,
+            r#","cameraLayoutRegions":[{"clipIndex":0,"startSec":1.0,"endSec":5.0,
+                "look":{"webcamRect":{"x":0.03,"y":0.03,"width":0.2,"height":0.2}}}]"#,
+        );
+        let scene = Scene::from_json(&json).expect("scène");
+        let mut input = golden_input(&scene, &cfg);
+        input.timeline_t_override = Some(3.0);
+        input.live.webcam_mirror = true;
+        assert!(plan_frame(&input).webcam_mirror);
+        input.live.webcam_mirror = false;
+        assert!(!plan_frame(&input).webcam_mirror);
+    }
+
     /// Le JSON de `golden_scene` avec un autre layout, et des champs en plus à la fin.
     fn golden_scene_json_with(layout: &str, extra: &str) -> String {
         format!(
@@ -7920,6 +8110,7 @@ mod tests {
             w_radius: 0.0,
             shape_fade: 0.0,
             webcam_hidden: false,
+            webcam_mirror: false,
             window_frame: None,
             screen_mask: None,
         }

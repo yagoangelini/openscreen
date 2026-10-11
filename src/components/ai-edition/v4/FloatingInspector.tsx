@@ -20,6 +20,7 @@ import {
 	MousePointer2,
 	Pencil,
 	PictureInPicture2,
+	RotateCcw,
 	Scissors,
 	SlidersHorizontal,
 	SquareSplitHorizontal,
@@ -57,15 +58,22 @@ import {
 	type AnnotationTextAnimation,
 	TEXT_ANIMATION_VALUES,
 } from "@/lib/ai-edition/annotations/textAnimation";
-import { type CameraMode, findCameraPiece } from "@/lib/ai-edition/document/cameraSegments";
+import {
+	type CameraMode,
+	type CameraPiece,
+	findCameraPiece,
+	mergeCameraLook,
+} from "@/lib/ai-edition/document/cameraSegments";
 import { resolveAspectRatioValue } from "@/lib/ai-edition/document/outputFormat";
 import type { AxcutAnnotationRegion, AxcutClip } from "@/lib/ai-edition/schema";
 import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
 import { rafCoalesce } from "@/lib/ai-edition/store/rafCoalesce";
 import { useEditorSettings } from "@/lib/ai-edition/store/useEditorSettings";
 import type { useTimeline } from "@/lib/ai-edition/store/useTimeline";
+import { hasAnyClipWithCamera } from "@/lib/ai-edition/timeline/camera";
 import { formatSeconds } from "@/lib/ai-edition/timeline/format";
 import { coalescedTrimGroups } from "@/lib/ai-edition/timeline/trim-mapping";
+import { resolveWebcamLayoutPreset } from "@/lib/compositeLayout";
 import { clampToBound } from "@/lib/projectDefaults";
 import { annotationFootageRect, zoomScaleLimit } from "@/native/sceneDescription";
 import { ColorField } from "../ColorField";
@@ -73,6 +81,8 @@ import shell from "../NewEditorShell.module.css";
 import {
 	AudioPane,
 	AudioTrackPane,
+	CameraLookControls,
+	type CameraLookValues,
 	ChoiceRow,
 	CursorPane,
 	LayoutPane,
@@ -1329,6 +1339,7 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 						/>,
 					)}
 					<p className={shell.hint}>{tt("cameraPiece.syncHint")}</p>
+					<CameraPieceLook tl={tl} piece={piece} />
 					<button type="button" onClick={() => void tl.splitCamera()} className={PANE_BUTTON}>
 						<SquareSplitHorizontal size={16} />
 						{tt("cameraPiece.splitAtPlayhead")}
@@ -1391,6 +1402,107 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 /** Every action of the selection pane, delete included: the red icon says it destroys; a red
  *  slab outshouted every setting above it. */
 const PANE_BUTTON = `${shell.btn} ${shell.btnSecondary}`;
+
+type LookScope = "piece" | "all";
+
+/**
+ * A camera piece's look: the global camera controls (`CameraLookControls`) behind a scope
+ * switch. "Este trecho" edits the piece's own overrides and shows what the piece shows (the
+ * global settings with its overrides over them); "Todos os trechos" edits the global settings,
+ * exactly as the Layout pane does. A piece with a look of its own opens on its own scope.
+ */
+function CameraPieceLook({ tl, piece }: { tl: TimelineApi; piece: CameraPiece }) {
+	const tt = useScopedT("timeline");
+	const { settings, set, setLive, commit } = useEditorSettings();
+	const doc = useProjectStore((s) => s.document);
+	const hasAnyCamera = useMemo(
+		() => (doc ? hasAnyClipWithCamera(doc.assets, doc.timeline.clips) : false),
+		[doc],
+	);
+	const ownLook = piece.overrides !== undefined;
+	const [scope, setScope] = useState<LookScope>(ownLook ? "piece" : "all");
+	// Another piece selected: open on its own scope. Keyed on the start, which a piece keeps when
+	// its first write stores it (an implicit piece changes key, not place).
+	// biome-ignore lint/correctness/useExhaustiveDependencies: the start is the trigger; `ownLook` is read once per piece
+	useEffect(() => {
+		setScope(ownLook ? "piece" : "all");
+	}, [piece.startMs]);
+	const isPip =
+		resolveWebcamLayoutPreset(settings.webcamLayoutPreset, hasAnyCamera) === "picture-in-picture";
+	// One live write per frame, as for the annotations (see `SelectionPane`).
+	const liveRef = useRef(tl.updateCameraLookLive);
+	liveRef.current = tl.updateCameraLookLive;
+	const liveLook = useMemo(
+		() =>
+			rafCoalesce((key: string, patch: Partial<CameraLookValues>) => liveRef.current(key, patch)),
+		[],
+	);
+	const values: CameraLookValues = mergeCameraLook(
+		{
+			webcamMirrored: settings.webcamMirrored,
+			webcamMaskShape: settings.webcamMaskShape,
+			webcamRoundness: settings.webcamRoundness,
+			webcamSizePreset: settings.webcamSizePreset,
+			webcamAnchor: settings.webcamAnchor,
+		},
+		scope === "piece" ? piece.overrides : undefined,
+	);
+	const disabled = !doc || !hasAnyCamera;
+	return (
+		<>
+			{paneStack(
+				tt("cameraPiece.look"),
+				<ChoiceRow<LookScope>
+					label={tt("cameraPiece.look")}
+					columns={2}
+					options={[
+						{ value: "piece", label: tt("cameraPiece.lookScopePiece") },
+						{ value: "all", label: tt("cameraPiece.lookScopeAll") },
+					]}
+					value={scope}
+					disabled={disabled}
+					onChange={setScope}
+				/>,
+			)}
+			<p className={shell.hint}>
+				{tt(scope === "piece" ? "cameraPiece.lookPieceHint" : "cameraPiece.lookAllHint")}
+			</p>
+			{scope === "piece" ? (
+				<CameraLookControls
+					values={values}
+					isPip={isPip}
+					disabled={disabled}
+					onSet={(patch) => void tl.setCameraLook(piece.key, patch)}
+					onSetLive={(patch) => liveLook(piece.key, patch)}
+					onCommit={() => {
+						liveLook.flush();
+						void tl.commitCameraLook();
+					}}
+				/>
+			) : (
+				<CameraLookControls
+					values={values}
+					isPip={isPip}
+					disabled={disabled}
+					pushNativeParams
+					onSet={(patch) => void set(patch)}
+					onSetLive={setLive}
+					onCommit={() => void commit()}
+				/>
+			)}
+			{ownLook ? (
+				<button
+					type="button"
+					onClick={() => void tl.clearCameraLook(piece.key)}
+					className={PANE_BUTTON}
+				>
+					<RotateCcw size={16} />
+					{tt("cameraPiece.lookRestore")}
+				</button>
+			) : null}
+		</>
+	);
+}
 
 function FacetBody({
 	facet,

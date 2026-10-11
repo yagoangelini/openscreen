@@ -2540,7 +2540,7 @@ impl Compositor {
             w_px[0] / w_px[1].max(0.0001),
         );
         // miroir = échanger les bornes u du rect source (flip horizontal).
-        let (u0, u1) = if lp.webcam_mirror { (su1, su0) } else { (su0, su1) };
+        let (u0, u1) = if g.webcam_mirror { (su1, su0) } else { (su0, su1) };
         // Une zone "Sans caméra" qui a fini de la retirer : rien à dessiner, ombre comprise.
         if lp.has_webcam && !g.webcam_hidden {
             // L'ombre portée appartient à la bulle flottante PiP : elle se retire avec elle

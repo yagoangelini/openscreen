@@ -282,6 +282,10 @@ const DECLARED: WritePath[] = [
 	// document back into the store, around the writers, so it records nothing. There is
 	// nothing to take off either — the commit records only on success.
 	w("src/lib/ai-edition/store/useTimeline.ts", "commitAnnotationChange", "state", "unrecorded"),
+	// A camera piece's own look dragged on a slider (phase 3): the same pair as an annotation
+	// drag, one undo step on release, and the rollback when that write does not land.
+	w("src/lib/ai-edition/store/useTimeline.ts", "commitCameraLook", "save", "gesture"),
+	w("src/lib/ai-edition/store/useTimeline.ts", "commitCameraLook", "state", "unrecorded"),
 	w("src/lib/ai-edition/store/useTimeline.ts", "commitZoomFocus", "save", "gesture"),
 	w("src/lib/ai-edition/store/useTimeline.ts", "commitZoomFocus", "state", "unrecorded"),
 	w("src/lib/ai-edition/store/useTimeline.ts", "duplicateClip", "save", "gesture"),
@@ -314,6 +318,7 @@ const DECLARED: WritePath[] = [
 	w("src/lib/ai-edition/store/useTimeline.ts", "setTrimEntries", "save", "gesture"),
 	// The live halves of the two drags.
 	w("src/lib/ai-edition/store/useTimeline.ts", "updateAnnotationLive", "set", "automatic"),
+	w("src/lib/ai-edition/store/useTimeline.ts", "updateCameraLookLive", "set", "automatic"),
 	w("src/lib/ai-edition/store/useTimeline.ts", "updateAnnotationSpan", "save", "gesture"),
 	w("src/lib/ai-edition/store/useTimeline.ts", "updateSpeedSpan", "save", "gesture"),
 	w("src/lib/ai-edition/store/useTimeline.ts", "updateSpeedValue", "save", "gesture"),

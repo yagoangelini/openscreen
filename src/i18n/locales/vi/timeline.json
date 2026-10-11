@@ -135,6 +135,13 @@
 		"syncHint": "Camera vẫn đồng bộ với màn hình. Đoạn này chỉ đổi cách camera hiển thị.",
 		"splitAtPlayhead": "Tách tại con trỏ",
 		"mergeWithNext": "Gộp với đoạn sau",
-		"reset": "Về mặc định"
+		"reset": "Về mặc định",
+		"look": "Giao diện",
+		"lookScopePiece": "Đoạn này",
+		"lookScopeAll": "Tất cả các đoạn",
+		"lookPieceHint": "Thay đổi ở đây chỉ áp dụng cho đoạn này. Camera chuyển mượt sang giao diện của đoạn rồi trở lại.",
+		"lookAllHint": "Thay đổi ở đây áp dụng cho mọi đoạn không có giao diện riêng.",
+		"lookRestore": "Khôi phục giao diện mặc định",
+		"ownLook": "Giao diện riêng"
 	}
 }
