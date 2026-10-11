@@ -953,6 +953,11 @@ async function removeNativeWindowsCaptureOutputs(
 		}
 		const videoLeft = await fs.stat(screenVideoPath).catch(() => null);
 		if (!videoLeft) {
+			// Still the live writer (a Restart discards the take it was writing): stop it first, or
+			// an append already on its way lands after the removal and leaves an orphan behind.
+			if (cursorCheckpoint?.path === `${screenVideoPath}${CURSOR_CHECKPOINT_SUFFIX}`) {
+				await discardCursorCheckpoint();
+			}
 			await fs
 				.rm(`${screenVideoPath}${CURSOR_CHECKPOINT_SUFFIX}`, { force: true })
 				.catch(() => undefined);

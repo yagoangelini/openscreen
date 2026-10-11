@@ -584,6 +584,9 @@ export function useTimeline() {
 			if (!hasAnyClipWithCamera(doc.assets, doc.timeline.clips)) return false;
 			const result = edit(doc);
 			if (!result) return false;
+			// Nothing changed (a style pasted onto the piece it came from): no undo step, and the
+			// caller says nothing happened.
+			if (JSON.stringify(result.segments) === JSON.stringify(readCameraSegments(doc))) return false;
 			if (!(await saveDocument({ ...doc, cameraSegments: result.segments }, { history: true }))) {
 				return false;
 			}

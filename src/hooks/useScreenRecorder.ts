@@ -1872,7 +1872,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 					? startRecording(runId, preparedRecordingId, countdownEndsAt)
 					: null;
 
-			for (const value of values) {
+			for (const [index, value] of values.entries()) {
 				if (countdownRunId.current !== runId) {
 					return;
 				}
@@ -1885,7 +1885,15 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 					}
 				}
 
-				await new Promise((resolve) => window.setTimeout(resolve, 1000));
+				// On the clock the take starts by, not 1 s per tick: the ticks drift late, and a take
+				// started with the countdown begins on time, so the last tick ends a little early to
+				// have the overlay gone before the first frame.
+				const isLast = index === values.length - 1;
+				const tickEndsAt =
+					countdownEndsAt - (values.length - 1 - index) * 1000 - (isLast && earlyStart ? 150 : 0);
+				await new Promise((resolve) =>
+					window.setTimeout(resolve, Math.max(0, tickEndsAt - Date.now())),
+				);
 			}
 
 			if (countdownRunId.current !== runId) {

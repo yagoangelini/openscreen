@@ -1104,14 +1104,21 @@ export function NewEditorShell() {
 			return;
 		}
 
-		// A camera piece is pasted as a STYLE: the piece under the playhead takes the copied
-		// mode and look, and keeps its own span. The camera track has no free space to paste into.
+		// A camera piece is pasted as a STYLE: the selected piece (or, with none, the one under the
+		// playhead) takes the copied mode and look, and keeps its own span. The camera track has
+		// no free space to paste into.
 		if (snapshot.kind === "camera") {
 			const { cameraPieceAt } = await import("@/lib/ai-edition/document/cameraSegments");
-			const piece = cameraPieceAt(
-				tl.cameraPieces,
-				Math.round(useProjectStore.getState().currentTimeSec * 1000),
-			);
+			const selected =
+				tl.selection?.kind === "camera"
+					? tl.cameraPieces.find((candidate) => candidate.key === tl.selection?.id)
+					: undefined;
+			const piece =
+				selected ??
+				cameraPieceAt(
+					tl.cameraPieces,
+					Math.round(useProjectStore.getState().currentTimeSec * 1000),
+				);
 			if (!piece) return;
 			if (await tl.setCameraStyle(piece.key, snapshot.region)) {
 				toast.success(toastText("editor", "shellToasts.regionPasted"));

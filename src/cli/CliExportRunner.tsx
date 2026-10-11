@@ -14,6 +14,7 @@ import {
 	validateProjectData,
 } from "@/components/video-editor/projectPersistence";
 import { prepareClickSound } from "@/lib/ai-edition/clickSound";
+import { withDeliveryLoudness } from "@/lib/ai-edition/deliveryLoudness";
 import { migrateProjectDataToAxcutDocument } from "@/lib/ai-edition/document/migrate";
 import {
 	collectEffectiveClipDims,
@@ -34,6 +35,7 @@ import { GIF_SIZE_PRESETS, type GifSizePreset } from "@/lib/exporter";
 import { calculateMp4ExportSettings } from "@/lib/exporter/mp4ExportSettings";
 import { outputFrameCount } from "@/lib/exporter/outputFrameCount";
 import { mixVoiceoverIntoVideo } from "@/lib/exporter/voiceoverMix";
+import { loadUserPreferences } from "@/lib/userPreferences";
 import { exportGifNative, exportMultiNative, nativeBridgeClient } from "@/native";
 import type { CompositorClipInput } from "@/native/contracts";
 import { buildSceneDescription, resolveVisibleClips } from "@/native/sceneDescription";
@@ -286,7 +288,13 @@ async function runExport(request: CliExportRequest): Promise<CliDoneResult> {
 	// scene build cannot await — without this a cold CLI export builds its scene from empty
 	// caches and comes out silent. Clicks that will not load must not cost the export.
 	await prepareClickSound(axcutDocument).catch(() => undefined);
-	const sceneDesc = buildSceneDescription(axcutDocument);
+	// The same delivery loudness as the editor's export: without it a CLI export came out 2 dB
+	// softer than the one the user made from the dialog.
+	const builtScene = buildSceneDescription(axcutDocument);
+	const sceneDesc =
+		format === "mp4"
+			? withDeliveryLoudness(builtScene, loadUserPreferences().youtubeLoudness)
+			: builtScene;
 
 	// The webcam background effect is applied by the compositor from the scene, so the clip
 	// list needs no pre-rendering pass.

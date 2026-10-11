@@ -110,5 +110,11 @@
 	"recording": {
 		"lowDiskSpace": "Nicht genügend Speicherplatz, um die Aufnahme zu starten (nur {{availableMb}} MB frei). Gib Speicherplatz frei oder wähle einen anderen Ordner für Aufnahmen und versuche es erneut.",
 		"folderUnavailable": "Der Ordner für Aufnahmen {{path}} ist nicht erreichbar. Schließe sein Laufwerk wieder an oder wähle im Modus „Aufnahme“ einen anderen Ordner."
+	},
+	"quitWhileRecording": {
+		"title": "Recording in progress",
+		"message": "A recording is in progress. Stop it now and open it in the editor?",
+		"stopAndOpen": "Stop and open in the editor",
+		"keepRecording": "Keep recording"
 	}
 }

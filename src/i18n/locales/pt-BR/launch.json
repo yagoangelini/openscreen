@@ -1,7 +1,7 @@
 {
 	"tooltips": {
 		"hideHUD": "Ocultar HUD",
-		"hideHUDTip": "Ocultar a barra. Mostre-a de novo pelo ícone da bandeja do sistema.",
+		"hideHUDTip": "Ocultar a barra. Mostre-a de novo pela barra de tarefas ou pelo ícone da bandeja do sistema.",
 		"closeApp": "Fechar App",
 		"restartRecording": "Excluir esta gravação e iniciar uma nova",
 		"cancelRecording": "Parar e excluir esta gravação",

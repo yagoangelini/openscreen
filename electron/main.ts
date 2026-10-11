@@ -1430,7 +1430,31 @@ appReady?.then(async () => {
 	registerPermissionsIpc();
 
 	ipcMain.on("hud-overlay-close", () => {
-		app.quit();
+		if (!isRecording) {
+			app.quit();
+			return;
+		}
+		// Quitting mid-take kept the file but never opened it in the editor, and said nothing.
+		// The take is stopped and opened instead, or recording goes on.
+		void showMessageBox({
+			type: "question",
+			buttons: [
+				mainT("dialogs", "quitWhileRecording.stopAndOpen"),
+				mainT("dialogs", "quitWhileRecording.keepRecording"),
+			],
+			defaultId: 0,
+			cancelId: 1,
+			title: mainT("dialogs", "quitWhileRecording.title"),
+			message: mainT("dialogs", "quitWhileRecording.message"),
+		}).then(({ response }) => {
+			if (response !== 0 || !isRecording) return;
+			const hudWindow = liveHudWindow();
+			if (hudWindow) {
+				hudWindow.webContents.send("stop-recording-from-tray");
+				return;
+			}
+			void recordingControls?.stopAndSaveNativeWindowsRecording({ openEditor: true });
+		});
 	});
 	ipcMain.handle("set-locale", (_, locale: string) => {
 		setMainLocale(locale);

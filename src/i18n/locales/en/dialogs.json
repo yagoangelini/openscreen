@@ -110,5 +110,11 @@
 	"recording": {
 		"lowDiskSpace": "Not enough disk space to start recording (only {{availableMb}} MB free). Free up space or choose a different recordings folder, then try again.",
 		"folderUnavailable": "Can't reach the recordings folder {{path}}. Reconnect its drive, or choose another folder in Record mode."
+	},
+	"quitWhileRecording": {
+		"title": "Recording in progress",
+		"message": "A recording is in progress. Stop it now and open it in the editor?",
+		"stopAndOpen": "Stop and open in the editor",
+		"keepRecording": "Keep recording"
 	}
 }

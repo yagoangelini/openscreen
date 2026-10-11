@@ -91,6 +91,8 @@ export class CursorCheckpointWriter {
 	private writtenAssets = new Set<string>();
 	private pending: string[] = [];
 	private chain: Promise<void> = Promise.resolve();
+	/** Discarded: nothing more is written, even by a flush already scheduled. */
+	private discarded = false;
 
 	constructor(readonly path: string) {}
 
@@ -117,13 +119,14 @@ export class CursorCheckpointWriter {
 			this.pending.push(JSON.stringify({ type: "sample", sample: data.samples[index] }));
 		}
 		this.writtenSamples = data.samples.length;
-		if (this.pending.length === 0) {
+		if (this.discarded || this.pending.length === 0) {
+			this.pending = [];
 			return this.chain;
 		}
 		const text = `${this.pending.join("\n")}\n`;
 		this.pending = [];
 		this.chain = this.chain
-			.then(() => fs.appendFile(this.path, text, "utf-8"))
+			.then(() => (this.discarded ? undefined : fs.appendFile(this.path, text, "utf-8")))
 			.catch((error) => {
 				console.warn("[cursor-checkpoint] could not append", error);
 			});
@@ -132,6 +135,7 @@ export class CursorCheckpointWriter {
 
 	/** The take was saved normally: the real cursor file supersedes this one. */
 	async discard() {
+		this.discarded = true;
 		this.pending = [];
 		await this.chain;
 		await fs.rm(this.path, { force: true }).catch(() => undefined);

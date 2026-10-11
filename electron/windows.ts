@@ -681,6 +681,10 @@ export function createCountdownOverlayWindow(): BrowserWindow {
 	});
 
 	win.setIgnoreMouseEvents(true);
+	// Out of the recording, like the HUD: a take that starts on the last tick of the countdown
+	// (Windows, since 2.1.1) caught the "1" in its first frames.
+	applyContentProtection(win, "countdown");
+	win.once("ready-to-show", () => applyContentProtection(win, "countdown"));
 
 	followAcrossSpaces(win);
 
