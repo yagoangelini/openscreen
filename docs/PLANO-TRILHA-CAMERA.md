@@ -4,7 +4,7 @@ Pedido do usuário, 11/10/2026: "A gravação da câmera precisa aparecer na tri
 
 Este plano junta esse pedido aos itens 1 e 2 do 2.2.0 do [`HANDOFF.md`](HANDOFF.md) (o botão "Rosto / Tela + câmera" do HUD e a região "Sem câmera"). As linhas citadas são do commit `4de55e06`.
 
-## Status (branch `feat/camera-track`, 11/10/2026)
+## Status (11/10/2026)
 
 | Fase | Status | Onde |
 |---|---|---|
@@ -12,7 +12,8 @@ Este plano junta esse pedido aos itens 1 e 2 do 2.2.0 do [`HANDOFF.md`](HANDOFF.
 | 1. A trilha | **Feito** | `V4Timeline.tsx` (`renderCameraTrack`, botão "Dividir a câmera"), `FloatingInspector.tsx` (painel do trecho), `useTimeline.ts` (`saveCameraEdit` e os callbacks), atalho `splitCamera` = **B** em `shortcuts.ts`, Ctrl+C/Ctrl+V do estilo em `NewEditorShell.tsx`. |
 | 2. Sem câmera | **Feito** | Cena `cameraHiddenRegions`; Rust `camera_hidden_regions` (`scene.rs`), escala até 0 na âncora em `frame_geometry.rs` e `webcam_hidden` nos três backends; prévia web com opacidade (`PreviewCanvas.tsx`). Delete num trecho: sem câmera; Delete de novo: volta ao padrão. |
 | 3. Aparência por pedaço | **Feito** (branch `feat/camera-look`) | `overrides` no `cameraSegmentSchema` (sem subir a versão); edições `setCameraPieceLook` / `clearCameraPieceLook` / `setCameraPieceStyle` e `deriveCameraLookRuns` em `cameraSegments.ts`; cena `cameraLayoutRegions` (`sceneDescription.ts`); Rust `camera_layout_regions` (`scene.rs`), `camera_look_at` (`regions.rs`), `resolve_camera_look` e `webcam_mirror` por frame (`frame_geometry.rs`, três backends); `CameraLookControls` (`RightPanes.tsx`) usado pelo painel global e pelo `CameraPieceLook` (`FloatingInspector.tsx`); prévia web em `PreviewCanvas.tsx`; ponto laranja na trilha. |
-| 4–5 | Pendentes | — |
+| 4. Rosto / Tela + câmera no HUD | **Feito** (branch `feat/hud-camera-layout`) | HUD `HudCameraLayoutButton` (`HudControls.tsx`, `LaunchWindow.tsx`); atalho `cameraLayoutToggle` = Ctrl+Shift+F7 (`shortcuts.ts`, `main.ts`); pref `cameraLayout`; main `switchRecordingCameraLayout` (`handlers.ts`) + `takeCameraLayout.ts`; sidecar `<take>.mp4.layout.json` (`src/lib/recordingLayout.ts`); `asset.cameraLayout` (`document-service.ts`); `cameraSegmentsFromRecordingLayout` (`cameraSegments.ts`); `applyFreshRecordingCameraLayout` (`recordingImport.ts`); auto-zoom em volta da câmera cheia (`apply-auto-zooms.ts`); sem rampa na borda do vídeo (`holdAtProgrammeEdges`, `sceneDescription.ts`). |
+| 5 | Pendente | — |
 
 Decisões tomadas na implementação:
 
@@ -23,6 +24,18 @@ Decisões tomadas na implementação:
 - **Ctrl+V de um trecho** aplica o modo copiado ao trecho sob o cursor, sem mudar o tempo.
 - **"Sem câmera" encolhe a webcam até zero na âncora**, na mesma envoltória da Câmera cheia, sem mexer em shader. Trecho sem câmera e trecho em tela cheia nunca se sobrepõem.
 - **Nota da release:** uma build 2.1.x recusa o arquivo v9; abrir um projeto na 2.2 e voltar à 2.1 não funciona.
+
+Decisões da fase 4:
+
+- **O HUD só mostra o botão no Windows e com a câmera ligada.** As trocas são registradas pelo relógio do take do Windows (o dos marcadores); no macOS e no Linux não há esse relógio no main, e um botão que não faz nada não aparece.
+- **Pref = começo do próximo take.** Trocar antes do take (ou durante a contagem) muda a pref; trocar durante o take não muda, para o próximo take começar outra vez no rosto de quem sempre abre assim.
+- **Relógio:** ms desde o primeiro quadro, sem as pausas; com o take pausado a troca cai no ms da pausa, e duas trocas no mesmo ms ficam só com a última. Uma troca para o que já está na tela não grava nada.
+- **O sidecar é gravado a cada troca**, não só no stop, para um take recuperado de um crash voltar com o rosto. Ele vai para o asset como dados (`asset.cameraLayout`, em segundos da fonte), então a revinculação de mídia não precisa conhecê-lo.
+- **Os pedaços são "Tela cheia" com origin `system`**, um por trecho de rosto e por clipe que o toca; o resto fica PiP implícito. Uma escrita desfazível (linha nova no `documentWriteAudit`), só depois da duração medida e nunca por cima de pedaços que já existam.
+- **Auto-zoom:** o planejador reserva todo trecho de câmera cheia como um zoom fixo sem rampa (`cameraFullscreenReservations`): nenhum zoom dentro dele nem colado na saída. O auto-zoom do take recém-gravado espera os pedaços (`pendingFreshRecordingCameraLayoutPath`) e é chamado de novo quando eles entram. Vale também para o replanejamento pela transcrição e para a varinha, que passam pelo mesmo `collectAutoZoomSuggestionsForDocument`.
+- **Borda do vídeo sem rampa.** Um trecho de câmera cheia (ou sem câmera) que começa no primeiro quadro ou termina no último não tem rampa daquele lado, como um trecho cortado por um trim. Sem isso, o take que abre no rosto mostrava o PiP crescendo no primeiro segundo.
+- **A troca Rosto → Tela acontece dentro do trecho do rosto**, como toda Câmera cheia: a rampa de saída (1,5 s) termina no ms da troca. Quem quiser a tela antes ou depois arrasta a borda do pedaço.
+- **Verificado:** take real com troca pelo mouse no HUD, pelo atalho e com o take pausado; sidecar e pedaços conferidos no projeto; export 1080p pela CLI medido quadro a quadro (detalhes no `HANDOFF.md`).
 
 Decisões da fase 3:
 

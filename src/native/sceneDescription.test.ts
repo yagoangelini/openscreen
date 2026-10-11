@@ -1002,6 +1002,35 @@ describe("buildSceneDescription.cameraFullscreenRegions", () => {
 		]);
 	});
 
+	it("holds a span that opens or closes the video: nothing to ease from or to there", () => {
+		// "Rosto" from the first frame (0-3 s) and again to the end (8-10 s) of one 10 s clip.
+		const doc = makeDoc({
+			assets: [makeAsset({ id: "a", originalPath: "/a.mp4" })],
+			clips: [
+				makeClip({
+					id: "c1",
+					assetId: "a",
+					sourceStartSec: 0,
+					sourceEndSec: 10,
+					timelineStartSec: 0,
+					timelineEndSec: 10,
+				}),
+			],
+			legacyEditor: {
+				cameraFullscreenRegions: [
+					{ id: "cf1", startMs: 0, endMs: 3000 },
+					{ id: "cf2", startMs: 4000, endMs: 6000 },
+					{ id: "cf3", startMs: 8000, endMs: 10000 },
+				],
+			},
+		});
+		expect(buildSceneDescription(loadedFromV8(doc)).cameraFullscreenRegions).toEqual([
+			{ startSec: 0, endSec: 3, clipIndex: 0, continuesBefore: true },
+			{ startSec: 4, endSec: 6, clipIndex: 0 },
+			{ startSec: 8, endSec: 10, clipIndex: 0, continuesAfter: true },
+		]);
+	});
+
 	it("yields [] when legacyEditor.cameraFullscreenRegions is missing", () => {
 		const doc = makeDoc({ legacyEditor: {} });
 		expect(buildSceneDescription(loadedFromV8(doc)).cameraFullscreenRegions).toEqual([]);

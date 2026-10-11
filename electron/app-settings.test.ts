@@ -104,6 +104,19 @@ describe("app settings store", () => {
 		expect(new AppSettingsStore(dir).getSnapshot().recording.micChannelMode).toBe("auto");
 	});
 
+	it("keeps the camera layout a take starts in to screen or face", () => {
+		const dir = temp();
+		const store = new AppSettingsStore(dir);
+		expect(store.getSnapshot().recording.cameraLayout).toBe("screen");
+		store.setRecordingPreferences({ cameraLayout: "face" });
+		expect(new AppSettingsStore(dir).getSnapshot().recording.cameraLayout).toBe("face");
+		expect(() =>
+			store.setRecordingPreferences({ cameraLayout: "both" as unknown as "face" }),
+		).toThrow(TypeError);
+		writeFileSync(path.join(dir, "recording-settings.json"), JSON.stringify({ cameraLayout: 3 }));
+		expect(new AppSettingsStore(dir).getSnapshot().recording.cameraLayout).toBe("screen");
+	});
+
 	it("reads a hand-edited relative recordings folder as the default", () => {
 		const dir = temp();
 		writeFileSync(

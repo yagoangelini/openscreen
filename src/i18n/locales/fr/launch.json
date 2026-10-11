@@ -75,6 +75,14 @@
 		"saving": "Sauvegarde...",
 		"markerAdded": "Repère {{count}} ajouté"
 	},
+	"cameraLayout": {
+		"name": "Visage : la caméra seule",
+		"faceTip": "Visage : la caméra seule, en plein écran. Cliquez pour afficher l'écran avec la caméra.",
+		"screenTip": "Écran + caméra : votre écran, avec la caméra dans un coin. Cliquez pour n'afficher que la caméra, en plein écran.",
+		"face": "Visage",
+		"screen": "Écran + caméra",
+		"switched": "Maintenant : {{layout}}"
+	},
 	"language": "Langue",
 	"languageWithName": "Langue : {{language}}",
 	"systemLanguagePrompt": {
