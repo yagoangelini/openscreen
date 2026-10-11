@@ -31,7 +31,7 @@ As decisões e o porquê de cada fase estão em [`PLANO-FORK.md`](PLANO-FORK.md)
 
 ## Estado atual
 
-`main` do fork = **v2.1.1**, publicada e marcada como Latest. Desde a 2.1.0 o fork contém o **OpenScreen 2.0** do upstream (veja "Sincronizar com o upstream" abaixo). O histórico do fork, em ordem:
+`main` do fork = **v2.2.0**, publicada e marcada como Latest. Desde a 2.1.0 o fork contém o **OpenScreen 2.0** do upstream (veja "Sincronizar com o upstream" abaixo). O histórico do fork, em ordem:
 
 | Versão | Como entrou | Conteúdo |
 |---|---|---|
@@ -44,6 +44,7 @@ As decisões e o porquê de cada fase estão em [`PLANO-FORK.md`](PLANO-FORK.md)
 | 1.19.1 | PR yagoangelini/openscreen#6 | correções dos recursos do fork achadas na análise de 10/10 ([`ANALISE-MELHORIAS.md`](ANALISE-MELHORIAS.md) §2) |
 | 2.1.0 | PR yagoangelini/openscreen#7 | merge do OpenScreen 2.0: 408 commits do upstream, base 28/09 até `125ebd95` |
 | 2.1.1 | PR yagoangelini/openscreen#9 | pedidos de 11/10: gravador na barra de tarefas, cursor menor e com px, início instantâneo, auto-zoom corrigido num take real |
+| 2.2.0 | PRs yagoangelini/openscreen#10 e #11 | auto-zoom guiado pela transcrição (pergunta depois de gravar, janela de progresso, refazer depois de corrigir) e trilha da câmera na timeline (schema v9: pedaços PiP / tela cheia / sem câmera, tecla B) |
 
 **O que a 1.16.0 trouxe:**
 
