@@ -27,6 +27,7 @@
 		"addVoiceover": "Voiceover aufnehmen",
 		"addKeyframe": "Keyframe hinzufügen",
 		"addCameraFullscreen": "Vollbild-Kamera hinzufügen",
+		"splitCamera": "Kamera am Abspielkopf teilen",
 		"deleteSelected": "Auswahl löschen",
 		"playPause": "Wiedergabe / Pause",
 		"copySelected": "Auswahl kopieren",

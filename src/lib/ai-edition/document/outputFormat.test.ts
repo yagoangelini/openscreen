@@ -71,6 +71,7 @@ function doc(assets: AxcutAsset[], clips: AxcutClip[]): AxcutDocument {
 		annotations: [],
 		zoomRanges: [],
 		audioTracks: [],
+		cameraSegments: [],
 		legacyEditor: null,
 	};
 }

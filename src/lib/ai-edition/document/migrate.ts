@@ -32,6 +32,7 @@ import {
 	documentSchema,
 	migrateRawDocumentToCurrent,
 } from "../schema";
+import { readCameraFullscreenRegions } from "./cameraSegments";
 import { createId } from "./ids";
 
 const MS_TO_SEC = 1 / 1000;
@@ -388,6 +389,13 @@ export function migrateAxcutDocumentToProjectData(input: AxcutDocument): EditorP
 		}),
 	);
 	editor.annotationRegions = reverseAnnotationRegions;
+	// The legacy editor only knew Full Camera spans; since v9 they are the camera pieces in
+	// full-screen mode. Picture-in-picture and no-camera pieces have no v2 shape.
+	editor.cameraFullscreenRegions = readCameraFullscreenRegions(document).map((run) => ({
+		id: run.id,
+		startMs: run.startMs,
+		endMs: run.endMs,
+	}));
 
 	return {
 		version: PROJECT_VERSION,

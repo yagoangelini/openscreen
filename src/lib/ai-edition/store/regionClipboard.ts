@@ -10,7 +10,9 @@ export type RegionSnapshot =
 	| { kind: "zoom"; region: Record<string, unknown> }
 	| { kind: "annotation"; region: Record<string, unknown> }
 	| { kind: "speed"; region: Record<string, unknown> }
-	| { kind: "cameraFullscreen"; region: Record<string, unknown> }
+	// A camera piece copies how it shows the camera, never a span: a paste restyles the
+	// piece under the playhead (the track is continuous, there is no free space to paste in).
+	| { kind: "camera"; region: { mode: "pip" | "fullscreen" | "hidden" } }
 	// An audio track copies its whole payload (asset, gain, fades, loop) so a
 	// paste is a second placement of the same audio, like every other kind. The
 	// snapshot is the COLLAPSED pill, never a stored fragment.

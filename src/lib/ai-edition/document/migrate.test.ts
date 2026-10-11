@@ -51,7 +51,7 @@ describe("migrateProjectDataToAxcutDocument", () => {
 	it("produces a current-schema document with one asset and one clip from a v2 single-recording project", () => {
 		const doc = migrateProjectDataToAxcutDocument(makeV2Project());
 
-		expect(doc.schemaVersion).toBe(8);
+		expect(doc.schemaVersion).toBe(9);
 		expect(doc.assets).toHaveLength(1);
 		const asset = doc.assets[0];
 		expect(asset.kind).toBe("video");
@@ -331,6 +331,25 @@ describe("migrateProjectDataToAxcutDocument", () => {
 });
 
 describe("migrateAxcutDocumentToProjectData", () => {
+	// Schema v9: a v2 project's Full Camera regions become camera pieces, and come back out.
+	it("round-trips Full Camera regions through the camera track", () => {
+		const v2 = makeV2Project({
+			editor: {
+				...makeV2Project().editor,
+				cameraFullscreenRegions: [{ id: "cf_a", startMs: 1000, endMs: 2500 }],
+			},
+		});
+		const doc = migrateProjectDataToAxcutDocument(v2);
+		expect(doc.cameraSegments).toEqual([
+			expect.objectContaining({ id: "cf_a", startMs: 1000, endMs: 2500, mode: "fullscreen" }),
+		]);
+		expect((doc.legacyEditor as Record<string, unknown>).cameraFullscreenRegions).toBeUndefined();
+		const back = migrateAxcutDocumentToProjectData(doc);
+		expect(back.editor.cameraFullscreenRegions).toEqual([
+			{ id: "cf_a", startMs: 1000, endMs: 2500 },
+		]);
+	});
+
 	it("round-trips trimRanges back to trimRegions", () => {
 		const v2 = makeV2Project({
 			editor: {
@@ -524,7 +543,7 @@ describe("migrateRawDocumentToCurrent", () => {
 		};
 	}
 
-	it("upgrades a v3 document to v8 (cameraTrack relocated onto the primary asset)", () => {
+	it("upgrades a v3 document to v9 (cameraTrack relocated onto the primary asset)", () => {
 		// Models the full load path: every disk-read site runs the helper, then
 		// the schema parse fills in defaults (cameraTrack: null on non-target
 		// assets). The helper alone is just the upgrader chain; the schema is
@@ -542,13 +561,13 @@ describe("migrateRawDocumentToCurrent", () => {
 				}),
 			),
 		);
-		expect(migrated.schemaVersion).toBe(8);
+		expect(migrated.schemaVersion).toBe(9);
 		expect((migrated as Record<string, unknown>).cameraTrack).toBeUndefined();
 		expect(migrated.assets[0].cameraTrack).toBeNull();
 		expect(migrated.assets[1].cameraTrack?.sourcePath).toBe("/cam.mp4");
 	});
 
-	it("upgrades a v4 document to v8 (anchors modifiers onto clips)", () => {
+	it("upgrades a v4 document to v9 (anchors modifiers onto clips)", () => {
 		const migrated = migrateRawDocumentToCurrent(
 			makeV4Doc({
 				zoomRanges: [
@@ -556,7 +575,7 @@ describe("migrateRawDocumentToCurrent", () => {
 				],
 			}),
 		) as Record<string, unknown>;
-		expect(migrated.schemaVersion).toBe(8);
+		expect(migrated.schemaVersion).toBe(9);
 		const zooms = migrated.zoomRanges as Array<Record<string, unknown>>;
 		expect(zooms).toHaveLength(1);
 		expect(zooms[0]).toMatchObject({ id: "z1", clipId: "c1", depth: 3 });
@@ -564,12 +583,12 @@ describe("migrateRawDocumentToCurrent", () => {
 
 	it("is a no-op for an already-current document (returns an equal value)", () => {
 		const v5 = makeV4Doc(); // makeV4Doc's body is the v5-compatible shape
-		const once = migrateRawDocumentToCurrent({ ...v5, schemaVersion: 8 });
+		const once = migrateRawDocumentToCurrent({ ...v5, schemaVersion: 9, cameraSegments: [] });
 		// ponytail: the upgrader chain checks schemaVersion and returns the input
 		// unchanged, so the round-trip allocation is bounded to a property
 		// comparison per upgrader — the same per-parse overhead the old
 		// `z.preprocess` carried.
-		expect(once).toEqual({ ...v5, schemaVersion: 8 });
+		expect(once).toEqual({ ...v5, schemaVersion: 9, cameraSegments: [] });
 	});
 
 	it("passes non-document input through unchanged (the schema is the gate, not this helper)", () => {
@@ -622,7 +641,7 @@ describe("dropping trims anchored to audio", () => {
 
 	function docWith(trimRanges: unknown[], assets?: unknown[]) {
 		return {
-			schemaVersion: 8,
+			schemaVersion: 9,
 			project: { id: "p", title: "t", createdAt, updatedAt: createdAt },
 			assets: assets ?? [
 				{ id: "vid", kind: "video", label: "v", originalPath: "/v.mp4", cameraTrack: null },
@@ -762,7 +781,7 @@ describe("repairing inverted transcript timings", () => {
 			],
 		};
 		return {
-			schemaVersion: 8,
+			schemaVersion: 9,
 			project: { id: "p", title: "t", createdAt, updatedAt: createdAt },
 			assets: [{ id: "vid", kind: "video", label: "v", originalPath: "/v.mp4", cameraTrack: null }],
 			transcript,

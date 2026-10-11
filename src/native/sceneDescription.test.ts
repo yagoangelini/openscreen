@@ -19,7 +19,7 @@ import type {
 	AxcutDocument,
 	AxcutZoomRegion,
 } from "@/lib/ai-edition/schema";
-import { axcutSchemaVersion } from "@/lib/ai-edition/schema";
+import { axcutSchemaVersion, parseDocumentFile } from "@/lib/ai-edition/schema";
 import { autoZoomMotion, DEFAULT_AUTO_ZOOM_SETTINGS } from "@/lib/ai-edition/timeline/zoom-motion";
 import { CURSOR_KIND_IDS, DEFAULT_CURSOR_THEME_ID } from "@/lib/cursor/cursorThemes";
 import { DEVICE_FRAMES } from "@/lib/projectDefaults";
@@ -103,6 +103,7 @@ function makeDoc(
 		annotations: overrides.annotations ?? [],
 		zoomRanges: overrides.zoomRanges ?? [],
 		audioTracks: overrides.audioTracks ?? [],
+		cameraSegments: overrides.cameraSegments ?? [],
 		legacyEditor: overrides.legacyEditor ?? null,
 	};
 }
@@ -970,19 +971,37 @@ describe("buildSceneDescription.zoomRegions with an earlier trim", () => {
 // --- cameraFullscreenRegions -------------------------------------------------
 
 describe("buildSceneDescription.cameraFullscreenRegions", () => {
+	// PARITY (schema v9). Every fixture below stores its Full Camera regions the way a v8
+	// project did, in `legacyEditor.cameraFullscreenRegions`, and is loaded through the
+	// v8 -> v9 upgrade, which turns them into camera pieces. The expectations are the ones the
+	// legacy reader met before the camera track existed: an old project looks the same.
+	const loadedFromV8 = (doc: AxcutDocument) => parseDocumentFile({ ...doc, schemaVersion: 8 });
+
 	it("converts ms->sec for start/end", () => {
 		const doc = makeDoc({
 			legacyEditor: {
 				cameraFullscreenRegions: [{ id: "cf1", startMs: 2000, endMs: 5500 }],
 			},
 		});
-		const { cameraFullscreenRegions } = buildSceneDescription(doc);
+		const { cameraFullscreenRegions } = buildSceneDescription(loadedFromV8(doc));
 		expect(cameraFullscreenRegions).toEqual([{ startSec: 2, endSec: 5.5 }]);
+	});
+
+	it("moves the regions out of the legacy envelope", () => {
+		const loaded = loadedFromV8(
+			makeDoc({
+				legacyEditor: { cameraFullscreenRegions: [{ id: "cf1", startMs: 2000, endMs: 5500 }] },
+			}),
+		);
+		expect(loaded.legacyEditor).toEqual({});
+		expect(loaded.cameraSegments).toEqual([
+			expect.objectContaining({ id: "cf1", startMs: 2000, endMs: 5500, mode: "fullscreen" }),
+		]);
 	});
 
 	it("yields [] when legacyEditor.cameraFullscreenRegions is missing", () => {
 		const doc = makeDoc({ legacyEditor: {} });
-		expect(buildSceneDescription(doc).cameraFullscreenRegions).toEqual([]);
+		expect(buildSceneDescription(loadedFromV8(doc)).cameraFullscreenRegions).toEqual([]);
 	});
 
 	it("splits a region straddling two clips into one entry per clip's source time", () => {
@@ -1011,7 +1030,7 @@ describe("buildSceneDescription.cameraFullscreenRegions", () => {
 				cameraFullscreenRegions: [{ id: "cf1", startMs: 3000, endMs: 7000 }],
 			},
 		});
-		const { cameraFullscreenRegions } = buildSceneDescription(doc);
+		const { cameraFullscreenRegions } = buildSceneDescription(loadedFromV8(doc));
 		expect(cameraFullscreenRegions).toEqual([
 			{ startSec: 103, endSec: 105, clipIndex: 0, continuesAfter: true },
 			{ startSec: 200, endSec: 202, clipIndex: 1, continuesBefore: true },
@@ -1042,7 +1061,7 @@ describe("buildSceneDescription.cameraFullscreenRegions", () => {
 				cameraFullscreenRegions: [{ id: "cf1", startMs: 2000, endMs: 8000 }],
 			},
 		});
-		expect(buildSceneDescription(doc).cameraFullscreenRegions).toEqual([
+		expect(buildSceneDescription(loadedFromV8(doc)).cameraFullscreenRegions).toEqual([
 			{ startSec: 2, endSec: 4, clipIndex: 0, continuesAfter: true },
 			{ startSec: 6, endSec: 8, clipIndex: 1, continuesBefore: true },
 		]);
@@ -1073,8 +1092,64 @@ describe("buildSceneDescription.cameraFullscreenRegions", () => {
 				cameraFullscreenRegions: [{ id: "cf1", startMs: 3000, endMs: 5000 }],
 			},
 		});
-		expect(buildSceneDescription(doc).cameraFullscreenRegions).toEqual([
+		expect(buildSceneDescription(loadedFromV8(doc)).cameraFullscreenRegions).toEqual([
 			{ startSec: 3, endSec: 5, clipIndex: 0, underTrim: true },
+		]);
+	});
+
+	// Two full-screen pieces side by side are two pills on the camera track, but one stretch
+	// for the camera: emitted apart, it would ease out and straight back in at the seam.
+	it("joins touching full-screen pieces into one region", () => {
+		const doc = makeDoc({
+			assets: [makeAsset({ id: "a", originalPath: "/a.mp4" })],
+			clips: [
+				makeClip({
+					id: "c1",
+					assetId: "a",
+					sourceStartSec: 0,
+					sourceEndSec: 10,
+					timelineStartSec: 0,
+					timelineEndSec: 10,
+				}),
+			],
+			cameraSegments: [
+				{
+					id: "p1",
+					segmentId: "s1",
+					startMs: 2000,
+					endMs: 4000,
+					clipId: "c1",
+					sourceStartSec: 2,
+					sourceEndSec: 4,
+					mode: "fullscreen",
+					origin: "user",
+				},
+				{
+					id: "p2",
+					segmentId: "s2",
+					startMs: 4000,
+					endMs: 6000,
+					clipId: "c1",
+					sourceStartSec: 4,
+					sourceEndSec: 6,
+					mode: "fullscreen",
+					origin: "user",
+				},
+				{
+					id: "p3",
+					segmentId: "s3",
+					startMs: 6000,
+					endMs: 8000,
+					clipId: "c1",
+					sourceStartSec: 6,
+					sourceEndSec: 8,
+					mode: "pip",
+					origin: "user",
+				},
+			],
+		});
+		expect(buildSceneDescription(doc).cameraFullscreenRegions).toEqual([
+			{ startSec: 2, endSec: 6, clipIndex: 0 },
 		]);
 	});
 });

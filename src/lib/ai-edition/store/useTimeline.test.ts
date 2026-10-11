@@ -124,6 +124,7 @@ const sampleDoc: AxcutDocument = {
 	annotations: [],
 	zoomRanges: [],
 	audioTracks: [],
+	cameraSegments: [],
 	legacyEditor: null,
 };
 
@@ -615,7 +616,7 @@ describe("useTimeline.applyClipEdit (Edit-clip modal)", () => {
 });
 
 // #353. The toolbar button and the `C` shortcut both used to write a region on a
-// project with no webcam: it persists into `legacyEditor.cameraFullscreenRegions`,
+// project with no webcam: it persisted into the document (now `cameraSegments`),
 // renders nothing in the preview (PreviewCanvas short-circuits on a missing
 // `webcamRect`) and nothing in the export, forever, with no feedback. The gate lives
 // in the shared mutation so both entry points — and any future one — are covered.
@@ -662,7 +663,7 @@ describe("useTimeline.addCameraFullscreen (camera gate)", () => {
 			await result.current.addCameraFullscreen();
 		});
 		expect(bridgeMocks.save).not.toHaveBeenCalled();
-		expect(useProjectStore.getState().document?.legacyEditor).toBeNull();
+		expect(useProjectStore.getState().document?.cameraSegments ?? []).toEqual([]);
 		expect(result.current.cameraFullscreenRegions).toEqual([]);
 	});
 
@@ -672,11 +673,129 @@ describe("useTimeline.addCameraFullscreen (camera gate)", () => {
 		await act(async () => {
 			await result.current.addCameraFullscreen();
 		});
-		const legacy = useProjectStore.getState().document?.legacyEditor as Record<string, unknown>;
-		const regions = legacy.cameraFullscreenRegions as Array<{ startMs: number; endMs: number }>;
-		expect(regions).toHaveLength(1);
-		// 2s at the playhead (currentTimeSec = 1), the shared default.
-		expect(regions[0]).toMatchObject({ startMs: 1000, endMs: 3000 });
+		const pieces = useProjectStore.getState().document?.cameraSegments ?? [];
+		expect(pieces).toHaveLength(1);
+		// 2s at the playhead (currentTimeSec = 1), the shared default, as a full-screen piece.
+		expect(pieces[0]).toMatchObject({ startMs: 1000, endMs: 3000, mode: "fullscreen" });
+		// Derived for the preview, and the new piece is selected.
+		expect(result.current.cameraFullscreenRegions).toEqual([
+			expect.objectContaining({ startMs: 1000, endMs: 3000 }),
+		]);
+		expect(result.current.selection).toEqual({ kind: "camera", id: pieces[0].id });
+	});
+});
+
+// The camera track (schema v9): every edit is one save, one undo step, and leaves the piece
+// the user is on selected.
+describe("useTimeline camera track", () => {
+	const cameraAsset = {
+		...sampleDoc.assets[0],
+		cameraTrack: {
+			sourcePath: "/tmp/camera.webm",
+			startMs: 0,
+			offsetMs: 0,
+			visible: true,
+			width: 1280,
+			height: 720,
+		},
+	};
+	const pieceModes = () =>
+		useProjectStore.getState().document?.cameraSegments.map((p) => [p.startMs, p.endMs, p.mode]) ??
+		[];
+
+	beforeEach(() => {
+		useProjectStore.getState().clear();
+		for (const mock of Object.values(bridgeMocks)) mock.mockReset();
+		bridgeMocks.save.mockImplementation(async (doc: typeof sampleDoc) => ({
+			success: true,
+			document: doc,
+		}));
+		clearHistory();
+		useProjectStore.setState({
+			projectId: "proj_test",
+			document: { ...sampleDoc, assets: [cameraAsset] },
+			currentTimeSec: 4,
+			revision: 1,
+			status: "ready",
+			error: null,
+		});
+	});
+
+	afterEach(() => {
+		vi.clearAllMocks();
+	});
+
+	it("starts as one implicit picture-in-picture piece over the whole timeline", () => {
+		const { result } = renderTimeline();
+		const end = Math.round(sampleDoc.timeline.clips.at(-1)!.timelineEndSec * 1000);
+		expect(result.current.cameraPieces).toEqual([
+			expect.objectContaining({ startMs: 0, endMs: end, mode: "pip", implicit: true }),
+		]);
+	});
+
+	it("splits at the playhead, sets a mode, joins back, each in one undo step", async () => {
+		const { result } = renderTimeline();
+		const end = Math.round(sampleDoc.timeline.clips.at(-1)!.timelineEndSec * 1000);
+		await act(async () => {
+			await result.current.splitCamera();
+		});
+		expect(pieceModes()).toEqual([
+			[0, 4000, "pip"],
+			[4000, end, "pip"],
+		]);
+		expect(past).toHaveLength(1);
+		const right = result.current.selection;
+		expect(right?.kind).toBe("camera");
+
+		await act(async () => {
+			await result.current.setCameraMode(right?.id ?? "", "fullscreen");
+		});
+		expect(result.current.cameraPieces.map((p) => p.mode)).toEqual(["pip", "fullscreen"]);
+		expect(result.current.cameraFullscreenRegions).toEqual([
+			expect.objectContaining({ startMs: 4000, endMs: end }),
+		]);
+
+		await act(async () => {
+			await result.current.moveCameraEdge(result.current.cameraPieces[0].key, 6000);
+		});
+		expect(pieceModes()).toEqual([
+			[0, 6000, "pip"],
+			[6000, end, "fullscreen"],
+		]);
+
+		await act(async () => {
+			await result.current.mergeCameraWithNext(result.current.cameraPieces[0].key);
+		});
+		expect(pieceModes()).toEqual([[0, end, "pip"]]);
+		expect(past).toHaveLength(4);
+	});
+
+	it("hides the camera on the first Delete and puts the piece back to default on the second", async () => {
+		const { result } = renderTimeline();
+		await act(async () => {
+			await result.current.splitCamera();
+		});
+		const key = result.current.cameraPieces[1].key;
+		await act(async () => {
+			await result.current.removeRegion("camera", key);
+		});
+		expect(result.current.cameraPieces.map((p) => p.mode)).toEqual(["pip", "hidden"]);
+		await act(async () => {
+			await result.current.removeRegion("camera", key);
+		});
+		expect(result.current.cameraPieces.map((p) => [p.mode, p.implicit])).toEqual([
+			["pip", false],
+			["pip", true],
+		]);
+	});
+
+	it("refuses every camera edit on a project with no webcam", async () => {
+		useProjectStore.setState({ document: sampleDoc });
+		const { result } = renderTimeline();
+		await act(async () => {
+			await result.current.splitCamera();
+		});
+		expect(bridgeMocks.save).not.toHaveBeenCalled();
 	});
 });
 
@@ -749,18 +868,17 @@ describe("useTimeline.clearTimeline", () => {
 		trim: (tl) => tl.addTrim(),
 		annotation: (tl) => tl.addAnnotation(),
 		speed: (tl) => tl.addSpeed(),
-		cameraFullscreen: (tl) => tl.addCameraFullscreen(),
+		camera: (tl) => tl.addCameraFullscreen(),
 	};
 	const editKinds = Object.keys(addOf) as EditKind[];
 
 	const regionCounts = (doc: AxcutDocument | null | undefined): Record<EditKind, number> => {
-		const legacy = (doc?.legacyEditor ?? {}) as { cameraFullscreenRegions?: unknown[] };
 		return {
 			zoom: doc?.zoomRanges.length ?? 0,
 			trim: doc?.timeline.trimRanges.length ?? 0,
 			annotation: doc?.annotations.length ?? 0,
 			speed: doc ? readSpeedRegions(doc).length : 0,
-			cameraFullscreen: legacy.cameraFullscreenRegions?.length ?? 0,
+			camera: doc?.cameraSegments.length ?? 0,
 		};
 	};
 	const noRegions: Record<EditKind, number> = {
@@ -768,7 +886,7 @@ describe("useTimeline.clearTimeline", () => {
 		trim: 0,
 		annotation: 0,
 		speed: 0,
-		cameraFullscreen: 0,
+		camera: 0,
 	};
 
 	// A project holding everything that is NOT an edit: two clips, a webcam, an imported
@@ -927,7 +1045,7 @@ describe("useTimeline.clearTimeline", () => {
 			trim: 1,
 			annotation: 1,
 			speed: 1,
-			cameraFullscreen: 1,
+			camera: 1,
 		});
 
 		await act(async () => {
@@ -966,7 +1084,7 @@ describe("useTimeline.clearTimeline", () => {
 			trim: 1,
 			annotation: 1,
 			speed: 1,
-			cameraFullscreen: 1,
+			camera: 1,
 		});
 
 		act(() => {

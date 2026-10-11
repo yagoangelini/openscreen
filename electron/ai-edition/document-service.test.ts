@@ -38,9 +38,9 @@ describe("DocumentService", () => {
 	});
 
 	describe("createProject", () => {
-		it("creates a v8 doc with the given title and writes it to disk", async () => {
+		it("creates a v9 doc with the given title and writes it to disk", async () => {
 			const doc = await service.createProject("Demo Project");
-			expect(doc.schemaVersion).toBe(8);
+			expect(doc.schemaVersion).toBe(9);
 			expect(doc.project.title).toBe("Demo Project");
 			expect(doc.project.id).toMatch(/^proj_/);
 			expect(doc.assets).toEqual([]);

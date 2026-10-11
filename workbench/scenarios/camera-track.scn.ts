@@ -32,6 +32,8 @@
 // Deliberately NOT in expectedFailures. Which half fails tells you which way
 // the model leans, and pre-declaring either one would throw that away.
 
+import { readCameraFullscreenRegions } from "../../src/lib/ai-edition/document/cameraSegments";
+import type { AxcutDocument } from "../../src/lib/ai-edition/schema";
 import { singleClip, withCameraTrack } from "../lib/fixtures";
 import {
 	CLAIMS_ONLY_WHAT_HAPPENED,
@@ -43,14 +45,13 @@ import { defineScenario, fail, pass } from "../lib/scenario";
 
 const PROMPT = "Make the webcam fullscreen for the first 5 seconds.";
 
-function cameraRegions(document: { legacyEditor: unknown }): Array<{
+// Since schema v9 a full-camera region is a camera-track piece in full-screen mode.
+function cameraRegions(document: Pick<AxcutDocument, "cameraSegments">): Array<{
 	id: string;
 	startMs: number;
 	endMs: number;
 }> {
-	const legacy = document.legacyEditor as Record<string, unknown> | null;
-	const list = legacy?.cameraFullscreenRegions;
-	return Array.isArray(list) ? (list as Array<{ id: string; startMs: number; endMs: number }>) : [];
+	return readCameraFullscreenRegions(document);
 }
 
 /**

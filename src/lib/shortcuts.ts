@@ -7,6 +7,7 @@ export const SHORTCUT_ACTIONS = [
 	"addTrim",
 	"addSpeed",
 	"addCameraFullscreen",
+	"splitCamera",
 	"addAnnotation",
 	"addAudio",
 	"addVoiceover",
@@ -149,6 +150,8 @@ export const DEFAULT_SHORTCUTS: ShortcutsConfig = {
 	addTrim: { key: "t" },
 	addSpeed: { key: "s" },
 	addCameraFullscreen: { key: "c" },
+	// B, as in a blade: S is already speed.
+	splitCamera: { key: "b" },
 	addAnnotation: { key: "a" },
 	addAudio: { key: "m" },
 	// Record a voiceover over the timeline from the playhead.
@@ -168,6 +171,7 @@ export const SHORTCUT_LABELS: Record<ShortcutAction, string> = {
 	addTrim: "Add Trim",
 	addSpeed: "Add Speed",
 	addCameraFullscreen: "Add Full Camera",
+	splitCamera: "Split Camera at Playhead",
 	addAnnotation: "Add Annotation",
 	addAudio: "Add Audio",
 	addVoiceover: "Record Voiceover",

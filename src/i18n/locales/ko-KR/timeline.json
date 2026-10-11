@@ -7,7 +7,8 @@
 		"addTrim": "트림 추가: 현재 시점에서 영상의 한 구간을 제거합니다",
 		"addAnnotation": "현재 시점에 텍스트, 화살표, 이미지 또는 블러 추가",
 		"addSpeed": "현재 시점에 속도 변경 추가",
-		"addCameraFullscreen": "전체 화면 카메라 추가: 현재 시점에 카메라를 전체 화면으로 표시합니다"
+		"addCameraFullscreen": "전체 화면 카메라 추가: 현재 시점에 카메라를 전체 화면으로 표시합니다",
+		"splitCamera": "현재 시점에서 카메라 분할: 각 구간을 따로 편집할 수 있습니다"
 	},
 	"hints": {
 		"pressZoom": "{{key}}를 눌러 줌 추가",
@@ -32,7 +33,10 @@
 		"emptyText": "빈 텍스트",
 		"cameraFullscreen": "전체 화면 카메라",
 		"cameraFullscreenItem": "전체 화면 카메라 {{index}}",
-		"marker": "{{time}} 마커"
+		"marker": "{{time}} 마커",
+		"cameraTrack": "카메라",
+		"cameraPip": "PiP",
+		"cameraHidden": "카메라 없음"
 	},
 	"trails": {
 		"zoomIn": "줌 인: 줌이 시작될 때까지 화면이 확대됩니다",
@@ -120,5 +124,17 @@
 		"recordingUnavailable": "여기에서는 녹음할 수 없습니다",
 		"saveFailed": "녹음을 저장하지 못했습니다",
 		"importFailed": "오디오 파일을 가져오지 못했습니다"
+	},
+	"cameraPiece": {
+		"title": "카메라 구간",
+		"span": "{{start}}부터 {{end}}까지",
+		"mode": "카메라 표시",
+		"modePip": "화면 속 화면",
+		"modeFullscreen": "전체 화면",
+		"modeHidden": "카메라 없음",
+		"syncHint": "카메라는 화면과 계속 동기화됩니다. 이 구간은 보이는 방식만 바꿉니다.",
+		"splitAtPlayhead": "재생 위치에서 분할",
+		"mergeWithNext": "다음 구간과 합치기",
+		"reset": "기본값으로 되돌리기"
 	}
 }

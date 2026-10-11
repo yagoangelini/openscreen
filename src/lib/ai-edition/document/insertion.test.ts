@@ -126,7 +126,7 @@ describe("insertGeneratedClip", () => {
 		]);
 	});
 
-	it("keeps the speed and Full Camera regions of the right half, and both sides of one across the cut (#1037)", () => {
+	it("keeps the speed regions and camera pieces of the right half, and both sides of one across the cut (#1037)", () => {
 		const region = (id: string, startSec: number, endSec: number) => ({
 			id,
 			clipId: "c1",
@@ -142,8 +142,11 @@ describe("insertGeneratedClip", () => {
 						{ ...region("right", 6, 8), speed: 2 },
 						{ ...region("across", 3, 5), speed: 2 },
 					],
-					cameraFullscreenRegions: [region("right", 7, 9), region("across", 3, 5)],
 				},
+				cameraSegments: [
+					{ ...region("right", 7, 9), segmentId: "s_right", mode: "fullscreen", origin: "user" },
+					{ ...region("across", 3, 5), segmentId: "s_across", mode: "fullscreen", origin: "user" },
+				],
 			} as Partial<AxcutDocument>),
 		);
 		const rightId = next.timeline.clips[2].id;
@@ -157,11 +160,15 @@ describe("insertGeneratedClip", () => {
 			["right", 4, 5],
 			["right", 6, 8],
 		]);
-		expect(spans(legacy.cameraFullscreenRegions)).toEqual([
+		expect(spans(next.cameraSegments)).toEqual([
 			["c1", 3, 4],
 			["right", 4, 5],
 			["right", 7, 9],
 		]);
+		// The piece cut by the insertion is still ONE piece: both halves keep its segmentId.
+		expect(
+			next.cameraSegments.filter((p) => p.segmentId === "s_across").map((p) => p.sourceStartSec),
+		).toEqual([3, 4]);
 	});
 });
 

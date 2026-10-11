@@ -31,13 +31,14 @@ import {
 	removeAudioTrack,
 	separateAudioLanes,
 } from "./audioTracks";
+import { readCameraSegments } from "./cameraSegments";
 import { createId } from "./ids";
 
 /** The region families a delete can target by id. Shared with the store so "which kinds
  *  exist" has exactly one definition. `trim` is a source-time cut; the rest are pill-merged
- *  effects (zoom / speed / annotation / camera-fullscreen). Clips are removed via
+ *  effects (zoom / speed / annotation / a camera-track piece). Clips are removed via
  *  {@link removeClip}, not here — deleting a clip reflows the whole timeline. */
-export type RegionKind = "zoom" | "trim" | "annotation" | "speed" | "cameraFullscreen" | "audio";
+export type RegionKind = "zoom" | "trim" | "annotation" | "speed" | "camera" | "audio";
 
 /** Length a clip is given before its media has been probed. Lives here, in the pure
  *  document layer, because that layer decides which clips are still waiting for a real
@@ -368,9 +369,6 @@ export function mapAllRegionCollections(
 	const speedRegions = Array.isArray(legacy?.speedRegions)
 		? (legacy?.speedRegions as StoredRegion[])
 		: undefined;
-	const cameraFullscreenRegions = Array.isArray(legacy?.cameraFullscreenRegions)
-		? (legacy?.cameraFullscreenRegions as StoredRegion[])
-		: undefined;
 
 	return {
 		...document,
@@ -404,15 +402,15 @@ export function mapAllRegionCollections(
 				() => createId("audio"),
 			),
 		),
+		// The camera track's pieces (v9), anchored like a zoom. `readCameraSegments` tolerates
+		// a document assembled in memory before the field existed.
+		cameraSegments: fn(
+			readCameraSegments(document) as unknown as StoredRegion[],
+			"cam",
+		) as unknown as AxcutDocument["cameraSegments"],
 		legacyEditor:
-			legacy && (speedRegions || cameraFullscreenRegions)
-				? {
-						...legacy,
-						...(speedRegions ? { speedRegions: fn(speedRegions, "speed") } : {}),
-						...(cameraFullscreenRegions
-							? { cameraFullscreenRegions: fn(cameraFullscreenRegions, "camfull") }
-							: {}),
-					}
+			legacy && speedRegions
+				? { ...legacy, speedRegions: fn(speedRegions, "speed") }
 				: document.legacyEditor,
 	};
 }
@@ -727,7 +725,7 @@ function anchoredRegionsOf(document: AxcutDocument): Array<{ id: string; clipId:
 		document.zoomRanges as unknown as StoredRegion[],
 		document.annotations as unknown as StoredRegion[],
 		(legacy?.speedRegions as StoredRegion[] | undefined) ?? [],
-		(legacy?.cameraFullscreenRegions as StoredRegion[] | undefined) ?? [],
+		readCameraSegments(document) as unknown as StoredRegion[],
 	];
 	return collections
 		.flat()
@@ -1031,6 +1029,15 @@ export function duplicateClip(
 	const copiedTrims = document.timeline.trimRanges
 		.filter((t) => t.clipId === original.id)
 		.map((t) => ({ ...t, id: createId("trim"), clipId: copy.id }));
+	// A copied camera piece is a piece of its own: sharing the original's `segmentId` would
+	// make the two one pill wherever they touch, and an edit of one would reach the other.
+	const copiedSegmentIds = new Map<string, string>();
+	const copySegmentId = (segmentId: unknown) => {
+		if (typeof segmentId !== "string") return {};
+		const next = copiedSegmentIds.get(segmentId) ?? createId("camseg");
+		copiedSegmentIds.set(segmentId, next);
+		return { segmentId: next };
+	};
 	const withModifiers = mapAllRegionCollections(document, (regions, prefix) =>
 		prefix === "audio"
 			? regions
@@ -1038,7 +1045,14 @@ export function duplicateClip(
 					...regions,
 					...regions
 						.filter((region) => hasCompleteClipAnchor(region) && region.clipId === original.id)
-						.map((region) => ({ ...region, id: createId(prefix), clipId: copy.id })),
+						.map((region) => ({
+							...region,
+							id: createId(prefix),
+							clipId: copy.id,
+							...(prefix === "cam"
+								? copySegmentId((region as { segmentId?: unknown }).segmentId)
+								: {}),
+						})),
 				],
 	);
 	return withClipsChanged(
@@ -1092,7 +1106,7 @@ export function setClipSourceRange(
  * keys off `startMs`/`endMs` and a trim stores `startSec`/`endSec` plus a `clipId` anchor —
  * different storage, same rule. Trims used to be the exception here (a bare id filter), so a
  * cut grown across a clip boundary — necessarily 2+ rows — lost only the row that was
- * clicked and kept cutting on the other side. Speed / camera-fullscreen live under
+ * clicked and kept cutting on the other side. Speed lives under
  * `legacyEditor`. An id that matches nothing is a no-op. Pure.
  */
 export function removeRegion(document: AxcutDocument, kind: RegionKind, id: string): AxcutDocument {
@@ -1127,15 +1141,9 @@ export function removeRegion(document: AxcutDocument, kind: RegionKind, id: stri
 			);
 			return { ...document, legacyEditor: { ...legacy, speedRegions: prev } };
 		}
-		case "cameraFullscreen": {
-			const legacy = (document.legacyEditor as Record<string, unknown>) ?? {};
-			const prev = dropPillById(
-				(legacy.cameraFullscreenRegions as Array<{ id: string; startMs: number; endMs: number }>) ??
-					[],
-				id,
-			);
-			return { ...document, legacyEditor: { ...legacy, cameraFullscreenRegions: prev } };
-		}
+		case "camera":
+			// The whole piece goes, and its stretch is the default picture-in-picture again.
+			return { ...document, cameraSegments: dropPillById(readCameraSegments(document), id) };
 		default: {
 			// ponytail: exhaustive — TS errors here if a new RegionKind is added.
 			const exhaustive: never = kind;
@@ -1176,9 +1184,9 @@ const EDIT_REGIONS: Record<
 		count: (d) => legacyRegionCount(d, "speedRegions"),
 		clear: (d) => withLegacyRegionsCleared(d, "speedRegions"),
 	},
-	cameraFullscreen: {
-		count: (d) => legacyRegionCount(d, "cameraFullscreenRegions"),
-		clear: (d) => withLegacyRegionsCleared(d, "cameraFullscreenRegions"),
+	camera: {
+		count: (d) => readCameraSegments(d).length,
+		clear: (d) => ({ ...d, cameraSegments: [] }),
 	},
 };
 

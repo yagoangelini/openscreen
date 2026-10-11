@@ -7,7 +7,8 @@
 		"addTrim": "Aggiungi un taglio: rimuove una parte del video nel momento attuale",
 		"addAnnotation": "Aggiungi testo, una freccia, un'immagine o una sfocatura nel momento attuale",
 		"addSpeed": "Aggiungi un cambio di velocità nel momento attuale",
-		"addCameraFullscreen": "Aggiungi Camera a schermo intero: mostra la fotocamera a schermo intero nel momento attuale"
+		"addCameraFullscreen": "Aggiungi Camera a schermo intero: mostra la fotocamera a schermo intero nel momento attuale",
+		"splitCamera": "Dividi la camera nel momento attuale: ogni pezzo si modifica poi separatamente"
 	},
 	"hints": {
 		"pressZoom": "Premi {{key}} per aggiungere zoom",
@@ -32,7 +33,10 @@
 		"emptyText": "Testo vuoto",
 		"cameraFullscreen": "Camera a schermo intero",
 		"cameraFullscreenItem": "Camera a schermo intero {{index}}",
-		"marker": "Marcatore a {{time}}"
+		"marker": "Marcatore a {{time}}",
+		"cameraTrack": "Camera",
+		"cameraPip": "PiP",
+		"cameraHidden": "Nessuna camera"
 	},
 	"trails": {
 		"zoomIn": "Zoom in: la vista si avvicina fino all'inizio dello zoom",
@@ -120,5 +124,17 @@
 		"recordingUnavailable": "La registrazione non è disponibile qui",
 		"saveFailed": "Impossibile salvare la registrazione",
 		"importFailed": "Impossibile importare il file audio"
+	},
+	"cameraPiece": {
+		"title": "Pezzo di camera",
+		"span": "Da {{start}} a {{end}}",
+		"mode": "Mostra la camera",
+		"modePip": "Picture-in-picture",
+		"modeFullscreen": "Schermo intero",
+		"modeHidden": "Nessuna camera",
+		"syncHint": "La camera resta sincronizzata con lo schermo. Questo pezzo cambia solo come viene mostrata.",
+		"splitAtPlayhead": "Dividi al cursore",
+		"mergeWithNext": "Unisci al successivo",
+		"reset": "Torna al predefinito"
 	}
 }

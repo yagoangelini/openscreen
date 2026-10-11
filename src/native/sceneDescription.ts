@@ -16,7 +16,6 @@
  */
 
 import type {
-	CameraFullscreenRegion,
 	Rotation3DPreset,
 	SpeedRegion,
 	WallpaperMotion,
@@ -33,6 +32,7 @@ import {
 } from "@/lib/ai-edition/captions";
 import { clickSoundForDocument } from "@/lib/ai-edition/clickSound";
 import { collapseTracksToPills, trackGroupId } from "@/lib/ai-edition/document/audioTracks";
+import { readCameraFullscreenRegions } from "@/lib/ai-edition/document/cameraSegments";
 import { createId } from "@/lib/ai-edition/document/ids";
 import { isFormatFillActive, pickOutputDims } from "@/lib/ai-edition/document/outputFormat";
 import {
@@ -127,7 +127,7 @@ export interface SceneZoomRegion {
 	motion?: ZoomMotion;
 }
 
-/** A "Full Camera" timeline region (from `legacyEditor.cameraFullscreenRegions`). Times in seconds. */
+/** A "Full Camera" span, derived from the camera track (`readCameraFullscreenRegions`). Seconds. */
 export interface SceneCameraFullscreenRegion {
 	startSec: number;
 	endSec: number;
@@ -1096,10 +1096,10 @@ export function buildSceneDescription(
 		document.timeline.clips,
 		() => createId("ann"),
 	);
+	// Derived from the camera track (v9): its full-screen pieces, touching ones joined so the
+	// camera does not ease out and back in at the seam between two of them.
 	const projectedCameraFullscreenRegions = projectRegionsToSource(
-		((document.legacyEditor as Record<string, unknown> | null)?.cameraFullscreenRegions as
-			| CameraFullscreenRegion[]
-			| undefined) ?? [],
+		readCameraFullscreenRegions(document),
 		visibleClips,
 		document.timeline.clips,
 		() => createId("camfull"),

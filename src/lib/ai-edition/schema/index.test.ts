@@ -16,12 +16,13 @@ import {
 	timelineSchema,
 	trimRangeSchema,
 	upgradeV7DocumentToV8,
+	upgradeV8DocumentToV9,
 	zoomRegionSchema,
 } from "./index";
 
-describe("axcut-schema v8", () => {
-	it("uses schema version 8", () => {
-		expect(axcutSchemaVersion).toBe(8);
+describe("axcut-schema v9", () => {
+	it("uses schema version 9", () => {
+		expect(axcutSchemaVersion).toBe(9);
 	});
 
 	it("rejects unknown schema versions", () => {
@@ -33,9 +34,9 @@ describe("axcut-schema v8", () => {
 		).toThrow();
 	});
 
-	it("createEmptyDocument returns a valid v8 doc with empty collections", () => {
+	it("createEmptyDocument returns a valid v9 doc with empty collections", () => {
 		const doc = createEmptyDocument({ projectId: "proj_1", title: "Demo" });
-		expect(doc.schemaVersion).toBe(8);
+		expect(doc.schemaVersion).toBe(9);
 		expect(doc.assets).toEqual([]);
 		expect(doc.timeline.clips).toEqual([]);
 		expect(doc.timeline.trimRanges).toEqual([]);
@@ -312,7 +313,7 @@ describe("axcut-schema v8", () => {
 					v3Doc({ project: { ...v3Doc().project, primaryAssetId: "asset_2" } }),
 				),
 			);
-			expect(doc.schemaVersion).toBe(8);
+			expect(doc.schemaVersion).toBe(9);
 			expect((doc as Record<string, unknown>).cameraTrack).toBeUndefined();
 			expect(doc.assets.find((a) => a.id === "asset_1")?.cameraTrack).toBeNull();
 			expect(doc.assets.find((a) => a.id === "asset_2")?.cameraTrack?.sourcePath).toBe("/cam.mp4");
@@ -326,7 +327,7 @@ describe("axcut-schema v8", () => {
 
 		it("is a no-op when the v3 document has no legacy cameraTrack", () => {
 			const doc = documentSchema.parse(migrateRawDocumentToCurrent(v3Doc({ cameraTrack: null })));
-			expect(doc.schemaVersion).toBe(8);
+			expect(doc.schemaVersion).toBe(9);
 			for (const asset of doc.assets) {
 				expect(asset.cameraTrack).toBeNull();
 			}
@@ -472,7 +473,7 @@ describe("v4 -> v5 clip-anchored modifier migration", () => {
 				}),
 			),
 		);
-		expect(doc.schemaVersion).toBe(8);
+		expect(doc.schemaVersion).toBe(9);
 		expect(doc.zoomRanges).toHaveLength(1);
 		const z = doc.zoomRanges[0];
 		expect(z).toMatchObject({ id: "z1", clipId: "clip_a", depth: 3 });
@@ -609,7 +610,7 @@ describe("v5 -> v6 native AspectRatio migration", () => {
 				}),
 			),
 		);
-		expect(doc.schemaVersion).toBe(8);
+		expect(doc.schemaVersion).toBe(9);
 		expect((doc.legacyEditor as Record<string, unknown>).aspectRatio).toBe("16:9");
 	});
 
@@ -666,7 +667,7 @@ describe("v5 -> v6 native AspectRatio migration", () => {
 				legacyEditor: { aspectRatio: "native" },
 			}),
 		);
-		expect(doc.schemaVersion).toBe(8);
+		expect(doc.schemaVersion).toBe(9);
 		expect((doc.legacyEditor as Record<string, unknown>).aspectRatio).toBe("9:16");
 	});
 
@@ -677,7 +678,7 @@ describe("v5 -> v6 native AspectRatio migration", () => {
 		const doc = documentSchema.parse(
 			migrateRawDocumentToCurrent(makeV5Doc({ legacyEditor: { aspectRatio: "native" } })),
 		);
-		expect(doc.schemaVersion).toBe(8);
+		expect(doc.schemaVersion).toBe(9);
 		expect((doc.legacyEditor as Record<string, unknown>).aspectRatio).toBe("native");
 	});
 
@@ -685,7 +686,7 @@ describe("v5 -> v6 native AspectRatio migration", () => {
 		const doc = documentSchema.parse(
 			migrateRawDocumentToCurrent(makeV5Doc({ legacyEditor: { aspectRatio: "4:5" } })),
 		);
-		expect(doc.schemaVersion).toBe(8);
+		expect(doc.schemaVersion).toBe(9);
 		expect((doc.legacyEditor as Record<string, unknown>).aspectRatio).toBe("4:5");
 	});
 
@@ -693,7 +694,7 @@ describe("v5 -> v6 native AspectRatio migration", () => {
 		const doc = documentSchema.parse(
 			migrateRawDocumentToCurrent(makeV5Doc({ legacyEditor: { someOtherField: "preserved" } })),
 		);
-		expect(doc.schemaVersion).toBe(8);
+		expect(doc.schemaVersion).toBe(9);
 		const legacy = doc.legacyEditor as Record<string, unknown>;
 		expect(legacy.someOtherField).toBe("preserved");
 		expect(legacy.aspectRatio).toBe("16:9");
@@ -702,7 +703,7 @@ describe("v5 -> v6 native AspectRatio migration", () => {
 	it("passes through a v5 doc with no legacyEditor at all, which v8 then pins to 16:9", () => {
 		const v5 = makeV5Doc();
 		const doc = documentSchema.parse(migrateRawDocumentToCurrent(v5));
-		expect(doc.schemaVersion).toBe(8);
+		expect(doc.schemaVersion).toBe(9);
 		expect(doc.legacyEditor).toEqual({ aspectRatio: "16:9" });
 	});
 
@@ -756,7 +757,7 @@ describe("v5 -> v6 native AspectRatio migration", () => {
 				legacyEditor: { aspectRatio: "native" },
 			}),
 		);
-		expect(doc.schemaVersion).toBe(8);
+		expect(doc.schemaVersion).toBe(9);
 		expect((doc.legacyEditor as Record<string, unknown>).aspectRatio).toBe("native");
 	});
 
@@ -798,7 +799,7 @@ describe("v5 -> v6 native AspectRatio migration", () => {
 				legacyEditor: { aspectRatio: "native" },
 			}),
 		);
-		expect(doc.schemaVersion).toBe(8);
+		expect(doc.schemaVersion).toBe(9);
 		expect((doc.legacyEditor as Record<string, unknown>).aspectRatio).toBe("9:16");
 	});
 
@@ -842,7 +843,7 @@ describe("v5 -> v6 native AspectRatio migration", () => {
 				legacyEditor: { aspectRatio: "native" },
 			}),
 		);
-		expect(doc.schemaVersion).toBe(8);
+		expect(doc.schemaVersion).toBe(9);
 		expect((doc.legacyEditor as Record<string, unknown>).aspectRatio).toBe("8:9");
 	});
 });
@@ -912,7 +913,7 @@ describe("v6 -> v7 trim clip-anchor migration", () => {
 				[{ id: "t1", assetId: "asset_1", startSec: 3, endSec: 5, origin: "user", reason: "" }],
 			),
 		);
-		expect((out as Record<string, unknown>).schemaVersion).toBe(8);
+		expect((out as Record<string, unknown>).schemaVersion).toBe(9);
 		expect(trimsOf(out)).toEqual([
 			{
 				id: "t1",
@@ -1243,5 +1244,89 @@ describe("follow-cursor zooms read as orbits under auto focus", () => {
 	it("leaves an orbit set to manual alone, so a second load changes nothing", () => {
 		const manualOrbit = docWith([zoom({ rotationPreset: "orbit", focusMode: "manual" })]);
 		expect(migrateRawDocumentToCurrent(manualOrbit)).toBe(manualOrbit);
+	});
+});
+
+// --- v8 -> v9 : the camera gets its own track ------------------------------------
+
+describe("v8 -> v9 camera track", () => {
+	const v8Doc = (legacyEditor: Record<string, unknown> | null) => {
+		const { cameraSegments: _none, ...rest } = createEmptyDocument({ projectId: "p", title: "t" });
+		return { ...rest, schemaVersion: 8, legacyEditor };
+	};
+	const fragment = (id: string, clipId: string, startMs: number, endMs: number) => ({
+		id,
+		startMs,
+		endMs,
+		clipId,
+		sourceStartSec: startMs / 1000,
+		sourceEndSec: endMs / 1000,
+	});
+
+	it("turns each Full Camera pill into one full-screen piece, fragments and anchors kept", () => {
+		const out = upgradeV8DocumentToV9(
+			v8Doc({
+				padding: 20,
+				cameraFullscreenRegions: [
+					// One pill across a clip junction: two fragments that touch.
+					fragment("a1", "c1", 3000, 5000),
+					fragment("a2", "c2", 5000, 7000),
+					// Another pill, apart from it.
+					fragment("b1", "c2", 9000, 9500),
+				],
+			}),
+		) as Record<string, unknown>;
+		expect(out.schemaVersion).toBe(9);
+		expect(out.legacyEditor).toEqual({ padding: 20 });
+		const pieces = out.cameraSegments as Array<Record<string, unknown>>;
+		expect(pieces.map((p) => [p.id, p.clipId, p.startMs, p.endMs, p.mode])).toEqual([
+			["a1", "c1", 3000, 5000, "fullscreen"],
+			["a2", "c2", 5000, 7000, "fullscreen"],
+			["b1", "c2", 9000, 9500, "fullscreen"],
+		]);
+		expect(pieces[0].segmentId).toBe(pieces[1].segmentId);
+		expect(pieces[2].segmentId).not.toBe(pieces[0].segmentId);
+		// And the result is a valid v9 document.
+		expect(documentSchema.parse(out).cameraSegments).toHaveLength(3);
+	});
+
+	it("drops what is not a span instead of refusing the whole document", () => {
+		const out = upgradeV8DocumentToV9(
+			v8Doc({
+				cameraFullscreenRegions: [
+					{ id: "ok", startMs: 0, endMs: 1000 },
+					{ id: "", startMs: 0, endMs: 1000 },
+					{ id: "inverted", startMs: 2000, endMs: 1000 },
+					"garbage",
+					null,
+				],
+			}),
+		);
+		const doc = documentSchema.parse(out);
+		expect(doc.cameraSegments.map((p) => p.id)).toEqual(["ok"]);
+		const notAList = documentSchema.parse(
+			upgradeV8DocumentToV9(v8Doc({ cameraFullscreenRegions: 42 })),
+		);
+		expect(notAList.cameraSegments).toEqual([]);
+		expect(notAList.legacyEditor).toEqual({});
+	});
+
+	it("gives a document with no Full Camera an empty track", () => {
+		const out = upgradeV8DocumentToV9(v8Doc(null)) as Record<string, unknown>;
+		expect(out.schemaVersion).toBe(9);
+		expect(out.cameraSegments).toEqual([]);
+		expect(out.legacyEditor).toBeNull();
+	});
+
+	it("runs in the load chain, and a second load changes nothing", () => {
+		const once = parseDocumentFile(
+			v8Doc({ cameraFullscreenRegions: [{ id: "cf", startMs: 0, endMs: 1000 }] }),
+		);
+		expect(once.cameraSegments).toEqual([
+			expect.objectContaining({ id: "cf", mode: "fullscreen", origin: "user" }),
+		]);
+		expect(parseDocumentFile(once)).toEqual(once);
+		const fresh = createEmptyDocument({ projectId: "p", title: "t" });
+		expect(upgradeV8DocumentToV9(fresh)).toBe(fresh);
 	});
 });

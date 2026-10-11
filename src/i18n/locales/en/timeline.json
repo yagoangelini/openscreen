@@ -7,7 +7,8 @@
 		"addTrim": "Add a trim: removes a section of the video at the current time",
 		"addAnnotation": "Add text, an arrow, an image or a blur at the current time",
 		"addSpeed": "Add a speed change at the current time",
-		"addCameraFullscreen": "Add Full Camera: shows the camera full screen at the current time"
+		"addCameraFullscreen": "Add Full Camera: shows the camera full screen at the current time",
+		"splitCamera": "Split the camera at the current time: each piece is then edited on its own"
 	},
 	"hints": {
 		"pressZoom": "Press {{key}} to add zoom",
@@ -32,7 +33,10 @@
 		"emptyText": "Empty text",
 		"cameraFullscreen": "Full Camera",
 		"cameraFullscreenItem": "Full Camera {{index}}",
-		"marker": "Marker at {{time}}"
+		"marker": "Marker at {{time}}",
+		"cameraTrack": "Camera",
+		"cameraPip": "PiP",
+		"cameraHidden": "No camera"
 	},
 	"trails": {
 		"zoomIn": "Zoom-in: the view moves in until the zoom starts",
@@ -120,5 +124,17 @@
 		"recordingUnavailable": "Recording is not available here",
 		"saveFailed": "Could not save the recording",
 		"importFailed": "Could not import the audio file"
+	},
+	"cameraPiece": {
+		"title": "Camera piece",
+		"span": "From {{start}} to {{end}}",
+		"mode": "Show the camera",
+		"modePip": "Picture-in-picture",
+		"modeFullscreen": "Full screen",
+		"modeHidden": "No camera",
+		"syncHint": "The camera stays in sync with the screen. This piece only changes how it is shown.",
+		"splitAtPlayhead": "Split at playhead",
+		"mergeWithNext": "Join with next piece",
+		"reset": "Back to default"
 	}
 }
