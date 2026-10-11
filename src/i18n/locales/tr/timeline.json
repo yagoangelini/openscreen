@@ -129,7 +129,7 @@
 		"title": "Kamera parçası",
 		"span": "{{start}} ile {{end}} arası",
 		"mode": "Kamerayı göster",
-		"modePip": "Resim içinde resim",
+		"modePip": "PiP",
 		"modeFullscreen": "Tam ekran",
 		"modeHidden": "Kamera yok",
 		"syncHint": "Kamera ekranla senkron kalır. Bu parça yalnızca nasıl gösterildiğini değiştirir.",

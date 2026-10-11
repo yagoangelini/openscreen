@@ -32,7 +32,10 @@ import {
 } from "@/lib/ai-edition/captions";
 import { clickSoundForDocument } from "@/lib/ai-edition/clickSound";
 import { collapseTracksToPills, trackGroupId } from "@/lib/ai-edition/document/audioTracks";
-import { readCameraFullscreenRegions } from "@/lib/ai-edition/document/cameraSegments";
+import {
+	readCameraFullscreenRegions,
+	readCameraHiddenRegions,
+} from "@/lib/ai-edition/document/cameraSegments";
 import { createId } from "@/lib/ai-edition/document/ids";
 import { isFormatFillActive, pickOutputDims } from "@/lib/ai-edition/document/outputFormat";
 import {
@@ -491,6 +494,12 @@ export interface SceneDescription {
 	 */
 	cameraFullscreenRegions: SceneCameraFullscreenRegion[];
 	/**
+	 * "No camera" spans of the camera track (schema v9): the webcam leaves the frame, shrunk to
+	 * nothing at its anchor, and comes back. Same shape and same envelope as a Full Camera
+	 * region (`camera_hidden_regions`, scene.rs). Empty when none set.
+	 */
+	cameraHiddenRegions: SceneCameraFullscreenRegion[];
+	/**
 	 * Speed regions projected onto each clip's source time (one entry per
 	 * source-time span after `projectRegionsToSourceTime`). Empty when none set.
 	 *
@@ -807,6 +816,25 @@ export function webcamBoxSourceSize(
 	};
 }
 
+/** One projected camera-track span as the scene carries it (Full Camera or no camera). */
+function sceneCameraRegion(region: {
+	startMs: number;
+	endMs: number;
+	clipIndex?: number;
+	underTrim?: boolean;
+	continuesBefore?: boolean;
+	continuesAfter?: boolean;
+}): SceneCameraFullscreenRegion {
+	return {
+		startSec: region.startMs / 1000,
+		endSec: region.endMs / 1000,
+		clipIndex: region.clipIndex,
+		...(region.underTrim ? { underTrim: true } : {}),
+		...(region.continuesBefore ? { continuesBefore: true } : {}),
+		...(region.continuesAfter ? { continuesAfter: true } : {}),
+	};
+}
+
 /** Serialize a document into a {@link SceneDescription}. No per-frame math; the one side effect is
  *  handing the click cues to the preview, which has no document of its own to read them from. */
 export function buildSceneDescription(
@@ -1103,6 +1131,12 @@ export function buildSceneDescription(
 		visibleClips,
 		document.timeline.clips,
 		() => createId("camfull"),
+	);
+	const projectedCameraHiddenRegions = projectRegionsToSource(
+		readCameraHiddenRegions(document),
+		visibleClips,
+		document.timeline.clips,
+		() => createId("camhide"),
 	);
 	// Speed regions carry an extra `speed` field the standard `rangeSchema` does not, so we
 	// can't read from `document.timeline.speedRanges` today (see SceneDescription.speedRegions
@@ -1496,14 +1530,8 @@ export function buildSceneDescription(
 			})
 			// Ascending zIndex so the compositor paints in order without sorting per frame.
 			.sort((a, b) => a.zIndex - b.zIndex),
-		cameraFullscreenRegions: projectedCameraFullscreenRegions.map((region) => ({
-			startSec: region.startMs / 1000,
-			endSec: region.endMs / 1000,
-			clipIndex: region.clipIndex,
-			...(region.underTrim ? { underTrim: true } : {}),
-			...(region.continuesBefore ? { continuesBefore: true } : {}),
-			...(region.continuesAfter ? { continuesAfter: true } : {}),
-		})),
+		cameraFullscreenRegions: projectedCameraFullscreenRegions.map(sceneCameraRegion),
+		cameraHiddenRegions: projectedCameraHiddenRegions.map(sceneCameraRegion),
 		// Speed is the one modifier with nothing to show for itself on a parked playhead: a
 		// still frame has no rate. So the entries under a trim are dropped here rather than
 		// shipped inert — `speed_at` (regions.rs) matches on clipIndex + time with no window

@@ -30,6 +30,7 @@ import {
 	mergeCameraPieceWithNext,
 	moveCameraBoundary,
 	readCameraFullscreenRegions,
+	readCameraHiddenRegions,
 	readCameraSegments,
 	removeCameraPiece,
 	setCameraModeOverSpan,
@@ -1563,6 +1564,10 @@ export function useTimeline() {
 		() => readCameraFullscreenRegions({ cameraSegments }),
 		[cameraSegments],
 	);
+	const cameraHiddenRegions = useMemo(
+		() => readCameraHiddenRegions({ cameraSegments }),
+		[cameraSegments],
+	);
 
 	// --- Timeline audio tracks (issue #350) -------------------------------------
 	// CLIP-ANCHORED like every region above: one user-visible track is one pill
@@ -1751,6 +1756,7 @@ export function useTimeline() {
 		cameraSegments,
 		cameraPieces: cameraTrackPieces,
 		cameraFullscreenRegions,
+		cameraHiddenRegions,
 		clips: document?.timeline.clips ?? [],
 		assets: document?.assets ?? [],
 		// The timeline marks where the user has ADDED words — text with no audio behind it.

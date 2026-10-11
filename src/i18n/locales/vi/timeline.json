@@ -129,7 +129,7 @@
 		"title": "Đoạn camera",
 		"span": "Từ {{start}} đến {{end}}",
 		"mode": "Hiển thị camera",
-		"modePip": "Hình trong hình",
+		"modePip": "PiP",
 		"modeFullscreen": "Toàn màn hình",
 		"modeHidden": "Không camera",
 		"syncHint": "Camera vẫn đồng bộ với màn hình. Đoạn này chỉ đổi cách camera hiển thị.",

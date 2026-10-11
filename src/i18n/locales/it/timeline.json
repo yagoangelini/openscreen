@@ -129,7 +129,7 @@
 		"title": "Pezzo di camera",
 		"span": "Da {{start}} a {{end}}",
 		"mode": "Mostra la camera",
-		"modePip": "Picture-in-picture",
+		"modePip": "PiP",
 		"modeFullscreen": "Schermo intero",
 		"modeHidden": "Nessuna camera",
 		"syncHint": "La camera resta sincronizzata con lo schermo. Questo pezzo cambia solo come viene mostrata.",

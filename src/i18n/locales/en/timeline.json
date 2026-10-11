@@ -129,7 +129,7 @@
 		"title": "Camera piece",
 		"span": "From {{start}} to {{end}}",
 		"mode": "Show the camera",
-		"modePip": "Picture-in-picture",
+		"modePip": "PiP",
 		"modeFullscreen": "Full screen",
 		"modeHidden": "No camera",
 		"syncHint": "The camera stays in sync with the screen. This piece only changes how it is shown.",

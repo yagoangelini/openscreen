@@ -136,6 +136,8 @@ Os PRs do fork são abertos e mesclados com `gh pr merge N --merge`, sem CI. Ant
 | Esc/fechar durante um export | `ExportDialog` (`export-confirm-close`); proteção ao sair do app em `main.ts` (`exportJobs.isRunning`) | pergunta |
 | Webcam na contagem | `useScreenRecorder` (`deferWebcamToCountdown`, win32) | sempre |
 | Diagnóstico | `handlers.ts`: `gpu: {compositor, chromium}` | — |
+| Trilha da câmera (schema v9) | `document.cameraSegments`; edições puras em `src/lib/ai-edition/document/cameraSegments.ts`; migração `upgradeV8DocumentToV9`; trilha `renderCameraTrack` em `V4Timeline.tsx`; painel do trecho em `FloatingInspector.tsx`; escritas em `useTimeline.ts` (`saveCameraEdit`); atalho `splitCamera` (B) | cada trecho PiP, Tela cheia ou Sem câmera |
+| Sem câmera | cena `cameraHiddenRegions`; Rust `camera_hidden_regions` + `webcam_hidden` (`frame_geometry.rs`, três backends); prévia em `PreviewCanvas.tsx` | — |
 
 **Arquivos que podem aparecer ao lado de cada gravação:**
 
@@ -355,7 +357,7 @@ O fork acompanha `getopenscreen/openscreen`. O último merge (2.1.0) foi até `1
 
 ### Próximo passo: 2.2.0, trilha da câmera, câmera e vinheta
 
-**Pedido de 11/10:** a câmera numa trilha própria da timeline, com cortes e cada pedaço editável. O plano completo, em fases, está em [`PLANO-TRILHA-CAMERA.md`](PLANO-TRILHA-CAMERA.md). Ele absorve os itens 1 e 2 abaixo: o HUD escreve pedaços da trilha, e "Sem câmera" é um modo do pedaço. Comece pela fase 0 (modelo e migração v9).
+**Pedido de 11/10:** a câmera numa trilha própria da timeline, com cortes e cada pedaço editável. O plano completo, em fases, está em [`PLANO-TRILHA-CAMERA.md`](PLANO-TRILHA-CAMERA.md). Ele absorve os itens 1 e 2 abaixo: o HUD escreve pedaços da trilha, e "Sem câmera" é um modo do pedaço. **As fases 0, 1 e 2 estão no branch `feat/camera-track`** (schema v9, trilha, Sem câmera); a tabela de status está no plano. Falta a fase 3 (aparência por pedaço) e a 4 (o HUD escrevendo pedaços, item 1 abaixo).
 
 O que o usuário pediu está em `PLANO-FORK.md`, "Decisões de 10/10/2026 (tarde)". O que já foi levantado no código:
 

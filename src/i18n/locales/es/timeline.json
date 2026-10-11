@@ -129,7 +129,7 @@
 		"title": "Tramo de cámara",
 		"span": "De {{start}} a {{end}}",
 		"mode": "Mostrar la cámara",
-		"modePip": "Imagen en imagen",
+		"modePip": "PiP",
 		"modeFullscreen": "Pantalla completa",
 		"modeHidden": "Sin cámara",
 		"syncHint": "La cámara sigue sincronizada con la pantalla. Este tramo solo cambia cómo se muestra.",

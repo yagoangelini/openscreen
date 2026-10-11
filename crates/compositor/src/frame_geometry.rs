@@ -1965,6 +1965,9 @@ pub struct FrameGeometry {
     pub w_px: [f32; 2],
     pub w_radius: f32,
     pub shape_fade: f32,
+    /// Une zone "Sans caméra" (`camera_hidden_regions`) a fini de retirer la webcam : sa boîte
+    /// est vide, et aucun backend ne la dessine, ni elle ni son ombre.
+    pub webcam_hidden: bool,
     /// Cadre autour de l'écran : chrome de fenêtre plat (mode 14) ou appareil modelé (mode 17).
     /// `None` : aucun, et le rendu est celui d'avant le cadre, à l'octet. `Some` : `s_dst` est
     /// déjà la boîte rétrécie, et `s_radius` le rayon des coins de l'écran — des seuls coins BAS
@@ -3118,6 +3121,14 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
             crate::regions::camera_fullscreen_progress_at(cam_regions, source_t_prev, &clock);
         let shape_fade =
             crate::regions::camera_fullscreen_shape_at(cam_regions, source_t, &clock);
+        // "Sans caméra" : la même enveloppe que Full Camera (contenue dans la zone, montée et
+        // descente adoucies, aucune rampe à une coupe), lue comme la part de la webcam retirée.
+        let hidden_regions =
+            scene.map(|s| &s.camera_hidden_regions).unwrap_or(&empty_cam);
+        let hide_progress =
+            crate::regions::camera_fullscreen_progress_at(hidden_regions, source_t, &clock);
+        let hide_progress_prev =
+            crate::regions::camera_fullscreen_progress_at(hidden_regions, source_t_prev, &clock);
         // rétrécissement réactif : la webcam garde 70 % de sa taille pendant un zoom actif, quel
         // que soit son niveau (elle suivait 1/zoom, et rétrécissait donc d'autant plus que le zoom
         // était profond : ×0,6 au zoom maximal). L'enveloppe est celle de la région : elle descend
@@ -3421,6 +3432,16 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
         let w_nominal_min = (w_dst[2] * rw).min(w_dst[3] * rh);
         w_dst = fullscreen_dst(w_dst, cam_progress);
         w_dst_prev = fullscreen_dst(w_dst_prev, cam_progress_prev);
+        // "Sans caméra" : la boîte rétrécit vers l'ancre de la caméra jusqu'à rien, comme le zoom
+        // réactif, sans toucher aux shaders. Les deux zones ne se chevauchent jamais (une pièce
+        // de la piste n'a qu'un mode), donc l'ordre avec Full Camera n'importe pas.
+        let webcam_hidden = hide_progress >= 1.0;
+        if hide_progress > 0.0 {
+            w_dst = scale_anchored(w_dst, 1.0 - hide_progress.clamp(0.0, 1.0));
+        }
+        if hide_progress_prev > 0.0 {
+            w_dst_prev = scale_anchored(w_dst_prev, 1.0 - hide_progress_prev.clamp(0.0, 1.0));
+        }
 
         // Aucun contre-étirement ici : le render target porte la géométrie de sortie, rien n'est
         // étiré après coup, donc aucun rect n'est rétréci pour compenser.
@@ -3561,6 +3582,7 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
         w_px,
         w_radius,
         shape_fade,
+        webcam_hidden,
         window_frame,
         screen_mask,
     }
@@ -6788,6 +6810,56 @@ mod tests {
         }
     }
 
+    /// "Sans caméra" (piste caméra, schéma v9) : au milieu de la zone la webcam est retirée — boîte
+    /// vide, `webcam_hidden` levé, que chaque backend lit pour ne rien dessiner. Pendant la montée
+    /// elle rétrécit vers son ancre, et hors de la zone elle est exactement celle d'avant.
+    #[test]
+    fn a_no_camera_region_shrinks_the_camera_to_nothing_at_its_anchor() {
+        let cfg = crate::config::all().pop().expect("au moins une config");
+        let layout = r#""webcamReactiveZoom":false,"webcamAnchor":"bottom-right","webcamRect":{"x":0.77,"y":0.77,"width":0.2,"height":0.2}}"#;
+        let plain = golden_scene_json_with(layout, "");
+        let at = |json: &str, t: f32| {
+            let scene = Scene::from_json(json).expect("scène");
+            let mut input = golden_input(&scene, &cfg);
+            input.timeline_t_override = Some(t);
+            plan_frame(&input)
+        };
+        let hidden = golden_scene_json_with(
+            layout,
+            r#","cameraHiddenRegions":[{"clipIndex":0,"startSec":1.0,"endSec":5.0}]"#,
+        );
+        let mid = at(&hidden, 3.0);
+        assert!(mid.webcam_hidden);
+        assert!(mid.w_dst[2] < 1e-6 && mid.w_dst[3] < 1e-6, "{:?}", mid.w_dst);
+        // La montée : plus petite, et toujours au coin bas-droite (0,97 ; 0,97).
+        let easing = at(&hidden, 1.05);
+        assert!(!easing.webcam_hidden);
+        assert!(easing.w_dst[2] > 0.0 && easing.w_dst[2] < 0.2, "{:?}", easing.w_dst);
+        assert!((easing.w_dst[0] + easing.w_dst[2] - 0.97).abs() < 1e-5);
+        assert!((easing.w_dst[1] + easing.w_dst[3] - 0.97).abs() < 1e-5);
+        // Hors de la zone : la caméra d'une scène sans zone, au bit près.
+        let outside = at(&hidden, 6.0);
+        assert!(!outside.webcam_hidden);
+        assert_eq!(outside.w_dst, at(&plain, 6.0).w_dst);
+    }
+
+    /// Le JSON de `golden_scene` avec un autre layout, et des champs en plus à la fin.
+    fn golden_scene_json_with(layout: &str, extra: &str) -> String {
+        format!(
+            r##"{{
+            "clips":[{{"screenPath":"/s.mp4","webcamPath":"/w.mp4","sourceStartSec":0,"sourceEndSec":10,"webcamOffsetSec":0,"hasAudio":true}}],
+            "layout":{{"preset":"picture-in-picture","webcamSize":0.44,"webcamShape":"circle","webcamMirror":false,
+                      "webcamPosition":{{"cx":0.8577,"cy":0.8159}},{layout},
+            "effects":{{"padding":0.51,"blur":false,"shadow":0.35,"roundnessFrac":0.0255,"motionBlur":0.35}},
+            "background":{{"kind":"color","color":"#1e1e2e"}},
+            "zoomRegions":[],
+            "cursor":{{"show":true,"size":7.76,"smoothing":0,"motionBlur":0.35,"clickBounce":1,"clipToBounds":false,"theme":"default"}},
+            "cropByClip":[{{"x":0,"y":0,"width":0.61,"height":0.61}}],
+            "output":{{"width":1170,"height":658,"fps":60}}{extra}
+        }}"##
+        )
+    }
+
     /// Le rétrécissement réactif vise 70 % QUEL QUE SOIT le niveau de zoom : la caméra garde la
     /// même taille à 1,25×, 2× et 5× (elle suivait 1/zoom, et rétrécissait d'autant plus que le
     /// zoom était profond).
@@ -7847,6 +7919,7 @@ mod tests {
             w_px: [0.0, 0.0],
             w_radius: 0.0,
             shape_fade: 0.0,
+            webcam_hidden: false,
             window_frame: None,
             screen_mask: None,
         }

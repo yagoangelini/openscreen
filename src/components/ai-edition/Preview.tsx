@@ -38,6 +38,8 @@ interface PreviewProps {
 	zoomRegions?: AxcutZoomRegion[];
 	speedRegions?: SpeedRegion[];
 	cameraFullscreenRegions?: CameraFullscreenRegion[];
+	/** The camera track's "no camera" spans (schema v9), same shape as Full Camera. */
+	cameraHiddenRegions?: CameraFullscreenRegion[];
 	trimRanges?: AxcutTrimRange[];
 	transcripts?: AxcutTranscript[];
 	selectedZoomRegionId?: string | null;
@@ -73,6 +75,7 @@ export function Preview({
 	zoomRegions,
 	speedRegions,
 	cameraFullscreenRegions,
+	cameraHiddenRegions,
 	trimRanges,
 	transcripts,
 	selectedZoomRegionId,
@@ -216,6 +219,7 @@ export function Preview({
 						zoomRegions={zoomRegions}
 						speedRegions={speedRegions}
 						cameraFullscreenRegions={cameraFullscreenRegions}
+						cameraHiddenRegions={cameraHiddenRegions}
 						trimRanges={trimRanges}
 						transcripts={transcripts}
 						selectedZoomRegionId={selectedZoomRegionId}

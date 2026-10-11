@@ -129,7 +129,7 @@
 		"title": "カメラの区間",
 		"span": "{{start}} から {{end}}",
 		"mode": "カメラの表示",
-		"modePip": "ピクチャーインピクチャー",
+		"modePip": "PiP",
 		"modeFullscreen": "全画面",
 		"modeHidden": "カメラなし",
 		"syncHint": "カメラは画面と同期したままです。この区間では表示方法だけが変わります。",

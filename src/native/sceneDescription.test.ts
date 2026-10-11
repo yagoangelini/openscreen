@@ -1154,6 +1154,60 @@ describe("buildSceneDescription.cameraFullscreenRegions", () => {
 	});
 });
 
+// --- cameraHiddenRegions (schema v9: "no camera" pieces of the camera track) -------
+
+describe("buildSceneDescription.cameraHiddenRegions", () => {
+	const doc = (mode: "hidden" | "fullscreen") =>
+		makeDoc({
+			assets: [makeAsset({ id: "a", originalPath: "/a.mp4" })],
+			clips: [
+				makeClip({
+					id: "c1",
+					assetId: "a",
+					sourceStartSec: 0,
+					sourceEndSec: 10,
+					timelineStartSec: 0,
+					timelineEndSec: 10,
+				}),
+			],
+			cameraSegments: [
+				{
+					id: "h1",
+					segmentId: "s1",
+					startMs: 2000,
+					endMs: 4000,
+					clipId: "c1",
+					sourceStartSec: 2,
+					sourceEndSec: 4,
+					mode,
+					origin: "user",
+				},
+				{
+					id: "h2",
+					segmentId: "s2",
+					startMs: 4000,
+					endMs: 7000,
+					clipId: "c1",
+					sourceStartSec: 4,
+					sourceEndSec: 7,
+					mode,
+					origin: "user",
+				},
+			],
+		});
+
+	it("ships the no-camera pieces, joined, and keeps them out of Full Camera", () => {
+		const scene = buildSceneDescription(doc("hidden"));
+		expect(scene.cameraHiddenRegions).toEqual([{ startSec: 2, endSec: 7, clipIndex: 0 }]);
+		expect(scene.cameraFullscreenRegions).toEqual([]);
+	});
+
+	it("is empty when no piece hides the camera", () => {
+		expect(buildSceneDescription(doc("fullscreen")).cameraHiddenRegions).toEqual([]);
+		expect(buildSceneDescription(makeDoc()).cameraHiddenRegions).toEqual([]);
+	});
+});
+
 // --- speedRegions -----------------------------------------------------------
 // Speed regions today live under `document.legacyEditor.speedRegions` (the schema's
 // `timeline.speedRanges` is `rangeSchema[]` which carries no `speed` value — see

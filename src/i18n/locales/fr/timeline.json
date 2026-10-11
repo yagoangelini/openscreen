@@ -129,7 +129,7 @@
 		"title": "Morceau de caméra",
 		"span": "De {{start}} à {{end}}",
 		"mode": "Afficher la caméra",
-		"modePip": "Incrustation (PiP)",
+		"modePip": "Incrustation",
 		"modeFullscreen": "Plein écran",
 		"modeHidden": "Sans caméra",
 		"syncHint": "La caméra reste synchronisée avec l'écran. Ce morceau ne change que sa façon d'apparaître.",

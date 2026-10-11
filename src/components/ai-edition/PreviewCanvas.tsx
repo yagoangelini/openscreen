@@ -86,6 +86,9 @@ interface PreviewCanvasProps {
 	zoomRegions?: AxcutZoomRegion[];
 	speedRegions?: SpeedRegion[];
 	cameraFullscreenRegions?: CameraFullscreenRegion[];
+	/** The camera track's "no camera" spans (schema v9): the camera fades out of the overlay
+	 *  there, on the envelope the compositor shrinks it on. */
+	cameraHiddenRegions?: CameraFullscreenRegion[];
 	trimRanges?: AxcutTrimRange[];
 	/** Relayed to `VirtualPreview` so a clip carrying added words plays their extensions. */
 	transcripts?: AxcutTranscript[];
@@ -323,6 +326,18 @@ export function PreviewCanvas(props: PreviewCanvasProps) {
 			),
 		[props.cameraFullscreenRegions, props.currentTimeSec, props.speedRegions],
 	);
+	// "No camera": the compositor shrinks the webcam to nothing at its anchor over the same
+	// envelope as Full Camera. The overlay above it (the drag hitbox and its hidden <video>)
+	// fades with it, and is gone once the camera is, so nothing can grab a camera not shown.
+	const cameraHiddenProgress = useMemo(
+		() =>
+			computeCameraFullscreenProgress(
+				props.cameraHiddenRegions ?? [],
+				Math.round(props.currentTimeSec * 1000),
+				props.speedRegions,
+			),
+		[props.cameraHiddenRegions, props.currentTimeSec, props.speedRegions],
+	);
 	const effectiveLayout = useMemo<WebcamCompositeLayout | null>(() => {
 		if (!layout?.webcamRect || cameraFullscreenProgress <= 0) return layout;
 		return {
@@ -349,7 +364,9 @@ export function PreviewCanvas(props: PreviewCanvasProps) {
 	);
 	// `layout` already resolves to "no-webcam" (hence `webcamRect: null`) for a
 	// camera-less clip, so this is belt-and-braces rather than the only guard.
-	const showWebcamSlot = Boolean(layout?.webcamRect && activeClipHasCamera);
+	const showWebcamSlot = Boolean(
+		layout?.webcamRect && activeClipHasCamera && cameraHiddenProgress < 1,
+	);
 	const [isPlaying, setIsPlaying] = useState(false);
 	const handleVideoElement = useMemo(() => props.onVideoElement, [props.onVideoElement]);
 	// L'élément `<video>` lui-même n'est plus retenu : il ne servait qu'à échantillonner des pixels
@@ -483,6 +500,7 @@ export function PreviewCanvas(props: PreviewCanvasProps) {
 					className={styles.webcamSlot}
 					style={{
 						...webcamStyle,
+						...(cameraHiddenProgress > 0 ? { opacity: 1 - cameraHiddenProgress } : {}),
 						cursor: isPipGrab && !isPlaying ? "grab" : "default",
 						touchAction: "none",
 					}}

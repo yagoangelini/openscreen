@@ -129,7 +129,7 @@
 		"title": "Díl kamery",
 		"span": "Od {{start}} do {{end}}",
 		"mode": "Zobrazit kameru",
-		"modePip": "Obraz v obraze",
+		"modePip": "PiP",
 		"modeFullscreen": "Celá obrazovka",
 		"modeHidden": "Bez kamery",
 		"syncHint": "Kamera zůstává synchronní s obrazovkou. Tento díl mění jen to, jak se zobrazuje.",

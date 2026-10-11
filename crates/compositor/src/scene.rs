@@ -843,6 +843,11 @@ pub struct Scene {
     /// `#[serde(default)]` : champ ajouté après coup, absent des JSON de test existants.
     #[serde(default)]
     pub camera_fullscreen_regions: Vec<SceneCameraFullscreenRegion>,
+    /// Zones "Sans caméra" de la piste caméra (schéma v9) : la webcam se retire, rétrécie
+    /// jusqu'à rien vers son ancre, puis revient. Même forme et même enveloppe qu'une zone
+    /// Full Camera. `#[serde(default)]` : absent de toute scène écrite avant la piste.
+    #[serde(default)]
+    pub camera_hidden_regions: Vec<SceneCameraFullscreenRegion>,
     pub cursor: SceneCursor,
     /// Global audio finishing. Default keeps old scene payloads bit-for-bit compatible.
     #[serde(default)]
@@ -906,6 +911,9 @@ impl Scene {
             belongs(region.clip_index, region.start_sec, region.end_sec)
         });
         scene.camera_fullscreen_regions.retain(|region| {
+            belongs(region.clip_index, region.start_sec, region.end_sec)
+        });
+        scene.camera_hidden_regions.retain(|region| {
             belongs(region.clip_index, region.start_sec, region.end_sec)
         });
         scene.annotations.retain(|annotation| {
