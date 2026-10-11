@@ -599,6 +599,59 @@ function cutRegionSourceSpan<T extends { startMs: number; endMs: number } & Regi
 	return { clipId: clip.id, startSec: toSource(lo), endSec: toSource(hi) };
 }
 
+/**
+ * The SOURCE stretches of a region that a trim removed while other parts of it were kept: its
+ * source span on its raw clip, kept to that clip's own window, minus every kept segment of the
+ * clip. Each stretch says whether the region goes on before / after it (`continuesBefore` /
+ * `continuesAfter`), so Full Camera stays full across it. Stretches under a millisecond, the
+ * float noise between a segment edge and the region's, are not cuts and are left out.
+ */
+function removedPartsOfRegion<T extends { startMs: number; endMs: number } & RegionClipAnchor>(
+	region: T,
+	visibleSegments: AxcutClip[],
+	segmentRawClipIds: (string | undefined)[],
+	rawClips: AxcutClip[],
+): {
+	clipId: string;
+	startSec: number;
+	endSec: number;
+	continuesBefore: boolean;
+	continuesAfter: boolean;
+}[] {
+	const cut = cutRegionSourceSpan(region, rawClips);
+	const rawClip = cut ? rawClips.find((clip) => clip.id === cut.clipId) : undefined;
+	if (!cut || !rawClip) return [];
+	const lo = Math.max(cut.startSec, rawClip.sourceStartSec);
+	const hi = Math.min(cut.endSec, rawClip.sourceEndSec ?? rawClip.sourceStartSec);
+	const kept = visibleSegments
+		.filter((_, i) => segmentRawClipIds[i] === cut.clipId)
+		.map((seg) => ({
+			startSec: seg.sourceStartSec,
+			endSec: seg.sourceEndSec ?? seg.sourceStartSec,
+		}))
+		.sort((a, b) => a.startSec - b.startSec);
+	const gaps: ReturnType<typeof removedPartsOfRegion> = [];
+	const pushGap = (startSec: number, endSec: number) => {
+		if (Math.round(endSec * 1000) <= Math.round(startSec * 1000)) return;
+		gaps.push({
+			clipId: cut.clipId,
+			startSec,
+			endSec,
+			continuesBefore: startSec > lo,
+			continuesAfter: endSec < hi,
+		});
+	};
+	let cursor = lo;
+	for (const span of kept) {
+		if (span.endSec <= cursor) continue;
+		if (span.startSec >= hi) break;
+		pushGap(cursor, Math.min(span.startSec, hi));
+		cursor = Math.max(cursor, span.endSec);
+	}
+	pushGap(cursor, hi);
+	return gaps;
+}
+
 /** A region as `projectRegionsToSource` emits it. */
 type ProjectedRegion<T> = T & {
 	clipIndex?: number;
@@ -639,6 +692,11 @@ type ProjectedRegion<T> = T & {
  * regions.rs). An index pins it to one clip, and `underTrim` is what tells native to gate
  * it hard on its own span so a zoom's ease-in cannot bleed into the kept frames next to
  * the cut — the render still cuts, exactly as it did.
+ *
+ * A region that STRADDLES a cut gets the same treatment for the stretch the cut removed: one
+ * more `underTrim` piece per removed stretch, after its kept pieces, with `continuesBefore` /
+ * `continuesAfter` on the sides the region goes on. Without it a blur across a trim left the
+ * frames under the cut sharp in the paused preview (B-10 of the 2.2.0 E2E pass).
  *
  * A region whose clip has no kept segment at all still has nothing to address it with, and
  * is dropped. With no segments AT ALL there is no layout to resolve against, so the
@@ -730,6 +788,31 @@ export function projectRegionsToSource<
 				: -1;
 			if (cut && clipIndex >= 0 && cut.endSec > cut.startSec) {
 				emit(clipIndex, cut.startSec, cut.endSec, { underTrim: true });
+			}
+		} else if (emitted > 0) {
+			// Straddles a cut: the kept pieces are out, and so must be the stretch the trim
+			// removed, the same way a region wholly under a cut is. The playhead parked on the
+			// trim shows the frames underneath (`resolveNativePosition`), so leaving that stretch
+			// out showed them WITHOUT the region: an auto-blurred e-mail came up sharp in the
+			// paused preview while the export, which never composes those frames, was right.
+			for (const gap of removedPartsOfRegion(
+				region,
+				visibleSegments,
+				segmentRawClipIds,
+				rawClips,
+			)) {
+				const clipIndex = cutAddressingSegmentIndex(
+					visibleSegments,
+					segmentRawClipIds,
+					gap.clipId,
+					gap.startSec,
+				);
+				if (clipIndex < 0) continue;
+				emit(clipIndex, gap.startSec, gap.endSec, {
+					underTrim: true,
+					continuesBefore: gap.continuesBefore,
+					continuesAfter: gap.continuesAfter,
+				});
 			}
 		}
 		// No segments AT ALL: no layout to resolve against, so the region passes through on
