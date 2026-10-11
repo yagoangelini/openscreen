@@ -1,5 +1,6 @@
 import {
 	AudioLines,
+	CameraOff,
 	Clock,
 	Crosshair,
 	Eraser,
@@ -10,8 +11,10 @@ import {
 	Mic,
 	Music,
 	Pencil,
+	PictureInPicture2,
 	Scissors,
 	Sparkles,
+	SquareSplitHorizontal,
 	Trash2,
 	Wand2,
 	ZoomIn,
@@ -45,6 +48,7 @@ import {
 	packAudioTrackRows,
 	slipAudioOffsetMs,
 } from "@/lib/ai-edition/document/audioTracks";
+import { type CameraMode, MIN_CAMERA_PIECE_MS } from "@/lib/ai-edition/document/cameraSegments";
 import { createId } from "@/lib/ai-edition/document/ids";
 import { isGeneratedAssetId } from "@/lib/ai-edition/document/insertion";
 import { setUiProbeScrubbing } from "@/lib/ai-edition/perf/uiFrameProbe";
@@ -605,7 +609,7 @@ const AudioLanePill = memo(function AudioLanePill({
 
 interface LanePill {
 	id: string;
-	kind: "annotation" | "speed" | "trim" | "zoom" | "cameraFullscreen";
+	kind: "annotation" | "speed" | "trim" | "zoom";
 	start: number;
 	end: number;
 	label: string;
@@ -783,16 +787,6 @@ export function V4Timeline({
 		label: `${(p.member as { speed?: number }).speed ?? 1.5}×`,
 		sourceIds: p.ids,
 	}));
-	const cameraFullscreenPills: LanePill[] = coalesceRegionsForRuler(tl.cameraFullscreenRegions).map(
-		(p) => ({
-			id: p.ids[0],
-			kind: "cameraFullscreen",
-			start: p.start,
-			end: p.end,
-			label: "Full Camera",
-			sourceIds: p.ids,
-		}),
-	);
 	const zoomRuns = coalesceRegionsForRuler(tl.zoomRegions);
 	const zoomPills: LanePill[] = zoomRuns.map((p) => ({
 		id: p.ids[0],
@@ -965,7 +959,6 @@ export function V4Timeline({
 				annotation: tl.annotationRegions,
 				speed: tl.speedRegions,
 				zoom: tl.zoomRegions,
-				cameraFullscreen: tl.cameraFullscreenRegions,
 				// Nothing to edit on a trim but its span, and a span edit moves the whole pill.
 				trim: [],
 			};
@@ -1039,8 +1032,6 @@ export function V4Timeline({
 				else if (pill.kind === "speed") await tl.updateSpeedSpan(grabbed, s * 1000, en * 1000);
 				else if (pill.kind === "annotation")
 					await tl.updateAnnotationSpan(grabbed, s * 1000, en * 1000);
-				else if (pill.kind === "cameraFullscreen")
-					await tl.updateCameraFullscreenSpan(grabbed, s * 1000, en * 1000);
 				else {
 					// Trims are stored in source-time per asset but manipulated on the
 					// timeline like every other pill. Ventilate the new span across the
@@ -1468,9 +1459,7 @@ export function V4Timeline({
 				? styles.laneSpeed
 				: kind === "trim"
 					? styles.laneTrim
-					: kind === "cameraFullscreen"
-						? styles.laneCameraFullscreen
-						: styles.laneZoom;
+					: styles.laneZoom;
 	const pillIcon = (kind: LanePill["kind"]) =>
 		kind === "annotation" ? (
 			<MessageSquare size={12} />
@@ -1478,8 +1467,6 @@ export function V4Timeline({
 			<Clock size={12} />
 		) : kind === "trim" ? (
 			<Scissors size={12} />
-		) : kind === "cameraFullscreen" ? (
-			<Maximize2 size={12} />
 		) : (
 			<ZoomIn size={12} />
 		);
@@ -1864,6 +1851,197 @@ export function V4Timeline({
 		activePillDrag && activePillDrag.id === id
 			? { ...p, start: activePillDrag.start, end: activePillDrag.end }
 			: p;
+
+	// ── camera track ────────────────────────────────────────────────
+	// The camera's own row (schema v9): every stretch of the ruler is a PIECE that shows the
+	// camera one way — picture-in-picture, full screen, or none. The stored pieces and the
+	// implicit picture-in-picture ones between them are drawn alike, so the row is always
+	// continuous; an implicit piece is only quieter. A click selects a piece, B cuts the one
+	// under the playhead, and dragging the edge between two pieces is a roll edit: one grows by
+	// what the other loses. Nothing here moves the camera in time, it plays with its clip.
+	const [cameraEdgeDrag, setCameraEdgeDrag] = useState<{ leftKey: string; atMs: number } | null>(
+		null,
+	);
+	const cameraEdgeDragRef = useRef<{ leftKey: string; atMs: number } | null>(null);
+	const cameraModeLabel = (mode: CameraMode) =>
+		mode === "fullscreen"
+			? t("labels.cameraFullscreen")
+			: mode === "hidden"
+				? t("labels.cameraHidden")
+				: t("labels.cameraPip");
+	const cameraModeIcon = (mode: CameraMode) =>
+		mode === "fullscreen" ? (
+			<Maximize2 size={12} />
+		) : mode === "hidden" ? (
+			<CameraOff size={12} />
+		) : (
+			<PictureInPicture2 size={12} />
+		);
+	const startCameraEdgeDrag = useCallback(
+		(e: ReactPointerEvent, leftKey: string, minMs: number, maxMs: number, fromMs: number) => {
+			if (e.button !== 0) return;
+			e.preventDefault();
+			e.stopPropagation();
+			const el = canvasRef.current;
+			if (!el || maxMs < minMs) return;
+			const r = el.getBoundingClientRect();
+			const startX = e.clientX;
+			// Same magnet as the pills: clip junctions, in screen pixels.
+			const snapTargets = clips.map((c) => c.timelineStartSec * 1000);
+			const snapThreshMs = pxPerSec > 0 ? (PILL_SNAP_PX / pxPerSec) * 1000 : 0;
+			const move = (ev: PointerEvent) => {
+				const wanted = fromMs + ((ev.clientX - startX) / r.width) * total * 1000;
+				let atMs = wanted;
+				let best = snapThreshMs;
+				for (const target of snapTargets) {
+					if (Math.abs(target - wanted) < best) {
+						best = Math.abs(target - wanted);
+						atMs = target;
+					}
+				}
+				atMs = Math.min(maxMs, Math.max(minMs, atMs));
+				setSnapPct(atMs === wanted ? null : (atMs / 1000 / total) * 100);
+				const next = { leftKey, atMs };
+				cameraEdgeDragRef.current = next;
+				setCameraEdgeDrag(next);
+			};
+			const up = () => {
+				setSnapPct(null);
+				window.removeEventListener("pointermove", move);
+				window.removeEventListener("pointerup", up);
+				const final = cameraEdgeDragRef.current;
+				if (!final || Math.abs(final.atMs - fromMs) < 1) {
+					cameraEdgeDragRef.current = null;
+					setCameraEdgeDrag(null);
+					return;
+				}
+				void tl.moveCameraEdge(leftKey, final.atMs).finally(() => {
+					if (cameraEdgeDragRef.current === final) {
+						cameraEdgeDragRef.current = null;
+						setCameraEdgeDrag(null);
+					}
+				});
+			};
+			window.addEventListener("pointermove", move);
+			window.addEventListener("pointerup", up);
+		},
+		[tl, total, clips, pxPerSec],
+	);
+	const renderCameraTrack = () => {
+		const stored = tl.cameraPieces;
+		// While an edge is dragged, the two pieces it separates are drawn at the live edge.
+		const pieces = stored.map((piece, i) => {
+			if (!cameraEdgeDrag) return piece;
+			if (piece.key === cameraEdgeDrag.leftKey) return { ...piece, endMs: cameraEdgeDrag.atMs };
+			if (stored[i - 1]?.key === cameraEdgeDrag.leftKey) {
+				return { ...piece, startMs: cameraEdgeDrag.atMs };
+			}
+			return piece;
+		});
+		const selectedId = tl.selection?.kind === "camera" ? tl.selection.id : null;
+		const isSelected = (piece: (typeof pieces)[number]) =>
+			(selectedId !== null && (piece.key === selectedId || piece.ids.includes(selectedId))) ||
+			tl.multiSelection.some(
+				(h) => h.kind === "camera" && (h.id === piece.key || piece.ids.includes(h.id)),
+			);
+		return (
+			<div
+				className={`${styles.tlLane} ${styles.tlLaneCamera}`}
+				role="group"
+				aria-label={t("labels.cameraTrack")}
+			>
+				{!hasAnyCamera ? (
+					// No webcam anywhere: nothing to show, and every camera edit is refused. The
+					// Layout pane's wording, so the two surfaces say the same thing.
+					<span
+						className={styles.laneEmpty}
+						style={{ left: `${nav.start * 100}%`, width: `${navSpan * 100}%` }}
+					>
+						{ts("layout.noWebcam")}
+					</span>
+				) : (
+					<>
+						{pieces.map((piece) => {
+							const durSec = Math.max(0, (piece.endMs - piece.startMs) / 1000);
+							const { roomForLabel } = pillAffordance(durSec, pxPerSec);
+							const label = cameraModeLabel(piece.mode);
+							const selected = isSelected(piece);
+							const modeClass =
+								piece.mode === "fullscreen"
+									? styles.cameraPieceFullscreen
+									: piece.mode === "hidden"
+										? styles.cameraPieceHidden
+										: styles.cameraPiecePip;
+							return (
+								<div
+									key={piece.key}
+									role="button"
+									tabIndex={0}
+									aria-pressed={selected}
+									aria-label={`${t("labels.cameraTrack")}: ${label}`}
+									title={label}
+									data-camera-piece={piece.implicit ? "implicit" : "stored"}
+									className={`${styles.cameraPiece} ${modeClass}${
+										piece.implicit ? ` ${styles.cameraPieceImplicit}` : ""
+									}${selected ? ` ${styles.cameraPieceSel}` : ""}`}
+									style={{
+										left: `${pctAt(piece.startMs / 1000)}%`,
+										width: `${pctOf(durSec)}%`,
+									}}
+									onPointerDown={(e) => {
+										if (e.button !== 0) return;
+										// Not a scrub: the lane's own pointerdown would move the playhead.
+										e.stopPropagation();
+										tl.selectRegion("camera", piece.key, { additive: e.shiftKey });
+									}}
+									onKeyDown={(e) => {
+										if (e.key !== "Enter" && e.key !== " ") return;
+										e.preventDefault();
+										e.nativeEvent.stopPropagation();
+										tl.selectRegion("camera", piece.key, { additive: e.shiftKey });
+									}}
+								>
+									{roomForLabel ? (
+										<>
+											{cameraModeIcon(piece.mode)}
+											<span className={styles.lanePillLabel}>{label}</span>
+										</>
+									) : null}
+								</div>
+							);
+						})}
+						{stored.slice(0, -1).map((piece, i) => {
+							const next = stored[i + 1];
+							if (next.startMs - piece.endMs > 1) return null;
+							const atMs =
+								cameraEdgeDrag?.leftKey === piece.key ? cameraEdgeDrag.atMs : piece.endMs;
+							return (
+								<span
+									key={`edge:${piece.key}`}
+									aria-hidden
+									className={styles.cameraEdge}
+									style={{ left: `${pctAt(atMs / 1000)}%` }}
+									onPointerDown={(e) =>
+										startCameraEdgeDrag(
+											e,
+											piece.key,
+											piece.startMs + MIN_CAMERA_PIECE_MS,
+											next.endMs - MIN_CAMERA_PIECE_MS,
+											piece.endMs,
+										)
+									}
+								/>
+							);
+						})}
+						{/* The row's name, pinned to the visible window like the empty hints. */}
+						<span className={styles.cameraTrackLabel} style={{ left: `${nav.start * 100}%` }}>
+							{t("labels.cameraTrack")}
+						</span>
+					</>
+				)}
+			</div>
+		);
+	};
 
 	const renderPills = (pills: LanePill[], emptyLabel: string) => {
 		const effectivePills = pills.map((p) => liveSpan(p.id, p));
@@ -2346,6 +2524,21 @@ export function V4Timeline({
 									</button>
 								</Tooltip>
 							) : null}
+							{hasAnyCamera ? (
+								<Tooltip
+									content={t("buttons.splitCamera")}
+									shortcut={formatBinding(shortcuts.splitCamera, isMac)}
+								>
+									<button
+										type="button"
+										className={styles.tlToolBtn}
+										aria-label={t("buttons.splitCamera")}
+										onClick={() => void tl.splitCamera()}
+									>
+										<SquareSplitHorizontal size={16} />
+									</button>
+								</Tooltip>
+							) : null}
 							{/* Last, behind a divider: every button before it adds a region, this one
 							    clears them. Absent with its divider, not greyed out, when there is
 							    nothing to clear. One write in the store, so one Ctrl+Z restores every
@@ -2488,19 +2681,7 @@ export function V4Timeline({
 										t("hints.pressZoom", { key: formatBinding(shortcuts.addZoom, isMac) }),
 									)}
 								</div>
-								<div className={styles.tlLane}>
-									{/* Advertising "Press C" on a project with no webcam invites a keystroke
-									    that `addCameraFullscreen` now refuses (#353). The toolbar button is
-									    already disabled; this keeps the lane from contradicting it. */}
-									{renderPills(
-										cameraFullscreenPills,
-										hasAnyCamera
-											? t("hints.pressCameraFullscreen", {
-													key: formatBinding(shortcuts.addCameraFullscreen, isMac),
-												})
-											: ts("layout.noWebcam"),
-									)}
-								</div>
+								{renderCameraTrack()}
 								{/* Imported audio tracks (issue #350). Always shown, like every other
 								    lane — "Add audio" is a toolbar peer of the region tools now (and
 								    has a keyboard shortcut), so an empty lane advertises the shortcut

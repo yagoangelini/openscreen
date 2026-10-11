@@ -11,15 +11,15 @@ the contract.
 
 ## `schemaVersion` and top-level shape
 
-`axcutSchemaVersion` is **8** — exported as a literal at the top of
+`axcutSchemaVersion` is **9** — exported as a literal at the top of
 `src/lib/ai-edition/schema/index.ts`. Every document on disk carries
-`schemaVersion: 8`; anything older is upgraded on parse (see [Migrations](#migrations))
+`schemaVersion: 9`; anything older is upgraded on parse (see [Migrations](#migrations))
 and anything unknown is rejected by the `z.literal(axcutSchemaVersion)` check in
 `documentSchemaShape`.
 
 | Field | Holds | Notes |
 |---|---|---|
-| `schemaVersion` | `8` | Bumping requires a migration; see the chain below. |
+| `schemaVersion` | `9` | Bumping requires a migration; see the chain below. |
 | `project` | `{ id, title, createdAt, updatedAt, primaryAssetId? }` | One project per file. |
 | `assets[]` | `AxcutAsset` (one per recorded/imported media file) | Carries `originalPath`, `cameraTrack`, `durationSec` (renderer probes). |
 | `transcript` | `AxcutTranscript \| null` | Legacy primary transcript; left for back-compat, no longer the source of truth. |
@@ -28,6 +28,7 @@ and anything unknown is rejected by the `z.literal(axcutSchemaVersion)` check in
 | `annotations[]` | `AxcutAnnotationRegion[]` | Text/image/figure/blur overlays, anchored to a clip (`clipId?`). |
 | `zoomRanges[]` | `AxcutZoomRegion[]` | Zoom-in effects, depth 1–6, anchored to a clip (`clipId?`). |
 | `audioTracks[]` | `AxcutAudioTrack[]` | Imported audio (voiceover / BGM / SFX, issue #350) mixed over the programme. NOT clip-anchored — addressed in RAW/document timeline seconds (`timelineStartSec`), with `trimStartSec`/`trimEndSec` windowing the source and `gainDb` its level. Added from the timeline toolbar; the referenced asset has `kind: "audio"`. |
+| `cameraSegments[]` | `AxcutCameraSegment[]` | The camera track (v9): pieces that each show the camera one way (`mode`: `pip`, `fullscreen`, `hidden`), clip-anchored like a zoom, one fragment per clip sharing `segmentId`. Stored sparse: uncovered time is an implicit picture-in-picture piece. Full Camera and no-camera spans are DERIVED from them (`document/cameraSegments.ts`). |
 | `legacyEditor` | OpenScreen v2 `ProjectEditorState` passthrough | Appearance/cursor settings not yet first-class in the AI-edition schema. |
 | `agent` | `{ baseIntent?, pendingQuestions[], suggestions[], lastAppliedOperations[], lastReasoningSummary? }` | LLM agent state. |
 | `preview` | `{ strategy: "seek" \| "mse-proxy", revision: number }` | `revision` is the bump used to invalidate cached frames after an edit. |
@@ -40,14 +41,14 @@ Migrations are **one-way and forward-only**. There is no version downgrade path:
 newer document that lands on an older build is rejected by the `schemaVersion`
 literal, not silently truncated. The chain runs **at load time** through
 `migrateRawDocumentToCurrent` (`src/lib/ai-edition/document/migrate.ts`) — the
-upgraders compose the chain and `documentSchema.parse` is a pure v8 validator.
+upgraders compose the chain and `documentSchema.parse` is a pure v9 validator.
 Every JSON-read site (`DocumentService`, the browser shim, the renderer's
 `handleBrowseProject` / `openLoadedProject` disk-load paths) must call the
 helper before `documentSchema.parse`. The pre-hoist implementation wrapped this
 chain in a `z.preprocess`, so it ran on every `setDocument` / `saveDocument` /
 `loadProject` parse — measurable per-parse overhead on documents that were
 already current. Hoisting it to load time makes the in-memory parse a single
-`z.literal(8)` + shape check on already-upgraded data.
+`z.literal(9)` + shape check on already-upgraded data.
 
 ### v3 → v4 (`upgradeV3DocumentToV4`, `schema/index.ts`)
 
@@ -129,6 +130,18 @@ projects on their next open, so the upgrader writes down the frame they have alw
 shown, `"16:9"`. It pins only a **missing** value (no envelope, or no key), which is
 exactly what the read would have defaulted; any stored ratio, `"native"` included, is
 left alone. Documents created from v8 on store none and read Auto.
+
+### v8 → v9 (`upgradeV8DocumentToV9`, `schema/index.ts`)
+
+v9 gives the camera its own timeline track. Each Full Camera pill of
+`legacyEditor.cameraFullscreenRegions` becomes one `cameraSegments` piece in
+`"fullscreen"` mode: its fragments keep their ids and clip anchors and share a fresh
+`segmentId`, so the pill the user saw is the piece they get. The legacy key is removed;
+the scene, the preview, the agent snapshot and the v2 export all derive Full Camera from
+the pieces (`readCameraFullscreenRegions`), joining touching full-screen pieces so the
+camera does not ease out and back in at a seam. Entries that are not spans are dropped.
+A 2.1.x build rejects a v9 file by its `schemaVersion` literal rather than dropping the
+pieces on save.
 
 The legacy v2 format keeps the same reading: `normalizeProjectEditor` fills a missing
 ratio with `"16:9"` (`DEFAULT_EDITOR_LAYOUT_SETTINGS`), since every v2 file predates

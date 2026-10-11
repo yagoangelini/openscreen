@@ -78,6 +78,7 @@ const DOC: AxcutDocument = {
 	annotations: [],
 	zoomRanges: [],
 	audioTracks: [],
+	cameraSegments: [],
 	legacyEditor: null,
 };
 

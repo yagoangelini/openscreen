@@ -316,7 +316,7 @@ describe("remove-one-modifier / targeted deletion", () => {
 		// deletion that took their speed region with it.
 		const damaged = documentSchema.parse({
 			...without("zoom_2"),
-			legacyEditor: { speedRegions: [], cameraFullscreenRegions: [] },
+			legacyEditor: { speedRegions: [] },
 		});
 		const verdict = check.check(contextFor({ before, after: damaged }));
 		expect(verdict.ok).toBe(false);
@@ -400,18 +400,19 @@ describe("the camera pair is a discrimination test, and it is unwinnable today",
 	const withRegion = (document: AxcutDocument): AxcutDocument =>
 		documentSchema.parse({
 			...document,
-			legacyEditor: {
-				cameraFullscreenRegions: [
-					{
-						id: "camfull_1",
-						startMs: 0,
-						endMs: 5_000,
-						clipId: "clip_1",
-						sourceStartSec: 0,
-						sourceEndSec: 5,
-					},
-				],
-			},
+			cameraSegments: [
+				{
+					id: "camfull_1",
+					segmentId: "camseg_1",
+					startMs: 0,
+					endMs: 5_000,
+					clipId: "clip_1",
+					sourceStartSec: 0,
+					sourceEndSec: 5,
+					mode: "fullscreen",
+					origin: "agent",
+				},
+			],
 		});
 
 	it("the same compliant turn passes the positive control and fails the negative one", () => {

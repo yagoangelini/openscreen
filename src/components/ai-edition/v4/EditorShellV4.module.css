@@ -1684,8 +1684,100 @@
 .laneZoom {
 	--_c: var(--zoom);
 }
-.laneCameraFullscreen {
+/* The camera track (schema v9): one row of pieces that always covers the whole ruler, so
+   it is taller than a region lane and its pieces sit edge to edge. A piece reads as the
+   mode it shows: purple full screen (the old Full Camera colour), teal picture-in-picture,
+   grey for no camera. A piece nobody stored (the default picture-in-picture) is drawn
+   quieter, so the cuts the user made stand out. */
+.tlLaneCamera {
+	height: 30px;
+}
+.cameraPiece {
+	position: absolute;
+	top: 1px;
+	bottom: 1px;
+	min-width: 1px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 5px;
+	padding: 0 6px;
+	--_c: #14b8a6;
+	border-radius: 6px;
+	border: 1px solid color-mix(in oklab, var(--_c) 80%, black);
+	background: linear-gradient(180deg, color-mix(in oklab, var(--_c) 72%, white), var(--_c));
+	color: #0b1220;
+	font-size: 12px;
+	font-weight: 600;
+	white-space: nowrap;
+	overflow: hidden;
+	box-sizing: border-box;
+	cursor: pointer;
+	z-index: 2;
+}
+.cameraPiecePip {
+	--_c: #14b8a6;
+}
+.cameraPieceFullscreen {
 	--_c: #a855f7;
+}
+.cameraPieceHidden {
+	--_c: #94a3b8;
+	background: repeating-linear-gradient(
+		135deg,
+		color-mix(in oklab, var(--_c) 55%, transparent) 0 6px,
+		color-mix(in oklab, var(--_c) 30%, transparent) 6px 12px
+	);
+}
+.cameraPieceImplicit {
+	background: color-mix(in oklab, var(--_c) 28%, transparent);
+	border-style: dashed;
+	color: var(--muted);
+}
+.cameraPieceSel {
+	box-shadow: 0 0 0 2px var(--bg), 0 0 0 3.5px var(--_c);
+	z-index: 3;
+}
+/* The edge between two pieces: a roll edit grip, centred on the seam. */
+.cameraEdge {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	width: 10px;
+	transform: translateX(-50%);
+	cursor: col-resize;
+	z-index: 4;
+}
+.cameraEdge::after {
+	content: "";
+	position: absolute;
+	top: 4px;
+	bottom: 4px;
+	left: 4px;
+	width: 2px;
+	border-radius: 1px;
+	background: color-mix(in oklab, var(--fg) 45%, transparent);
+	opacity: 0;
+	transition: opacity 120ms;
+}
+.cameraEdge:hover::after {
+	opacity: 1;
+}
+.cameraTrackLabel {
+	position: absolute;
+	top: 50%;
+	transform: translateY(-50%);
+	margin-left: 4px;
+	padding: 1px 5px;
+	border-radius: 4px;
+	background: color-mix(in oklab, var(--bg) 75%, transparent);
+	color: var(--meta);
+	font-size: 10px;
+	font-weight: 600;
+	letter-spacing: 0.02em;
+	text-transform: uppercase;
+	pointer-events: none;
+	z-index: 5;
 }
 /* A zoom's camera moves (#1028): a trail on each side of the pill, fading away from it, BELOW
    it (a chained neighbour's pill stays on top). Thinner than the pill so it reads as part of

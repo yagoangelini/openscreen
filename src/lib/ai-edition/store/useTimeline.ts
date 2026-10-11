@@ -3,7 +3,7 @@
 // speed regions. Each add creates a 2-second region at the current playhead
 // (a reasonable default for the user to then resize).
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { toFileUrl } from "@/components/video-editor/projectPersistence";
 import type {
@@ -21,6 +21,22 @@ import {
 	removeAudioTrack as removeAudioTrackInDocument,
 	trackGroupId,
 } from "../document/audioTracks";
+import {
+	type CameraMode,
+	cameraPieceAt,
+	cameraPieces,
+	cameraTimelineEndMs,
+	findCameraPiece,
+	mergeCameraPieceWithNext,
+	moveCameraBoundary,
+	readCameraFullscreenRegions,
+	readCameraHiddenRegions,
+	readCameraSegments,
+	removeCameraPiece,
+	setCameraModeOverSpan,
+	setCameraPieceMode,
+	splitCameraAt,
+} from "../document/cameraSegments";
 import { createId } from "../document/ids";
 import { resolveAspectRatioValue } from "../document/outputFormat";
 import {
@@ -37,7 +53,12 @@ import {
 	setClipSourceRange,
 	withClipsChanged,
 } from "../document/timeline";
-import type { AxcutAudioTrack, AxcutClipCropRegion, AxcutDocument } from "../schema";
+import type {
+	AxcutAudioTrack,
+	AxcutCameraSegment,
+	AxcutClipCropRegion,
+	AxcutDocument,
+} from "../schema";
 import { appendAutoZoomSuggestions } from "../timeline/apply-auto-zooms";
 import { hasAnyClipWithCamera } from "../timeline/camera";
 import { probeAudioDuration, probeVideoDimensions, probeVideoDuration } from "../timeline/duration";
@@ -75,6 +96,9 @@ const finiteFraction = (n: number) => (Number.isFinite(n) ? Math.min(1, Math.max
 // arrives. Defined there, re-exported here so existing importers keep working and the
 // value has exactly one definition.
 export { PLACEHOLDER_DURATION_SEC };
+
+// Stable for documents with no piece, so the derived lists below keep their identity.
+const EMPTY_CAMERA_SEGMENTS: AxcutCameraSegment[] = [];
 
 interface RegionHandle {
 	kind: RegionKind;
@@ -527,43 +551,152 @@ export function useTimeline() {
 		[document, saveDocument],
 	);
 
-	// Full Camera: a plain time span (no value) during which the preview/export
-	// grows the webcam overlay to (almost) fill the canvas and eases it back.
+	// ── The camera track (schema v9) ─────────────────────────────────────────
+	// The camera's own row on the timeline: pieces that each show the camera one way
+	// (picture-in-picture, full screen, or not at all), cut and edited one by one. The
+	// camera's TIME never changes here — it plays wherever its screen clip plays — only how
+	// it is shown. Every edit is built by the pure functions of `document/cameraSegments.ts`
+	// and lands as one undoable save, which then selects the piece the user is left on.
 	//
-	// With no webcam anywhere on the timeline there is nothing to grow, so the region
-	// renders nothing in the preview (`PreviewCanvas.effectiveLayout` short-circuits on
-	// a missing `webcamRect`) and nothing in the export — it just sits in
-	// `legacyEditor.cameraFullscreenRegions` forever. The agent's `addCameraFullscreen`
-	// tool already refuses this and says why (electron/ai-edition/agent-tools.ts,
-	// `noCameraUnderSpan`); the gate lives HERE rather than at each button so both UI
-	// entry points — the toolbar and the `C` shortcut — and any future one are covered
-	// by construction. `hasAnyClipWithCamera` is the consolidated answer to "does this
-	// project have a camera at all", used the same way by the Layout pane.
+	// With no webcam anywhere on the timeline there is nothing to show, so every camera
+	// write is refused: it would render nothing in the preview and nothing in the export.
+	// The agent's camera tools refuse the same way (`noCameraUnderSpan` in agent-tools), and
+	// the gate lives HERE rather than at each button so the toolbar, the shortcuts and the
+	// inspector are all covered by construction. `hasAnyClipWithCamera` is the consolidated
+	// answer to "does this project have a camera at all", used the same way by the Layout pane.
+	const saveCameraEdit = useCallback(
+		async (
+			edit: (doc: AxcutDocument) => { segments: AxcutCameraSegment[]; key?: string } | null,
+		): Promise<boolean> => {
+			const doc = useProjectStore.getState().document;
+			if (!doc) return false;
+			if (!hasAnyClipWithCamera(doc.assets, doc.timeline.clips)) return false;
+			const result = edit(doc);
+			if (!result) return false;
+			if (!(await saveDocument({ ...doc, cameraSegments: result.segments }, { history: true }))) {
+				return false;
+			}
+			if (result.key) {
+				const handle = { kind: "camera" as const, id: result.key };
+				setClipSelection(null);
+				setSelectedAudioTrackId(null);
+				setMultiSelection([handle]);
+				setSelection(handle);
+			}
+			return true;
+		},
+		[saveDocument, setSelectedAudioTrackId],
+	);
+
+	// Full Camera over a span from the playhead: a piece of its own in full-screen mode, over
+	// whatever pieces were there (`setCameraModeOverSpan`). What the `C` shortcut and the
+	// toolbar button do.
 	const addCameraFullscreen = useCallback(
 		async (durationSec = DEFAULT_NEW_REGION_SEC) => {
-			if (!document) return;
-			if (!hasAnyClipWithCamera(document.assets, document.timeline.clips)) return;
 			const timeMs = Math.round(playheadSec() * 1000);
 			const endMs = timeMs + Math.round(durationSec * 1000);
-			const legacy = (document.legacyEditor as Record<string, unknown>) ?? {};
-			const prev = (legacy.cameraFullscreenRegions as unknown[]) ?? [];
-			const next: AxcutDocument = {
-				...document,
-				legacyEditor: {
-					...legacy,
-					cameraFullscreenRegions: [
-						...prev,
-						...anchorRegionsWithDerivedMs(
-							[{ id: createId("camfull"), startMs: timeMs, endMs }],
-							document.timeline.clips,
-							() => createId("camfull"),
-						),
-					],
-				},
-			};
-			await saveDocument(next, { history: true });
+			await saveCameraEdit((doc) => {
+				const placed = setCameraModeOverSpan(
+					readCameraSegments(doc),
+					doc.timeline.clips,
+					timeMs,
+					endMs,
+					"fullscreen",
+				);
+				return placed.ids.length > 0 ? { segments: placed.segments, key: placed.ids[0] } : null;
+			});
 		},
-		[document, saveDocument],
+		[saveCameraEdit],
+	);
+
+	// Cut the camera piece under the playhead (or `atSec`) in two. Each half is edited on
+	// its own afterwards; the right one is selected, as it is the one that starts at the cut.
+	const splitCamera = useCallback(
+		(atSec?: number) =>
+			saveCameraEdit((doc) => {
+				const split = splitCameraAt(
+					readCameraSegments(doc),
+					doc.timeline.clips,
+					Math.round((atSec ?? playheadSec()) * 1000),
+				);
+				return split ? { segments: split.segments, key: split.rightKey } : null;
+			}),
+		[saveCameraEdit],
+	);
+
+	const setCameraMode = useCallback(
+		(key: string, mode: CameraMode) =>
+			saveCameraEdit((doc) => {
+				const set = setCameraPieceMode(readCameraSegments(doc), doc.timeline.clips, key, mode);
+				return set ? { segments: set.segments, key: set.key } : null;
+			}),
+		[saveCameraEdit],
+	);
+
+	const mergeCameraWithNext = useCallback(
+		(key: string) =>
+			saveCameraEdit((doc) =>
+				mergeCameraPieceWithNext(readCameraSegments(doc), doc.timeline.clips, key),
+			),
+		[saveCameraEdit],
+	);
+
+	// A drag of the edge between two pieces: one grows by what the other loses (a roll edit).
+	const moveCameraEdge = useCallback(
+		(leftKey: string, atMs: number) =>
+			saveCameraEdit((doc) => {
+				const segments = moveCameraBoundary(
+					readCameraSegments(doc),
+					doc.timeline.clips,
+					leftKey,
+					finiteMs(atMs),
+				);
+				return segments ? { segments } : null;
+			}),
+		[saveCameraEdit],
+	);
+
+	// Back to the default picture-in-picture: the piece stops being stored, and the gap it
+	// leaves is an implicit piece again (joined with any implicit neighbour).
+	const resetCameraPiece = useCallback(
+		(key: string) =>
+			saveCameraEdit((doc) => {
+				const endMs = cameraTimelineEndMs(doc.timeline.clips);
+				const segments = readCameraSegments(doc);
+				const piece = findCameraPiece(cameraPieces(segments, endMs), key);
+				if (!piece || piece.implicit) return null;
+				const removed = removeCameraPiece(segments, doc.timeline.clips, key);
+				return {
+					segments: removed,
+					key: cameraPieceAt(cameraPieces(removed, endMs), piece.startMs)?.key,
+				};
+			}),
+		[saveCameraEdit],
+	);
+
+	// Delete on a piece: first it shows no camera; Delete again puts it back to the default
+	// picture-in-picture (its stored fragments go).
+	const deleteCameraPiece = useCallback(
+		(key: string) =>
+			saveCameraEdit((doc) => {
+				const segments = readCameraSegments(doc);
+				const piece = findCameraPiece(
+					cameraPieces(segments, cameraTimelineEndMs(doc.timeline.clips)),
+					key,
+				);
+				if (!piece) return null;
+				if (piece.mode !== "hidden") {
+					const set = setCameraPieceMode(segments, doc.timeline.clips, key, "hidden");
+					return set ? { segments: set.segments, key: set.key } : null;
+				}
+				const removed = removeCameraPiece(segments, doc.timeline.clips, key);
+				const after = cameraPieceAt(
+					cameraPieces(removed, cameraTimelineEndMs(doc.timeline.clips)),
+					piece.startMs,
+				);
+				return { segments: removed, key: after?.key };
+			}),
+		[saveCameraEdit],
 	);
 
 	// Like updateTrimRange but also re-attaches the trim to a (possibly different) CLIP —
@@ -1024,36 +1157,6 @@ export function useTimeline() {
 		[document, saveDocument],
 	);
 
-	const updateCameraFullscreenSpan = useCallback(
-		async (id: string, startMs: number, endMs: number) => {
-			if (!document) return;
-			const s = finiteMs(startMs);
-			const e = finiteMs(endMs);
-			const legacy = (document.legacyEditor as Record<string, unknown>) ?? {};
-			const prev = ((legacy.cameraFullscreenRegions as unknown[]) ?? []) as Array<{
-				id: string;
-				startMs: number;
-				endMs: number;
-			}>;
-			const next: AxcutDocument = {
-				...document,
-				legacyEditor: {
-					...legacy,
-					cameraFullscreenRegions: replacePillSpan(
-						prev,
-						id,
-						Math.min(s, e),
-						Math.max(s, e),
-						document.timeline.clips,
-						() => createId("camfull"),
-					),
-				},
-			};
-			await saveDocument(next, { history: true });
-		},
-		[document, saveDocument],
-	);
-
 	const updateSpeedValue = useCallback(
 		async (id: string, speed: number) => {
 			if (!document) return;
@@ -1079,13 +1182,18 @@ export function useTimeline() {
 	const removeRegion = useCallback(
 		async (kind: RegionKind, id: string) => {
 			if (!document) return;
+			// A camera piece is never simply removed by Delete: see `deleteCameraPiece`.
+			if (kind === "camera") {
+				await deleteCameraPiece(id);
+				return;
+			}
 			// One shared mutator with the agent's removeTrim / removeModifier tools.
 			if (!(await saveDocument(removeRegionInDocument(document, kind, id), { history: true })))
 				return;
 			if (selection?.id === id) setSelection(null);
 			setMultiSelection((prev) => prev.filter((h) => h.id !== id));
 		},
-		[document, selection, saveDocument],
+		[document, selection, saveDocument, deleteCameraPiece],
 	);
 
 	// F2.7 — batch removal for multi-selection: one document save (one undo
@@ -1099,18 +1207,15 @@ export function useTimeline() {
 				handles.filter((h) => h.kind === "annotation").map((h) => h.id),
 			);
 			const speedIds = new Set(handles.filter((h) => h.kind === "speed").map((h) => h.id));
-			const cameraFullscreenIds = new Set(
-				handles.filter((h) => h.kind === "cameraFullscreen").map((h) => h.id),
-			);
+			// Camera pieces selected with the rest go back to the default picture-in-picture.
+			// Delete on ONE piece hides the camera first (`deleteCameraPiece`); a batch is a
+			// clear-out, and a two-step toggle across several pieces would leave some hidden
+			// and some removed.
+			const cameraIds = new Set(handles.filter((h) => h.kind === "camera").map((h) => h.id));
 			const legacy = (document.legacyEditor as Record<string, unknown>) ?? {};
 			const prevSpeed = dropPillsByIds(
 				(legacy.speedRegions as Array<{ id: string; startMs: number; endMs: number }>) ?? [],
 				speedIds,
-			);
-			const prevCameraFullscreen = dropPillsByIds(
-				(legacy.cameraFullscreenRegions as Array<{ id: string; startMs: number; endMs: number }>) ??
-					[],
-				cameraFullscreenIds,
 			);
 			const next: AxcutDocument = {
 				...document,
@@ -1127,10 +1232,15 @@ export function useTimeline() {
 						trimIds,
 					),
 				},
+				cameraSegments:
+					cameraIds.size > 0
+						? [...cameraIds].reduce(
+								(segments, id) => removeCameraPiece(segments, document.timeline.clips, id),
+								readCameraSegments(document),
+							)
+						: document.cameraSegments,
 				legacyEditor:
-					speedIds.size > 0 || cameraFullscreenIds.size > 0
-						? { ...legacy, speedRegions: prevSpeed, cameraFullscreenRegions: prevCameraFullscreen }
-						: document.legacyEditor,
+					speedIds.size > 0 ? { ...legacy, speedRegions: prevSpeed } : document.legacyEditor,
 			};
 			if (!(await saveDocument(next, { history: true }))) return;
 			setSelection(null);
@@ -1442,14 +1552,22 @@ export function useTimeline() {
 		? readSpeedRegions<{ id: string; startMs: number; endMs: number; speed: number }>(document)
 		: [];
 
-	const cameraFullscreenRegions = hasDoc
-		? (((document.legacyEditor as Record<string, unknown> | null)
-				?.cameraFullscreenRegions as Array<{
-				id: string;
-				startMs: number;
-				endMs: number;
-			}>) ?? [])
-		: [];
+	// The camera track. `cameraFullscreenRegions` is DERIVED from its full-screen pieces —
+	// what the preview animates, exactly as the scene does (`readCameraFullscreenRegions`).
+	const cameraSegments = hasDoc ? readCameraSegments(document) : EMPTY_CAMERA_SEGMENTS;
+	const cameraTimelineEnd = cameraTimelineEndMs(document?.timeline.clips ?? []);
+	const cameraTrackPieces = useMemo(
+		() => cameraPieces(cameraSegments, cameraTimelineEnd),
+		[cameraSegments, cameraTimelineEnd],
+	);
+	const cameraFullscreenRegions = useMemo(
+		() => readCameraFullscreenRegions({ cameraSegments }),
+		[cameraSegments],
+	);
+	const cameraHiddenRegions = useMemo(
+		() => readCameraHiddenRegions({ cameraSegments }),
+		[cameraSegments],
+	);
 
 	// --- Timeline audio tracks (issue #350) -------------------------------------
 	// CLIP-ANCHORED like every region above: one user-visible track is one pill
@@ -1635,7 +1753,10 @@ export function useTimeline() {
 		// timeline store writes them (see `document/transcript.ts`).
 		annotationRegions: (document?.annotations ?? []) as unknown as AnnotationRegion[],
 		speedRegions,
+		cameraSegments,
+		cameraPieces: cameraTrackPieces,
 		cameraFullscreenRegions,
+		cameraHiddenRegions,
 		clips: document?.timeline.clips ?? [],
 		assets: document?.assets ?? [],
 		// The timeline marks where the user has ADDED words — text with no audio behind it.
@@ -1652,6 +1773,12 @@ export function useTimeline() {
 		addAnnotation,
 		addSpeed,
 		addCameraFullscreen,
+		splitCamera,
+		setCameraMode,
+		mergeCameraWithNext,
+		moveCameraEdge,
+		deleteCameraPiece,
+		resetCameraPiece,
 		removeRegion,
 		removeRegions,
 		hasEditRegions,
@@ -1688,7 +1815,6 @@ export function useTimeline() {
 		commitAnnotationChange,
 		updateSpeedSpan,
 		updateSpeedValue,
-		updateCameraFullscreenSpan,
 		// T19 — drives the preview video during trim-edge resize.
 		setCurrentTime: useProjectStore((s) => s.setCurrentTime),
 	};

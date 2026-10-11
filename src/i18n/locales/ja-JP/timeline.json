@@ -7,7 +7,8 @@
 		"addTrim": "トリムを追加：現在の再生位置で動画の一部を削除します",
 		"addAnnotation": "現在の再生位置にテキスト、矢印、画像、ぼかしを追加",
 		"addSpeed": "現在の再生位置に再生速度の変更を追加",
-		"addCameraFullscreen": "フルスクリーンカメラを追加：現在の再生位置でカメラを全画面表示します"
+		"addCameraFullscreen": "フルスクリーンカメラを追加：現在の再生位置でカメラを全画面表示します",
+		"splitCamera": "現在の位置でカメラを分割：各部分を個別に編集できます"
 	},
 	"hints": {
 		"pressZoom": "{{key}}キーを押してズームを追加",
@@ -32,7 +33,10 @@
 		"emptyText": "空のテキスト",
 		"cameraFullscreen": "フルスクリーンカメラ",
 		"cameraFullscreenItem": "フルスクリーンカメラ {{index}}",
-		"marker": "{{time}} のマーカー"
+		"marker": "{{time}} のマーカー",
+		"cameraTrack": "カメラ",
+		"cameraPip": "PiP",
+		"cameraHidden": "カメラなし"
 	},
 	"trails": {
 		"zoomIn": "ズームイン：ズームの開始まで画面が拡大していきます",
@@ -120,5 +124,17 @@
 		"recordingUnavailable": "ここでは録音できません",
 		"saveFailed": "録音を保存できませんでした",
 		"importFailed": "音声ファイルを読み込めませんでした"
+	},
+	"cameraPiece": {
+		"title": "カメラの区間",
+		"span": "{{start}} から {{end}}",
+		"mode": "カメラの表示",
+		"modePip": "PiP",
+		"modeFullscreen": "全画面",
+		"modeHidden": "カメラなし",
+		"syncHint": "カメラは画面と同期したままです。この区間では表示方法だけが変わります。",
+		"splitAtPlayhead": "再生位置で分割",
+		"mergeWithNext": "次の区間と結合",
+		"reset": "既定に戻す"
 	}
 }

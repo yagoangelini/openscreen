@@ -2670,7 +2670,8 @@ impl Compositor {
 
         // --- caméra : ombre PiP puis vidéo ---
         let enc = self.begin_pass(cmd_buf, &self.rt, None, &self.pipeline_main)?;
-        if let (true, Some((wy, wuv))) = (lp.has_webcam, webcam_tex.as_ref()) {
+        // Une zone "Sans caméra" qui a fini de la retirer : rien à dessiner, ombre comprise.
+        if let (true, Some((wy, wuv))) = (lp.has_webcam && !g.webcam_hidden, webcam_tex.as_ref()) {
             let [cu0, cv0, cu1, cv1] = crate::frame_geometry::webcam_source_rect(
                 [wcw, wch],
                 [wtw as f32, wth as f32],

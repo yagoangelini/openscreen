@@ -23,6 +23,11 @@ import {
 	placeAudioTrackInDocument,
 	trackGroupId,
 } from "../../src/lib/ai-edition/document/audioTracks";
+import {
+	deriveCameraModeRuns,
+	readCameraSegments,
+	setCameraModeOverSpan,
+} from "../../src/lib/ai-edition/document/cameraSegments";
 import { createId } from "../../src/lib/ai-edition/document/ids";
 import {
 	moveClip,
@@ -101,10 +106,8 @@ function modifierIds(document: AxcutDocument, kind: ModifierKind): string[] {
 			return ((legacy.speedRegions as Array<{ id: string }> | undefined) ?? []).map(
 				(region) => region.id,
 			);
-		case "cameraFullscreen":
-			return ((legacy.cameraFullscreenRegions as Array<{ id: string }> | undefined) ?? []).map(
-				(region) => region.id,
-			);
+		case "camera":
+			return readCameraSegments(document).map((segment) => segment.id);
 		case "audio":
 			// Fragments of one user-visible track share `trackId` and render as a single pill,
 			// so the id that disappears is the group key once, not one per fragment.
@@ -348,13 +351,11 @@ function landingSuffix(
 function modifierIdsOf(document: AxcutDocument): string[] {
 	const legacy = (document.legacyEditor as Record<string, unknown>) ?? {};
 	const speedRegions = (legacy.speedRegions as Array<{ id: string }> | undefined) ?? [];
-	const cameraFullscreenRegions =
-		(legacy.cameraFullscreenRegions as Array<{ id: string }> | undefined) ?? [];
 	return [
 		...document.zoomRanges.map((r) => r.id),
 		...document.annotations.map((r) => r.id),
 		...speedRegions.map((r) => r.id),
-		...cameraFullscreenRegions.map((r) => r.id),
+		...readCameraSegments(document).map((r) => r.id),
 	];
 }
 
@@ -839,10 +840,10 @@ export function documentSnapshotForModel(
 		(legacy?.speedRegions as
 			| Array<{ id: string; startMs: number; endMs: number; speed: number }>
 			| undefined) ?? [];
-	const cameraFullscreenRegions =
-		(legacy?.cameraFullscreenRegions as
-			| Array<{ id: string; startMs: number; endMs: number }>
-			| undefined) ?? [];
+	// The camera track's full-screen pieces (schema v9), in the shape the Full Camera regions
+	// always had. Each fragment keeps its id, so an id here is one `setCameraFullscreen` and
+	// `removeModifier` resolve.
+	const cameraFullscreenRegions = deriveCameraModeRuns(readCameraSegments(document), "fullscreen");
 	// The global Auto-Focus toggle OVERRIDES each region's own focusMode at
 	// render (sceneDescription.ts:703) and the inspector disables the per-region
 	// control while it is on. Reporting the stored mode would hand the model a
@@ -2318,25 +2319,31 @@ export function executeAgentTool(
 			};
 		}
 
+		// Both write the camera track (schema v9): a full-camera region is a camera piece in
+		// full-screen mode, laid over whatever pieces were under its span.
 		case "addCameraFullscreen": {
 			const parsed = addCameraFullscreenArgs.safeParse(args);
 			if (!parsed.success) return failure(parsed.error.message);
 			const startMs = toMs(Math.min(parsed.data.startSec, parsed.data.endSec));
 			const endMs = toMs(Math.max(parsed.data.startSec, parsed.data.endSec));
-			const legacy = (document.legacyEditor as Record<string, unknown>) ?? {};
-			const prev = (legacy.cameraFullscreenRegions as unknown[] | undefined) ?? [];
-			const region = { id: createId("camfull"), startMs, endMs };
-			const placed = anchorForAgent(region, document, "camfull");
-			const landing = landingOf(placed, document);
+			const placed = setCameraModeOverSpan(
+				readCameraSegments(document),
+				document.timeline.clips,
+				startMs,
+				endMs,
+				"fullscreen",
+				{ origin: "agent" },
+			);
+			const landing = landingOf(
+				placed.segments.filter((segment) => placed.ids.includes(segment.id)),
+				document,
+			);
 			if (!landing.anchored) {
 				return coversNoClip("full-camera region", startMs / 1000, endMs / 1000, document);
 			}
 			const blind = noCameraUnderSpan(document, landing.startSec, landing.endSec);
 			if (blind) return blind;
-			const next: AxcutDocument = {
-				...document,
-				legacyEditor: { ...legacy, cameraFullscreenRegions: [...prev, ...placed] },
-			};
+			const next: AxcutDocument = { ...document, cameraSegments: placed.segments };
 			return {
 				ok: true,
 				document: next,
@@ -2353,34 +2360,49 @@ export function executeAgentTool(
 		case "setCameraFullscreen": {
 			const parsed = setCameraFullscreenArgs.safeParse(args);
 			if (!parsed.success) return failure(parsed.error.message);
-			const legacy = (document.legacyEditor as Record<string, unknown>) ?? {};
-			const prev =
-				(legacy.cameraFullscreenRegions as
-					| Array<{ id: string; startMs: number; endMs: number }>
-					| undefined) ?? [];
-			const existing = prev.find((r) => r.id === parsed.data.cameraFullscreenId);
+			const segments = readCameraSegments(document);
+			// The full-camera stretch the id belongs to, as the snapshot reported it: touching
+			// full-screen pieces are one stretch there, so they move as one here.
+			const runs = segments
+				.filter((segment) => segment.mode === "fullscreen")
+				.map(({ id, startMs, endMs }) => ({ id, startMs, endMs }));
+			const existing = runs.find((r) => r.id === parsed.data.cameraFullscreenId);
 			if (!existing)
 				return failure(`Unknown full-camera region: ${parsed.data.cameraFullscreenId}`);
-			const { startMs, endMs } = resolveSpanMs(existing, parsed.data.startSec, parsed.data.endSec);
-			const camPill = new Set(resolvePillIds(prev, parsed.data.cameraFullscreenId));
-			const rebuiltCamera = replacePillSpan(
-				prev,
-				parsed.data.cameraFullscreenId,
+			const run = new Set(resolvePillIds(runs, parsed.data.cameraFullscreenId));
+			const span = coalesceRegionsForRuler(runs.filter((r) => run.has(r.id)))[0];
+			const { startMs, endMs } = resolveSpanMs(
+				span
+					? { startMs: Math.round(span.start * 1000), endMs: Math.round(span.end * 1000) }
+					: existing,
+				parsed.data.startSec,
+				parsed.data.endSec,
+			);
+			const first = segments.find((segment) => segment.id === parsed.data.cameraFullscreenId);
+			// What it leaves behind is the default picture-in-picture again; where it lands, it
+			// replaces whatever pieces were there.
+			const placed = setCameraModeOverSpan(
+				segments.filter((segment) => !run.has(segment.id)),
+				document.timeline.clips,
 				startMs,
 				endMs,
-				document.timeline.clips,
-				() => createId("camfull"),
+				"fullscreen",
+				{
+					id: parsed.data.cameraFullscreenId,
+					segmentId: first?.segmentId,
+					origin: first?.origin ?? "agent",
+				},
 			);
-			const landing = landingAfterPillEdit(prev, rebuiltCamera, camPill, document);
+			const landing = landingOf(
+				placed.segments.filter((segment) => placed.ids.includes(segment.id)),
+				document,
+			);
 			if (!landing.anchored) {
 				return coversNoClip("full-camera region", startMs / 1000, endMs / 1000, document);
 			}
 			const blindMove = noCameraUnderSpan(document, landing.startSec, landing.endSec);
 			if (blindMove) return blindMove;
-			const next: AxcutDocument = {
-				...document,
-				legacyEditor: { ...legacy, cameraFullscreenRegions: rebuiltCamera },
-			};
+			const next: AxcutDocument = { ...document, cameraSegments: placed.segments };
 			return {
 				ok: true,
 				document: next,
@@ -2575,13 +2597,11 @@ export function executeAgentTool(
 			const { id } = parsed.data;
 			const legacy = (document.legacyEditor as Record<string, unknown>) ?? {};
 			const speedRegions = (legacy.speedRegions as Array<{ id: string }> | undefined) ?? [];
-			const cameraFullscreenRegions =
-				(legacy.cameraFullscreenRegions as Array<{ id: string }> | undefined) ?? [];
 			let kind: ModifierKind | null = null;
 			if (document.zoomRanges.some((z) => z.id === id)) kind = "zoom";
 			else if (document.annotations.some((a) => a.id === id)) kind = "annotation";
 			else if (speedRegions.some((s) => s.id === id)) kind = "speed";
-			else if (cameraFullscreenRegions.some((c) => c.id === id)) kind = "cameraFullscreen";
+			else if (readCameraSegments(document).some((c) => c.id === id)) kind = "camera";
 			else if (document.audioTracks.some((t) => trackGroupId(t) === id)) kind = "audio";
 			if (!kind) {
 				return failure(

@@ -27,6 +27,7 @@
 		"addVoiceover": "Gravar narração",
 		"addKeyframe": "Adicionar Quadro-chave",
 		"addCameraFullscreen": "Adicionar Câmera em Tela Cheia",
+		"splitCamera": "Dividir a câmera no cursor",
 		"deleteSelected": "Excluir Selecionado",
 		"playPause": "Reproduzir / Pausar",
 		"copySelected": "Copiar seleção",

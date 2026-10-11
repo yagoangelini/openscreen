@@ -9,16 +9,20 @@ import {
 	ArrowUpRight,
 	AudioLines,
 	Camera,
+	CameraOff,
 	ChevronRight,
 	EyeOff,
 	FileText,
 	ImageIcon,
 	type LucideIcon,
 	Maximize2,
+	Merge,
 	MousePointer2,
 	Pencil,
+	PictureInPicture2,
 	Scissors,
 	SlidersHorizontal,
+	SquareSplitHorizontal,
 	Trash2,
 	Type,
 	Undo2,
@@ -53,6 +57,7 @@ import {
 	type AnnotationTextAnimation,
 	TEXT_ANIMATION_VALUES,
 } from "@/lib/ai-edition/annotations/textAnimation";
+import { type CameraMode, findCameraPiece } from "@/lib/ai-edition/document/cameraSegments";
 import { resolveAspectRatioValue } from "@/lib/ai-edition/document/outputFormat";
 import type { AxcutAnnotationRegion, AxcutClip } from "@/lib/ai-edition/schema";
 import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
@@ -1285,22 +1290,68 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 		);
 	}
 
-	if (selection.kind === "cameraFullscreen") {
-		const region = tl.cameraFullscreenRegions.find((c) => c.id === selection.id);
-		if (!region) return null;
+	// A piece of the camera track. Only how the camera is SHOWN over this stretch changes
+	// here; its timing stays locked to the screen clip, so the inspector offers no span.
+	if (selection.kind === "camera") {
+		const pieces = tl.cameraPieces;
+		const piece = findCameraPiece(pieces, selection.id);
+		if (!piece) return null;
+		const index = pieces.indexOf(piece);
+		const hasNext = index >= 0 && index < pieces.length - 1;
+		const modeOptions: Array<{ value: CameraMode; label: string; icon: React.ReactNode }> = [
+			{ value: "pip", label: tt("cameraPiece.modePip"), icon: <PictureInPicture2 size={16} /> },
+			{
+				value: "fullscreen",
+				label: tt("cameraPiece.modeFullscreen"),
+				icon: <Maximize2 size={16} />,
+			},
+			{ value: "hidden", label: tt("cameraPiece.modeHidden"), icon: <CameraOff size={16} /> },
+		];
 		return (
 			<div style={{ display: "flex", flexDirection: "column", minHeight: 0 }}>
-				{paneHeader(
-					<Maximize2 size={16} />,
-					tt("labels.cameraFullscreen"),
-					onClose,
-					tc("actions.close"),
-				)}
+				{paneHeader(<Camera size={16} />, tt("cameraPiece.title"), onClose, tc("actions.close"))}
 				<div style={bodyStyle}>
-					<button type="button" onClick={deleteAndClose} className={PANE_BUTTON}>
-						<Trash2 size={16} style={{ color: "var(--danger)" }} />
-						{te("inspector.deleteRegion")}
+					<p className={shell.hint}>
+						{tt("cameraPiece.span", {
+							start: formatSeconds(piece.startMs / 1000),
+							end: formatSeconds(piece.endMs / 1000),
+						})}
+					</p>
+					{paneStack(
+						tt("cameraPiece.mode"),
+						<ChoiceRow<CameraMode>
+							label={tt("cameraPiece.mode")}
+							columns={3}
+							display="both"
+							options={modeOptions}
+							value={piece.mode}
+							onChange={(mode) => void tl.setCameraMode(piece.key, mode)}
+						/>,
+					)}
+					<p className={shell.hint}>{tt("cameraPiece.syncHint")}</p>
+					<button type="button" onClick={() => void tl.splitCamera()} className={PANE_BUTTON}>
+						<SquareSplitHorizontal size={16} />
+						{tt("cameraPiece.splitAtPlayhead")}
 					</button>
+					<button
+						type="button"
+						disabled={!hasNext}
+						onClick={() => void tl.mergeCameraWithNext(piece.key)}
+						className={PANE_BUTTON}
+					>
+						<Merge size={16} />
+						{tt("cameraPiece.mergeWithNext")}
+					</button>
+					{piece.implicit ? null : (
+						<button
+							type="button"
+							onClick={() => void tl.resetCameraPiece(piece.key)}
+							className={PANE_BUTTON}
+						>
+							<Undo2 size={16} />
+							{tt("cameraPiece.reset")}
+						</button>
+					)}
 				</div>
 			</div>
 		);

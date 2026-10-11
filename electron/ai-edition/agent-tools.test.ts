@@ -731,12 +731,15 @@ describe("executeAgentTool", () => {
 			JSON.stringify({ startSec: 9, endSec: 5 }),
 		);
 		expect(added.ok).toBe(true);
-		const legacy = added.document?.legacyEditor as Record<string, unknown>;
-		const region = (
-			legacy.cameraFullscreenRegions as Array<{ id: string; startMs: number; endMs: number }>
-		).at(-1);
+		// A full-screen piece of the camera track (schema v9).
+		const region = added.document?.cameraSegments.at(-1);
 		// bounds normalised (start ≤ end).
-		expect(region).toMatchObject({ startMs: 5000, endMs: 9000 });
+		expect(region).toMatchObject({
+			startMs: 5000,
+			endMs: 9000,
+			mode: "fullscreen",
+			origin: "agent",
+		});
 		expect(() => documentSchema.parse(added.document)).not.toThrow();
 
 		const snapshot = JSON.parse(
@@ -751,13 +754,18 @@ describe("executeAgentTool", () => {
 			JSON.stringify({ cameraFullscreenId: region?.id, startSec: 1, endSec: 2 }),
 		);
 		expect(moved.ok).toBe(true);
-		const movedRegion = (
-			(moved.document?.legacyEditor as Record<string, unknown>).cameraFullscreenRegions as Array<{
-				startMs: number;
-				endMs: number;
-			}>
-		)[0];
-		expect(movedRegion).toMatchObject({ startMs: 1000, endMs: 2000 });
+		// It keeps its id, and where it was is the default picture-in-picture again.
+		expect(moved.document?.cameraSegments).toEqual([
+			expect.objectContaining({ id: region?.id, startMs: 1000, endMs: 2000, mode: "fullscreen" }),
+		]);
+		const removed = executeAgentTool(
+			moved.document as AxcutDocument,
+			"removeModifier",
+			JSON.stringify({ id: region?.id }),
+		);
+		expect(removed.ok).toBe(true);
+		expect(JSON.parse(removed.resultJson).kind).toBe("camera");
+		expect(removed.document?.cameraSegments).toEqual([]);
 		expect(
 			executeAgentTool(
 				withCameraTrack(fixtureDocument()),
@@ -1162,8 +1170,7 @@ describe("a full-camera region needs a camera", () => {
 			JSON.stringify({ startSec: 0, endSec: 5 }),
 		);
 		expect(result.ok).toBe(true);
-		const legacy = result.document?.legacyEditor as Record<string, unknown>;
-		expect(legacy.cameraFullscreenRegions).toHaveLength(1);
+		expect(result.document?.cameraSegments).toHaveLength(1);
 	});
 
 	it("refuses to MOVE a region onto footage with no webcam", () => {
@@ -1195,11 +1202,7 @@ describe("a full-camera region needs a camera", () => {
 			JSON.stringify({ startSec: 0, endSec: 5 }),
 		);
 		expect(added.ok).toBe(true);
-		const regionId = (
-			(added.document?.legacyEditor as Record<string, unknown>).cameraFullscreenRegions as Array<{
-				id: string;
-			}>
-		)[0].id;
+		const regionId = added.document?.cameraSegments[0].id;
 		const moved = executeAgentTool(
 			added.document as AxcutDocument,
 			"setCameraFullscreen",

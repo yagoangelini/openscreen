@@ -62,6 +62,7 @@ function makeDoc(overrides: Partial<AxcutDocument> = {}): AxcutDocument {
 		annotations: [],
 		zoomRanges: [],
 		audioTracks: [],
+		cameraSegments: [],
 		legacyEditor: null,
 		...overrides,
 	};
@@ -987,7 +988,7 @@ describe("duplicateClip / moveClip", () => {
 	// zoom or the Full Camera the original had.
 	it("duplicateClip copies every modifier anchored to the original onto the copy", () => {
 		type Row = { id: string; clipId?: string; startMs: number; endMs: number };
-		type Legacy = { speedRegions: Row[]; cameraFullscreenRegions: Row[] };
+		type Legacy = { speedRegions: Row[] };
 		// clip_a plays its source 0-10 s at 0-10 s on the ruler.
 		const onA = (sourceStartSec: number, sourceEndSec: number) => ({
 			clipId: "clip_a",
@@ -1026,9 +1027,11 @@ describe("duplicateClip / moveClip", () => {
 			annotations: [
 				{ id: "a1", ...onA(5, 6), type: "text", content: "hi" },
 			] as unknown as AxcutDocument["annotations"],
+			cameraSegments: [
+				{ id: "cf1", segmentId: "seg1", ...onA(6, 9), mode: "fullscreen", origin: "user" },
+			],
 			legacyEditor: {
 				speedRegions: [{ id: "s1", ...onA(1, 3), speed: 1.5 }],
-				cameraFullscreenRegions: [{ id: "cf1", ...onA(6, 9) }],
 			},
 		});
 		const before = structuredClone(doc);
@@ -1052,15 +1055,19 @@ describe("duplicateClip / moveClip", () => {
 		expect(onCopy(legacy.speedRegions)).toEqual([
 			copyOf(legacyBefore.speedRegions[0], 11000, 13000),
 		]);
-		expect(onCopy(legacy.cameraFullscreenRegions)).toEqual([
-			copyOf(legacyBefore.cameraFullscreenRegions[0], 16000, 19000),
+		// A copied camera piece is a piece of its own: a fresh `segmentId` too.
+		expect(onCopy(next.cameraSegments)).toEqual([
+			{
+				...copyOf(before.cameraSegments[0], 16000, 19000),
+				segmentId: expect.not.stringMatching(/^seg1$/),
+			},
 		]);
 		// Under fresh ids: a shared one would make a copy and its original one row.
 		const ids = [
 			...next.zoomRanges,
 			...next.annotations,
 			...legacy.speedRegions,
-			...legacy.cameraFullscreenRegions,
+			...next.cameraSegments,
 		].map((row) => row.id);
 		expect(new Set(ids).size).toBe(9);
 
@@ -1071,7 +1078,7 @@ describe("duplicateClip / moveClip", () => {
 		]);
 		expect(notOnCopy(next.annotations)).toEqual(before.annotations);
 		expect(notOnCopy(legacy.speedRegions)).toEqual(legacyBefore.speedRegions);
-		expect(notOnCopy(legacy.cameraFullscreenRegions)).toEqual(legacyBefore.cameraFullscreenRegions);
+		expect(notOnCopy(next.cameraSegments)).toEqual(before.cameraSegments);
 		// Pure, so the store's undo snapshot of the input is still the document to go back to.
 		expect(doc).toEqual(before);
 
@@ -1079,7 +1086,8 @@ describe("duplicateClip / moveClip", () => {
 		// per clip.
 		const twice = duplicateClip(next, "clip_a");
 		expect(twice.zoomRanges.filter((z) => z.sourceStartSec === 2)).toHaveLength(3);
-		expect((twice.legacyEditor as Legacy).cameraFullscreenRegions).toHaveLength(3);
+		expect(twice.cameraSegments).toHaveLength(3);
+		expect(new Set(twice.cameraSegments.map((p) => p.segmentId)).size).toBe(3);
 	});
 
 	// Left out on purpose, see `duplicateClip`: an imported take is not a modifier of the
@@ -1888,19 +1896,36 @@ describe("removeRegion — the one shared region-delete mutator", () => {
 		});
 	});
 
-	it("removes speed and camera-fullscreen regions under legacyEditor", () => {
+	it("removes speed regions under legacyEditor, and a whole camera piece", () => {
 		const doc = makeDoc({
+			cameraSegments: [
+				// One piece across two clips, and another piece touching it.
+				{ id: "cf1", segmentId: "s1", startMs: 0, endMs: 1000, mode: "fullscreen", origin: "user" },
+				{
+					id: "cf2",
+					segmentId: "s1",
+					startMs: 1000,
+					endMs: 2000,
+					mode: "fullscreen",
+					origin: "user",
+				},
+				{
+					id: "cf3",
+					segmentId: "s2",
+					startMs: 2000,
+					endMs: 3000,
+					mode: "fullscreen",
+					origin: "user",
+				},
+			],
 			legacyEditor: {
 				speedRegions: [{ id: "sp1", startMs: 0, endMs: 1000, speed: 2 }],
-				cameraFullscreenRegions: [{ id: "cf1", startMs: 0, endMs: 1000 }],
 			},
 		});
 		const afterSpeed = removeRegion(doc, "speed", "sp1");
 		expect((afterSpeed.legacyEditor as { speedRegions: unknown[] }).speedRegions).toHaveLength(0);
-		const afterCam = removeRegion(doc, "cameraFullscreen", "cf1");
-		expect(
-			(afterCam.legacyEditor as { cameraFullscreenRegions: unknown[] }).cameraFullscreenRegions,
-		).toHaveLength(0);
+		const afterCam = removeRegion(doc, "camera", "cf2");
+		expect(afterCam.cameraSegments.map((p) => p.id)).toEqual(["cf3"]);
 	});
 
 	it("is a no-op for an unknown id", () => {
@@ -2070,17 +2095,20 @@ describe("removeClip — delete a clip, close the gap, drop its pills", () => {
 					},
 					{ id: "legacy_speed", startMs: 0, endMs: 1000, speed: 1.5 },
 				],
-				cameraFullscreenRegions: [
-					{
-						id: "anchored_camera",
-						clipId: "clip_a",
-						sourceStartSec: 0,
-						sourceEndSec: 1,
-						startMs: 0,
-						endMs: 1000,
-					},
-				],
 			},
+			cameraSegments: [
+				{
+					id: "anchored_camera",
+					segmentId: "seg",
+					clipId: "clip_a",
+					sourceStartSec: 0,
+					sourceEndSec: 1,
+					startMs: 0,
+					endMs: 1000,
+					mode: "fullscreen",
+					origin: "user",
+				},
+			],
 		});
 
 		const next = removeClip(before, "clip_a");
@@ -2096,9 +2124,7 @@ describe("removeClip — delete a clip, close the gap, drop its pills", () => {
 		expect((next.legacyEditor as { speedRegions: Array<{ id: string }> }).speedRegions).toEqual([
 			expect.objectContaining({ id: "legacy_speed" }),
 		]);
-		expect(
-			(next.legacyEditor as { cameraFullscreenRegions: unknown[] }).cameraFullscreenRegions,
-		).toEqual([]);
+		expect(next.cameraSegments).toEqual([]);
 	});
 
 	it("is a no-op for an unknown clip", () => {
@@ -2136,9 +2162,9 @@ describe("a malformed legacyEditor envelope", () => {
 		});
 
 	it("deletes a clip instead of throwing, and keeps the sibling collection working", () => {
-		const before = doc({
-			speedRegions: "oops",
-			cameraFullscreenRegions: [
+		const before: AxcutDocument = {
+			...doc({ speedRegions: "oops" }),
+			cameraSegments: [
 				{
 					id: "cam_b",
 					clipId: "clip_b",
@@ -2146,21 +2172,20 @@ describe("a malformed legacyEditor envelope", () => {
 					sourceEndSec: 4,
 					startMs: 12000,
 					endMs: 14000,
+					mode: "fullscreen",
+					origin: "user",
 				},
 			],
-		});
+		};
 
 		const next = removeClip(before, "clip_a");
 
 		expect(next.timeline.clips.map((c) => c.id)).toEqual(["clip_b"]);
-		const legacy = next.legacyEditor as {
-			speedRegions: unknown;
-			cameraFullscreenRegions: Array<{ id: string; startMs: number; endMs: number }>;
-		};
+		const legacy = next.legacyEditor as { speedRegions: unknown };
 		// Untouched, not dropped — we cannot walk it, which is not a reason to delete it.
 		expect(legacy.speedRegions).toBe("oops");
 		// The well-formed neighbour is still rederived: clip_b slid 10s to the front.
-		expect(legacy.cameraFullscreenRegions).toEqual([
+		expect(next.cameraSegments).toEqual([
 			expect.objectContaining({ id: "cam_b", startMs: 2000, endMs: 4000 }),
 		]);
 	});

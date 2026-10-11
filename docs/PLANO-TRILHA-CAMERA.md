@@ -4,6 +4,26 @@ Pedido do usuário, 11/10/2026: "A gravação da câmera precisa aparecer na tri
 
 Este plano junta esse pedido aos itens 1 e 2 do 2.2.0 do [`HANDOFF.md`](HANDOFF.md) (o botão "Rosto / Tela + câmera" do HUD e a região "Sem câmera"). As linhas citadas são do commit `4de55e06`.
 
+## Status (branch `feat/camera-track`, 11/10/2026)
+
+| Fase | Status | Onde |
+|---|---|---|
+| 0. Modelo e migração | **Feito** | Schema v9 (`cameraSegmentSchema`, `upgradeV8DocumentToV9` em `schema/index.ts`); `src/lib/ai-edition/document/cameraSegments.ts` (+ `.test.ts`); leitores derivados: `sceneDescription.ts`, `useTimeline.ts`, `agent-tools.ts`, `migrate.ts` (volta ao v2), workbench. Paridade: os testes `buildSceneDescription.cameraFullscreenRegions` carregam cada fixture como v8 e esperam a cena de antes. |
+| 1. A trilha | **Feito** | `V4Timeline.tsx` (`renderCameraTrack`, botão "Dividir a câmera"), `FloatingInspector.tsx` (painel do trecho), `useTimeline.ts` (`saveCameraEdit` e os callbacks), atalho `splitCamera` = **B** em `shortcuts.ts`, Ctrl+C/Ctrl+V do estilo em `NewEditorShell.tsx`. |
+| 2. Sem câmera | **Feito** | Cena `cameraHiddenRegions`; Rust `camera_hidden_regions` (`scene.rs`), escala até 0 na âncora em `frame_geometry.rs` e `webcam_hidden` nos três backends; prévia web com opacidade (`PreviewCanvas.tsx`). Delete num trecho: sem câmera; Delete de novo: volta ao padrão. |
+| 3. Aparência por pedaço | Pendente | `overrides` ainda não existe no schema (o zod descarta a chave). |
+| 4–5 | Pendentes | — |
+
+Decisões tomadas na implementação:
+
+- **Dividir um trecho implícito guarda os dois lados** como PiP explícitos. O trecho da esquerda mantém o id; o da direita é novo e fica selecionado.
+- **"C" (Câmera cheia) cria um trecho por cima** dos que estavam no intervalo (`setCameraModeOverSpan`), em vez de recusar a sobreposição. O agente faz o mesmo.
+- **`setCameraFullscreen` do agente** move o trecho inteiro: onde ele estava volta a ser PiP padrão.
+- **Delete em lote** (seleção múltipla) volta os trechos ao padrão direto, sem passar por "sem câmera".
+- **Ctrl+V de um trecho** aplica o modo copiado ao trecho sob o cursor, sem mudar o tempo.
+- **"Sem câmera" encolhe a webcam até zero na âncora**, na mesma envoltória da Câmera cheia, sem mexer em shader. Trecho sem câmera e trecho em tela cheia nunca se sobrepõem.
+- **Nota da release:** uma build 2.1.x recusa o arquivo v9; abrir um projeto na 2.2 e voltar à 2.1 não funciona.
+
 ## O que já existe e não muda
 
 - **Sincronia de tempo.** Cada clipe da cena leva `webcamPath` e `webcamOffsetSec` (`assetCameraSource`, `src/lib/ai-edition/timeline/camera.ts:44`; montado em `src/native/sceneDescription.ts:983-1006`). Cortar, aparar, reordenar ou apagar o clipe da tela corta a câmera junto, na prévia e no export.

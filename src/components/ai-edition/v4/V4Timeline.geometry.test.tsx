@@ -120,6 +120,7 @@ function renderTimeline(
 		annotationRegions: [annotation],
 		speedRegions: [],
 		cameraFullscreenRegions: [],
+		cameraPieces: [],
 		zoomRegions: [],
 		trimRanges: [],
 		hasEditRegions: true,
@@ -496,7 +497,7 @@ describe("V4Timeline create-from-toolbar", () => {
 		expect(tl.clearTimeline).toHaveBeenCalledTimes(1);
 	});
 
-	it("puts Clear timeline last, behind a divider, after the Add Full Camera button", () => {
+	it("puts Clear timeline last, behind a divider, after the camera buttons", () => {
 		renderTimeline(undefined, undefined, [CAMERA_ASSET]);
 		const toolbar = toolbarOf();
 		const buttons = Array.from(toolbar.querySelectorAll("button"));
@@ -505,7 +506,8 @@ describe("V4Timeline create-from-toolbar", () => {
 
 		const divider = clear.previousElementSibling;
 		expect(divider?.className).toContain("tlToolSep");
-		expect(divider?.previousElementSibling).toBe(
+		expect(divider?.previousElementSibling).toBe(screen.getByLabelText("buttons.splitCamera"));
+		expect(divider?.previousElementSibling?.previousElementSibling).toBe(
 			screen.getByLabelText("buttons.addCameraFullscreen"),
 		);
 		expect(dividersIn(toolbar)).toHaveLength(2);
@@ -536,15 +538,40 @@ describe("V4Timeline create-from-toolbar", () => {
 		expect(screen.queryByText("hints.pressCameraFullscreen")).not.toBeInTheDocument();
 	});
 
-	it("advertises it again once a camera is on the timeline", () => {
-		renderTimeline(undefined, undefined, [
-			{
-				...NO_CAMERA_ASSET,
-				cameraTrack: { sourcePath: "/tmp/cam.webm", startMs: 0, offsetMs: 0, visible: true },
-			},
-		]);
-		expect(screen.getByText("hints.pressCameraFullscreen")).toBeInTheDocument();
+	// The camera track (schema v9) replaced the Full Camera lane: with a camera it is never
+	// empty, it shows the pieces, the implicit picture-in-picture ones included.
+	it("draws the camera track's pieces once a camera is on the timeline", () => {
+		const selectRegion = vi.fn();
+		renderTimeline(undefined, undefined, [CAMERA_ASSET], undefined, {
+			selectRegion,
+			cameraPieces: [
+				{
+					key: "cam1",
+					ids: ["cam1"],
+					startMs: 0,
+					endMs: 60_000,
+					mode: "fullscreen",
+					implicit: false,
+				},
+				{
+					key: "implicit:60000",
+					ids: [],
+					startMs: 60_000,
+					endMs: TOTAL_SEC * 1000,
+					mode: "pip",
+					implicit: true,
+				},
+			],
+		});
 		expect(screen.queryByText("layout.noWebcam")).not.toBeInTheDocument();
+		const track = screen.getByRole("group", { name: "labels.cameraTrack" });
+		const pieces = track.querySelectorAll("[data-camera-piece]");
+		expect(Array.from(pieces).map((p) => p.getAttribute("data-camera-piece"))).toEqual([
+			"stored",
+			"implicit",
+		]);
+		fireEvent.pointerDown(pieces[1], { button: 0 });
+		expect(selectRegion).toHaveBeenCalledWith("camera", "implicit:60000", { additive: false });
 	});
 });
 
@@ -700,6 +727,7 @@ describe("V4Timeline audio lane drag", () => {
 			annotationRegions: [],
 			speedRegions: [],
 			cameraFullscreenRegions: [],
+			cameraPieces: [],
 			zoomRegions: [],
 			trimRanges: [],
 			selection: null,
@@ -916,7 +944,6 @@ describe("V4Timeline empty-lane hints", () => {
 		expect(screen.getByText("Press Z to add zoom")).toBeInTheDocument();
 		expect(screen.getByText("Press T to add trim")).toBeInTheDocument();
 		expect(screen.getByText("Press S to add speed")).toBeInTheDocument();
-		expect(screen.getByText("Press C to add a Full Camera segment")).toBeInTheDocument();
 		expect(screen.getByText("Press M to add audio, V to record a voiceover")).toBeInTheDocument();
 	});
 
@@ -945,7 +972,6 @@ describe("V4Timeline empty-lane hints", () => {
 		expect(screen.getByText("Press Ctrl + Shift + T to add trim")).toBeInTheDocument();
 		expect(screen.getByText("Press N to add annotation")).toBeInTheDocument();
 		expect(screen.getByText("Press J to add speed")).toBeInTheDocument();
-		expect(screen.getByText("Press K to add a Full Camera segment")).toBeInTheDocument();
 		expect(
 			screen.getByText("Press U to add audio, Alt + R to record a voiceover"),
 		).toBeInTheDocument();

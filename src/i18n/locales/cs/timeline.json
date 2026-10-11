@@ -7,7 +7,8 @@
 		"addTrim": "Přidat oříznutí: odstraní část videa v aktuálním čase",
 		"addAnnotation": "Přidat text, šipku, obrázek nebo rozmazání v aktuálním čase",
 		"addSpeed": "Přidat změnu rychlosti v aktuálním čase",
-		"addCameraFullscreen": "Přidat Celou kameru: zobrazí kameru na celou obrazovku v aktuálním čase"
+		"addCameraFullscreen": "Přidat Celou kameru: zobrazí kameru na celou obrazovku v aktuálním čase",
+		"splitCamera": "Rozdělit kameru v aktuálním čase: každý díl se pak upravuje zvlášť"
 	},
 	"hints": {
 		"pressZoom": "Stiskněte {{key}} pro přidání přiblížení",
@@ -32,7 +33,10 @@
 		"emptyText": "Prázdný text",
 		"cameraFullscreen": "Celá kamera",
 		"cameraFullscreenItem": "Celá kamera {{index}}",
-		"marker": "Značka v {{time}}"
+		"marker": "Značka v {{time}}",
+		"cameraTrack": "Kamera",
+		"cameraPip": "PiP",
+		"cameraHidden": "Bez kamery"
 	},
 	"trails": {
 		"zoomIn": "Najetí: pohled se přibližuje až do začátku přiblížení",
@@ -120,5 +124,17 @@
 		"recordingUnavailable": "Nahrávání zde není dostupné",
 		"saveFailed": "Nepodařilo se uložit nahrávku",
 		"importFailed": "Nepodařilo se importovat zvukový soubor"
+	},
+	"cameraPiece": {
+		"title": "Díl kamery",
+		"span": "Od {{start}} do {{end}}",
+		"mode": "Zobrazit kameru",
+		"modePip": "PiP",
+		"modeFullscreen": "Celá obrazovka",
+		"modeHidden": "Bez kamery",
+		"syncHint": "Kamera zůstává synchronní s obrazovkou. Tento díl mění jen to, jak se zobrazuje.",
+		"splitAtPlayhead": "Rozdělit u kurzoru",
+		"mergeWithNext": "Spojit s dalším",
+		"reset": "Zpět na výchozí"
 	}
 }

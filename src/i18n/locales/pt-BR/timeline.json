@@ -7,7 +7,8 @@
 		"addTrim": "Adicionar um recorte: remove uma parte do vídeo no momento atual",
 		"addAnnotation": "Adicionar texto, seta, imagem ou desfoque no momento atual",
 		"addSpeed": "Adicionar uma mudança de velocidade no momento atual",
-		"addCameraFullscreen": "Adicionar Câmera em Tela Cheia: mostra a câmera em tela cheia no momento atual"
+		"addCameraFullscreen": "Adicionar Câmera em Tela Cheia: mostra a câmera em tela cheia no momento atual",
+		"splitCamera": "Dividir a câmera no momento atual: cada pedaço passa a ser editado separadamente"
 	},
 	"hints": {
 		"pressZoom": "Pressione {{key}} para adicionar zoom",
@@ -32,7 +33,10 @@
 		"emptyText": "Texto vazio",
 		"cameraFullscreen": "Câmera em Tela Cheia",
 		"cameraFullscreenItem": "Câmera em Tela Cheia {{index}}",
-		"marker": "Marcador em {{time}}"
+		"marker": "Marcador em {{time}}",
+		"cameraTrack": "Câmera",
+		"cameraPip": "PiP",
+		"cameraHidden": "Sem câmera"
 	},
 	"trails": {
 		"zoomIn": "Aproximação: a visão se aproxima até o início do zoom",
@@ -120,5 +124,17 @@
 		"recordingUnavailable": "A gravação não está disponível aqui",
 		"saveFailed": "Não foi possível salvar a gravação",
 		"importFailed": "Não foi possível importar o arquivo de áudio"
+	},
+	"cameraPiece": {
+		"title": "Trecho da câmera",
+		"span": "De {{start}} a {{end}}",
+		"mode": "Mostrar a câmera",
+		"modePip": "Janela (PiP)",
+		"modeFullscreen": "Tela cheia",
+		"modeHidden": "Sem câmera",
+		"syncHint": "A câmera continua sincronizada com a tela. Este trecho muda só a forma como ela aparece.",
+		"splitAtPlayhead": "Dividir no cursor",
+		"mergeWithNext": "Juntar com o próximo",
+		"reset": "Voltar ao padrão"
 	}
 }

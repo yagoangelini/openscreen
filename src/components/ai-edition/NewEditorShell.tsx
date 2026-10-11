@@ -1104,6 +1104,21 @@ export function NewEditorShell() {
 			return;
 		}
 
+		// A camera piece is pasted as a STYLE: the piece under the playhead takes the copied
+		// mode, and keeps its own span. The camera track has no free space to paste into.
+		if (snapshot.kind === "camera") {
+			const { cameraPieceAt } = await import("@/lib/ai-edition/document/cameraSegments");
+			const piece = cameraPieceAt(
+				tl.cameraPieces,
+				Math.round(useProjectStore.getState().currentTimeSec * 1000),
+			);
+			if (!piece) return;
+			if (await tl.setCameraMode(piece.key, snapshot.region.mode)) {
+				toast.success(toastText("editor", "shellToasts.regionPasted"));
+			}
+			return;
+		}
+
 		// Validate before building anything. The clipboard outlives the project, so
 		// a track copied in one project and pasted in another would reference an
 		// asset that only exists back where it came from — a pill that plays
@@ -1180,14 +1195,13 @@ export function NewEditorShell() {
 				{ history: true },
 			);
 		} else {
-			// speed and cameraFullscreen are both plain spans on legacyEditor.
-			const key = snapshot.kind === "speed" ? "speedRegions" : "cameraFullscreenRegions";
+			// Speed is a plain span on legacyEditor.
 			const legacy = (doc.legacyEditor as Record<string, unknown>) ?? {};
-			const prev = (legacy[key] as unknown[]) ?? [];
+			const prev = (legacy.speedRegions as unknown[]) ?? [];
 			await saveDocument(
 				{
 					...doc,
-					legacyEditor: { ...legacy, [key]: [...prev, ...anchored] },
+					legacyEditor: { ...legacy, speedRegions: [...prev, ...anchored] },
 				},
 				{ history: true },
 			);
@@ -1240,14 +1254,23 @@ export function NewEditorShell() {
 			return;
 		}
 
+		// A camera piece copies its style (how it shows the camera), not a span: see paste.
+		if (sel.kind === "camera") {
+			const { findCameraPiece } = await import("@/lib/ai-edition/document/cameraSegments");
+			const piece = findCameraPiece(tl.cameraPieces, sel.id);
+			if (!piece) return;
+			copyRegion({ kind: "camera", region: { mode: piece.mode } });
+			setCopiedClipId(null);
+			toast.success(toastText("editor", "shellToasts.regionCopied"));
+			return;
+		}
+
 		const source =
 			sel.kind === "zoom"
 				? tl.zoomRegions
 				: sel.kind === "annotation"
 					? tl.annotationRegions
-					: sel.kind === "speed"
-						? tl.speedRegions
-						: tl.cameraFullscreenRegions;
+					: tl.speedRegions;
 		const region = (source as Array<{ id: string }>).find((r) => r.id === sel.id);
 		if (!region) return;
 		copyRegion({ kind: sel.kind, region: region as unknown as Record<string, unknown> });
@@ -1431,6 +1454,12 @@ export function NewEditorShell() {
 			if (matchesShortcut(e, shortcuts.addCameraFullscreen, isMac)) {
 				e.preventDefault();
 				void tl.addCameraFullscreen(newRegionDurationSec());
+				return;
+			}
+			// Cuts the camera track only: the screen clips under the playhead stay whole.
+			if (matchesShortcut(e, shortcuts.splitCamera, isMac)) {
+				e.preventDefault();
+				void tl.splitCamera();
 				return;
 			}
 
@@ -1667,6 +1696,7 @@ export function NewEditorShell() {
 									zoomRegions={tl.zoomRegions}
 									speedRegions={tl.speedRegions}
 									cameraFullscreenRegions={tl.cameraFullscreenRegions}
+									cameraHiddenRegions={tl.cameraHiddenRegions}
 									trimRanges={tl.trimRanges}
 									selectedZoomRegionId={tl.selection?.kind === "zoom" ? tl.selection.id : null}
 									onZoomFocusChange={tl.updateZoomFocusLive}

@@ -7,7 +7,8 @@
 		"addTrim": "新增剪輯：在目前時間移除一段影片",
 		"addAnnotation": "在目前時間新增文字、箭頭、圖片或模糊",
 		"addSpeed": "在目前時間新增速度變化",
-		"addCameraFullscreen": "新增全螢幕攝影機：在目前時間全螢幕顯示攝影機"
+		"addCameraFullscreen": "新增全螢幕攝影機：在目前時間全螢幕顯示攝影機",
+		"splitCamera": "在目前時間分割攝影機：之後每一段都可單獨編輯"
 	},
 	"hints": {
 		"pressZoom": "按 {{key}} 新增縮放",
@@ -32,7 +33,10 @@
 		"emptyText": "空文字",
 		"cameraFullscreen": "全螢幕攝影機",
 		"cameraFullscreenItem": "全螢幕攝影機 {{index}}",
-		"marker": "{{time}} 的標記"
+		"marker": "{{time}} 的標記",
+		"cameraTrack": "攝影機",
+		"cameraPip": "子母畫面",
+		"cameraHidden": "無攝影機"
 	},
 	"trails": {
 		"zoomIn": "放大過程：畫面在縮放開始前逐漸放大",
@@ -120,5 +124,17 @@
 		"recordingUnavailable": "此處無法錄音",
 		"saveFailed": "無法儲存錄音",
 		"importFailed": "無法匯入音訊檔案"
+	},
+	"cameraPiece": {
+		"title": "攝影機片段",
+		"span": "從 {{start}} 到 {{end}}",
+		"mode": "攝影機顯示方式",
+		"modePip": "子母畫面",
+		"modeFullscreen": "全螢幕",
+		"modeHidden": "無攝影機",
+		"syncHint": "攝影機始終與螢幕同步。此片段只改變它的顯示方式。",
+		"splitAtPlayhead": "在播放頭處分割",
+		"mergeWithNext": "與下一段合併",
+		"reset": "恢復預設"
 	}
 }

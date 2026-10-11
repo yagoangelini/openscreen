@@ -33,7 +33,7 @@ const sampleDoc = vi.hoisted(
 		// imports are initialised, so reading the constant here throws
 		// "Cannot access ... before initialization". The typecheck gate catches it
 		// if it ever falls behind the schema.
-		schemaVersion: 8,
+		schemaVersion: 9,
 		project: {
 			id: "proj_test",
 			title: "Test",
@@ -54,6 +54,7 @@ const sampleDoc = vi.hoisted(
 		annotations: [],
 		zoomRanges: [],
 		audioTracks: [],
+		cameraSegments: [],
 		legacyEditor: null,
 	}),
 );

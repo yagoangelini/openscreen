@@ -22,7 +22,7 @@ import { clampToBound } from "../../projectDefaults";
 // transitive value-imports (region-ventilation, virtual-preview) import from this
 // module TYPE-ONLY, so requiring them here never re-enters schema at runtime.
 import { createId } from "../document/ids";
-import { anchorRegionsWithDerivedMs } from "../timeline/timelineMap";
+import { anchorRegionsWithDerivedMs, coalesceRegionsForRuler } from "../timeline/timelineMap";
 
 //   4. v5 — modifiers (zoom / annotation / speed / cameraFullscreen) become
 //      CLIP-ANCHORED fragments: `{clipId, sourceStartSec, sourceEndSec}` is the
@@ -42,7 +42,10 @@ import { anchorRegionsWithDerivedMs } from "../timeline/timelineMap";
 //   7. v8 — Auto becomes the default AspectRatio. A document that never chose a
 //      ratio stores none and reads the default, so the upgrader pins the one it
 //      has always shown, 16:9. See `upgradeV7DocumentToV8`.
-export const axcutSchemaVersion = 8;
+//   8. v9 — the camera gets its own track: `cameraSegments` replaces
+//      `legacyEditor.cameraFullscreenRegions`, which becomes pieces in "fullscreen" mode.
+//      See `upgradeV8DocumentToV9` and `document/cameraSegments.ts`.
+export const axcutSchemaVersion = 9;
 
 // ponytail: every region schema shares the same monotonicity rule
 // (end >= start) with the same error shape. Factor the refine so the
@@ -616,6 +619,33 @@ export const audioTrackSchema = endGteStart(
 	"startMs",
 );
 
+// A piece of the camera track (v9). The camera stays locked to the screen in time: its
+// webcam file plays wherever the screen clip under it plays. What a piece changes is how
+// the camera is SHOWN there: as the picture-in-picture, filling the frame, or not at all.
+//
+// CLIP-ANCHORED like a zoom: `{clipId, sourceStartSec, sourceEndSec}` is the source of
+// truth and `startMs`/`endMs` a derived ruler cache. Stored sparse: only the pieces the
+// user made exist, and the ruler time no piece covers is an implicit picture-in-picture
+// piece. A piece across a clip junction is one fragment per clip, sharing `segmentId`,
+// which is what keeps two pieces with the same mode side by side as TWO pills (it is part
+// of the merge rule's identity, see timelineMap). Absent on a fragment written without
+// one, which then merges with any touching fragment of its mode.
+export const cameraSegmentModeSchema = z.enum(["pip", "fullscreen", "hidden"]);
+
+export const cameraSegmentSchema = endGteStart(
+	z.object({
+		id: z.string().min(1),
+		segmentId: z.string().min(1).optional(),
+		startMs: z.number().nonnegative(),
+		endMs: z.number().nonnegative(),
+		...clipAnchorShape,
+		mode: cameraSegmentModeSchema.default("pip"),
+		origin: z.enum(["system", "agent", "user"]).default("user"),
+	}),
+	"endMs",
+	"startMs",
+);
+
 // Legacy OpenScreen appearance / export settings that the v3 schema doesn't
 // normalize into the timeline / assets model. They are applied at export time
 // by the existing pipeline (see technical-documentation/architecture/document-model.md).
@@ -654,6 +684,9 @@ const documentSchemaShape = z.object({
 	// Imported audio tracks (issue #350). Defaulted so every document written
 	// before this loads unchanged; an older build simply strips the key on save.
 	audioTracks: z.array(audioTrackSchema).default([]),
+	// The camera track's pieces (v9). Defaulted: a document with no piece shows the camera
+	// as the picture-in-picture over the whole timeline, as before the track existed.
+	cameraSegments: z.array(cameraSegmentSchema).default([]),
 	legacyEditor: legacyEditorSchema.nullable().default(null),
 });
 
@@ -948,6 +981,85 @@ export function upgradeV7DocumentToV8(raw: unknown): unknown {
 }
 
 /**
+ * v8 → v9 — the camera gets its own track. Each "Full Camera" pill of
+ * `legacyEditor.cameraFullscreenRegions` becomes one camera piece in "fullscreen" mode: its
+ * fragments (one per clip it covers) keep their ids and anchors and share a fresh
+ * `segmentId`, so the pill the user saw is the piece they get. The legacy key goes away:
+ * the scene, the preview and the agent now derive the full-camera spans from the pieces
+ * (`readCameraFullscreenRegions`), and two stores of one thing would drift.
+ *
+ * The envelope is an unvalidated passthrough, so anything that is not a span is dropped
+ * rather than carried into a schema that would refuse the whole document over it.
+ * Runs on RAW, untrusted input like the rest of the chain.
+ */
+export function upgradeV8DocumentToV9(raw: unknown): unknown {
+	if (!raw || typeof raw !== "object") return raw;
+	const doc = raw as Record<string, unknown>;
+	if (doc.schemaVersion !== 8) return raw;
+
+	const legacy =
+		doc.legacyEditor && typeof doc.legacyEditor === "object" && !Array.isArray(doc.legacyEditor)
+			? (doc.legacyEditor as Record<string, unknown>)
+			: null;
+	const existing = Array.isArray(doc.cameraSegments) ? doc.cameraSegments : [];
+	if (!legacy || !("cameraFullscreenRegions" in legacy)) {
+		return { ...doc, schemaVersion: 9, cameraSegments: existing };
+	}
+	const { cameraFullscreenRegions: stored, ...rest } = legacy;
+	const spans = (Array.isArray(stored) ? stored : []).filter(
+		(entry): entry is { id: string; startMs: number; endMs: number } => {
+			if (!entry || typeof entry !== "object" || Array.isArray(entry)) return false;
+			const r = entry as Record<string, unknown>;
+			return (
+				typeof r.id === "string" &&
+				r.id.length > 0 &&
+				typeof r.startMs === "number" &&
+				typeof r.endMs === "number" &&
+				Number.isFinite(r.startMs) &&
+				Number.isFinite(r.endMs) &&
+				r.startMs >= 0 &&
+				r.endMs >= r.startMs
+			);
+		},
+	);
+	// Only the fields a full-camera region ever carried: position and anchor. Its identity
+	// was empty, so every touching fragment was one pill, which the coalesce reproduces.
+	const fragments = spans.map((r) => {
+		const anchor = r as { clipId?: unknown; sourceStartSec?: unknown; sourceEndSec?: unknown };
+		return {
+			id: r.id,
+			startMs: r.startMs,
+			endMs: r.endMs,
+			...(typeof anchor.clipId === "string" && anchor.clipId.length > 0
+				? { clipId: anchor.clipId }
+				: {}),
+			...(typeof anchor.sourceStartSec === "number" && anchor.sourceStartSec >= 0
+				? { sourceStartSec: anchor.sourceStartSec }
+				: {}),
+			...(typeof anchor.sourceEndSec === "number" && anchor.sourceEndSec >= 0
+				? { sourceEndSec: anchor.sourceEndSec }
+				: {}),
+		};
+	});
+	const byId = new Map(fragments.map((f) => [f.id, f]));
+	const migrated = coalesceRegionsForRuler(fragments).flatMap((pill) => {
+		const segmentId = createId("camseg");
+		return pill.ids.flatMap((id) => {
+			const fragment = byId.get(id);
+			return fragment
+				? [{ ...fragment, segmentId, mode: "fullscreen" as const, origin: "user" as const }]
+				: [];
+		});
+	});
+	return {
+		...doc,
+		schemaVersion: 9,
+		cameraSegments: [...existing, ...migrated],
+		legacyEditor: rest,
+	};
+}
+
+/**
  * Runs the whole upgrade chain on a raw, untrusted value. Idempotent: each step
  * is gated on an exact `schemaVersion`, so an already-current document passes
  * through untouched.
@@ -1115,9 +1227,11 @@ export function migrateRawDocumentToCurrent(raw: unknown): unknown {
 		raiseInvertedTranscriptEnds(
 			dropAudioAnchoredTrims(
 				liftZoomClickImpact(
-					upgradeV7DocumentToV8(
-						upgradeV6DocumentToV7(
-							upgradeV5DocumentToV6(upgradeV4DocumentToV5(upgradeV3DocumentToV4(raw))),
+					upgradeV8DocumentToV9(
+						upgradeV7DocumentToV8(
+							upgradeV6DocumentToV7(
+								upgradeV5DocumentToV6(upgradeV4DocumentToV5(upgradeV3DocumentToV4(raw))),
+							),
 						),
 					),
 				),
@@ -1126,13 +1240,13 @@ export function migrateRawDocumentToCurrent(raw: unknown): unknown {
 	);
 }
 
-// PURE v8 validation. Callers that read a document from disk (or any other
+// PURE v9 validation. Callers that read a document from disk (or any other
 // source that might carry an older `schemaVersion`) MUST run
 // `migrateRawDocumentToCurrent` on the raw value first. The previous
 // implementation wrapped this schema in a `z.preprocess` that re-ran the whole
-// v3→…→v8 chain on EVERY parse, including in-memory parses of documents that
+// v3→…→v9 chain on EVERY parse, including in-memory parses of documents that
 // were already current. Hoisting it to load time makes the in-memory parse a
-// single `z.literal(8)` + shape check.
+// single `z.literal(9)` + shape check.
 export const documentSchema = documentSchemaShape;
 
 /**
@@ -1286,6 +1400,8 @@ export type AxcutAnnotationRegion = z.infer<typeof annotationRegionSchema>;
 export type AxcutZoomRegion = z.infer<typeof zoomRegionSchema>;
 export type AxcutCameraTrack = z.infer<typeof cameraTrackSchema>;
 export type AxcutAudioTrack = z.infer<typeof audioTrackSchema>;
+export type AxcutCameraSegment = z.infer<typeof cameraSegmentSchema>;
+export type AxcutCameraMode = z.infer<typeof cameraSegmentModeSchema>;
 export type AxcutLegacyEditor = z.infer<typeof legacyEditorSchema>;
 export type AxcutDocument = z.infer<typeof documentSchema>;
 export type AxcutDocumentInput = z.input<typeof documentSchema>;
@@ -1320,6 +1436,7 @@ export function createEmptyDocument(
 		annotations: [],
 		zoomRanges: [],
 		audioTracks: [],
+		cameraSegments: [],
 		legacyEditor: null,
 	});
 }

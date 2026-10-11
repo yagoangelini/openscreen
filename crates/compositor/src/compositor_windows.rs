@@ -2541,7 +2541,8 @@ impl Compositor {
         );
         // miroir = échanger les bornes u du rect source (flip horizontal).
         let (u0, u1) = if lp.webcam_mirror { (su1, su0) } else { (su0, su1) };
-        if lp.has_webcam {
+        // Une zone "Sans caméra" qui a fini de la retirer : rien à dessiner, ombre comprise.
+        if lp.has_webcam && !g.webcam_hidden {
             // L'ombre portée appartient à la bulle flottante PiP : elle se retire avec elle
             // (`shape_fade`), pour qu'au plein écran plus rien n'encadre la caméra. C'est une
             // ombre légère NON paramétrable — indépendante du slider Shadow, qui ne pilote plus

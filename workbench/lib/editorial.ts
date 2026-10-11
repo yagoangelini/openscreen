@@ -63,7 +63,8 @@ export function regionFamilies(document: AxcutDocument): RegionFamily[] {
 		{ kind: "zoom", regions: document.zoomRanges as unknown as Region[] },
 		{ kind: "annotation", regions: document.annotations as unknown as Region[] },
 		{ kind: "speed", regions: legacyRegions(document, "speedRegions") },
-		{ kind: "cameraFullscreen", regions: legacyRegions(document, "cameraFullscreenRegions") },
+		// Since schema v9: the camera track pieces, which replaced the Full Camera regions.
+		{ kind: "cameraFullscreen", regions: (document.cameraSegments ?? []) as unknown as Region[] },
 	];
 }
 

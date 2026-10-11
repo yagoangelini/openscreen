@@ -7,7 +7,8 @@
 		"addTrim": "Thêm cắt: xóa một đoạn video tại thời điểm hiện tại",
 		"addAnnotation": "Thêm văn bản, mũi tên, hình ảnh hoặc làm mờ tại thời điểm hiện tại",
 		"addSpeed": "Thêm thay đổi tốc độ tại thời điểm hiện tại",
-		"addCameraFullscreen": "Thêm Camera Toàn màn hình: hiển thị camera toàn màn hình tại thời điểm hiện tại"
+		"addCameraFullscreen": "Thêm Camera Toàn màn hình: hiển thị camera toàn màn hình tại thời điểm hiện tại",
+		"splitCamera": "Tách camera tại thời điểm hiện tại: mỗi đoạn sau đó được chỉnh riêng"
 	},
 	"hints": {
 		"pressZoom": "Nhấn {{key}} để thêm thu phóng",
@@ -32,7 +33,10 @@
 		"emptyText": "Văn bản trống",
 		"cameraFullscreen": "Camera Toàn màn hình",
 		"cameraFullscreenItem": "Camera Toàn màn hình {{index}}",
-		"marker": "Điểm đánh dấu tại {{time}}"
+		"marker": "Điểm đánh dấu tại {{time}}",
+		"cameraTrack": "Camera",
+		"cameraPip": "PiP",
+		"cameraHidden": "Không camera"
 	},
 	"trails": {
 		"zoomIn": "Phóng to: khung hình phóng to dần cho đến khi bắt đầu thu phóng",
@@ -120,5 +124,17 @@
 		"recordingUnavailable": "Không thể ghi âm ở đây",
 		"saveFailed": "Không thể lưu bản ghi",
 		"importFailed": "Không thể nhập tệp âm thanh"
+	},
+	"cameraPiece": {
+		"title": "Đoạn camera",
+		"span": "Từ {{start}} đến {{end}}",
+		"mode": "Hiển thị camera",
+		"modePip": "PiP",
+		"modeFullscreen": "Toàn màn hình",
+		"modeHidden": "Không camera",
+		"syncHint": "Camera vẫn đồng bộ với màn hình. Đoạn này chỉ đổi cách camera hiển thị.",
+		"splitAtPlayhead": "Tách tại con trỏ",
+		"mergeWithNext": "Gộp với đoạn sau",
+		"reset": "Về mặc định"
 	}
 }

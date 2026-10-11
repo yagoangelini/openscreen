@@ -2417,7 +2417,8 @@ impl Compositor {
         // the SCREEN video, because `open_and_seek_clip` falls back to it rather
         // than leave the pair half-open. Without this check a recording with no
         // camera drew its own screen picture inside the PiP box.
-        let webcam_planes = if lp.has_webcam && !webcam.is_null() {
+        // Une zone "Sans caméra" qui a fini de la retirer : rien à dessiner, ombre comprise.
+        let webcam_planes = if lp.has_webcam && !g.webcam_hidden && !webcam.is_null() {
             self.nv12_srvs(webcam).ok()
         } else {
             None

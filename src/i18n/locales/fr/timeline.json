@@ -7,7 +7,8 @@
 		"addTrim": "Ajouter une coupe : retire une partie de la vidéo à l'instant actuel",
 		"addAnnotation": "Ajouter du texte, une flèche, une image ou un flou à l'instant actuel",
 		"addSpeed": "Ajouter un changement de vitesse à l'instant actuel",
-		"addCameraFullscreen": "Ajouter Caméra plein écran : affiche la caméra en plein écran à l'instant actuel"
+		"addCameraFullscreen": "Ajouter Caméra plein écran : affiche la caméra en plein écran à l'instant actuel",
+		"splitCamera": "Couper la caméra à l'instant actuel : chaque morceau se modifie ensuite séparément"
 	},
 	"hints": {
 		"pressZoom": "Appuyez sur {{key}} pour ajouter un zoom",
@@ -32,7 +33,10 @@
 		"emptyText": "Texte vide",
 		"cameraFullscreen": "Caméra plein écran",
 		"cameraFullscreenItem": "Caméra plein écran {{index}}",
-		"marker": "Repère à {{time}}"
+		"marker": "Repère à {{time}}",
+		"cameraTrack": "Caméra",
+		"cameraPip": "PiP",
+		"cameraHidden": "Sans caméra"
 	},
 	"trails": {
 		"zoomIn": "Zoom avant : l'image se resserre jusqu'au début du zoom",
@@ -120,5 +124,17 @@
 		"recordingUnavailable": "L'enregistrement n'est pas disponible ici",
 		"saveFailed": "Impossible d'enregistrer la capture",
 		"importFailed": "Impossible d'importer le fichier audio"
+	},
+	"cameraPiece": {
+		"title": "Morceau de caméra",
+		"span": "De {{start}} à {{end}}",
+		"mode": "Afficher la caméra",
+		"modePip": "Incrustation",
+		"modeFullscreen": "Plein écran",
+		"modeHidden": "Sans caméra",
+		"syncHint": "La caméra reste synchronisée avec l'écran. Ce morceau ne change que sa façon d'apparaître.",
+		"splitAtPlayhead": "Couper au curseur",
+		"mergeWithNext": "Joindre au suivant",
+		"reset": "Revenir au défaut"
 	}
 }

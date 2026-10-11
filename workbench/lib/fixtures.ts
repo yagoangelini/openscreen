@@ -351,7 +351,6 @@ export function multipleModifiers(options?: { projectId?: string }): AxcutDocume
 			speedRegions: [
 				{ id: "speed_1", startMs: 32_000, endMs: 38_000, ...anchor(32, 38), speed: 2 },
 			],
-			cameraFullscreenRegions: [],
 		},
 	});
 }

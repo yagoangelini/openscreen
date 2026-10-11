@@ -25,12 +25,16 @@ describe("shortcut registry", () => {
 		expect(Object.keys(DEFAULT_SHORTCUTS).sort()).toEqual([...SHORTCUT_ACTIONS].sort());
 	});
 
-	it("leaves a plain 'b' free to bind", () => {
+	it("gives a plain 'b' to splitting the camera, a real action", () => {
 		// The blur *region* was never implemented — blur ships as an annotation
 		// type. While `addBlur: {key: "b"}` was still in the registry, binding B to
 		// any real action reported "Already used by Add Blur" and offered a Swap
-		// that handed the old binding to a hidden, undispatched action.
-		expect(findConflict({ key: "b" }, "addZoom", DEFAULT_SHORTCUTS)).toBeNull();
+		// that handed the old binding to a hidden, undispatched action. B now cuts the
+		// camera track (S is speed), which the editor dispatches.
+		expect(findConflict({ key: "b" }, "addZoom", DEFAULT_SHORTCUTS)).toEqual({
+			type: "configurable",
+			action: "splitCamera",
+		});
 	});
 
 	it("still reports a real collision", () => {
