@@ -1052,6 +1052,15 @@ describe("LaunchWindow record button", () => {
 	// fires NO pointer events at all: it delivers only the cursor position the main
 	// process pushes, which is the one signal that survives input-transparency, and
 	// requires that to be enough to make the bar clickable again.
+	it("leaves no keyboard focus on a bar button after a click", async () => {
+		platformState.value = "win32";
+		renderLaunchWindow();
+		const record = await screen.findByTestId("launch-record-button");
+		const down = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
+		record.dispatchEvent(down);
+		expect(down.defaultPrevented).toBe(true);
+	});
+
 	it("leaves click-through on a pushed cursor position alone, with no pointer event", async () => {
 		platformState.value = "win32";
 
