@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { webcamDeviceIdentityFrom } from "./webcamDeviceIdentity";
+import {
+	webcamDeviceIdentityFrom,
+	webcamDeviceIdentityWithoutOpening,
+} from "./webcamDeviceIdentity";
 
 function streamWith(track: Partial<MediaStreamTrack> | null): MediaStream {
 	return { getVideoTracks: () => (track ? [track] : []) } as unknown as MediaStream;
@@ -64,5 +67,48 @@ describe("webcamDeviceIdentityFrom", () => {
 			deviceId: "picked-id",
 			deviceName: "Picked Camera",
 		});
+	});
+});
+
+describe("webcamDeviceIdentityWithoutOpening", () => {
+	const devices = (list: Array<Partial<MediaDeviceInfo>>) => ({
+		enumerateDevices: async () => list as MediaDeviceInfo[],
+	});
+
+	it("names the chosen camera from its own list entry", async () => {
+		const list = devices([
+			{ kind: "videoinput", deviceId: "a", label: "Integrated Camera" },
+			{ kind: "videoinput", deviceId: "b", label: "HD Pro Webcam C920 (046d:082d)" },
+		]);
+		expect(await webcamDeviceIdentityWithoutOpening("b", list)).toEqual({
+			deviceId: "b",
+			deviceName: "HD Pro Webcam C920 (046d:082d)",
+		});
+	});
+
+	it("takes the first camera when none was chosen", async () => {
+		const list = devices([
+			{ kind: "audioinput", deviceId: "m", label: "Mic" },
+			{ kind: "videoinput", deviceId: "a", label: "Integrated Camera" },
+		]);
+		expect(await webcamDeviceIdentityWithoutOpening(undefined, list)).toEqual({
+			deviceId: "a",
+			deviceName: "Integrated Camera",
+		});
+	});
+
+	it("gives up without labels or without the chosen camera", async () => {
+		expect(
+			await webcamDeviceIdentityWithoutOpening(
+				undefined,
+				devices([{ kind: "videoinput", deviceId: "a", label: "" }]),
+			),
+		).toBeNull();
+		expect(
+			await webcamDeviceIdentityWithoutOpening(
+				"gone",
+				devices([{ kind: "videoinput", deviceId: "a", label: "Cam" }]),
+			),
+		).toBeNull();
 	});
 });

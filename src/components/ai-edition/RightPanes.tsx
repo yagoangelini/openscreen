@@ -119,6 +119,7 @@ import {
 } from "@/lib/cursor/cursorThemes";
 import { gradientSeedColor, oneColorGradient } from "@/lib/gradientBuilder";
 import {
+	CURSOR_ARROW_PX_PER_UNIT_AT_1080,
 	DEFAULT_WEBCAM_ROUNDNESS,
 	FRAME_THEMES,
 	type FrameTheme,
@@ -3913,6 +3914,7 @@ export function CursorPane() {
 					min={SETTING_BOUNDS.cursorSize[0]}
 					max={SETTING_BOUNDS.cursorSize[1]}
 					step={0.05}
+					format={(v) => `${Math.round(v * CURSOR_ARROW_PX_PER_UNIT_AT_1080)} px`}
 					defaultValue={DEFAULT_EDITOR_SETTINGS.cursor.size}
 					disabled={!hasDocument}
 					onChange={(v) => {
@@ -4285,9 +4287,10 @@ export function SliderCell({
 	disabled,
 	onChange,
 	onCommit,
-	// A number with no unit ("30.0" for a cursor size) says nothing a user can act on: the
-	// track's position already shows where the value sits.
-	showValue = suffix !== "",
+	// A number with no unit ("30.0" for a cursor size) says nothing a user can act on: such a
+	// slider passes `format` to show its value in a unit that does.
+	format,
+	showValue = suffix !== "" || format !== undefined,
 	full = false,
 	hint,
 	defaultValue,
@@ -4299,6 +4302,9 @@ export function SliderCell({
 	step?: number;
 	decimals?: number;
 	suffix?: string;
+	/** The shown value, for a slider whose own units are not the ones a user reads (the cursor
+	 *  size multiplier, shown as the arrow's height in pixels). Replaces `decimals` and `suffix`. */
+	format?: (value: number) => string;
 	disabled?: boolean;
 	onChange: (next: number) => void;
 	onCommit: () => void;
@@ -4331,8 +4337,14 @@ export function SliderCell({
 				</span>
 				{showValue ? (
 					<span className={styles.val}>
-						{value.toFixed(decimals)}
-						{suffix}
+						{format ? (
+							format(value)
+						) : (
+							<>
+								{value.toFixed(decimals)}
+								{suffix}
+							</>
+						)}
 					</span>
 				) : null}
 				{/* Only once the value has moved: at the default there is nothing to go back to. */}

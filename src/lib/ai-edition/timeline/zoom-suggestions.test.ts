@@ -438,6 +438,16 @@ describe("buildAutoZoomSuggestions: hover, typing, popups", () => {
 		expect(shot.span.end).toBeGreaterThan(6333);
 	});
 
+	it("does not zoom on a hand drifting while the speaker introduces the video", () => {
+		// A slow 6% drift for three seconds, no click anywhere near it: the greeting of a real take.
+		const telemetry = take(
+			rest(0, 2966, [0.5, 0.48]),
+			sweep(3000, 6000, [0.5, 0.48], [0.56, 0.48]),
+			rest(6033, 12000, [0.56, 0.48]),
+		);
+		expect(plan(telemetry, 13000)).toEqual([]);
+	});
+
 	it("frames the menu the pointer explores, whole", () => {
 		const menu = { x: 0.55, y: 0.25, width: 0.2, height: 0.4 };
 		const telemetry = take(

@@ -55,6 +55,10 @@ struct CaptureConfig {
     bool webcamEnabled = false;
     bool preferSoftwareEncoder = false;
     bool hideDesktopIcons = false;
+    // When the take starts, in Unix ms (0: as soon as everything is open). The app spawns the
+    // helper as its countdown begins, so the camera, the encoders and the audio devices open
+    // during the countdown instead of after it; the capture then starts on the deadline.
+    double startAtEpochMs = 0;
     std::string microphoneDeviceId;
     std::string microphoneDeviceName;
     double microphoneGain = 1.0;
@@ -601,6 +605,7 @@ bool parseConfig(const std::string& json, CaptureConfig& config) {
     config.webcamEnabled = findBool(json, "webcamEnabled", false);
     config.preferSoftwareEncoder = findBool(json, "preferSoftwareEncoder", false);
     config.hideDesktopIcons = findBool(json, "hideDesktopIcons", false);
+    config.startAtEpochMs = findDouble(json, "startAtEpochMs", 0);
     config.microphoneDeviceId = findString(json, "microphoneDeviceId");
     config.microphoneDeviceName = findString(json, "microphoneDeviceName");
     config.microphoneGain = findDouble(json, "microphoneGain", 1.0);
@@ -677,6 +682,15 @@ int wmain(int argc, wchar_t* argv[]) {
         return 1;
     }
     const HighResolutionTiming highResolutionTiming;
+    // Where the start goes, step by step, like [stop-timing] for the stop: the time from
+    // spawn to the first frame is what the user waits through after the countdown.
+    const auto startClock = std::chrono::steady_clock::now();
+    const auto startTiming = [&startClock](const char* step) {
+        const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                 std::chrono::steady_clock::now() - startClock)
+                                 .count();
+        std::cerr << "[start-timing] step=" << step << " elapsed_ms=" << elapsed << std::endl;
+    };
 
     if (argc < 2) {
         std::cerr << "ERROR: Missing JSON config argument" << std::endl;
@@ -792,6 +806,7 @@ int wmain(int argc, wchar_t* argv[]) {
     // format, and only a camera going to its own file can use NV12 -- an inline
     // picture-in-picture composite needs the frame as BGRA.
     bool writeSeparateWebcam = config.webcamEnabled && !config.webcamOutputPath.empty();
+    startTiming("capture-session-ready");
     if (config.webcamEnabled) {
         if (!webcamCapture.initialize(
                 utf8ToWide(config.webcamDeviceId),
@@ -859,6 +874,7 @@ int wmain(int argc, wchar_t* argv[]) {
     };
     const AudioInputFormat* audioFormat = nullptr;
     AudioInputFormat encoderAudioFormat{};
+    startTiming("webcam-opened");
     AudioInputFormat systemAudioFormat{};
     AudioInputFormat microphoneAudioFormat{};
     if (config.captureSystemAudio) {
@@ -966,6 +982,7 @@ int wmain(int argc, wchar_t* argv[]) {
               << " captureOnNvidia=" << (captureOnNvidia ? "true" : "false")
               << " env=" << dxgiInputEnv << std::endl;
 
+    startTiming("audio-devices-opened");
     MFEncoder encoder;
     if (!encoder.initialize(
             utf8ToWide(config.outputPath),
@@ -1542,6 +1559,7 @@ int wmain(int argc, wchar_t* argv[]) {
         }
     }
 
+    startTiming("encoders-ready");
     if (!startAudioCaptures()) {
         stopDeviceWatchIfActive();
         stopRenderKeepAliveIfActive();
@@ -1580,6 +1598,17 @@ int wmain(int argc, wchar_t* argv[]) {
         }
     }
 
+    startTiming("devices-started");
+    // Everything is open: wait out the rest of the countdown. A sleep, not a read on stdin (a
+    // helper parked on stdin is what the antivirus quarantined); the app cancels a countdown
+    // by ending the process. Past the deadline (a slow camera) the take starts now, late.
+    if (config.startAtEpochMs > 0) {
+        const auto startAt = std::chrono::system_clock::time_point(
+            std::chrono::milliseconds(static_cast<int64_t>(config.startAtEpochMs)));
+        const auto latest = std::chrono::system_clock::now() + std::chrono::seconds(15);
+        std::this_thread::sleep_until(std::min(startAt, latest));
+        startTiming("countdown-over");
+    }
     if (!session.start()) {
         webcamCapture.stop();
         microphoneCapture.stop();
@@ -1640,6 +1669,7 @@ int wmain(int argc, wchar_t* argv[]) {
         return 1;
     }
 
+    startTiming("first-frame");
     std::cout << "{\"event\":\"recording-started\",\"schemaVersion\":2}" << std::endl;
     std::cout << "Recording started" << std::endl;
 

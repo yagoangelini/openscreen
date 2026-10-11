@@ -31,7 +31,7 @@ As decisões e o porquê de cada fase estão em [`PLANO-FORK.md`](PLANO-FORK.md)
 
 ## Estado atual
 
-`main` do fork = **v2.1.0**, publicada e marcada como Latest. Desde a 2.1.0 o fork contém o **OpenScreen 2.0** do upstream (veja "Sincronizar com o upstream" abaixo). O histórico do fork, em ordem:
+`main` do fork = **v2.1.1**, publicada e marcada como Latest. Desde a 2.1.0 o fork contém o **OpenScreen 2.0** do upstream (veja "Sincronizar com o upstream" abaixo). O histórico do fork, em ordem:
 
 | Versão | Como entrou | Conteúdo |
 |---|---|---|
@@ -43,6 +43,7 @@ As decisões e o porquê de cada fase estão em [`PLANO-FORK.md`](PLANO-FORK.md)
 | 1.19.0 | PR yagoangelini/openscreen#4 | voz e som do computador gravados à parte, com dois volumes |
 | 1.19.1 | PR yagoangelini/openscreen#6 | correções dos recursos do fork achadas na análise de 10/10 ([`ANALISE-MELHORIAS.md`](ANALISE-MELHORIAS.md) §2) |
 | 2.1.0 | PR yagoangelini/openscreen#7 | merge do OpenScreen 2.0: 408 commits do upstream, base 28/09 até `125ebd95` |
+| 2.1.1 | PR yagoangelini/openscreen#9 | pedidos de 11/10: gravador na barra de tarefas, cursor menor e com px, início instantâneo, auto-zoom corrigido num take real |
 
 **O que a 1.16.0 trouxe:**
 
@@ -81,6 +82,28 @@ As decisões e o porquê de cada fase estão em [`PLANO-FORK.md`](PLANO-FORK.md)
 - cursores 3D Glass Lens;
 - servidor MCP;
 - editor com tooltips novos.
+
+**O que a 2.1.1 trouxe** (pedidos do usuário de 11/10):
+
+- **O gravador aparece na barra de tarefas** do Windows (`skipTaskbar` só fora do Windows, título "OpenScreen", `electron/windows.ts`). "Esconder barra" minimiza para lá.
+- **Cursor menor por padrão:** 2.2, uma seta de 60 px a 1080p (era 3.6, 98 px).
+  - O slider mostra o tamanho em px (`CURSOR_ARROW_PX_PER_UNIT_AT_1080` em `projectDefaults.ts`, `format` no `SliderCell`).
+  - Os campos livres de zoom, velocidade e tamanho de texto mostram a unidade (`FieldUnit`).
+- **Início instantâneo depois da contagem.**
+  - O renderer chama `startNativeWindowsRecording` quando a contagem começa, com `startAtEpochMs` (o fim da contagem).
+  - O `wgc-capture` abre câmera, encoders e áudio e então **dorme** até lá (`sleep_until`, não lê o stdin; foi o stdin que o Kaspersky barrou).
+  - Cancelar a contagem chama `cancel-native-windows-pending-start`, que mata o helper antes do primeiro quadro e apaga o que ele abriu.
+  - A câmera é nomeada pela lista de dispositivos (`webcamDeviceIdentityWithoutOpening`), sem o renderer abri-la antes.
+  - Amostras do cursor anteriores ao primeiro quadro são descartadas, não empilhadas no 0 s (`shiftCursorTelemetry`).
+  - O log `[native-wgc] capture started` traz `startTiming` (linhas `[start-timing]` do helper) e `afterCountdownMs`.
+  - **Medido:** sem câmera, 14 ms depois da contagem. Com a C920 escura (lente tampada, brilho ~20/255), o helper espera os 3 s do "primeiro quadro visível", e o take sai ~2 s atrasado. Com a câmera acesa isso cai dentro da contagem.
+- **Auto-zoom corrigido**, com a análise quadro a quadro de um take real de 34 s contra a transcrição (`zoom-suggestions.ts`, `framePopups.ts`):
+  - mão parada no começo não dá zoom: o hover precisa explorar 15% da tela, estar num menu aberto ou levar a um clique;
+  - dois cliques no mesmo menu ficam num plano só (`MERGE_MIN_SCALE` 1.3);
+  - `fitScale` não reserva margem além da borda;
+  - um clique que fecha menu não vira "popup novo" no scan de quadros;
+  - escolher um item de menu termina o plano logo depois.
+  - Melhorias que precisam da transcrição (palavras como "aqui", "clica", "nesse" como gatilho; ficar aberto na apresentação) ainda **não** foram feitas: o auto-zoom roda antes da transcrição.
 
 Os PRs do fork são abertos e mesclados com `gh pr merge N --merge`, sem CI. Antes do merge, rode todo o portão de validação abaixo.
 
@@ -315,7 +338,7 @@ O fork acompanha `getopenscreen/openscreen`. O último merge (2.1.0) foi até `1
   - O teste do CursorPane exige que o impacto de clique fique logo abaixo dos níveis de bounce.
 - **`recordingImport.test`.** Um teste trava saves de propósito; describes novos entram **antes** dele.
 - **Disco cheio.** O C: tem cerca de 9,7 GB livres e já encheu uma vez. As pastas `release/1.13.0` a `1.19.0` são builds antigos que podem ir embora, mas só arquivo por arquivo ou pedindo ao usuário. `crates/target` também cresce (cerca de 3 GB).
-- **Kaspersky.** Ele coloca em quarentena um gravador que fica parado esperando no stdin (o "início armado"). Esse modo foi revertido; não reintroduza sem a exclusão do usuário.
+- **Kaspersky.** Ele colocou em quarentena um gravador que ficava parado esperando no stdin (o "início armado" de `0d9dc984`, revertido em `c956ea4e`). Desde a 2.1.1 o início durante a contagem usa `startAtEpochMs` e um `sleep_until`, sem ler o stdin antes de gravar. Se o `wgc-capture.exe` sumir depois de um build, esse é o primeiro suspeito.
 
 ## Pendências
 
@@ -330,7 +353,9 @@ O fork acompanha `getopenscreen/openscreen`. O último merge (2.1.0) foi até `1
    - retângulo de destaque e passos numerados;
    - remover "né", "tipo", "éé" e silêncios sem IA.
 
-### Próximo passo: 2.2.0, câmera e vinheta
+### Próximo passo: 2.2.0, trilha da câmera, câmera e vinheta
+
+**Pedido de 11/10:** a câmera numa trilha própria da timeline, com cortes e cada pedaço editável. O plano completo, em fases, está em [`PLANO-TRILHA-CAMERA.md`](PLANO-TRILHA-CAMERA.md). Ele absorve os itens 1 e 2 abaixo: o HUD escreve pedaços da trilha, e "Sem câmera" é um modo do pedaço. Comece pela fase 0 (modelo e migração v9).
 
 O que o usuário pediu está em `PLANO-FORK.md`, "Decisões de 10/10/2026 (tarde)". O que já foi levantado no código:
 
@@ -357,7 +382,7 @@ Valide com `record-take.mjs`, com um take que comece no rosto e passe para a tel
 
 **Esperando o usuário:**
 
-1. **Kaspersky: lembre o usuário** de criar a exclusão para a pasta do OpenScreen instalado. Depois disso, reative o início armado do gravador durante a contagem, que ganha 1 a 3 s.
+1. **Kaspersky:** a exclusão da pasta do OpenScreen instalado continua recomendada, mas não é mais pré-requisito: o início durante a contagem voltou de outro jeito na 2.1.1 (veja acima).
 2. **Validar a 2.1.0 no uso real**, que traz o 2.0 inteiro:
    - gravar com mic e sistema, nas duas telas;
    - ouvir se a voz ainda falha;

@@ -66,8 +66,11 @@ export const MIN_WIDE_BETWEEN_MS = 2500;
 export const SHOT_MERGE_GAP_MS = 4000;
 /** The margin kept around what a zoom frames, as a fraction of the frame. */
 export const SHOT_FIT_MARGIN = 0.12;
-/** A union must still fit at this scale (or the shot's own, if lower) to be one held shot. */
-export const MERGE_MIN_SCALE = 1.5;
+/**
+ * A union must still fit at this scale (or the shot's own, if lower) to be one held shot. At
+ * 1.5, two clicks in the same menu (1.42) became two shots, and the chain dropped the second.
+ */
+export const MERGE_MIN_SCALE = 1.3;
 /** At most one camera move (ramp or pan) per this long. */
 export const MIN_CAMERA_MOVE_GAP_MS = 1500;
 /** A pan only when the next target leaves this central share of the current view. */
@@ -96,6 +99,10 @@ export const HOVER_MAX_SPEED = 0.3;
 export const HOVER_MIN_MS = 1500;
 /** ...covering at least this much path (a pointer at rest is no reason to zoom)... */
 export const HOVER_MIN_PATH = 0.05;
+/** A hover covering this much of the frame on one axis explores it, click or not. */
+export const HOVER_EXPLORE_EXTENT = 0.15;
+/** A smaller one counts when a click this close (share of the frame) follows it. */
+export const HOVER_CLICK_REACH = 0.45;
 /** ...inside an area no larger than this on either axis. */
 export const HOVER_MAX_EXTENT = 0.4;
 /** The light zoom a hover gets. */
@@ -281,9 +288,18 @@ function rectContains(rect: NormalizedRect, point: ZoomFocus, slack = 0.01): boo
 	);
 }
 
-/** The deepest scale that shows the whole box with its margin. */
+/**
+ * The deepest scale that shows the whole box with its margin. No margin past the frame's edge:
+ * a menu at the top-left has nothing to keep clear above or beside it, and counting that
+ * margin anyway made the shot shallower than it needed to be.
+ */
 function fitScale(box: Box): number {
-	const size = Math.max(box.maxX - box.minX, box.maxY - box.minY) + 2 * SHOT_FIT_MARGIN;
+	const margin = (lo: number, hi: number) =>
+		Math.min(SHOT_FIT_MARGIN, Math.max(0, lo)) + Math.min(SHOT_FIT_MARGIN, Math.max(0, 1 - hi));
+	const size = Math.max(
+		box.maxX - box.minX + margin(box.minX, box.maxX),
+		box.maxY - box.minY + margin(box.minY, box.maxY),
+	);
 	return 1 / size;
 }
 
@@ -514,6 +530,9 @@ function clickAction(
 		const opened = popup.openMs >= at - 150 && popup.openMs <= at + POPUP_AFTER_CLICK_MS;
 		const under =
 			popup.openMs < at - 150 && popup.closeMs > at && rectContains(popup.rect, click.focus);
+		// A click on an item of an open menu that then closes picks it: the shot ends soon after,
+		// instead of holding on a menu that is gone.
+		if (under && popup.closeMs <= at + 300) navigation = true;
 		if (!opened && !under) continue;
 		if (rectArea(popup.rect) > NAVIGATION_AREA) {
 			if (opened) navigation = true;
@@ -882,7 +901,29 @@ function planAxis(
 	const actions: Action[] = signals.clicks.map((click, i) =>
 		clickAction(click, signals.clicks[i + 1]?.timeMs ?? Number.POSITIVE_INFINITY, signals, ctx),
 	);
-	actions.push(...hoverActions(signals, Math.min(ignoreClicksFromMs, totalMs), ctx));
+	// A hover is worth a zoom when the pointer explores an area, inside an open menu, or on the
+	// way to a click near it. A hand resting during the introduction drifts like a hover, a few
+	// percent of the frame, and zoomed in on nothing.
+	const hoverLeadsSomewhere = (hover: Action) =>
+		Math.max(hover.box.maxX - hover.box.minX, hover.box.maxY - hover.box.minY) >=
+			HOVER_EXPLORE_EXTENT ||
+		signals.popups.some(
+			(popup) =>
+				popup.openMs <= hover.activityEndMs &&
+				popup.closeMs >= hover.anchorMs &&
+				rectContains(popup.rect, centreOf(hover.box), 0.02),
+		) ||
+		signals.clicks.some(
+			(click) =>
+				click.timeMs >= hover.anchorMs &&
+				click.timeMs <= hover.activityEndMs + SHOT_MERGE_GAP_MS &&
+				distance(click.focus, centreOf(hover.box)) <= HOVER_CLICK_REACH,
+		);
+	actions.push(
+		...hoverActions(signals, Math.min(ignoreClicksFromMs, totalMs), ctx).filter(
+			hoverLeadsSomewhere,
+		),
+	);
 	const tailOf = (shot: Shot) => (shot.clicks > 0 ? SHOT_TAIL_MS : HOVER_TAIL_MS);
 	const shots = timeShots(
 		groupShots(actions, ctx),

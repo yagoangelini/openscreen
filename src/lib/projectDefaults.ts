@@ -264,9 +264,10 @@ export const DEFAULT_PROJECT_APPEARANCE: ProjectAppearanceDefaults = {
 	webcamWallpaper: "/wallpapers/wallpaper11.jpg",
 	webcamBlurIntensity: 0.5,
 	cursor: {
-		// 3.6 draws a 98 px arrow in a 1080p export, about five times the system one: the cursor
-		// effects are part of the product, and a smaller arrow plays them down. 6 reaches 164 px.
-		size: 3.6,
+		// 2.2 draws a 60 px arrow in a 1080p export, about three times the system one: big enough
+		// for the cursor effects to read, without the arrow covering what it points at. The fork
+		// came down from upstream's 3.6 (98 px) after real takes. 6 reaches 164 px.
+		size: 2.2,
 		smoothing: 0.67,
 		motionBlur: 0.35,
 		// A light tap: 2.5 squashed the arrow to 40% and threw it to 140% in 260 ms on every click.
@@ -295,6 +296,11 @@ export const DEFAULT_PROJECT_APPEARANCE: ProjectAppearanceDefaults = {
  *
  * Import-free on purpose, like the rest of this module: the main process reads it too.
  */
+/** Height in pixels of the drawn arrow in a 1080p export, per unit of cursor size: 3.6 measured
+ *  98 px (the sprite box is 34 px per unit, `CURSOR_BASE_SIZE_FRAC` in frame_geometry.rs). What
+ *  the size slider shows, since the bare multiplier means nothing to a user. */
+export const CURSOR_ARROW_PX_PER_UNIT_AT_1080 = 98 / 3.6;
+
 export const SETTING_BOUNDS = {
 	shadowIntensity: [0, 1],
 	backgroundBlur: [0, 1],

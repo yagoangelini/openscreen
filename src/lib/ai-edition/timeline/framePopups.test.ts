@@ -30,6 +30,21 @@ describe("clicksToScan", () => {
 		];
 		expect(clicksToScan(telemetry)).toEqual([5000]);
 	});
+
+	it("skips a click that closed a menu: the frames changing there are the menu going", () => {
+		const telemetry: CursorTelemetryPoint[] = [
+			click(1000),
+			{
+				timeMs: 1100,
+				cx: 0.3,
+				cy: 0.2,
+				interactionType: "move",
+				input: { kind: "popup-close", id: "uia-1" },
+			},
+			click(5000),
+		];
+		expect(clicksToScan(telemetry)).toEqual([5000]);
+	});
 });
 
 describe("withFramePopups", () => {

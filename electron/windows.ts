@@ -408,7 +408,12 @@ export function createHudOverlayWindow(): BrowserWindow {
 		roundedCorners: false,
 		resizable: false,
 		alwaysOnTop: true,
-		skipTaskbar: true,
+		// On Windows the recorder gets a taskbar button: without one, a HUD the user lost sight
+		// of stays open unnoticed, and "Hide recording bar" (a minimize) had no way back but
+		// the tray. macOS has the Dock icon, and Linux docks treat tool windows differently.
+		skipTaskbar: process.platform !== "win32",
+		title: "OpenScreen",
+		icon: path.join(process.env.VITE_PUBLIC || RENDERER_DIST, "openscreen.png"),
 		hasShadow: false,
 		show: false, // shown via ready-to-show to avoid black rectangle flash
 		webPreferences: {
@@ -446,6 +451,8 @@ export function createHudOverlayWindow(): BrowserWindow {
 	win.webContents.on("did-finish-load", () => {
 		win?.webContents.send("main-process-message", new Date().toLocaleString());
 	});
+	// The page's empty <title> would otherwise leave the taskbar button and Alt+Tab blank.
+	win.on("page-title-updated", (event) => event.preventDefault());
 
 	hudOverlayWindow = win;
 	hudWindowSize = { width: windowWidth, height: windowHeight };

@@ -31,7 +31,10 @@ import {
 	webcamQualityFrom,
 	webcamVideoConstraints,
 } from "./webcamCaptureTarget";
-import { webcamDeviceIdentityFrom } from "./webcamDeviceIdentity";
+import {
+	webcamDeviceIdentityFrom,
+	webcamDeviceIdentityWithoutOpening,
+} from "./webcamDeviceIdentity";
 
 const TARGET_FRAME_RATE = 60;
 const MIN_FRAME_RATE = 30;
@@ -1210,6 +1213,8 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 		setCountdownActive(false);
 		setWebcamArmed(false);
 		void safeHideCountdownOverlay(activeRunId);
+		// A take started with the countdown (Windows) is ended before its first frame.
+		void window.electronAPI.cancelNativeWindowsPendingStart?.();
 	};
 
 	const safeSetCountdownOverlayValue = async (value: number, runId: number) => {
@@ -1246,6 +1251,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 		selectedSource: ProcessedDesktopSource,
 		recordMicrophone: boolean,
 		countdownRunToken?: number,
+		startAtEpochMs?: number,
 	) => {
 		try {
 			const platform = window.electronAPI.getPlatform();
@@ -1275,7 +1281,19 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			const sourceType = selectedSource.id.startsWith("window:") ? "window" : "display";
 			const windowHandle = parseWindowHandleFromSourceId(selectedSource.id);
 			let webcamIdentity = { deviceId: webcamDeviceId, deviceName: webcamDeviceName };
-			if (webcamEnabled) {
+			// Started with the countdown: the camera is named off the device list, and the helper
+			// is its first and only opener. Only a list without labels needs it opened here.
+			const listedWebcam =
+				webcamEnabled && startAtEpochMs
+					? await webcamDeviceIdentityWithoutOpening(webcamDeviceId)
+					: null;
+			if (listedWebcam) {
+				webcamIdentity = listedWebcam;
+			} else if (webcamEnabled) {
+				if (startAtEpochMs) {
+					webcamReady.current = false;
+					setWebcamArmed(true);
+				}
 				await waitForWebcamReady();
 				if (!isCountdownRunActive(countdownRunToken)) {
 					return true;
@@ -1330,8 +1348,18 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				cursor: {
 					mode: cursorCaptureMode,
 				},
+				...(startAtEpochMs ? { startAtEpochMs } : {}),
 			};
 			const result = await window.electronAPI.startNativeWindowsRecording(request);
+			// The countdown was cancelled while the helper opened its devices: no take.
+			if (result.cancelled) {
+				return true;
+			}
+			// Cancelled before the helper existed to be ended: the take it then began is dropped.
+			if (result.success && !isCountdownRunActive(countdownRunToken)) {
+				await window.electronAPI.stopNativeWindowsRecording(true).catch(() => undefined);
+				return true;
+			}
 			if (!result.success || !result.recordingId) {
 				throw new Error(
 					result.errorCode === "disk-space-critical"
@@ -1714,8 +1742,12 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 
 		const runId = countdownRunId.current + 1;
 		countdownRunId.current = runId;
-		// The camera opens with the countdown, which leaves it the countdown to come up.
-		if (webcamEnabled) {
+		// On Windows with a countdown, the take is started as the countdown begins (below) and
+		// the helper opens the camera itself, with the countdown to come up in.
+		const startsWithCountdown =
+			window.electronAPI.getPlatform() === "win32" && countdownSecondsRef.current > 0;
+		// Otherwise the camera opens with the countdown, which leaves it the countdown to come up.
+		if (webcamEnabled && !startsWithCountdown) {
 			webcamReady.current = false;
 			setWebcamArmed(true);
 		}
@@ -1814,6 +1846,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 		setCountdownActive(true);
 
 		let overlayHiddenBeforeStart = false;
+		let earlyStart: Promise<void> | null = null;
 		try {
 			const countdownSeconds = countdownSecondsRef.current;
 			const values = Array.from(
@@ -1827,6 +1860,14 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			if (countdownRunId.current !== runId) {
 				return;
 			}
+
+			// The start runs alongside the countdown and takes its first frame as it ends: the
+			// camera, the encoders and the audio open during it, not after. It is awaited below.
+			const countdownEndsAt = Date.now() + values.length * 1000;
+			earlyStart =
+				startsWithCountdown && values.length > 0
+					? startRecording(runId, preparedRecordingId, countdownEndsAt)
+					: null;
 
 			for (const value of values) {
 				if (countdownRunId.current !== runId) {
@@ -1856,8 +1897,12 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				return;
 			}
 
-			await startRecording(runId, preparedRecordingId);
+			await (earlyStart ?? startRecording(runId, preparedRecordingId));
 		} finally {
+			// Every way out before the end of the countdown leaves a helper opening its devices.
+			if (earlyStart && countdownRunId.current !== runId) {
+				void window.electronAPI.cancelNativeWindowsPendingStart?.();
+			}
 			if (!overlayHiddenBeforeStart && countdownRunId.current === runId) {
 				setCountdownActive(false);
 				await safeHideCountdownOverlay(runId);
@@ -1876,6 +1921,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 	const startRecording = async (
 		countdownRunToken?: number,
 		preparedRecordingId?: number | null,
+		startAtEpochMs?: number,
 	) => {
 		const platform = window.electronAPI.getPlatform();
 		const browserCursorCaptureMode = effectiveBrowserCursorMode(platform, cursorCaptureMode);
@@ -1925,9 +1971,26 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 					selectedSource,
 					recordMicrophone,
 					countdownRunToken,
+					startAtEpochMs,
 				)
 			) {
 				return;
+			}
+			// Started early for a native take that isn't available: every other path records
+			// from the moment it is called, so it waits out the countdown first, with the camera
+			// the countdown did not open.
+			if (startAtEpochMs) {
+				if (webcamEnabled && !webcamStream.current) {
+					webcamReady.current = false;
+					setWebcamArmed(true);
+				}
+				await new Promise((resolve) =>
+					window.setTimeout(resolve, Math.max(0, startAtEpochMs - Date.now())),
+				);
+				if (!isCountdownRunActive(countdownRunToken)) {
+					teardownMedia();
+					return;
+				}
 			}
 			if (
 				await startNativeMacRecordingIfAvailable(

@@ -38,3 +38,32 @@ export function webcamDeviceIdentityFrom(
 		deviceName: track.label || fallbackDeviceName,
 	};
 }
+
+/**
+ * The camera to record, named off the device list without opening it, for a take whose helper
+ * is spawned as the countdown begins: opening the camera in the renderer only to read its name
+ * cost the countdown a second, and the helper then reopened the same device.
+ *
+ * The pair comes from one list entry, so the id and the name describe the same camera, as
+ * `webcamDeviceIdentityFrom` guarantees off a track (#387). No chosen id means the browser's
+ * default, the first camera listed. Null when the list withholds the labels (no camera
+ * permission yet) or holds no such camera: then only an opened track can name it.
+ */
+export async function webcamDeviceIdentityWithoutOpening(
+	deviceId: string | undefined,
+	mediaDevices: Pick<MediaDevices, "enumerateDevices"> | undefined = globalThis.navigator
+		?.mediaDevices,
+): Promise<WebcamDeviceIdentity | null> {
+	try {
+		const cameras = (await mediaDevices?.enumerateDevices())?.filter(
+			(device) => device.kind === "videoinput",
+		);
+		const camera = deviceId
+			? cameras?.find((device) => device.deviceId === deviceId)
+			: cameras?.[0];
+		if (!camera?.label) return null;
+		return { deviceId: camera.deviceId || deviceId, deviceName: camera.label };
+	} catch {
+		return null;
+	}
+}

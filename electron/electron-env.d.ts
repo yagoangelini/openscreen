@@ -193,6 +193,7 @@ interface Window {
 		startNativeWindowsRecording: (
 			request: import("../src/lib/nativeWindowsRecording").NativeWindowsRecordingRequest,
 		) => Promise<import("../src/lib/nativeWindowsRecording").NativeWindowsRecordingStartResult>;
+		cancelNativeWindowsPendingStart?: () => Promise<boolean>;
 		stopNativeWindowsRecording: (discard?: boolean) => Promise<{
 			success: boolean;
 			path?: string;
