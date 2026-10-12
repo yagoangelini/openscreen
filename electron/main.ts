@@ -91,6 +91,7 @@ import {
 	createHudOverlayWindow,
 	createNotesWindow,
 	createSourceSelectorWindow,
+	revealEditorWindow,
 } from "./windows";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -1205,7 +1206,51 @@ let isCloseConfirmInFlight = false;
 /** The user already agreed, for this close, that it may cancel the running export. */
 let exportCloseConfirmed = false;
 
-ipcMain.on("set-has-unsaved-changes", (_, hasChanges: boolean) => {
+/**
+ * The editor opened, hidden, at a stop click: its page loads while the take
+ * finalizes, and `createEditorWindowWrapper` shows it instead of building a new
+ * one when the HUD asks for the editor. Dropped when the stop does not end in it.
+ */
+let prewarmedEditorWindow: BrowserWindow | null = null;
+/** What the prewarmed editor said about unsaved changes before it was shown. */
+let prewarmedEditorUnsaved = false;
+let prewarmedEditorExpiry: ReturnType<typeof setTimeout> | null = null;
+
+function prewarmEditorWindow() {
+	if (prewarmedEditorWindow && !prewarmedEditorWindow.isDestroyed()) return;
+	const win = createEditorWindow({}, { deferShow: true });
+	prewarmedEditorWindow = win;
+	prewarmedEditorUnsaved = false;
+	win.once("closed", () => {
+		if (prewarmedEditorWindow === win) prewarmedEditorWindow = null;
+	});
+}
+
+function takePrewarmedEditorWindow() {
+	const win = prewarmedEditorWindow;
+	prewarmedEditorWindow = null;
+	if (prewarmedEditorExpiry) clearTimeout(prewarmedEditorExpiry);
+	prewarmedEditorExpiry = null;
+	return win && !win.isDestroyed() ? win : null;
+}
+
+/** Closes the prewarmed editor now, or `afterMs` from now if nobody took it by then. */
+function discardPrewarmedEditorWindow(afterMs = 0) {
+	if (prewarmedEditorExpiry) clearTimeout(prewarmedEditorExpiry);
+	prewarmedEditorExpiry = null;
+	const drop = () => takePrewarmedEditorWindow()?.destroy();
+	if (afterMs > 0) {
+		prewarmedEditorExpiry = setTimeout(drop, afterMs);
+	} else {
+		drop();
+	}
+}
+
+ipcMain.on("set-has-unsaved-changes", (event, hasChanges: boolean) => {
+	if (prewarmedEditorWindow && event.sender.id === prewarmedEditorWindow.webContents.id) {
+		prewarmedEditorUnsaved = hasChanges;
+		return;
+	}
 	editorHasUnsavedChanges = hasChanges;
 });
 
@@ -1237,8 +1282,11 @@ function createEditorWindowWrapper() {
 		isForceClosing = false;
 		mainWindow = null;
 	}
-	mainWindow = createEditorWindow();
-	editorHasUnsavedChanges = false;
+	const unsavedBeforeShown = prewarmedEditorUnsaved;
+	const prewarmed = takePrewarmedEditorWindow();
+	mainWindow = prewarmed ?? createEditorWindow();
+	if (prewarmed) revealEditorWindow(prewarmed);
+	editorHasUnsavedChanges = prewarmed ? unsavedBeforeShown : false;
 	// A hidden countdown overlay would keep "all windows closed" from ever firing,
 	// so closing the editor would no longer quit the app. Nothing records from the
 	// editor -- its Record mode hands over to the HUD, which builds a new one.
@@ -1717,6 +1765,7 @@ appReady?.then(async () => {
 			}
 		},
 		switchToHudWrapper,
+		{ open: prewarmEditorWindow, discard: discardPrewarmedEditorWindow },
 	);
 	recordingControls = ipcControls;
 

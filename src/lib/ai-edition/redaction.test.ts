@@ -3,7 +3,9 @@ import {
 	detectSensitive,
 	type OcrSample,
 	parseOcrScan,
+	parseSensitiveTerms,
 	redactionAnnotations,
+	replaceAutoRedactions,
 	scannedUpToSec,
 	trackDetections,
 } from "./redaction";
@@ -209,5 +211,125 @@ describe("redactionAnnotations", () => {
 		expect(blur.space).toBeUndefined();
 		expect(blur.position.x).toBeLessThan(40);
 		expect(blur.position.x + blur.size.width).toBeGreaterThan(50);
+	});
+});
+
+describe("custom sensitive terms", () => {
+	const custom = (sample: OcrSample, terms: string[]) =>
+		detectSensitive(sample, terms).map((d) => [d.kind, d.text]);
+
+	it("reads the list one per line or comma, ignoring repeats and terms too short", () => {
+		expect(parseSensitiveTerms("Contoso\n João Silva , ab\nCONTOSO\n\n123.456")).toEqual([
+			"Contoso",
+			"João Silva",
+			"123.456",
+		]);
+	});
+
+	it("matches ignoring case and accents, across two words and inside one", () => {
+		expect(custom(line(["Olá,", "JOAO", "SILVA"]), ["João Silva"])).toEqual([
+			["custom", "JOAO SILVA"],
+		]);
+		expect(custom(line(["Projeto", "fabrikam-interno"]), ["Fabrikam"])).toEqual([
+			["custom", "fabrikam"],
+		]);
+		expect(custom(line(["Conta", "4021-77"]), ["4021"])).toEqual([["custom", "4021"]]);
+		expect(custom(line(["nada", "aqui"]), ["Fabrikam"])).toEqual([]);
+	});
+
+	it("blurs the whole OCR word a term was found inside", () => {
+		const [found] = detectSensitive(line(["Projeto", "fabrikam-interno"]), ["fabrikam"]);
+		// The second word: x 0.16, 0.05 wide.
+		expect(found.box.x).toBeCloseTo(0.16, 5);
+		expect(found.box.w).toBeCloseTo(0.05, 5);
+	});
+
+	it("leaves to the built-in patterns what they already blur", () => {
+		expect(custom(line(["ana@contoso.com"]), ["contoso"])).toEqual([["email", "ana@contoso.com"]]);
+	});
+
+	it("is followed across frames like any other detection", () => {
+		const scan = parseOcrScan(
+			[
+				'{"type":"info","durationSec":10}',
+				'{"type":"frame","t":0,"words":[[0.1,0.1,0.1,0.02,"Fabrikam"]],"lines":[[0,1]]}',
+				'{"type":"same","t":2}',
+				'{"type":"frame","t":4,"words":[],"lines":[]}',
+				'{"type":"done"}',
+			].join("\n"),
+		);
+		expect(trackDetections(scan)).toEqual([]);
+		expect(trackDetections(scan, ["fabrikam"])).toMatchObject([
+			{ kind: "custom", startSec: 0, endSec: 4 },
+		]);
+	});
+});
+
+describe("replaceAutoRedactions", () => {
+	const base = createEmptyDocument({ projectId: "p", title: "t" });
+	const clip = (id: string, assetId: string, at: number) => ({
+		id,
+		assetId,
+		sourceStartSec: 0,
+		sourceEndSec: 10,
+		timelineStartSec: at,
+		timelineEndSec: at + 10,
+		wordRefs: [],
+		origin: "system" as const,
+		reason: "",
+	});
+	const span = (text: string) => ({
+		kind: "custom" as const,
+		text,
+		box: { x: 0.1, y: 0.1, w: 0.1, h: 0.02 },
+		startSec: 1,
+		endSec: 3,
+	});
+	let n = 0;
+	const makeId = (prefix: string) => `${prefix}_${++n}`;
+
+	it("replaces the automatic blurs of the scanned assets and keeps the user's own", () => {
+		const document = {
+			...base,
+			assets: [
+				{ id: "a1", kind: "video", label: "1", originalPath: "C:/1.mp4", cameraTrack: null },
+				{ id: "a2", kind: "video", label: "2", originalPath: "C:/2.mp4", cameraTrack: null },
+			],
+			timeline: { ...base.timeline, clips: [clip("c1", "a1", 0), clip("c2", "a2", 10)] },
+		} as AxcutDocument;
+		const old1 = redactionAnnotations(document, "a1", [span("old")], makeId);
+		const old2 = redactionAnnotations(document, "a2", [span("other")], makeId);
+		const manual = { ...old1[0], id: "manual", annotationSource: undefined };
+		const withBlurs = { ...document, annotations: [...old1, ...old2, manual] } as AxcutDocument;
+
+		const result = replaceAutoRedactions(
+			withBlurs,
+			new Map([["a1", [span("new"), { ...span("x"), startSec: 5, endSec: 6 }]]]),
+			makeId,
+		);
+		expect(result).toMatchObject({ removed: 1, added: 2 });
+		const ids = result.document.annotations.map((a) => a.id);
+		expect(ids).toContain("manual");
+		expect(ids).toContain(old2[0].id);
+		expect(ids).not.toContain(old1[0].id);
+		expect(result.document.annotations).toHaveLength(4);
+	});
+
+	it("clears the suggestions when the new scan finds nothing", () => {
+		const document = {
+			...base,
+			assets: [
+				{ id: "a1", kind: "video", label: "1", originalPath: "C:/1.mp4", cameraTrack: null },
+			],
+			timeline: { ...base.timeline, clips: [clip("c1", "a1", 0)] },
+		} as AxcutDocument;
+		const old = redactionAnnotations(document, "a1", [span("old")], makeId);
+		const result = replaceAutoRedactions(
+			{ ...document, annotations: old } as AxcutDocument,
+			new Map([["a1", []]]),
+			makeId,
+		);
+		expect(result).toMatchObject({ removed: 1, added: 0 });
+		expect(result.document.annotations).toEqual([]);
 	});
 });

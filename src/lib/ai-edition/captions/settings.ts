@@ -102,7 +102,20 @@ export interface CaptionSettings {
 	minWordsPerLine: number;
 	/** Upper bound on words shown at once. */
 	maxWordsPerLine: number;
+	/**
+	 * "[Convidado] ..." where the speaker changes, for a take whose transcript knows who spoke
+	 * (`transcription/speakers.ts`) and has both sides in it. Original language only: a
+	 * translation is spread over a span and has no words to label.
+	 */
+	speakerLabels: boolean;
+	/** The names the labels use; empty falls back to {@link DEFAULT_SPEAKER_NAMES}. */
+	speakerNameMic: string;
+	speakerNameSystem: string;
 }
+
+/** The names a label falls back to when none is stored. The app speaks pt-BR first; the pane
+ *  writes the user's own language's names the moment the labels are switched on. */
+export const DEFAULT_SPEAKER_NAMES = { mic: "Você", system: "Convidado" } as const;
 
 export const DEFAULT_CAPTION_SETTINGS: CaptionSettings = {
 	enabled: false,
@@ -124,6 +137,9 @@ export const DEFAULT_CAPTION_SETTINGS: CaptionSettings = {
 	insetX: 10,
 	minWordsPerLine: 2,
 	maxWordsPerLine: 7,
+	speakerLabels: false,
+	speakerNameMic: "",
+	speakerNameSystem: "",
 };
 
 /**
@@ -621,6 +637,10 @@ export function getCaptionSettings(
 		...placement,
 		minWordsPerLine: Math.min(minWords, maxWords),
 		maxWordsPerLine: Math.max(minWords, maxWords),
+		speakerLabels: readBoolean(raw.speakerLabels, d.speakerLabels),
+		speakerNameMic: typeof raw.speakerNameMic === "string" ? raw.speakerNameMic.slice(0, 40) : "",
+		speakerNameSystem:
+			typeof raw.speakerNameSystem === "string" ? raw.speakerNameSystem.slice(0, 40) : "",
 	};
 }
 

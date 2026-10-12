@@ -30,6 +30,13 @@ export interface LlmConfig {
 	 * the model to say (see technical-documentation/architecture/ai-agent.md).
 	 */
 	allowAgentEdits?: boolean;
+	/**
+	 * When not false, the renderer holds a turn that edits the project as a proposal
+	 * ("Pedir aprovação antes de aplicar") and writes it only on Apply. Undefined means
+	 * ON. Renderer-only: the agent runs the same either way, against its own working
+	 * copy, so nothing here reads it.
+	 */
+	requireAgentEditApproval?: boolean;
 }
 
 // Only `api-key` remains: the OAuth kinds ("codex", "github-device",

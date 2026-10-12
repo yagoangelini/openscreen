@@ -154,6 +154,9 @@ const DECLARED: WritePath[] = [
 	// Auto-zoom regions suggested for a freshly imported recording. `history: true`
 	// on purpose: unlike the probed duration above, this is a suggestion the user is
 	// meant to be able to undo.
+	// "Procurar de novo" under the sensitive words: the automatic blurs replaced by a new OCR
+	// scan, the user's own blurs kept. One undo step.
+	w("src/components/ai-edition/recordingImport.ts", "rescanAutoRedactions", "save", "gesture"),
 	w(
 		"src/components/ai-edition/recordingImport.ts",
 		"writeFreshRecordingAutoZooms",
@@ -173,6 +176,12 @@ const DECLARED: WritePath[] = [
 	// A word typed into the transcript pane, and the deletion of one. Both are the user's
 	// own edits to the transcript; neither touches the timeline.
 	w("src/components/ai-edition/NewEditorShell.tsx", "handleInsertWord", "save", "gesture"),
+	// "Cut N" in the transcript pane's "Limpar fala" list: the hesitations and silences the
+	// user left ticked, as trims, in one undoable write.
+	w("src/components/ai-edition/NewEditorShell.tsx", "handleApplySpeechCleanup", "save", "gesture"),
+	// "Quem fala" in the transcript pane: the takes' transcripts labelled again from their stems.
+	// (The labels a background transcription adds ride on its own unrecorded save.)
+	w("src/components/ai-edition/NewEditorShell.tsx", "handleLabelSpeakers", "save", "gesture"),
 	w("src/components/ai-edition/NewEditorShell.tsx", "handleRemoveWords", "save", "gesture"),
 	// The transcript lane, chosen in the pane and stored on the document because it decides
 	// the captions burnt into the export (#560). Written through `useCaptions.set`, which
@@ -219,6 +228,11 @@ const DECLARED: WritePath[] = [
 		"state",
 		"unrecorded",
 	),
+	// The persist that follows "Desfazer esta resposta" on an agent reply: the same
+	// undo as Ctrl+Z, so the same rule as `NewEditorShell`'s persist above. Recording
+	// it would undo the undo. The turn's own write is the `applyAgentDocumentIfCurrent`
+	// save above -- one entry per reply, however many tool calls it made.
+	w("src/lib/ai-edition/store/agentTurnUndo.ts", "undoAgentTurn", "save", "automatic"),
 
 	// Linking the camera track found next to a newly added asset. Part of the
 	// import, not an edit of its own.

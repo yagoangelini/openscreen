@@ -193,7 +193,43 @@
 		"noClipTranscript": "Aucune transcription pour ce clip — ouvrez la fiche du média et relancez la génération.",
 		"editingHintDev": "Double-cliquez sur un mot pour le corriger, Retour arrière le coupe du film, tapez entre deux mots pour en ajouter un.",
 		"noAudio": "Ce média n'a pas de piste audio",
-		"blankedWord": "vidé"
+		"blankedWord": "vidé",
+		"cleanup": {
+			"title": "Clean up speech",
+			"help": "Finds hesitations (\"um\", \"uh\"), fillers said on their own or repeated, and long silences, from the transcript alone. Nothing is cut until you press Cut; everything picked is one undo step.",
+			"open": "Clean up",
+			"hint": "Cut hesitations, fillers and long silences (you review the list first)",
+			"intro": "Untick anything you want to keep. Fillers like \"tipo\" or \"então\" are only listed when said between pauses or repeated; silences are shortened, not removed.",
+			"settings": "Words and rules",
+			"fillers": "Hesitations, always cut (one per line)",
+			"contextual": "Fillers that are also real words (one per line)",
+			"contextualHint": "Cut only when said on their own between two pauses, or repeated (\"então, então\").",
+			"aggressive": "Also cut these words wherever they appear",
+			"silenceMin": "Shorten silences longer than (s)",
+			"silenceKeep": "Leave a pause of (s)",
+			"restoreDefaults": "Restore the defaults",
+			"nothing": "Nothing to clean up in this transcript.",
+			"summary": "{{count}} of {{total}} picked · {{seconds}} s shorter",
+			"all": "All",
+			"none": "None",
+			"silenceItem": "Silence {{from}} s → {{to}} s",
+			"seek": "Go to this moment",
+			"cancel": "Cancel",
+			"apply": "Cut {{count}}",
+			"reason": {
+				"filler": "hesitation",
+				"repeated": "repeated",
+				"isolated": "between pauses",
+				"aggressive": "filler",
+				"silence": "silence"
+			}
+		},
+		"speakers": {
+			"button": "Who speaks",
+			"hint": "Label each word as you (microphone) or the guest (computer sound), from the take's two audio tracks",
+			"mic": "You",
+			"system": "Guest"
+		}
 	},
 	"exportFormat": {
 		"mp4": "MP4",
@@ -244,7 +280,14 @@
 			"minimal": "Minimal",
 			"light": "Clair"
 		},
-		"customize": "Personnaliser"
+		"customize": "Personnaliser",
+		"speakers": "Who speaks",
+		"speakerLabels": "Show who speaks",
+		"speakerLabelsHint": "Starts a new line and adds [Name] wherever the speaker changes, in the preview, the export and the .srt.",
+		"speakerMic": "Microphone",
+		"speakerSystem": "Computer sound",
+		"speakerMicDefault": "You",
+		"speakerSystemDefault": "Guest"
 	},
 	"panes": {
 		"help": "Aide"

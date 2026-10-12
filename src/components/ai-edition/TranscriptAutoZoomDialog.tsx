@@ -88,7 +88,7 @@ export function TranscriptAutoZoomDialog({
 		handFreshRecordingAutoZoomsToTranscript();
 		stopped.current = false;
 		setStage("transcribing");
-		await useTranscriptionStore.getState().request(assetId, "auto");
+		await useTranscriptionStore.getState().request(assetId);
 		if (stopped.current) return;
 		const transcribed = Boolean(findAssetTranscript(useProjectStore.getState().document, assetId));
 		if (!transcribed) toast.warning(te("autoZoom.afterRecording.failed"));

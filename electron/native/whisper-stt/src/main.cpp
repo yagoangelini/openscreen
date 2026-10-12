@@ -277,6 +277,22 @@ std::string base64(const void* data, size_t n) {
 	return out;
 }
 
+// The DTW alignment heads for `--dtw-preset`. The heads are (text layer, head)
+// pairs of one model family, and whisper.cpp refuses a context whose preset
+// names a layer the model does not have: large-v3-turbo has 4 text layers, and
+// SMALL's heads sit on layers 3 to 5, so the old fixed SMALL preset could not
+// load it at all. Unknown names keep SMALL, the model shipped by default.
+whisper_alignment_heads_preset dtw_preset_from_name(const std::string& name) {
+	if (name == "tiny") return WHISPER_AHEADS_TINY;
+	if (name == "base") return WHISPER_AHEADS_BASE;
+	if (name == "medium") return WHISPER_AHEADS_MEDIUM;
+	if (name == "large-v1") return WHISPER_AHEADS_LARGE_V1;
+	if (name == "large-v2") return WHISPER_AHEADS_LARGE_V2;
+	if (name == "large-v3") return WHISPER_AHEADS_LARGE_V3;
+	if (name == "large-v3-turbo") return WHISPER_AHEADS_LARGE_V3_TURBO;
+	return WHISPER_AHEADS_SMALL;
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -285,6 +301,7 @@ int main(int argc, char** argv) {
 	std::string host = "127.0.0.1";
 	bool host_from_flag = false;
 	bool force_cpu = false;
+	std::string dtw_preset = "small";
 	int port = 0;
 	int threads = std::max(1u, std::thread::hardware_concurrency());
 
@@ -296,6 +313,34 @@ int main(int argc, char** argv) {
 		else if (a == "--port" && i + 1 < argc) port = std::atoi(argv[++i]);
 		else if (a == "--threads" && i + 1 < argc) threads = std::atoi(argv[++i]);
 		else if (a == "--cpu") force_cpu = true;
+		else if (a == "--dtw-preset" && i + 1 < argc) dtw_preset = argv[++i];
+		else if (a == "--list-devices") {
+			// One JSON line on stdout, then exit: the compute devices ggml sees, so
+			// the app can tell a dedicated GPU with room for large-v3-turbo apart
+			// from an integrated one or none, before it downloads any model.
+			nlohmann::json devices = nlohmann::json::array();
+			for (size_t d = 0; d < ggml_backend_dev_count(); ++d) {
+				ggml_backend_dev_t dev = ggml_backend_dev_get(d);
+				if (!dev) continue;
+				const auto type = ggml_backend_dev_type(dev);
+				size_t free_bytes = 0, total_bytes = 0;
+				ggml_backend_dev_memory(dev, &free_bytes, &total_bytes);
+				const char* name = ggml_backend_dev_name(dev);
+				const char* description = ggml_backend_dev_description(dev);
+				devices.push_back({
+					{"name", name ? name : ""},
+					{"description", description ? description : ""},
+					{"type", type == GGML_BACKEND_DEVICE_TYPE_GPU    ? "gpu"
+					       : type == GGML_BACKEND_DEVICE_TYPE_IGPU ? "igpu"
+					       : type == GGML_BACKEND_DEVICE_TYPE_CPU  ? "cpu"
+					                                               : "accel"},
+					{"memory_free", free_bytes},
+					{"memory_total", total_bytes},
+				});
+			}
+			std::cout << nlohmann::json{{"devices", devices}}.dump() << std::endl;
+			return 0;
+		}
 	}
 	// ponytail: prefer env var (matches the prior native STT model env var
 	// shape; the Node wrapper passes both ways).
@@ -333,7 +378,8 @@ int main(int argc, char** argv) {
 	    (!vad_model_path.empty() ? (" vad_model=" + vad_model_path) : "") +
 	    " host=" + host +
 	    " port=" + (port > 0 ? std::to_string(port) : "(any)") +
-	    " threads=" + std::to_string(threads));
+	    " threads=" + std::to_string(threads) +
+	    " dtw_preset=" + dtw_preset);
 
 	// ---- Init whisper context with DTW alignment (POC §4.1) ----
 	whisper_context_params cparams = whisper_context_default_params();
@@ -343,7 +389,7 @@ int main(int argc, char** argv) {
 	                             // /inference handler still runs, but skipping
 	                             // the request is wasted work.
 	cparams.dtw_token_timestamps = true;
-	cparams.dtw_aheads_preset    = WHISPER_AHEADS_SMALL;
+	cparams.dtw_aheads_preset    = dtw_preset_from_name(dtw_preset);
 	whisper_context* ctx = whisper_init_from_file_with_params(model_path.c_str(), cparams);
 	if (!ctx && cparams.use_gpu) {
 		// Metal/Vulkan allocation can fail transiently when the editor or another
@@ -389,7 +435,11 @@ int main(int argc, char** argv) {
 	svr.Get("/", [&](const httplib::Request&, httplib::Response& res) {
 		nlohmann::json probe = {
 			{"status", "ok"},
-			{"vad",    vctx != nullptr}
+			{"vad",    vctx != nullptr},
+			{"dtw_preset", dtw_preset},
+			// What init bound, after its own CPU retry: the app swaps a large model
+			// that landed on the CPU for the small one instead of crawling.
+			{"backend", active_backend}
 		};
 		res.set_content(probe.dump(), "application/json");
 	});

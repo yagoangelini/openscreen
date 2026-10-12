@@ -12,8 +12,10 @@ import {
 	transcribeSourceFileToSegments,
 } from "@/lib/captioning";
 import type { SttRendererStatus } from "@/lib/captioning/transcribe";
+import { loadUserPreferences } from "@/lib/userPreferences";
 import { STT_NATIVE_EXTRACTION_UNAVAILABLE } from "../../../../electron/stt/transcriptionContract";
 import type { AxcutDocument, AxcutTranscript, AxcutTranscriptSegment, AxcutWord } from "../schema";
+import { buildTranscriptionPrompt } from "../transcription/vocabulary";
 
 /**
  * What the caller can show while a transcription runs. `completedSec` /
@@ -65,8 +67,14 @@ export async function transcribeAsset(
 	// so the stored transcript reflects reality, not the input option.
 	const forcedLanguage =
 		options.language && options.language !== "auto" ? options.language : undefined;
-	// The project's names and terms ride along on every run, background or manual.
-	const prompt = document.project.vocabulary;
+	// The standing terms (Microsoft 365 and AI by default) and the project's names and
+	// terms ride along on every run, background or manual.
+	const prefs = loadUserPreferences();
+	const prompt = buildTranscriptionPrompt(
+		document.project.vocabulary,
+		prefs.transcriptionVocabulary,
+	);
+	const model = prefs.transcriptionModel;
 
 	// Forward the main process's per-chunk progress. Without this the status
 	// callback only ever fired the two coarse phases above, so a 30-minute
@@ -103,13 +111,18 @@ export async function transcribeAsset(
 			signal: options.signal,
 			language: forcedLanguage,
 			prompt,
+			model,
 			onStatus: forwardStatus,
 		});
 	// The voice stem, when the take has one: the words without the computer's sound on top.
 	// Same clock as the video, so the timings need nothing. A stem that has gone missing or
 	// will not decode is no reason to fail the transcript: the take's own track holds the
 	// same voice, with the computer under it.
-	const voicePath = asset.audioStems?.voicePath;
+	//
+	// Unless the user asked for the guest too ("transcribe the computer's sound"): then the
+	// mixed track, which holds both sides of a call, and the stems only say who spoke
+	// (`transcription/speakers.ts`, run by the transcription store).
+	const voicePath = prefs.transcribeGuestAudio ? undefined : asset.audioStems?.voicePath;
 	const fromFile = voicePath
 		? transcribeFile(voicePath).catch((error: unknown) => {
 				const message = error instanceof Error ? error.message : String(error);
@@ -131,6 +144,7 @@ export async function transcribeAsset(
 			signal: options.signal,
 			language: forcedLanguage,
 			prompt,
+			model,
 			onStatus: forwardStatus,
 		});
 	});

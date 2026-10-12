@@ -5,6 +5,8 @@ import path from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 
+import { STT_WHISPER_MODEL_BYTES } from "./transcriptionContract";
+
 /**
  * Manages the lifetime of the on-disk model artifact used by the STT stack.
  *
@@ -14,8 +16,9 @@ import { pipeline } from "node:stream/promises";
  * `ggml-org/whisper.cpp` on HuggingFace is a different, access-gated repo
  * and returns 401 on every file including README.md — confirmed by curl).
  * whisper.cpp bakes precision into the file, so
- * there is no runtime `--int8` flag; OpenScreen ships the q8_0 quantized
- * `small` multilingual model by default.
+ * there is no runtime `--int8` flag. Two models (`WHISPER_MODELS`): the q8_0
+ * `large-v3-turbo` on a dedicated GPU with room for it, the q8_0 `small`
+ * multilingual model everywhere else (and as the fallback).
  *
  * The file is verified by SHA-256 and written atomically (via .partial rename)
  * to prevent partial downloads from being treated as complete.
@@ -95,6 +98,48 @@ export const STT_MODELS: Record<SttModelId, SttModelDescriptor> = {
 		],
 	},
 };
+
+/**
+ * The whisper models the app can run. `small` is the original default and the
+ * fallback; `large-v3-turbo` is the accurate one for a dedicated GPU (see
+ * `whisperDevices.ts`). Both come from the same pinned revision of the same repo.
+ *
+ * `dtwPreset` is the helper's `--dtw-preset`: the alignment heads belong to one
+ * model family, and whisper.cpp refuses a context whose heads name a text layer
+ * the model lacks (turbo has 4, SMALL's heads sit on layers 3 to 5). A helper
+ * built before the flag ignores it and dies loading turbo, which the manager
+ * turns into "use small".
+ *
+ * Measured on the RTX 3060 (Vulkan) with pt-BR tutorial speech, docs/HANDOFF.md:
+ * turbo q8_0 halves the word errors of small without a vocabulary prompt, at the
+ * same speed (rtf ~0.04), with ~1.4 GB of VRAM against ~0.7 GB.
+ */
+export type WhisperModelId = "small" | "large-v3-turbo";
+
+export interface WhisperModelDescriptor {
+	file: SttModelFile;
+	dtwPreset: "small" | "large-v3-turbo";
+}
+
+const TURBO_FILE = "ggml-large-v3-turbo-q8_0.bin";
+
+export const WHISPER_MODELS: Record<WhisperModelId, WhisperModelDescriptor> = {
+	small: { file: STT_MODELS.whisper.files[0], dtwPreset: "small" },
+	"large-v3-turbo": {
+		file: {
+			name: TURBO_FILE,
+			url: `${MODEL_BASE}/${MODEL_REPO}/resolve/${MODEL_REVISION}/${TURBO_FILE}`,
+			// HuggingFace's paths-info LFS oid for this file at MODEL_REVISION.
+			expectedSha256: "317eb69c11673c9de1e1f0d459b253999804ec71ac4c23c17ecf5fbe24e259a1",
+			approximateBytes: STT_WHISPER_MODEL_BYTES["large-v3-turbo"],
+		},
+		dtwPreset: "large-v3-turbo",
+	},
+};
+
+export function isWhisperModelId(value: unknown): value is WhisperModelId {
+	return value === "small" || value === "large-v3-turbo";
+}
 
 /**
  * The CTC aligners that re-time whisper's words (electron/stt/ctcAlign.ts), per
@@ -179,9 +224,17 @@ export async function ensureAligner(opts: {
 	return filePath;
 }
 
-export function modelPaths(baseDir: string): Record<SttModelId, string> {
+/** `whisperModel` picks which whisper file `whisper` points at; small by default. */
+export function modelPaths(
+	baseDir: string,
+	whisperModel: WhisperModelId = "small",
+): Record<SttModelId, string> {
 	return {
-		whisper: path.join(baseDir, STT_MODELS.whisper.cacheDir, MODEL_FILE),
+		whisper: path.join(
+			baseDir,
+			STT_MODELS.whisper.cacheDir,
+			WHISPER_MODELS[whisperModel].file.name,
+		),
 		"silero-vad": path.join(baseDir, STT_MODELS["silero-vad"].cacheDir, VAD_FILE),
 	};
 }
@@ -192,8 +245,9 @@ export function modelPaths(baseDir: string): Record<SttModelId, string> {
 export async function areModelsPresent(
 	baseDir: string,
 	only: SttModelId[] = ["whisper", "silero-vad"],
+	whisperModel: WhisperModelId = "small",
 ): Promise<boolean> {
-	const paths = modelPaths(baseDir);
+	const paths = modelPaths(baseDir, whisperModel);
 	try {
 		const results = await Promise.all(
 			only.map(async (id) => {
@@ -387,6 +441,8 @@ export interface EnsureModelsOptions {
 	baseDir: string;
 	/** Models to ensure; defaults to all (`whisper`, `silero-vad`). */
 	only?: SttModelId[];
+	/** Which whisper file `whisper` means; small by default. */
+	whisperModel?: WhisperModelId;
 	onProgress?: (event: {
 		id: SttModelId;
 		file: string;
@@ -398,16 +454,16 @@ export interface EnsureModelsOptions {
 
 /** Ensure the GGML model files are present locally; downloads with progress + retry. */
 export async function ensureModels(opts: EnsureModelsOptions): Promise<void> {
+	const whisperModel = opts.whisperModel ?? "small";
 	const targets = (opts.only ?? (["whisper", "silero-vad"] as SttModelId[])).map((id) => ({
 		id,
-		descriptor: STT_MODELS[id],
-		filePath: modelPaths(opts.baseDir)[id],
+		file: id === "whisper" ? WHISPER_MODELS[whisperModel].file : STT_MODELS[id].files[0],
+		filePath: modelPaths(opts.baseDir, whisperModel)[id],
 	}));
 
-	for (const { id, descriptor, filePath } of targets) {
+	for (const { id, file, filePath } of targets) {
 		await mkdir(path.dirname(filePath), { recursive: true });
 
-		const file = descriptor.files[0];
 		await ensureFile(filePath, file.url, file.expectedSha256, {
 			onProgress: (bytes) =>
 				opts.onProgress?.({

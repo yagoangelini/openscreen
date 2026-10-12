@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AxcutTranscript } from "../schema";
-import { applyGlossary, DEFAULT_GLOSSARY, parseGlossary } from "./glossary";
+import { applyGlossary, DEFAULT_GLOSSARY, parseGlossary, upgradeStoredGlossary } from "./glossary";
 
 function transcriptOf(
 	texts: string[],
@@ -129,5 +129,64 @@ describe("parseGlossary", () => {
 			],
 			["Contoso", [["contoso"]]],
 		]);
+	});
+});
+
+describe("DEFAULT_GLOSSARY on what Whisper really wrote", () => {
+	// Lines out of small and large-v3-turbo on pt-BR tutorial speech (docs/HANDOFF.md).
+	const fix = (text: string) =>
+		applyGlossary(transcriptOf(text.split(" ")), glossary)
+			.transcript.words.map((w) => w.text)
+			.join(" ");
+
+	it("puts the Microsoft and AI names right", () => {
+		expect(fix("entre no Timoz com a sua conta do Tenet.")).toBe(
+			"entre no Teams com a sua conta do tenant.",
+		);
+		expect(fix("uma pasta do Andrile ou")).toBe("uma pasta do OneDrive ou");
+		expect(fix("ficam no Pervil. e no pervio")).toBe("ficam no Purview. e no Purview");
+		expect(fix("o EJAR OpenAI e o Eger")).toBe("o Azure OpenAI e o Azure");
+		expect(fix("o Microsoft Febric junta")).toBe("o Microsoft Fabric junta");
+		expect(fix("como o chat GPT ou")).toBe("como o ChatGPT ou");
+		expect(fix("pelo MCP, o model context protocol.")).toBe("pelo MCP, o Model Context Protocol.");
+		expect(fix("se a sua licença e três")).toBe("se a sua licença E3");
+	});
+
+	it("leaves the Portuguese words that sound like a product alone", () => {
+		const speech = "a gente vai defender a ordem na cloud";
+		expect(fix(speech)).toBe(speech);
+	});
+});
+
+describe("upgradeStoredGlossary", () => {
+	it("moves an untouched older default to the current one", () => {
+		const shipped = [
+			"SharePoint: share point, sherpoint, xerpoint, sharepoit, shere point",
+			"Power Automate: power automeite, pauer automate, power automat, power autometi",
+			"Power Apps: powerapps, pauer apps, power aps",
+			"Power BI: power b i, pauer bi, power bi, power bí, power biai",
+			"Power Platform: pauer platform, power plataform",
+			"Power Pages: pauer pages",
+			"Copilot: copailot, copailote, copilote, co-pilot",
+			"Copilot Studio: copailot studio, copilot estudio",
+			"Microsoft 365: microsoft trezentos e sessenta e cinco",
+			"Microsoft Teams: microsoft tims",
+			"OneDrive: one drive, uandraive, wandraive, wan drive",
+			"Outlook: autlook, aut luk, out look",
+			"Dataverse: data verse, deiraverse, dataversi, data versi",
+			"Entra ID: entra aidi, entra ai di",
+			"Planner: planer",
+			"Loop: lupe",
+			"Viva Engage: viva engeidge",
+		];
+		expect(upgradeStoredGlossary(shipped.join("\n"))).toBe(DEFAULT_GLOSSARY);
+		expect(upgradeStoredGlossary(shipped.join("\r\n"))).toBe(DEFAULT_GLOSSARY);
+	});
+
+	it("keeps a glossary the user edited, and the current default, as they are", () => {
+		const mine = "Contoso: contozo";
+		expect(upgradeStoredGlossary(mine)).toBe(mine);
+		expect(upgradeStoredGlossary(DEFAULT_GLOSSARY)).toBe(DEFAULT_GLOSSARY);
+		expect(upgradeStoredGlossary("")).toBe("");
 	});
 });

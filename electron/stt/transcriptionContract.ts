@@ -11,7 +11,7 @@
  */
 
 /** A word-level segment with timestamps from whisper.cpp's native DTW token
- *  timestamps (`t_dtw`, computed with the SMALL aheads preset — see
+ *  timestamps (`t_dtw`, computed with the model's own aheads preset — see
  *  technical-documentation/architecture/transcription-and-captions.md § Decision rationale). Absolute seconds
  *  in the source recording. */
 export interface SttWordSegment {
@@ -134,7 +134,22 @@ export interface SttTranscribeRequest {
 	 * initial prompt on every chunk. Omit or leave blank for none.
 	 */
 	prompt?: string;
+	/**
+	 * Which whisper model to run. "auto" (the default) is large-v3-turbo on a
+	 * dedicated GPU with room for it and small everywhere else (whisperDevices.ts).
+	 */
+	model?: SttWhisperModelPreference;
 }
+
+/** The whisper models (modelManager.ts `WhisperModelId`), spelled out to keep this file import-free. */
+export type SttWhisperModel = "small" | "large-v3-turbo";
+export type SttWhisperModelPreference = "auto" | SttWhisperModel;
+
+/** Download size of each model file, for the settings that offer them. */
+export const STT_WHISPER_MODEL_BYTES: Record<SttWhisperModel, number> = {
+	small: 264_464_607,
+	"large-v3-turbo": 874_188_075,
+};
 
 /**
  * Marker carried in the error message when the main process cannot decode a
@@ -164,6 +179,8 @@ export interface SttTranscribeResponse {
 	wordSegments: SttWordSegment[];
 	detectedLanguage: string;
 	backend: SttBackend;
+	/** The model that ran, after "auto" and any fallback to small. */
+	model?: SttWhisperModel;
 	/**
 	 * Summed over every chunk of this request — and absent unless ALL of them
 	 * reported, because a total that quietly skips a chunk describes a shorter

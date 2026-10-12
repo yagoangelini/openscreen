@@ -2,12 +2,15 @@ import path from "node:path";
 import { app, type IpcMain } from "electron";
 import { planChunks } from "./chunking";
 import { extractMono16kPcm } from "./extractAudio";
+import { resolveBinaryPath } from "./gpuDetector";
 import {
 	alignerPath,
 	cachedAligner,
 	ensureAligner,
 	ensureModels,
 	modelPaths,
+	WHISPER_MODELS,
+	type WhisperModelId,
 } from "./modelManager";
 import type {
 	SttPhraseSegment,
@@ -17,6 +20,13 @@ import type {
 	SttTranscribeResponse,
 	SttWordSegment,
 } from "./transcriptionContract";
+import {
+	listWhisperDevices,
+	resolveWhisperModel,
+	turboCapableDevice,
+	type WhisperDevice,
+	type WhisperModelPreference,
+} from "./whisperDevices";
 import { WhisperServerManager } from "./whisperServer";
 
 /**
@@ -28,7 +38,7 @@ import { WhisperServerManager } from "./whisperServer";
  *      (`chunking.ts`) and runs each through whisper-stt-server's HTTP
  *      `/inference`, which returns both phrase- and word-level segments in one
  *      pass (see whisperServer.ts). Word timestamps come from whisper.cpp's
- *      native DTW token timestamps (`t_dtw`, SMALL aheads preset,
+ *      native DTW token timestamps (`t_dtw`, the model's aheads preset,
  *      `flash_attn = false`), see
  *      technical-documentation/architecture/transcription-and-captions.md § Decision rationale.
  *   3. `shutdown()` tears down on app quit.
@@ -123,6 +133,8 @@ export interface SttManagerInitOptions {
 	statusSink?: (event: SttStatusEvent) => void;
 	/** Override the models cache directory; defaults to `app.getPath("userData") + "/stt-models"`. */
 	modelsBaseDir?: string;
+	/** Which whisper model to load; "auto" by default (whisperDevices.ts). */
+	model?: WhisperModelPreference;
 }
 
 export class SttManager {
@@ -131,9 +143,16 @@ export class SttManager {
 	private modelsBaseDir: string | null = null;
 	private readonly statusSinks = new Set<(event: SttStatusEvent) => void>();
 	private initPromise: Promise<void> | null = null;
+	/** The preference `initPromise` prepared; a different one prepares again. */
+	private initPreference: WhisperModelPreference | null = null;
 	/** Kept from `prepare()` so a chunk retry can respawn a helper that died mid-run. */
 	private modelPath: string | null = null;
 	private vadModelPath: string | null = null;
+	private dtwPreset: string | undefined = undefined;
+	/** The whisper model the helper holds, once one is loaded. */
+	private whisperModel: WhisperModelId | null = null;
+	/** The helper's device list, asked once per session (only "auto" needs it). */
+	private devices: Promise<WhisperDevice[]> | null = null;
 	/**
 	 * Bumped by `cancel()`. The chunk loop compares it against the value it
 	 * captured on entry, so a cancel that lands after a new run started cannot
@@ -260,21 +279,40 @@ export class SttManager {
 		if (this.shuttingDown) return Promise.reject(cancelledError());
 		if (options.statusSink) this.addStatusSink(options.statusSink);
 		if (options.modelsBaseDir) this.modelsBaseDir = options.modelsBaseDir;
-		if (!this.initPromise) {
-			// A REJECTED init must not be cached. `prepare()` downloads a 264 MB
-			// model on first run, and caching its rejection meant one dropped
-			// connection poisoned the whole app session: every later transcription
-			// — including the retry the UI offers, and every remaining asset in the
+		const preference = options.model ?? "auto";
+		if (!this.initPromise || this.initPreference !== preference) {
+			// A REJECTED init must not be cached. `prepare()` downloads a model on
+			// first run, and caching its rejection meant one dropped connection
+			// poisoned the whole app session: every later transcription — including
+			// the retry the UI offers, and every remaining asset in the
 			// auto-transcription queue — awaited the same stale rejection and failed
 			// in milliseconds, with no way back short of quitting the app.
 			// Reconnecting the network changed nothing. Clearing the slot on failure
 			// makes the next attempt a real attempt.
-			this.initPromise = this.prepare().catch((error) => {
-				this.initPromise = null;
-				throw error;
-			});
+			//
+			// A new preference waits for the setup in flight, then prepares its own
+			// model: two setups at once would fight over the one helper.
+			const previous = this.initPromise?.catch(() => undefined) ?? Promise.resolve();
+			this.initPreference = preference;
+			const attempt: Promise<void> = previous
+				.then(() => this.prepare(preference))
+				.catch((error) => {
+					if (this.initPromise === attempt) this.initPromise = null;
+					throw error;
+				});
+			this.initPromise = attempt;
 		}
 		return this.initPromise;
+	}
+
+	/** The helper's devices, asked once; [] when it cannot say (whisperDevices.ts). */
+	private whisperDevices(): Promise<WhisperDevice[]> {
+		if (!this.devices) {
+			this.devices = resolveBinaryPath()
+				.then((binary) => (binary.path ? listWhisperDevices(binary.path) : []))
+				.catch(() => []);
+		}
+		return this.devices;
 	}
 
 	private getModelsDir(): string {
@@ -283,7 +321,40 @@ export class SttManager {
 		return this.modelsBaseDir;
 	}
 
-	private async prepare(): Promise<void> {
+	/**
+	 * Load the model `preference` means here. large-v3-turbo falls back to small
+	 * whenever it cannot run as intended: its download failed (offline, disk full),
+	 * the helper could not load it (one built before `--dtw-preset` dies on it), or,
+	 * under "auto", the GPU could not take it and the helper landed on the CPU.
+	 */
+	private async prepare(preference: WhisperModelPreference): Promise<void> {
+		const devices = preference === "auto" ? await this.whisperDevices() : [];
+		const wanted = resolveWhisperModel(preference, devices);
+		if (preference === "auto") {
+			const gpu = turboCapableDevice(devices);
+			console.info(
+				`[stt] model "auto" -> ${wanted}` +
+					(gpu ? ` (${gpu.description}, ${(gpu.memoryTotalBytes / 1024 ** 3).toFixed(1)} GB)` : ""),
+			);
+		}
+		if (wanted === "small") return this.load("small");
+		try {
+			await this.load(wanted);
+		} catch (error) {
+			if (this.shuttingDown) throw cancelledError();
+			console.warn(
+				`[stt] ${wanted} could not start, using small: ` +
+					`${error instanceof Error ? error.message : String(error)}`,
+			);
+			return this.load("small");
+		}
+		if (preference === "auto" && this.server.status.backend === "whispercpp-cpu") {
+			console.warn(`[stt] ${wanted} landed on the CPU, using small`);
+			return this.load("small");
+		}
+	}
+
+	private async load(model: WhisperModelId): Promise<void> {
 		const modelsDir = this.getModelsDir();
 		this.emit({ phase: "model", model: "whisper", downloadedBytes: 0, totalBytes: 0 });
 		// The download reports every network chunk (tens of thousands for the model). Each
@@ -292,6 +363,7 @@ export class SttManager {
 		const progress = throttledProgress(MODEL_PROGRESS_INTERVAL_MS);
 		await ensureModels({
 			baseDir: modelsDir,
+			whisperModel: model,
 			onProgress: (event) => {
 				if (!progress(event.id, event.downloadedBytes, event.totalBytes)) return;
 				this.emit({
@@ -304,18 +376,26 @@ export class SttManager {
 		});
 		if (this.shuttingDown) throw cancelledError();
 
-		const paths = modelPaths(modelsDir);
+		// A helper holding the other model has to go first: `start()` keeps a live one.
+		if (this.whisperModel !== null && this.whisperModel !== model) await this.server.stop();
+		const paths = modelPaths(modelsDir, model);
 		this.modelPath = paths.whisper;
 		this.vadModelPath = paths["silero-vad"];
+		this.dtwPreset = WHISPER_MODELS[model].dtwPreset;
+		this.whisperModel = null;
 		try {
 			await this.server.start({
 				modelPath: paths.whisper,
 				vadModelPath: paths["silero-vad"],
+				dtwPreset: this.dtwPreset,
 			});
 		} catch (error) {
 			if (this.shuttingDown) throw cancelledError();
+			// Whatever half-started must not be mistaken for the other model later.
+			await this.server.stop();
 			throw error;
 		}
+		this.whisperModel = model;
 		if (this.shuttingDown) {
 			await this.server.shutdown();
 			throw cancelledError();
@@ -368,7 +448,11 @@ export class SttManager {
 				if (isGuardrailRejection(error)) break;
 				if (this.modelPath) {
 					await this.server
-						.start({ modelPath: this.modelPath, vadModelPath: this.vadModelPath })
+						.start({
+							modelPath: this.modelPath,
+							vadModelPath: this.vadModelPath,
+							dtwPreset: this.dtwPreset,
+						})
 						.catch(() => undefined);
 				}
 				if (cancelled()) throw cancelledError();
@@ -398,12 +482,16 @@ export class SttManager {
 	}
 
 	async transcribe(req: SttTranscribeRequest): Promise<SttTranscribeResponse> {
-		await this.init();
+		await this.init({ model: req.model });
 
 		const epoch = this.cancelEpoch;
 		if (this.helperStoppedByCancel && this.modelPath) {
 			this.helperStoppedByCancel = false;
-			await this.server.start({ modelPath: this.modelPath, vadModelPath: this.vadModelPath });
+			await this.server.start({
+				modelPath: this.modelPath,
+				vadModelPath: this.vadModelPath,
+				dtwPreset: this.dtwPreset,
+			});
 		}
 		this.alignersFailed.clear();
 		// Extraction is part of the run, and on a long file it is the part the user used
@@ -552,7 +640,7 @@ export class SttManager {
 				? { elapsedSec, audioSec, rtf: elapsedSec / audioSec }
 				: undefined;
 		console.info(
-			`[stt] done on ${backend}: ${chunks.length} chunk(s), ` +
+			`[stt] done on ${backend} with ${this.whisperModel ?? "?"}: ${chunks.length} chunk(s), ` +
 				(timing
 					? formatTiming(timing)
 					: untimedChunks === chunks.length
@@ -564,6 +652,7 @@ export class SttManager {
 			wordSegments,
 			detectedLanguage: detectedLanguage ?? language ?? "auto",
 			backend,
+			model: this.whisperModel ?? undefined,
 			timing,
 		};
 	}

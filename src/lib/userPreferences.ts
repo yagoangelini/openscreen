@@ -2,9 +2,22 @@ import {
 	DEFAULT_EDITOR_LAYOUT_SETTINGS,
 	DEFAULT_EXPORT_SETTINGS,
 } from "@/components/video-editor/editorDefaults";
-import { DEFAULT_GLOSSARY } from "@/lib/ai-edition/transcription/glossary";
+import { DEFAULT_LOCALE, LOCALE_STORAGE_KEY } from "@/i18n/config";
+import { TRANSCRIPT_LANGUAGE_CODES, type TranscriptLanguageCode } from "@/lib/ai-edition/schema";
+import {
+	DEFAULT_CONTEXTUAL_FILLERS,
+	DEFAULT_SILENCE_KEEP_SEC,
+	DEFAULT_SILENCE_MIN_SEC,
+	DEFAULT_SPEECH_FILLERS,
+	formatFillerList,
+	parseFillerList,
+	type SpeechCleanupOptions,
+} from "@/lib/ai-edition/timeline/speechCleanup";
+import { DEFAULT_GLOSSARY, upgradeStoredGlossary } from "@/lib/ai-edition/transcription/glossary";
+import { DEFAULT_VOCABULARY } from "@/lib/ai-edition/transcription/vocabulary";
 import type { ExportFormat, ExportQuality } from "@/lib/exporter";
 import { type AspectRatio, isAspectRatio } from "@/utils/aspectRatioUtils";
+import type { SttWhisperModelPreference } from "../../electron/stt/transcriptionContract";
 
 const PREFS_KEY = "openscreen_user_preferences";
 
@@ -47,6 +60,37 @@ export interface UserPreferences {
 	 * before the editor opens up), or apply a remembered answer.
 	 */
 	autoZoomAfterRecording: AutoZoomAfterRecording;
+	/**
+	 * The whisper model: "auto" runs large-v3-turbo on a dedicated GPU with room for it
+	 * (874 MB, downloaded on first use) and small everywhere else (electron/stt/whisperDevices.ts).
+	 */
+	transcriptionModel: SttWhisperModelPreference;
+	/**
+	 * The language a transcription is decoded in when the run does not pick one; "auto"
+	 * detects it. Null follows the app: Portuguese while it speaks Portuguese, else
+	 * "auto" (`effectiveTranscriptionLanguage`).
+	 */
+	transcriptionLanguage: TranscriptLanguageCode | null;
+	/** Terms every transcription is told to expect, before the project's own (vocabulary.ts). */
+	transcriptionVocabulary: string;
+	/**
+	 * A take with voice and computer stems is transcribed from the voice stem alone. On, it is
+	 * transcribed from the mixed track, so a call's guest is in the transcript too, and each
+	 * word is labelled with who said it from the stems (`transcription/speakers.ts`).
+	 */
+	transcribeGuestAudio: boolean;
+	/** The user's own words, names and numbers the automatic blur also hides, one per line. */
+	autoRedactTerms: string;
+	/** "Limpar fala": hesitations always cut, one per line (`timeline/speechCleanup.ts`). */
+	speechFillers: string;
+	/** "Limpar fala": real words cut only when isolated or repeated, one per line. */
+	speechContextualFillers: string;
+	/** "Limpar fala": cut the contextual words wherever they appear. */
+	speechCleanupAggressive: boolean;
+	/** "Limpar fala": silences longer than this (seconds) are shortened. */
+	speechSilenceMinSec: number;
+	/** "Limpar fala": what a shortened silence keeps (seconds). */
+	speechSilenceKeepSec: number;
 }
 
 export const DEFAULT_PREFS: UserPreferences = {
@@ -64,7 +108,72 @@ export const DEFAULT_PREFS: UserPreferences = {
 	autoRedact: true,
 	glossary: DEFAULT_GLOSSARY,
 	autoZoomAfterRecording: "ask",
+	transcriptionModel: "auto",
+	transcriptionLanguage: null,
+	transcriptionVocabulary: DEFAULT_VOCABULARY,
+	transcribeGuestAudio: false,
+	autoRedactTerms: "",
+	speechFillers: formatFillerList(DEFAULT_SPEECH_FILLERS),
+	speechContextualFillers: formatFillerList(DEFAULT_CONTEXTUAL_FILLERS),
+	speechCleanupAggressive: false,
+	speechSilenceMinSec: DEFAULT_SILENCE_MIN_SEC,
+	speechSilenceKeepSec: DEFAULT_SILENCE_KEEP_SEC,
 };
+
+/** Bounds of the "Limpar fala" silence settings, shared by the loader and the inputs. */
+export const SPEECH_SILENCE_MIN_RANGE = { min: 0.3, max: 5 } as const;
+export const SPEECH_SILENCE_KEEP_RANGE = { min: 0, max: 1.5 } as const;
+
+function numberIn(value: unknown, range: { min: number; max: number }, fallback: number): number {
+	return typeof value === "number" &&
+		Number.isFinite(value) &&
+		value >= range.min &&
+		value <= range.max
+		? value
+		: fallback;
+}
+
+/** The app's language, as the I18n provider resolves it: the stored choice, else pt-BR. */
+function appLocale(): string {
+	try {
+		return localStorage.getItem(LOCALE_STORAGE_KEY) || DEFAULT_LOCALE;
+	} catch {
+		return DEFAULT_LOCALE;
+	}
+}
+
+/**
+ * The language transcriptions run in by default. Pinned to Portuguese while the app
+ * speaks it: detection runs on the first seconds alone, and a take that opens on a
+ * product name or a silence could come back as English. "auto" stays one choice away.
+ */
+export function effectiveTranscriptionLanguage(
+	prefs: Pick<UserPreferences, "transcriptionLanguage"> = loadUserPreferences(),
+	locale: string = appLocale(),
+): TranscriptLanguageCode {
+	if (prefs.transcriptionLanguage) return prefs.transcriptionLanguage;
+	return locale.toLowerCase().startsWith("pt") ? "pt" : "auto";
+}
+
+/** What "Limpar fala" looks for, as the preferences say. A kept gap never exceeds the threshold. */
+export function speechCleanupOptions(
+	prefs: Pick<
+		UserPreferences,
+		| "speechFillers"
+		| "speechContextualFillers"
+		| "speechCleanupAggressive"
+		| "speechSilenceMinSec"
+		| "speechSilenceKeepSec"
+	> = loadUserPreferences(),
+): SpeechCleanupOptions {
+	return {
+		fillers: parseFillerList(prefs.speechFillers),
+		contextual: parseFillerList(prefs.speechContextualFillers),
+		aggressive: prefs.speechCleanupAggressive,
+		silenceMinSec: prefs.speechSilenceMinSec,
+		keepGapSec: Math.min(prefs.speechSilenceKeepSec, prefs.speechSilenceMinSec),
+	};
+}
 
 /** Parses stored preferences without throwing on malformed JSON. */
 function safeJsonParse(text: string | null): Record<string, unknown> | null {
@@ -132,11 +241,53 @@ export function loadUserPreferences(): UserPreferences {
 				? raw.youtubeLoudness
 				: DEFAULT_PREFS.youtubeLoudness,
 		autoRedact: typeof raw.autoRedact === "boolean" ? raw.autoRedact : DEFAULT_PREFS.autoRedact,
-		glossary: typeof raw.glossary === "string" ? raw.glossary : DEFAULT_PREFS.glossary,
+		glossary:
+			typeof raw.glossary === "string"
+				? upgradeStoredGlossary(raw.glossary)
+				: DEFAULT_PREFS.glossary,
 		autoZoomAfterRecording:
 			raw.autoZoomAfterRecording === "transcript" || raw.autoZoomAfterRecording === "cursor"
 				? raw.autoZoomAfterRecording
 				: DEFAULT_PREFS.autoZoomAfterRecording,
+		transcriptionModel:
+			raw.transcriptionModel === "small" || raw.transcriptionModel === "large-v3-turbo"
+				? raw.transcriptionModel
+				: DEFAULT_PREFS.transcriptionModel,
+		transcriptionLanguage: (TRANSCRIPT_LANGUAGE_CODES as readonly unknown[]).includes(
+			raw.transcriptionLanguage,
+		)
+			? (raw.transcriptionLanguage as TranscriptLanguageCode)
+			: DEFAULT_PREFS.transcriptionLanguage,
+		transcriptionVocabulary:
+			typeof raw.transcriptionVocabulary === "string"
+				? raw.transcriptionVocabulary
+				: DEFAULT_PREFS.transcriptionVocabulary,
+		transcribeGuestAudio:
+			typeof raw.transcribeGuestAudio === "boolean"
+				? raw.transcribeGuestAudio
+				: DEFAULT_PREFS.transcribeGuestAudio,
+		autoRedactTerms:
+			typeof raw.autoRedactTerms === "string" ? raw.autoRedactTerms : DEFAULT_PREFS.autoRedactTerms,
+		speechFillers:
+			typeof raw.speechFillers === "string" ? raw.speechFillers : DEFAULT_PREFS.speechFillers,
+		speechContextualFillers:
+			typeof raw.speechContextualFillers === "string"
+				? raw.speechContextualFillers
+				: DEFAULT_PREFS.speechContextualFillers,
+		speechCleanupAggressive:
+			typeof raw.speechCleanupAggressive === "boolean"
+				? raw.speechCleanupAggressive
+				: DEFAULT_PREFS.speechCleanupAggressive,
+		speechSilenceMinSec: numberIn(
+			raw.speechSilenceMinSec,
+			SPEECH_SILENCE_MIN_RANGE,
+			DEFAULT_PREFS.speechSilenceMinSec,
+		),
+		speechSilenceKeepSec: numberIn(
+			raw.speechSilenceKeepSec,
+			SPEECH_SILENCE_KEEP_RANGE,
+			DEFAULT_PREFS.speechSilenceKeepSec,
+		),
 	};
 }
 
