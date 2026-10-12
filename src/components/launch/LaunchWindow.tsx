@@ -4,6 +4,7 @@ import { useI18n, useScopedT } from "@/contexts/I18nContext";
 import { getAvailableLocales, getLocaleName } from "@/i18n/loader";
 import { offersEditableCursor } from "@/lib/editableCursorAvailability";
 import { canTurnMicrophoneOn } from "@/lib/microphoneAvailability";
+import { sourceDisplayName } from "@/lib/sourceDisplayName";
 import { loadUserPreferences, saveUserPreferences } from "@/lib/userPreferences";
 import { nativeBridgeClient } from "@/native";
 import { canRecordMicrophone } from "@/utils/platformUtils";
@@ -1266,9 +1267,10 @@ export function LaunchWindow() {
 						{!portalOwnsSource && (
 							<HudSourceButton
 								vertical={isVertical}
-								label={
-									hasSelectedSource ? selectedSource : (rememberedSourceName ?? selectedSource)
-								}
+								label={sourceDisplayName(
+									hasSelectedSource ? selectedSource : (rememberedSourceName ?? selectedSource),
+									tCommon,
+								)}
 								tooltip={
 									hasSelectedSource || rememberedSourceName !== null
 										? t("tooltips.changeSource")

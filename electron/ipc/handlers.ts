@@ -2159,7 +2159,7 @@ export async function exportDiagnosticFile(payload: {
 	logs: string[];
 }) {
 	const { filePath, canceled } = await dialog.showSaveDialog({
-		title: "Save Diagnostic File",
+		title: mainT("dialogs", "fileDialogs.saveDiagnostics"),
 		defaultPath: `openscreen-diagnostic-${Date.now()}.json`,
 		filters: [{ name: "JSON", extensions: ["json"] }],
 	});
@@ -3220,7 +3220,9 @@ export function registerIpcHandlers(
 					return {
 						success: false,
 						errorCode: "disk-space-critical",
-						error: `Not enough free disk space to record (${Math.round(freeSpace.freeBytes / 1024 / 1024)} MB free).`,
+						error: mainT("dialogs", "recording.lowDiskSpace", {
+							availableMb: Math.round(freeSpace.freeBytes / 1024 / 1024),
+						}),
 					};
 				}
 

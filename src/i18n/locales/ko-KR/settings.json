@@ -260,7 +260,13 @@
 	"gifSettings": {
 		"frameRate": "GIF 프레임 속도",
 		"loop": "GIF 반복",
-		"size": "GIF 크기"
+		"size": "GIF 크기",
+		"sizes": {
+			"small": "Small (480p)",
+			"medium": "Medium (720p)",
+			"large": "Large (1080p)",
+			"original": "Original"
+		}
 	},
 	"exportQuality": {
 		"title": "내보내기 해상도",

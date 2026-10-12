@@ -40,7 +40,8 @@
 	"audio": {
 		"systemAudio": "Systémový zvuk",
 		"microphone": "Mikrofon",
-		"inputDevice": "Vstupní zařízení"
+		"inputDevice": "Vstupní zařízení",
+		"unlabeledMicrophone": "Microphone {{id}}"
 	},
 	"webcam": {
 		"searching": "Hledání...",
@@ -51,7 +52,8 @@
 		"quality": "Kvalita kamery",
 		"quality1080p": "1080p",
 		"quality1440p": "1440p",
-		"quality2160p": "4K"
+		"quality2160p": "4K",
+		"unlabeledCamera": "Camera {{id}}"
 	},
 	"cursor": {
 		"name": "Upravitelný kurzor",

@@ -73,6 +73,12 @@
 		"window": "Ventana",
 		"screen": "Pantalla",
 		"virtual": "Pantalla virtual",
-		"unknown": "Grabación de pantalla"
+		"unknown": "Grabación de pantalla",
+		"screenNumber": "Screen {{number}}",
+		"entireScreen": "Entire Screen"
+	},
+	"notifications": "Notifications",
+	"windowTitles": {
+		"notes": "Notes"
 	}
 }

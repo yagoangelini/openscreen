@@ -44,5 +44,6 @@
 		"zoomTimeline": "Zaman Çizelgesini Yakınlaştır",
 		"frameBack": "Önceki Kare",
 		"frameForward": "Sonraki Kare"
-	}
+	},
+	"scrollKey": "Scroll"
 }

@@ -40,7 +40,8 @@
 	"audio": {
 		"systemAudio": "Sistem sesi",
 		"microphone": "Mikrofon",
-		"inputDevice": "Giriş cihazı"
+		"inputDevice": "Giriş cihazı",
+		"unlabeledMicrophone": "Microphone {{id}}"
 	},
 	"webcam": {
 		"searching": "Aranıyor...",
@@ -51,7 +52,8 @@
 		"quality": "Kamera kalitesi",
 		"quality1080p": "1080p",
 		"quality1440p": "1440p",
-		"quality2160p": "4K"
+		"quality2160p": "4K",
+		"unlabeledCamera": "Camera {{id}}"
 	},
 	"cursor": {
 		"name": "Düzenlenebilir imleç",

@@ -2,13 +2,13 @@
 	"tooltips": {
 		"hideHUD": "Ocultar HUD",
 		"hideHUDTip": "Ocultar a barra. Mostre-a de novo pela barra de tarefas ou pelo ícone da bandeja do sistema.",
-		"closeApp": "Fechar App",
+		"closeApp": "Fechar app",
 		"restartRecording": "Excluir esta gravação e iniciar uma nova",
 		"cancelRecording": "Parar e excluir esta gravação",
 		"pauseRecording": "Pausar gravação",
 		"resumeRecording": "Retomar gravação",
-		"useVerticalTray": "Usar bandeja vertical",
-		"useHorizontalTray": "Usar bandeja horizontal",
+		"useVerticalTray": "Usar barra vertical",
+		"useHorizontalTray": "Usar barra horizontal",
 		"changeSource": "Escolher outra tela ou janela",
 		"systemAudio": "Áudio do sistema: grava o som reproduzido pelo computador",
 		"microphone": "Microfone: grava sua voz",
@@ -40,7 +40,8 @@
 	"audio": {
 		"systemAudio": "Áudio do sistema",
 		"microphone": "Microfone",
-		"inputDevice": "Dispositivo de entrada"
+		"inputDevice": "Dispositivo de entrada",
+		"unlabeledMicrophone": "Microfone {{id}}"
 	},
 	"webcam": {
 		"searching": "Procurando...",
@@ -51,7 +52,8 @@
 		"quality": "Qualidade da câmera",
 		"quality1080p": "1080p",
 		"quality1440p": "1440p",
-		"quality2160p": "4K"
+		"quality2160p": "4K",
+		"unlabeledCamera": "Câmera {{id}}"
 	},
 	"cursor": {
 		"name": "Cursor editável",
@@ -112,7 +114,7 @@
 		"micChannelAuto": "Auto",
 		"micChannelLeft": "Esq.",
 		"micChannelRight": "Dir.",
-		"micChannelMix": "Mix",
+		"micChannelMix": "Mixar",
 		"broadcastTip": "Dica: escolha o microfone \"NVIDIA Broadcast\" para remover o ruído de fundo."
 	},
 	"permissions": {

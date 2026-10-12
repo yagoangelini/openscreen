@@ -57,7 +57,11 @@
 		"audioDeviceLostMicrophone": "Mikrofon kayıt sırasında bağlantıyı kaybetti ve geri gelmedi: kaydın geri kalanında ses yok.",
 		"audioDeviceLostSystemAudio": "Sistem ses aygıtı kayıt sırasında bağlantıyı kaybetti ve geri gelmedi: kaydın geri kalanında bilgisayar sesi yok.",
 		"audioDeviceBackMicrophone": "Mikrofonun bağlantısı kesildi ve geri geldi: kaydın yaklaşık {{seconds}} sn'si sessiz.",
-		"audioDeviceBackSystemAudio": "Sistem ses aygıtının bağlantısı kesildi ve geri geldi: kaydın yaklaşık {{seconds}} sn'sinde bilgisayar sesi yok."
+		"audioDeviceBackSystemAudio": "Sistem ses aygıtının bağlantısı kesildi ve geri geldi: kaydın yaklaşık {{seconds}} sn'sinde bilgisayar sesi yok.",
+		"stopFailed": "Couldn't save the recording",
+		"webcamNotSaved": "Camera not saved. The screen recording was kept.",
+		"pauseFailed": "Couldn't pause or resume the recording",
+		"startFailed": "Couldn't start the recording"
 	},
 	"loadingVideo": "Video yükleniyor...",
 	"loadingEditor": "Editör yükleniyor...",
@@ -249,7 +253,8 @@
 		"confirmCloseTitle": "Dışa aktarma iptal edilsin mi?",
 		"confirmCloseBody": "Kapatmak dışa aktarmayı durdurur ve video kaydedilmez.",
 		"keepExporting": "Dışa aktarmaya devam et",
-		"cancelAndClose": "İptal et ve kapat"
+		"cancelAndClose": "İptal et ve kapat",
+		"cancelFailed": "Couldn't cancel the export"
 	},
 	"inspector": {
 		"resetFocusPoint": "Odak noktasını sıfırla",
@@ -406,7 +411,8 @@
 			"description": "Video çözümlenemedi. Dosya bozulmuş, hâlâ yazılıyor ya da projenin beklediği yerde olmayabilir — projeniz olduğu gibi duruyor.",
 			"retry": "Yeniden dene",
 			"detail": "Ayrıntılar: {{detail}}"
-		}
+		},
+		"attachVideo": "Attach a video to start previewing."
 	},
 	"annotationOverlay": {
 		"imageAlt": "Açıklama",
@@ -441,7 +447,16 @@
 		"disconnect": "Bağlantıyı kes",
 		"cancel": "İptal",
 		"save": "Kaydet",
-		"saveAndUse": "Kaydet ve kullan"
+		"saveAndUse": "Kaydet ve kullan",
+		"effort": {
+			"none": "None",
+			"minimal": "Minimal",
+			"low": "Low",
+			"medium": "Medium",
+			"high": "High",
+			"xhigh": "Extra high",
+			"on": "On"
+		}
 	},
 	"mcpServer": {
 		"title": "MCP sunucusu",
@@ -488,7 +503,9 @@
 		"cameraCheckFailed": "Could not check for a camera recording near {{name}}",
 		"sensitiveBlurred": "Otomatik bulanıklaştırılan hassas alanlar: {{count}}. Zaman çizelgesinde kontrol edin.",
 		"sensitiveScanFailed": "Otomatik bulanıklaştırma bu kayıtta çalışmadı, ekranda hiçbir şey bulanıklaştırılmadı.",
-		"sensitiveScanPartial": "Otomatik bulanıklaştırma bu kaydı yalnızca {{covered}} anına kadar kontrol etti. Gerisini elle kontrol edin."
+		"sensitiveScanPartial": "Otomatik bulanıklaştırma bu kaydı yalnızca {{covered}} anına kadar kontrol etti. Gerisini elle kontrol edin.",
+		"projectOpened": "Project opened",
+		"legacyProjectOpened": "Legacy project migrated and loaded"
 	},
 	"exportPipeline": {
 		"quality1440p": "1440p",
@@ -560,5 +577,10 @@
 		"save": "Altyazıları kaydet (.srt)",
 		"saved": "Altyazılar kaydedildi: {{path}}",
 		"failed": "Altyazılar kaydedilemedi"
+	},
+	"projectNames": {
+		"recording": "Recording {{date}}",
+		"project": "Project {{date}}",
+		"asset": "Recording"
 	}
 }

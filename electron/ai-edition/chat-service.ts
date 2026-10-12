@@ -21,6 +21,7 @@ import type {
 	AiEditionChatResult,
 	AiEditionToolCallSummary,
 } from "../../src/native/contracts";
+import { mainT } from "../i18n";
 import {
 	applyCompaction,
 	budgetSnapshot,
@@ -228,7 +229,7 @@ function getProjectSessions(projectId: string): Map<string, ChatSession> {
 }
 
 function defaultSessionTitle(index: number): string {
-	return `Conversation ${index}`;
+	return mainT("dialogs", "ai.conversationTitle", { index });
 }
 
 export function listSessions(projectId: string): ChatSessionSummary[] {
@@ -353,7 +354,7 @@ export async function runChat(
 	if (!config) {
 		return {
 			success: false,
-			error: "No LLM provider configured. Open Settings → AI to configure.",
+			error: mainT("dialogs", "ai.noProvider"),
 		};
 	}
 
@@ -367,7 +368,7 @@ export async function runChat(
 	if (!apiKey && def.authKind === "api-key") {
 		return {
 			success: false,
-			error: `No API key for ${def.label}. Add one in Settings → AI.`,
+			error: mainT("dialogs", "ai.noApiKey", { provider: def.label }),
 		};
 	}
 

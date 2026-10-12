@@ -65,7 +65,11 @@
 		"audioDeviceLostMicrophone": "Микрофон отключился во время записи и не вернулся: остаток дубля без голоса.",
 		"audioDeviceLostSystemAudio": "Системное аудиоустройство отключилось во время записи и не вернулось: остаток дубля без звука компьютера.",
 		"audioDeviceBackMicrophone": "Микрофон отключился и вернулся: около {{seconds}} с дубля без голоса.",
-		"audioDeviceBackSystemAudio": "Системное аудиоустройство отключилось и вернулось: около {{seconds}} с дубля без звука компьютера."
+		"audioDeviceBackSystemAudio": "Системное аудиоустройство отключилось и вернулось: около {{seconds}} с дубля без звука компьютера.",
+		"stopFailed": "Couldn't save the recording",
+		"webcamNotSaved": "Camera not saved. The screen recording was kept.",
+		"pauseFailed": "Couldn't pause or resume the recording",
+		"startFailed": "Couldn't start the recording"
 	},
 	"emptyState": {
 		"title": "Нет открытых проектов",
@@ -249,7 +253,8 @@
 		"confirmCloseTitle": "Отменить экспорт?",
 		"confirmCloseBody": "Если закрыть, экспорт остановится и видео не сохранится.",
 		"keepExporting": "Продолжить экспорт",
-		"cancelAndClose": "Отменить и закрыть"
+		"cancelAndClose": "Отменить и закрыть",
+		"cancelFailed": "Couldn't cancel the export"
 	},
 	"inspector": {
 		"resetFocusPoint": "Сбросить точку фокуса",
@@ -406,7 +411,8 @@
 			"description": "Не удалось декодировать видео. Файл может быть повреждён, ещё записываться или больше не находиться там, где его ожидает проект — сам проект не пострадал.",
 			"retry": "Повторить",
 			"detail": "Подробности: {{detail}}"
-		}
+		},
+		"attachVideo": "Attach a video to start previewing."
 	},
 	"annotationOverlay": {
 		"imageAlt": "Аннотация",
@@ -441,7 +447,16 @@
 		"disconnect": "Отключить",
 		"cancel": "Отмена",
 		"save": "Сохранить",
-		"saveAndUse": "Сохранить и использовать"
+		"saveAndUse": "Сохранить и использовать",
+		"effort": {
+			"none": "None",
+			"minimal": "Minimal",
+			"low": "Low",
+			"medium": "Medium",
+			"high": "High",
+			"xhigh": "Extra high",
+			"on": "On"
+		}
 	},
 	"mcpServer": {
 		"title": "MCP-сервер",
@@ -488,7 +503,9 @@
 		"cameraCheckFailed": "Could not check for a camera recording near {{name}}",
 		"sensitiveBlurred": "Автоматически размыто областей: {{count}}. Проверьте их на шкале времени.",
 		"sensitiveScanFailed": "Автоматическое размытие не запустилось для этой записи: ничего на экране не размыто.",
-		"sensitiveScanPartial": "Автоматическое размытие проверило эту запись только до {{covered}}. Остальное проверьте вручную."
+		"sensitiveScanPartial": "Автоматическое размытие проверило эту запись только до {{covered}}. Остальное проверьте вручную.",
+		"projectOpened": "Project opened",
+		"legacyProjectOpened": "Legacy project migrated and loaded"
 	},
 	"exportPipeline": {
 		"quality1440p": "1440p",
@@ -560,5 +577,10 @@
 		"save": "Сохранить субтитры (.srt)",
 		"saved": "Субтитры сохранены: {{path}}",
 		"failed": "Не удалось сохранить субтитры"
+	},
+	"projectNames": {
+		"recording": "Recording {{date}}",
+		"project": "Project {{date}}",
+		"asset": "Recording"
 	}
 }

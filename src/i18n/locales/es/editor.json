@@ -57,7 +57,11 @@
 		"audioDeviceLostMicrophone": "El micrófono se desconectó durante la grabación y no volvió: el resto de la toma no tiene voz.",
 		"audioDeviceLostSystemAudio": "El dispositivo de audio del sistema se desconectó durante la grabación y no volvió: el resto de la toma no tiene el sonido del equipo.",
 		"audioDeviceBackMicrophone": "El micrófono se desconectó y volvió: unos {{seconds}} s de la toma no tienen voz.",
-		"audioDeviceBackSystemAudio": "El dispositivo de audio del sistema se desconectó y volvió: unos {{seconds}} s de la toma no tienen el sonido del equipo."
+		"audioDeviceBackSystemAudio": "El dispositivo de audio del sistema se desconectó y volvió: unos {{seconds}} s de la toma no tienen el sonido del equipo.",
+		"stopFailed": "Couldn't save the recording",
+		"webcamNotSaved": "Camera not saved. The screen recording was kept.",
+		"pauseFailed": "Couldn't pause or resume the recording",
+		"startFailed": "Couldn't start the recording"
 	},
 	"loadingVideo": "Cargando video...",
 	"loadingEditor": "Cargando editor...",
@@ -249,7 +253,8 @@
 		"confirmCloseTitle": "¿Cancelar la exportación?",
 		"confirmCloseBody": "Cerrar detiene la exportación y el vídeo no se guardará.",
 		"keepExporting": "Seguir exportando",
-		"cancelAndClose": "Cancelar y cerrar"
+		"cancelAndClose": "Cancelar y cerrar",
+		"cancelFailed": "Couldn't cancel the export"
 	},
 	"inspector": {
 		"resetFocusPoint": "Restablecer punto de enfoque",
@@ -406,7 +411,8 @@
 			"description": "No se pudo decodificar el vídeo. El archivo puede estar dañado, aún escribiéndose, o ya no estar donde el proyecto lo espera; tu proyecto está intacto.",
 			"retry": "Reintentar",
 			"detail": "Detalles: {{detail}}"
-		}
+		},
+		"attachVideo": "Attach a video to start previewing."
 	},
 	"annotationOverlay": {
 		"imageAlt": "Anotación",
@@ -441,7 +447,16 @@
 		"disconnect": "Desconectar",
 		"cancel": "Cancelar",
 		"save": "Guardar",
-		"saveAndUse": "Guardar y usar"
+		"saveAndUse": "Guardar y usar",
+		"effort": {
+			"none": "None",
+			"minimal": "Minimal",
+			"low": "Low",
+			"medium": "Medium",
+			"high": "High",
+			"xhigh": "Extra high",
+			"on": "On"
+		}
 	},
 	"mcpServer": {
 		"title": "Servidor MCP",
@@ -488,7 +503,9 @@
 		"cameraCheckFailed": "No se pudo buscar una grabación de cámara junto a {{name}}",
 		"sensitiveBlurred": "Áreas sensibles difuminadas automáticamente: {{count}}. Revísalas en la línea de tiempo.",
 		"sensitiveScanFailed": "El difuminado automático no se ejecutó en esta grabación: no se difuminó nada de la pantalla.",
-		"sensitiveScanPartial": "El difuminado automático solo revisó esta grabación hasta {{covered}}. Revisa el resto a mano."
+		"sensitiveScanPartial": "El difuminado automático solo revisó esta grabación hasta {{covered}}. Revisa el resto a mano.",
+		"projectOpened": "Project opened",
+		"legacyProjectOpened": "Legacy project migrated and loaded"
 	},
 	"exportPipeline": {
 		"quality1440p": "1440p",
@@ -560,5 +577,10 @@
 		"save": "Guardar subtítulos (.srt)",
 		"saved": "Subtítulos guardados: {{path}}",
 		"failed": "No se pudieron guardar los subtítulos"
+	},
+	"projectNames": {
+		"recording": "Recording {{date}}",
+		"project": "Project {{date}}",
+		"asset": "Recording"
 	}
 }

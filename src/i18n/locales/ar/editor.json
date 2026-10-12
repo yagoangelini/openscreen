@@ -65,7 +65,11 @@
 		"audioDeviceLostMicrophone": "انقطع الميكروفون أثناء التسجيل ولم يعد: بقية اللقطة بلا صوت.",
 		"audioDeviceLostSystemAudio": "انقطع جهاز صوت النظام أثناء التسجيل ولم يعد: بقية اللقطة بلا صوت الكمبيوتر.",
 		"audioDeviceBackMicrophone": "انقطع الميكروفون ثم عاد: نحو {{seconds}} ث من اللقطة بلا صوت.",
-		"audioDeviceBackSystemAudio": "انقطع جهاز صوت النظام ثم عاد: نحو {{seconds}} ث من اللقطة بلا صوت الكمبيوتر."
+		"audioDeviceBackSystemAudio": "انقطع جهاز صوت النظام ثم عاد: نحو {{seconds}} ث من اللقطة بلا صوت الكمبيوتر.",
+		"stopFailed": "Couldn't save the recording",
+		"webcamNotSaved": "Camera not saved. The screen recording was kept.",
+		"pauseFailed": "Couldn't pause or resume the recording",
+		"startFailed": "Couldn't start the recording"
 	},
 	"emptyState": {
 		"title": "لا يوجد مشروع مفتوح",
@@ -249,7 +253,8 @@
 		"confirmCloseTitle": "إلغاء التصدير؟",
 		"confirmCloseBody": "الإغلاق يوقف التصدير ولن يُحفظ الفيديو.",
 		"keepExporting": "متابعة التصدير",
-		"cancelAndClose": "إلغاء وإغلاق"
+		"cancelAndClose": "إلغاء وإغلاق",
+		"cancelFailed": "Couldn't cancel the export"
 	},
 	"inspector": {
 		"resetFocusPoint": "إعادة تعيين نقطة التركيز",
@@ -406,7 +411,8 @@
 			"description": "تعذّر فك ترميز الفيديو. قد يكون الملف تالفًا، أو ما زال قيد الكتابة، أو لم يعد في المكان الذي يتوقعه المشروع — مشروعك نفسه سليم.",
 			"retry": "إعادة المحاولة",
 			"detail": "التفاصيل: {{detail}}"
-		}
+		},
+		"attachVideo": "Attach a video to start previewing."
 	},
 	"annotationOverlay": {
 		"imageAlt": "تعليق توضيحي",
@@ -441,7 +447,16 @@
 		"disconnect": "قطع الاتصال",
 		"cancel": "إلغاء",
 		"save": "حفظ",
-		"saveAndUse": "حفظ واستخدام"
+		"saveAndUse": "حفظ واستخدام",
+		"effort": {
+			"none": "None",
+			"minimal": "Minimal",
+			"low": "Low",
+			"medium": "Medium",
+			"high": "High",
+			"xhigh": "Extra high",
+			"on": "On"
+		}
 	},
 	"mcpServer": {
 		"title": "خادم MCP",
@@ -488,7 +503,9 @@
 		"cameraCheckFailed": "Could not check for a camera recording near {{name}}",
 		"sensitiveBlurred": "المناطق الحساسة التي مُوِّهت تلقائيًا: {{count}}. راجعها على المخطط الزمني.",
 		"sensitiveScanFailed": "لم يعمل التمويه التلقائي على هذا التسجيل، لذا لم يُموَّه أي شيء على الشاشة.",
-		"sensitiveScanPartial": "فحص التمويه التلقائي هذا التسجيل حتى {{covered}} فقط. راجع الباقي يدويًا."
+		"sensitiveScanPartial": "فحص التمويه التلقائي هذا التسجيل حتى {{covered}} فقط. راجع الباقي يدويًا.",
+		"projectOpened": "Project opened",
+		"legacyProjectOpened": "Legacy project migrated and loaded"
 	},
 	"exportPipeline": {
 		"quality1440p": "1440p",
@@ -560,5 +577,10 @@
 		"save": "حفظ الترجمة (.srt)",
 		"saved": "تم حفظ الترجمة: {{path}}",
 		"failed": "تعذّر حفظ الترجمة"
+	},
+	"projectNames": {
+		"recording": "Recording {{date}}",
+		"project": "Project {{date}}",
+		"asset": "Recording"
 	}
 }

@@ -65,7 +65,11 @@
 		"audioDeviceLostMicrophone": "錄製期間麥克風中斷且未恢復：之後的內容沒有人聲。",
 		"audioDeviceLostSystemAudio": "錄製期間系統音訊裝置中斷且未恢復：之後的內容沒有電腦聲音。",
 		"audioDeviceBackMicrophone": "麥克風中斷後已恢復：約 {{seconds}} 秒沒有人聲。",
-		"audioDeviceBackSystemAudio": "系統音訊裝置中斷後已恢復：約 {{seconds}} 秒沒有電腦聲音。"
+		"audioDeviceBackSystemAudio": "系統音訊裝置中斷後已恢復：約 {{seconds}} 秒沒有電腦聲音。",
+		"stopFailed": "Couldn't save the recording",
+		"webcamNotSaved": "Camera not saved. The screen recording was kept.",
+		"pauseFailed": "Couldn't pause or resume the recording",
+		"startFailed": "Couldn't start the recording"
 	},
 	"emptyState": {
 		"title": "未開啟任何專案",
@@ -249,7 +253,8 @@
 		"confirmCloseTitle": "取消匯出？",
 		"confirmCloseBody": "關閉會停止匯出，影片不會被儲存。",
 		"keepExporting": "繼續匯出",
-		"cancelAndClose": "取消並關閉"
+		"cancelAndClose": "取消並關閉",
+		"cancelFailed": "Couldn't cancel the export"
 	},
 	"inspector": {
 		"resetFocusPoint": "重設焦點",
@@ -406,7 +411,8 @@
 			"description": "無法解碼此影片。檔案可能已損毀、仍在寫入中，或已不在專案預期的位置——你的專案本身完好無缺。",
 			"retry": "重試",
 			"detail": "詳細資訊：{{detail}}"
-		}
+		},
+		"attachVideo": "Attach a video to start previewing."
 	},
 	"annotationOverlay": {
 		"imageAlt": "註解",
@@ -441,7 +447,16 @@
 		"disconnect": "中斷連線",
 		"cancel": "取消",
 		"save": "儲存",
-		"saveAndUse": "儲存並使用"
+		"saveAndUse": "儲存並使用",
+		"effort": {
+			"none": "None",
+			"minimal": "Minimal",
+			"low": "Low",
+			"medium": "Medium",
+			"high": "High",
+			"xhigh": "Extra high",
+			"on": "On"
+		}
 	},
 	"mcpServer": {
 		"title": "MCP 伺服器",
@@ -488,7 +503,9 @@
 		"cameraCheckFailed": "Could not check for a camera recording near {{name}}",
 		"sensitiveBlurred": "已自動模糊的敏感區域：{{count}}。請在時間軸上檢查。",
 		"sensitiveScanFailed": "此錄製未執行自動模糊，因此畫面上沒有任何內容被模糊。",
-		"sensitiveScanPartial": "自動模糊只檢查到此錄製的 {{covered}}。請手動檢查其餘部分。"
+		"sensitiveScanPartial": "自動模糊只檢查到此錄製的 {{covered}}。請手動檢查其餘部分。",
+		"projectOpened": "Project opened",
+		"legacyProjectOpened": "Legacy project migrated and loaded"
 	},
 	"exportPipeline": {
 		"quality1440p": "1440p",
@@ -560,5 +577,10 @@
 		"save": "儲存字幕 (.srt)",
 		"saved": "字幕已儲存：{{path}}",
 		"failed": "無法儲存字幕"
+	},
+	"projectNames": {
+		"recording": "Recording {{date}}",
+		"project": "Project {{date}}",
+		"asset": "Recording"
 	}
 }

@@ -34,6 +34,7 @@ import {
 	probeMiniMaxModels,
 } from "../../ai-edition/llm-provider-auth";
 import { PROVIDER_DEFINITIONS } from "../../ai-edition/provider-registry";
+import { mainT } from "../../i18n";
 import type { McpController } from "../../mcp/mcp-controller";
 
 export interface AiEditionServiceOptions {
@@ -404,7 +405,7 @@ export class AiEditionService {
 			return {
 				success: false,
 				titles: {},
-				error: "No AI provider is configured. Connect one in the agent settings first.",
+				error: mainT("dialogs", "ai.noProvider"),
 			};
 		}
 		const def = PROVIDER_DEFINITIONS.find((d) => d.id === config.provider);
@@ -431,7 +432,7 @@ export class AiEditionService {
 			return {
 				success: false,
 				segments: {},
-				error: "No AI provider is configured. Connect one in the agent settings first.",
+				error: mainT("dialogs", "ai.noProvider"),
 			};
 		}
 		const def = PROVIDER_DEFINITIONS.find((d) => d.id === config.provider);

@@ -40,7 +40,8 @@
 	"audio": {
 		"systemAudio": "System audio",
 		"microphone": "Microphone",
-		"inputDevice": "Input device"
+		"inputDevice": "Input device",
+		"unlabeledMicrophone": "Microphone {{id}}"
 	},
 	"webcam": {
 		"searching": "Searching...",
@@ -51,7 +52,8 @@
 		"quality": "Camera quality",
 		"quality1080p": "1080p",
 		"quality1440p": "1440p",
-		"quality2160p": "4K"
+		"quality2160p": "4K",
+		"unlabeledCamera": "Camera {{id}}"
 	},
 	"cursor": {
 		"name": "Editable cursor",

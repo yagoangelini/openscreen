@@ -1,5 +1,11 @@
 import i18next, { type Resource } from "i18next";
-import { DEFAULT_LOCALE, I18N_NAMESPACES, type I18nNamespace, type Locale } from "./config";
+import {
+	DEFAULT_LOCALE,
+	FALLBACK_LOCALE,
+	I18N_NAMESPACES,
+	type I18nNamespace,
+	type Locale,
+} from "./config";
 
 const modules = import.meta.glob("./locales/**/*.json", {
 	eager: true,
@@ -35,7 +41,7 @@ const resources = Object.fromEntries(
 // stored preference is applied by I18nContext, which guards its access.
 await i18next.init({
 	lng: DEFAULT_LOCALE,
-	fallbackLng: DEFAULT_LOCALE,
+	fallbackLng: FALLBACK_LOCALE,
 	defaultNS: "common",
 	resources,
 	interpolation: { escapeValue: false },

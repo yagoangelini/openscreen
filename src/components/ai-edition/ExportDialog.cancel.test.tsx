@@ -216,7 +216,9 @@ describe("export cancellation", () => {
 		await start();
 		fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
 		await waitFor(() => expect(screen.getByText("cancel ipc failed")).toBeVisible());
-		expect(toast.error).toHaveBeenCalledWith("cancel ipc failed");
+		expect(toast.error).toHaveBeenCalledWith("Couldn't cancel the export", {
+			description: "cancel ipc failed",
+		});
 		expect(toast.success).not.toHaveBeenCalled();
 		expect(screen.queryByText(/Exporting your video/i)).not.toBeInTheDocument();
 	});

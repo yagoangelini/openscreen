@@ -36,7 +36,8 @@
 		"marker": "{{time}} 处的标记",
 		"cameraTrack": "摄像头",
 		"cameraPip": "画中画",
-		"cameraHidden": "无摄像头"
+		"cameraHidden": "无摄像头",
+		"scrollKey": "Scroll"
 	},
 	"trails": {
 		"zoomIn": "放大过程：画面在缩放开始前逐渐放大",

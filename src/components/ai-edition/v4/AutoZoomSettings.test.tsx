@@ -6,6 +6,7 @@ import "@testing-library/jest-dom";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { I18nProvider } from "@/contexts/I18nContext";
+import { LOCALE_STORAGE_KEY } from "@/i18n/config";
 import { createEmptyDocument } from "@/lib/ai-edition/schema";
 import { getEditorSettings } from "@/lib/ai-edition/store/editorSettings";
 import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
@@ -16,6 +17,8 @@ vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn(), info: vi.f
 
 beforeEach(() => {
 	localStorage.clear();
+	// The app starts in pt-BR; these assertions read the English copy.
+	localStorage.setItem(LOCALE_STORAGE_KEY, "en");
 	const base = createEmptyDocument({ title: "T", projectId: "p1" });
 	useProjectStore.setState({
 		document: {

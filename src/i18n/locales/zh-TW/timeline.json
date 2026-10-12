@@ -36,7 +36,8 @@
 		"marker": "{{time}} 的標記",
 		"cameraTrack": "攝影機",
 		"cameraPip": "子母畫面",
-		"cameraHidden": "無攝影機"
+		"cameraHidden": "無攝影機",
+		"scrollKey": "Scroll"
 	},
 	"trails": {
 		"zoomIn": "放大過程：畫面在縮放開始前逐漸放大",

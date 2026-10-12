@@ -69,7 +69,9 @@ const messages: Record<Locale, Record<Namespace, MessageMap>> = {
 	"zh-TW": { common: commonZhTw, dialogs: dialogsZhTw },
 };
 
-let currentLocale: Locale = "en";
+// pt-BR is the fork's native language: menus, tray and dialogs speak it from the first
+// frame, before a renderer reports the user's stored choice through `set-locale`.
+let currentLocale: Locale = "pt-BR";
 
 export function setMainLocale(locale: string) {
 	if (

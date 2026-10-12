@@ -24,7 +24,7 @@ import { useScopedT } from "@/contexts/I18nContext";
 import { nativeBridgeClient } from "@/native/client";
 import type { AiEditionLlmConfig, AiEditionLlmSnapshot } from "@/native/contracts";
 import {
-	getReasoningEffortLabel,
+	getReasoningEffortLabelKey,
 	getReasoningEffortOptions,
 	PROVIDER_DEFINITIONS,
 	type ProviderDefinition,
@@ -476,7 +476,7 @@ function ProviderForm({
 					>
 						{getReasoningEffortOptions(def.id).map((r) => (
 							<option key={r} value={r}>
-								{getReasoningEffortLabel(def.id, r)}
+								{te(`providerSettings.effort.${getReasoningEffortLabelKey(def.id, r)}`)}
 							</option>
 						))}
 					</select>

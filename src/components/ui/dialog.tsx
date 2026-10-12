@@ -2,6 +2,7 @@ import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
 import * as React from "react";
 
+import { toastText } from "@/i18n/toastText";
 import { cn } from "@/lib/utils";
 
 const Dialog = DialogPrimitive.Root;
@@ -50,7 +51,7 @@ const DialogContent = React.forwardRef<
 			{/* A 32px target, not the bare 16px glyph: every dialog shares this one control. */}
 			<DialogPrimitive.Close className="absolute right-3 top-3 grid h-8 w-8 place-items-center rounded-[10px] text-[var(--muted)] transition-colors hover:bg-[var(--surface-2)] hover:text-[var(--fg)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-ring)] disabled:pointer-events-none">
 				<X className="h-4 w-4" />
-				<span className="sr-only">Close</span>
+				<span className="sr-only">{toastText("common", "actions.close")}</span>
 			</DialogPrimitive.Close>
 		</DialogPrimitive.Content>
 	</DialogPortal>

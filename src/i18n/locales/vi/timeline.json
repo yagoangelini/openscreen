@@ -36,7 +36,8 @@
 		"marker": "Điểm đánh dấu tại {{time}}",
 		"cameraTrack": "Camera",
 		"cameraPip": "PiP",
-		"cameraHidden": "Không camera"
+		"cameraHidden": "Không camera",
+		"scrollKey": "Scroll"
 	},
 	"trails": {
 		"zoomIn": "Phóng to: khung hình phóng to dần cho đến khi bắt đầu thu phóng",

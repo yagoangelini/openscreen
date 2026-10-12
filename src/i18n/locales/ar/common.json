@@ -73,6 +73,12 @@
 		"window": "نافذة",
 		"screen": "شاشة",
 		"virtual": "شاشة افتراضية",
-		"unknown": "تسجيل الشاشة"
+		"unknown": "تسجيل الشاشة",
+		"screenNumber": "Screen {{number}}",
+		"entireScreen": "Entire Screen"
+	},
+	"notifications": "Notifications",
+	"windowTitles": {
+		"notes": "Notes"
 	}
 }

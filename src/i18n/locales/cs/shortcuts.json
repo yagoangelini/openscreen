@@ -44,5 +44,6 @@
 		"zoomTimeline": "Přiblížit časovou osu",
 		"frameBack": "Snímek zpět",
 		"frameForward": "Snímek dopředu"
-	}
+	},
+	"scrollKey": "Scroll"
 }

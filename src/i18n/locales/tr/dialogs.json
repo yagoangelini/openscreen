@@ -89,7 +89,8 @@
 		"openscreenProject": "OpenScreen Projesi",
 		"allFiles": "Tüm Dosyalar",
 		"chooseRecordingsFolder": "Yeni kayıtlar için klasör seçin",
-		"selectRecordingsFolder": "Kayıt klasörünü seç"
+		"selectRecordingsFolder": "Kayıt klasörünü seç",
+		"saveDiagnostics": "Save Diagnostic File"
 	},
 	"recovery": {
 		"title": "Kaydı kurtar",
@@ -116,5 +117,10 @@
 		"message": "A recording is in progress. Stop it now and open it in the editor?",
 		"stopAndOpen": "Stop and open in the editor",
 		"keepRecording": "Keep recording"
+	},
+	"ai": {
+		"noProvider": "No AI provider is configured. Connect one in the agent settings first.",
+		"noApiKey": "No API key for {{provider}}. Add one in the agent settings.",
+		"conversationTitle": "Conversation {{index}}"
 	}
 }

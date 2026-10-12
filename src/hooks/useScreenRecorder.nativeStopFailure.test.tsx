@@ -98,9 +98,9 @@ describe("useScreenRecorder native Windows stop failure", () => {
 		await pressStop(view);
 
 		expect(view.result.current.recording).toBe(false);
-		expect(toast.error).toHaveBeenCalledWith(
-			"Timed out waiting for native Windows capture to stop.",
-		);
+		expect(toast.error).toHaveBeenCalledWith("recording.stopFailed", {
+			description: "Timed out waiting for native Windows capture to stop.",
+		});
 		expect(view.result.current.saving).toBe(false);
 		// The failure must not be mistaken for a successful recording.
 		expect(api.switchToEditor).not.toHaveBeenCalled();
@@ -121,7 +121,9 @@ describe("useScreenRecorder native Windows stop failure", () => {
 		await pressStop(view);
 
 		expect(view.result.current.recording).toBe(false);
-		expect(toast.error).toHaveBeenCalledWith("IPC channel closed");
+		expect(toast.error).toHaveBeenCalledWith("recording.stopFailed", {
+			description: "IPC channel closed",
+		});
 	});
 
 	it("still opens the editor when the stop succeeds", async () => {

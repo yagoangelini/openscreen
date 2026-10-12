@@ -103,13 +103,13 @@ describe("chat-service sessions", () => {
 describe("chat-service runChat signature", () => {
 	it("accepts (projectId, sessionId, message, llmConfig) and short-circuits without a config", async () => {
 		// ponytail: stub LlmConfigStore whose getConfig() returns null, so
-		// runChat exits early with the "No LLM provider configured" error.
+		// runChat exits early with the "No AI provider is configured" error.
 		const llmConfig = { getConfig: () => null } as unknown as LlmConfigStore;
 		const { runChat, createSession } = await import("./chat-service");
 		const s = createSession("proj_sig");
 		const result = await runChat("proj_sig", s.id, "hi", llmConfig);
 		expect(result.success).toBe(false);
-		expect(result.error).toMatch(/No LLM provider/);
+		expect(result.error).toMatch(/No AI provider/);
 	});
 });
 

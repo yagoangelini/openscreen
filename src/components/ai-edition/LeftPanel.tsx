@@ -19,7 +19,7 @@ import type {
 	AiEditionToolCallSummary,
 } from "@/native/contracts";
 import {
-	getReasoningEffortLabel,
+	getReasoningEffortLabelKey,
 	getReasoningEffortOptions,
 	PROVIDER_DEFINITIONS,
 	type ReasoningEffort,
@@ -795,7 +795,9 @@ export function ChatStripPanel() {
 		(llmConfig?.reasoningEffort as ReasoningEffort | undefined) ?? "medium";
 	const reasoningLabel =
 		providerSupportsReasoning && llmConfig
-			? getReasoningEffortLabel(llmConfig.provider, currentReasoningEffort)
+			? t(
+					`providerSettings.effort.${getReasoningEffortLabelKey(llmConfig.provider, currentReasoningEffort)}`,
+				)
 			: null;
 
 	const selectReasoningEffort = useCallback(
@@ -1547,7 +1549,9 @@ export function ChatStripPanel() {
 												fontSize: 13,
 											}}
 										>
-											{getReasoningEffortLabel(llmConfig?.provider ?? "", option)}
+											{t(
+												`providerSettings.effort.${getReasoningEffortLabelKey(llmConfig?.provider ?? "", option)}`,
+											)}
 											{option === currentReasoningEffort ? <Check size={12} /> : null}
 										</button>
 									))}

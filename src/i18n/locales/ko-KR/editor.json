@@ -65,7 +65,11 @@
 		"audioDeviceLostMicrophone": "녹화 중 마이크 연결이 끊기고 다시 연결되지 않았습니다. 이후 부분에는 음성이 없습니다.",
 		"audioDeviceLostSystemAudio": "녹화 중 시스템 오디오 장치 연결이 끊기고 다시 연결되지 않았습니다. 이후 부분에는 컴퓨터 소리가 없습니다.",
 		"audioDeviceBackMicrophone": "마이크 연결이 끊겼다가 다시 연결되었습니다. 약 {{seconds}}초 동안 음성이 없습니다.",
-		"audioDeviceBackSystemAudio": "시스템 오디오 장치 연결이 끊겼다가 다시 연결되었습니다. 약 {{seconds}}초 동안 컴퓨터 소리가 없습니다."
+		"audioDeviceBackSystemAudio": "시스템 오디오 장치 연결이 끊겼다가 다시 연결되었습니다. 약 {{seconds}}초 동안 컴퓨터 소리가 없습니다.",
+		"stopFailed": "Couldn't save the recording",
+		"webcamNotSaved": "Camera not saved. The screen recording was kept.",
+		"pauseFailed": "Couldn't pause or resume the recording",
+		"startFailed": "Couldn't start the recording"
 	},
 	"emptyState": {
 		"title": "열린 프로젝트 없음",
@@ -249,7 +253,8 @@
 		"confirmCloseTitle": "내보내기를 취소할까요?",
 		"confirmCloseBody": "닫으면 내보내기가 중단되고 동영상이 저장되지 않습니다.",
 		"keepExporting": "계속 내보내기",
-		"cancelAndClose": "취소하고 닫기"
+		"cancelAndClose": "취소하고 닫기",
+		"cancelFailed": "Couldn't cancel the export"
 	},
 	"inspector": {
 		"resetFocusPoint": "포커스 지점 재설정",
@@ -406,7 +411,8 @@
 			"description": "영상을 디코딩할 수 없습니다. 파일이 손상되었거나, 아직 저장 중이거나, 프로젝트가 기대한 위치에 없을 수 있습니다. 프로젝트 자체는 그대로입니다.",
 			"retry": "다시 시도",
 			"detail": "세부 정보: {{detail}}"
-		}
+		},
+		"attachVideo": "Attach a video to start previewing."
 	},
 	"annotationOverlay": {
 		"imageAlt": "주석",
@@ -441,7 +447,16 @@
 		"disconnect": "연결 해제",
 		"cancel": "취소",
 		"save": "저장",
-		"saveAndUse": "저장 후 사용"
+		"saveAndUse": "저장 후 사용",
+		"effort": {
+			"none": "None",
+			"minimal": "Minimal",
+			"low": "Low",
+			"medium": "Medium",
+			"high": "High",
+			"xhigh": "Extra high",
+			"on": "On"
+		}
 	},
 	"mcpServer": {
 		"title": "MCP 서버",
@@ -488,7 +503,9 @@
 		"cameraCheckFailed": "Could not check for a camera recording near {{name}}",
 		"sensitiveBlurred": "자동으로 흐리게 처리한 민감한 영역: {{count}}. 타임라인에서 확인하세요.",
 		"sensitiveScanFailed": "이 녹화에서는 자동 흐림이 실행되지 않아 화면의 어떤 것도 흐리게 처리되지 않았습니다.",
-		"sensitiveScanPartial": "자동 흐림은 이 녹화를 {{covered}}까지만 확인했습니다. 나머지는 직접 확인하세요."
+		"sensitiveScanPartial": "자동 흐림은 이 녹화를 {{covered}}까지만 확인했습니다. 나머지는 직접 확인하세요.",
+		"projectOpened": "Project opened",
+		"legacyProjectOpened": "Legacy project migrated and loaded"
 	},
 	"exportPipeline": {
 		"quality1440p": "1440p",
@@ -560,5 +577,10 @@
 		"save": "자막 저장 (.srt)",
 		"saved": "자막을 저장했습니다: {{path}}",
 		"failed": "자막을 저장할 수 없습니다"
+	},
+	"projectNames": {
+		"recording": "Recording {{date}}",
+		"project": "Project {{date}}",
+		"asset": "Recording"
 	}
 }

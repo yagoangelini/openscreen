@@ -73,6 +73,12 @@
 		"window": "Pencere",
 		"screen": "Ekran",
 		"virtual": "Sanal ekran",
-		"unknown": "Ekran kaydı"
+		"unknown": "Ekran kaydı",
+		"screenNumber": "Screen {{number}}",
+		"entireScreen": "Entire Screen"
+	},
+	"notifications": "Notifications",
+	"windowTitles": {
+		"notes": "Notes"
 	}
 }

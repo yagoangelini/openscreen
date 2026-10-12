@@ -161,26 +161,21 @@ export function getReasoningEffortOptions(providerId: string): readonly Reasonin
 }
 
 /**
- * Display label per effort value. SSOT for both the provider-settings
+ * Which label an effort value shows, as the key suffix of
+ * `editor.providerSettings.effort.<key>`. SSOT for both the provider-settings
  * dropdown (ProviderSettings.tsx) and the in-chat quick-pick popover
- * (LeftPanel.tsx) — MiniMax overrides "medium" to "On" since its `thinking`
+ * (LeftPanel.tsx) — MiniMax overrides "medium" to "on" since its `thinking`
  * block is binary, not a graduated tier (see getReasoningEffortOptions).
  */
-export function getReasoningEffortLabel(providerId: string, effort: ReasoningEffort): string {
+export function getReasoningEffortLabelKey(
+	providerId: string,
+	effort: ReasoningEffort,
+): ReasoningEffort | "on" {
 	if ((providerId === "minimax" || providerId === "minimax-token-plan") && effort === "medium") {
-		return "On";
+		return "on";
 	}
-	return REASONING_EFFORT_LABELS[effort];
+	return effort;
 }
-
-export const REASONING_EFFORT_LABELS: Record<ReasoningEffort, string> = {
-	none: "None",
-	minimal: "Minimal",
-	low: "Low",
-	medium: "Medium",
-	high: "High",
-	xhigh: "Extra high",
-};
 
 /**
  * Coerce free-form provider strings (including historical aliases and the

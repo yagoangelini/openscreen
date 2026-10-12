@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { toastText } from "@/i18n/toastText";
 
 export interface MicrophoneDevice {
 	deviceId: string;
@@ -15,7 +16,9 @@ function microphoneDevices(devices: readonly MediaDeviceInfo[]): MicrophoneDevic
 		.filter((device) => device.kind === "audioinput")
 		.map((device) => ({
 			deviceId: device.deviceId,
-			label: device.label || `Microphone ${device.deviceId.slice(0, 8)}`,
+			label:
+				device.label ||
+				toastText("launch", "audio.unlabeledMicrophone", { id: device.deviceId.slice(0, 8) }),
 			groupId: device.groupId,
 		}));
 }

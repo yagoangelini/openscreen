@@ -36,7 +36,8 @@
 		"marker": "Маркер на {{time}}",
 		"cameraTrack": "Камера",
 		"cameraPip": "PiP",
-		"cameraHidden": "Без камеры"
+		"cameraHidden": "Без камеры",
+		"scrollKey": "Scroll"
 	},
 	"trails": {
 		"zoomIn": "Приближение: вид приближается до начала масштабирования",

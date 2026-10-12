@@ -260,7 +260,13 @@
 	"gifSettings": {
 		"frameRate": "Частота кадров GIF",
 		"loop": "Зациклить GIF",
-		"size": "Размер GIF"
+		"size": "Размер GIF",
+		"sizes": {
+			"small": "Small (480p)",
+			"medium": "Medium (720p)",
+			"large": "Large (1080p)",
+			"original": "Original"
+		}
 	},
 	"exportQuality": {
 		"title": "Разрешение экспорта",

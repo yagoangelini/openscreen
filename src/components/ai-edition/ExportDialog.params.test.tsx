@@ -21,6 +21,7 @@ vi.mock("@/native/sceneDescription", () => ({
 }));
 
 import { I18nProvider } from "@/contexts/I18nContext";
+import { LOCALE_STORAGE_KEY } from "@/i18n/config";
 import { type AxcutDocument, axcutSchemaVersion } from "@/lib/ai-edition/schema";
 import { calculateMp4ExportSettings } from "@/lib/exporter/mp4ExportSettings";
 import { exportGifNative, exportMultiNative } from "@/native";
@@ -126,6 +127,8 @@ describe("ExportDialog MP4 params", () => {
 
 	it("exports at YouTube loudness by default, and at the voice's level when switched off", async () => {
 		localStorage.clear();
+		// The app starts in pt-BR; these assertions read the English copy.
+		localStorage.setItem(LOCALE_STORAGE_KEY, "en");
 		renderDialog();
 		await exportMp4();
 		const sent = (call: number) =>

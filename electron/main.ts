@@ -13,6 +13,7 @@ import {
 	Tray,
 } from "electron";
 import type { GlobalShortcutAction, GlobalShortcutsConfig } from "../src/lib/shortcuts";
+import { sourceDisplayName } from "../src/lib/sourceDisplayName";
 import {
 	type AboutFacts,
 	COPYRIGHT,
@@ -1051,7 +1052,7 @@ function updateTrayMenu(recording: boolean = false) {
 	const trayIcon = recording ? recordingTrayIcon : defaultTrayIcon;
 	const trayToolTip = recording
 		? mainT("common", "actions.recordingStatus", {
-				source: selectedSourceName,
+				source: sourceDisplayName(selectedSourceName, (key, vars) => mainT("common", key, vars)),
 			}) || `Recording: ${selectedSourceName}`
 		: PRODUCT_NAME;
 	const menuTemplate = recording

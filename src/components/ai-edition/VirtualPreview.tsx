@@ -4,6 +4,7 @@ import {
 	DEFAULT_CROP_REGION,
 	MAX_NATIVE_PLAYBACK_RATE,
 } from "@/components/video-editor/types";
+import { toastText } from "@/i18n/toastText";
 import {
 	clickHitBuffers,
 	playClickHits,
@@ -1951,7 +1952,7 @@ export function VirtualPreview({
 					    truth) — this CPU-rendered duplicate (CursorPreviewLayer) is removed. */}
 				</>
 			) : (
-				<div className={styles.placeholder}>Attach a video to start previewing.</div>
+				<div className={styles.placeholder}>{toastText("editor", "preview.attachVideo")}</div>
 			)}
 		</div>
 	);

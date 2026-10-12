@@ -36,7 +36,8 @@
 		"marker": "{{time}} のマーカー",
 		"cameraTrack": "カメラ",
 		"cameraPip": "PiP",
-		"cameraHidden": "カメラなし"
+		"cameraHidden": "カメラなし",
+		"scrollKey": "Scroll"
 	},
 	"trails": {
 		"zoomIn": "ズームイン：ズームの開始まで画面が拡大していきます",

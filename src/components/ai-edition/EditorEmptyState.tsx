@@ -52,9 +52,11 @@ export function EditorEmptyState({
 	const ensureProject = useCallback(async (): Promise<string | null> => {
 		const existing = useProjectStore.getState().projectId;
 		if (existing) return existing;
-		const doc = await createProject(`Project ${new Date().toLocaleString()}`);
+		const doc = await createProject(
+			t("projectNames.project", { date: new Date().toLocaleString() }),
+		);
 		return doc.project.id;
-	}, [createProject]);
+	}, [createProject, t]);
 
 	const handleImportVideo = useCallback(async () => {
 		const result = await window.electronAPI?.openVideoFilePicker?.();
@@ -62,7 +64,7 @@ export function EditorEmptyState({
 		try {
 			const projectId = await ensureProject();
 			if (!projectId) return;
-			const label = result.name || result.path.split(/[\\/]/).pop() || "Recording";
+			const label = result.name || result.path.split(/[\\/]/).pop() || t("projectNames.asset");
 			await addAsset(result.path, label);
 		} catch (err) {
 			setDropError("load-failed");
@@ -70,7 +72,7 @@ export function EditorEmptyState({
 			// already tells the user something went wrong.
 			console.error("Failed to import video", err);
 		}
-	}, [addAsset, ensureProject]);
+	}, [addAsset, ensureProject, t]);
 
 	// What the open-file dialog or a drop read: see importProjectFile.
 	const openLoadedProject = useCallback(

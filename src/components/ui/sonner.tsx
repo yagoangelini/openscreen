@@ -35,6 +35,7 @@ const Toaster = ({ className, style, ...props }: ToasterProps) => {
 			// start side, which is not where anything else in this app closes. Its colours live
 			// there too: from `classNames` they lose to sonner's own rule.
 			closeButton
+			containerAriaLabel={tc("notifications")}
 			toastOptions={{
 				// Sonner's default is the untranslated "Close toast"; the rest of the app
 				// speaks 13 languages.

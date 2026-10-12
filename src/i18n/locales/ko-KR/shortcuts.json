@@ -44,5 +44,6 @@
 		"zoomTimeline": "타임라인 확대/축소",
 		"frameBack": "이전 프레임",
 		"frameForward": "다음 프레임"
-	}
+	},
+	"scrollKey": "Scroll"
 }

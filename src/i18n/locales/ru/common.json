@@ -73,6 +73,12 @@
 		"window": "Окно",
 		"screen": "Экран",
 		"virtual": "Виртуальный экран",
-		"unknown": "Запись экрана"
+		"unknown": "Запись экрана",
+		"screenNumber": "Screen {{number}}",
+		"entireScreen": "Entire Screen"
+	},
+	"notifications": "Notifications",
+	"windowTitles": {
+		"notes": "Notes"
 	}
 }

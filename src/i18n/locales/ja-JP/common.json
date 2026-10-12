@@ -73,6 +73,12 @@
 		"window": "ウィンドウ",
 		"screen": "画面",
 		"virtual": "仮想ディスプレイ",
-		"unknown": "画面録画"
+		"unknown": "画面録画",
+		"screenNumber": "Screen {{number}}",
+		"entireScreen": "Entire Screen"
+	},
+	"notifications": "Notifications",
+	"windowTitles": {
+		"notes": "Notes"
 	}
 }

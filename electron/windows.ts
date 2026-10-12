@@ -18,6 +18,7 @@ import {
 	parseHudContentRect,
 	sameRect,
 } from "./hudWindowBounds";
+import { mainT } from "./i18n";
 import {
 	RECORDER_APP_USER_MODEL_ID,
 	RECORDER_NAME,
@@ -793,7 +794,7 @@ export function createNotesWindow(): BrowserWindow {
 		minHeight: 400,
 		maxWidth: 640,
 		maxHeight: 720,
-		title: "OpenScreen - Notes",
+		title: `OpenScreen - ${mainT("common", "windowTitles.notes")}`,
 		backgroundColor: "#09090b",
 		resizable: true,
 		alwaysOnTop: true,

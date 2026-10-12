@@ -44,5 +44,6 @@
 		"zoomTimeline": "تكبير المخطط الزمني",
 		"frameBack": "إطار للخلف",
 		"frameForward": "إطار للأمام"
-	}
+	},
+	"scrollKey": "Scroll"
 }

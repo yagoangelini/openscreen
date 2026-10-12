@@ -14,6 +14,8 @@ export default defineConfig({
 		// redundant but harmless.)
 		environment: "node",
 		include: ["{src,electron,scripts,.github}/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}"],
+		// The app starts in pt-BR; the assertions are written against the English copy.
+		setupFiles: ["src/test-setup/pinEnglishLocale.ts"],
 		// Vitest's 5s default is too tight here and produces red runs that mean nothing.
 		// Measured: with the machine loaded, 11 tests fail and 9 of them are purely
 		// "Test timed out in 5000ms" — ordinary component tests that pass in 200ms on an

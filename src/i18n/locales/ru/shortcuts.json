@@ -44,5 +44,6 @@
 		"zoomTimeline": "Масштабирование таймлайна",
 		"frameBack": "Кадр назад",
 		"frameForward": "Кадр вперёд"
-	}
+	},
+	"scrollKey": "Scroll"
 }

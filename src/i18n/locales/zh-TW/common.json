@@ -73,6 +73,12 @@
 		"window": "視窗",
 		"screen": "螢幕",
 		"virtual": "虛擬顯示器",
-		"unknown": "螢幕錄製"
+		"unknown": "螢幕錄製",
+		"screenNumber": "Screen {{number}}",
+		"entireScreen": "Entire Screen"
+	},
+	"notifications": "Notifications",
+	"windowTitles": {
+		"notes": "Notes"
 	}
 }

@@ -40,7 +40,8 @@
 	"audio": {
 		"systemAudio": "시스템 오디오",
 		"microphone": "마이크",
-		"inputDevice": "입력 장치"
+		"inputDevice": "입력 장치",
+		"unlabeledMicrophone": "Microphone {{id}}"
 	},
 	"webcam": {
 		"searching": "검색 중...",
@@ -51,7 +52,8 @@
 		"quality": "카메라 화질",
 		"quality1080p": "1080p",
 		"quality1440p": "1440p",
-		"quality2160p": "4K"
+		"quality2160p": "4K",
+		"unlabeledCamera": "Camera {{id}}"
 	},
 	"cursor": {
 		"name": "편집 가능한 커서",

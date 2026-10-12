@@ -100,7 +100,7 @@ Three call sites share that factory:
 
 `buildLangChainReasoningOptions` then maps the effort onto that provider's wire field: `reasoning.effort` + `useResponsesApi` for OpenAI, `thinking` blocks (adaptive with `outputConfig.effort` on Claude 4.6/4.7, otherwise `budget_tokens`) for Anthropic, `modelKwargs.reasoning` for OpenRouter, `thinkingConfig` for Google.
 
-MiniMax's `thinking` block is binary (`{type: "adaptive"}` or absent), so `getReasoningEffortOptions` shows it only `none` / `medium` and `getReasoningEffortLabel` renders that `medium` as **On** — advertising six tiers would imply a granularity it doesn't have. Both helpers are the SSOT shared by `ProviderSettings.tsx` and the in-chat quick-pick in `LeftPanel.tsx`.
+MiniMax's `thinking` block is binary (`{type: "adaptive"}` or absent), so `getReasoningEffortOptions` shows it only `none` / `medium` and `getReasoningEffortLabelKey` labels that `medium` **On** (`editor.providerSettings.effort.on`) — advertising six tiers would imply a granularity it doesn't have. Both helpers are the SSOT shared by `ProviderSettings.tsx` and the in-chat quick-pick in `LeftPanel.tsx`.
 
 ## Using a subscription through MCP instead
 

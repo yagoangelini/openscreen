@@ -89,7 +89,8 @@
 		"openscreenProject": "OpenScreen 專案",
 		"allFiles": "所有檔案",
 		"chooseRecordingsFolder": "選擇新錄製的資料夾",
-		"selectRecordingsFolder": "選擇錄製資料夾"
+		"selectRecordingsFolder": "選擇錄製資料夾",
+		"saveDiagnostics": "Save Diagnostic File"
 	},
 	"recovery": {
 		"title": "復原錄製",
@@ -116,5 +117,10 @@
 		"message": "A recording is in progress. Stop it now and open it in the editor?",
 		"stopAndOpen": "Stop and open in the editor",
 		"keepRecording": "Keep recording"
+	},
+	"ai": {
+		"noProvider": "No AI provider is configured. Connect one in the agent settings first.",
+		"noApiKey": "No API key for {{provider}}. Add one in the agent settings.",
+		"conversationTitle": "Conversation {{index}}"
 	}
 }

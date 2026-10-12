@@ -40,7 +40,8 @@
 	"audio": {
 		"systemAudio": "システム音声",
 		"microphone": "マイク",
-		"inputDevice": "入力デバイス"
+		"inputDevice": "入力デバイス",
+		"unlabeledMicrophone": "Microphone {{id}}"
 	},
 	"webcam": {
 		"searching": "検索中...",
@@ -51,7 +52,8 @@
 		"quality": "カメラの画質",
 		"quality1080p": "1080p",
 		"quality1440p": "1440p",
-		"quality2160p": "4K"
+		"quality2160p": "4K",
+		"unlabeledCamera": "Camera {{id}}"
 	},
 	"cursor": {
 		"name": "編集可能なカーソル",

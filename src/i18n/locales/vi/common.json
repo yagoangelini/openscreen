@@ -73,6 +73,12 @@
 		"window": "Cửa sổ",
 		"screen": "Màn hình",
 		"virtual": "Màn hình ảo",
-		"unknown": "Ghi màn hình"
+		"unknown": "Ghi màn hình",
+		"screenNumber": "Screen {{number}}",
+		"entireScreen": "Entire Screen"
+	},
+	"notifications": "Notifications",
+	"windowTitles": {
+		"notes": "Notes"
 	}
 }

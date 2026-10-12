@@ -45,14 +45,30 @@ function isSupportedLocale(value: string): value is Locale {
 	return getAvailableLocales().includes(value);
 }
 
+function getSystemLanguages() {
+	if (typeof navigator === "undefined") return [] as string[];
+	return Array.isArray(navigator.languages) && navigator.languages.length > 0
+		? navigator.languages
+		: [navigator.language];
+}
+
+/**
+ * Whether the native language appears anywhere in the system's list. Chromium often reports
+ * `en-US` ahead of the OS's own language on a Portuguese Windows, and offering to switch away
+ * from pt-BR there would nag the very user the native default is for.
+ */
+function systemSpeaksNativeLocale(): boolean {
+	const nativeBase = DEFAULT_LOCALE.split("-")[0]?.toLowerCase();
+	return getSystemLanguages().some(
+		(candidate) => candidate?.split("-")[0]?.toLowerCase() === nativeBase,
+	);
+}
+
 function getSupportedSystemLocale(): Locale | null {
 	if (typeof navigator === "undefined") return null;
 	const availableLocales = getAvailableLocales();
 
-	const candidates =
-		Array.isArray(navigator.languages) && navigator.languages.length > 0
-			? navigator.languages
-			: [navigator.language];
+	const candidates = getSystemLanguages();
 
 	for (const candidate of candidates) {
 		if (!candidate) continue;
@@ -131,7 +147,11 @@ export function I18nProvider({ children }: { children: ReactNode }) {
 		if (hasStoredLocale || hasHandledSystemPrompt) return;
 
 		const detectedSystemLocale = getSupportedSystemLocale();
-		if (!detectedSystemLocale || detectedSystemLocale === DEFAULT_LOCALE) {
+		if (
+			!detectedSystemLocale ||
+			detectedSystemLocale === DEFAULT_LOCALE ||
+			systemSpeaksNativeLocale()
+		) {
 			markPromptAsHandled();
 			return;
 		}

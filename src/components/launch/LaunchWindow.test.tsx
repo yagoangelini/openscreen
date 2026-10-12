@@ -169,6 +169,7 @@ vi.mock("@/contexts/I18nContext", () => ({
 	useScopedT: () => (key: string, vars?: Record<string, string | number>) => {
 		const translations: Record<string, string> = {
 			"sourceSelector.defaultSourceName": "Screen",
+			"recordingSource.screen": "Screen",
 			"recording.selectSource": "Please select a source to record",
 			"recording.systemPicker": "Your system will ask what to share",
 			"recording.start": "Start recording",

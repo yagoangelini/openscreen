@@ -40,7 +40,8 @@
 	"audio": {
 		"systemAudio": "系統音訊",
 		"microphone": "麥克風",
-		"inputDevice": "輸入裝置"
+		"inputDevice": "輸入裝置",
+		"unlabeledMicrophone": "Microphone {{id}}"
 	},
 	"webcam": {
 		"searching": "正在搜尋...",
@@ -51,7 +52,8 @@
 		"quality": "攝影機畫質",
 		"quality1080p": "1080p",
 		"quality1440p": "1440p",
-		"quality2160p": "4K"
+		"quality2160p": "4K",
+		"unlabeledCamera": "Camera {{id}}"
 	},
 	"cursor": {
 		"name": "可編輯游標",

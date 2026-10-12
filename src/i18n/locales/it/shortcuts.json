@@ -44,5 +44,6 @@
 		"zoomTimeline": "Zoom timeline",
 		"frameBack": "Fotogramma indietro",
 		"frameForward": "Fotogramma avanti"
-	}
+	},
+	"scrollKey": "Scroll"
 }

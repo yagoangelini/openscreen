@@ -709,7 +709,12 @@ export function NewEditorShell() {
 			if (!result?.success || !result.project) return;
 			const { projectId, legacy } = await importProjectFile(result.project, result.storedProjectId);
 			await loadProject(projectId);
-			toast.success(legacy ? "Legacy project migrated and loaded" : "Project opened");
+			toast.success(
+				toastText(
+					"editor",
+					legacy ? "shellToasts.legacyProjectOpened" : "shellToasts.projectOpened",
+				),
+			);
 		} catch (err) {
 			toast.error(toastText("editor", "shellToasts.loadProjectFailed"), {
 				description: err instanceof Error ? err.message : String(err),

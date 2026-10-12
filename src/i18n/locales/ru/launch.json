@@ -40,7 +40,8 @@
 	"audio": {
 		"systemAudio": "Системный звук",
 		"microphone": "Микрофон",
-		"inputDevice": "Устройство ввода"
+		"inputDevice": "Устройство ввода",
+		"unlabeledMicrophone": "Microphone {{id}}"
 	},
 	"webcam": {
 		"searching": "Поиск...",
@@ -51,7 +52,8 @@
 		"quality": "Качество камеры",
 		"quality1080p": "1080p",
 		"quality1440p": "1440p",
-		"quality2160p": "4K"
+		"quality2160p": "4K",
+		"unlabeledCamera": "Camera {{id}}"
 	},
 	"sourceSelector": {
 		"loading": "Загрузка источников...",

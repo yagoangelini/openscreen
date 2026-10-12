@@ -4,6 +4,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { I18nProvider } from "@/contexts/I18nContext";
+import { LOCALE_STORAGE_KEY } from "@/i18n/config";
 import { NotesWindow } from "./NotesWindow";
 
 // The sibling suite stubs `@tiptap/react`, so nothing in it can show that the real note ever
@@ -19,6 +20,8 @@ vi.mock("@/components/ui/tooltip", () => ({
 
 beforeEach(() => {
 	localStorage.clear();
+	// The app starts in pt-BR; these assertions read the English copy.
+	localStorage.setItem(LOCALE_STORAGE_KEY, "en");
 });
 
 function noteBody(): HTMLElement {

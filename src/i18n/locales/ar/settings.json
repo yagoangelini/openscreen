@@ -260,7 +260,13 @@
 	"gifSettings": {
 		"frameRate": "معدل إطارات GIF",
 		"loop": "تكرار GIF",
-		"size": "حجم GIF"
+		"size": "حجم GIF",
+		"sizes": {
+			"small": "Small (480p)",
+			"medium": "Medium (720p)",
+			"large": "Large (1080p)",
+			"original": "Original"
+		}
 	},
 	"exportQuality": {
 		"title": "دقة التصدير",

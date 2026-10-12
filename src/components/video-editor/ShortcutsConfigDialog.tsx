@@ -81,7 +81,12 @@ export function ShortcutsConfigDialog() {
 			setCaptureFor(null);
 
 			if (found?.type === "fixed") {
-				toast.error(t("reservedShortcut", { label: found.label }));
+				const fixed = FIXED_SHORTCUTS.find((shortcut) => shortcut.label === found.label);
+				toast.error(
+					t("reservedShortcut", {
+						label: fixed ? t(`fixedActions.${fixed.i18nKey}`) : found.label,
+					}),
+				);
 				return;
 			}
 
@@ -222,7 +227,7 @@ export function ShortcutsConfigDialog() {
 									{t(`fixedActions.${shortcut.i18nKey}`, { defaultValue: shortcut.label })}
 								</span>
 								<kbd className="px-2 py-1.5 bg-[var(--surface-2)] border border-[var(--border)] rounded-[8px] text-xs font-mono text-[var(--muted)] min-w-[90px] text-center">
-									{formatFixedShortcut(shortcut, isMac)}
+									{formatFixedShortcut(shortcut, isMac).replace("Scroll", t("scrollKey"))}
 								</kbd>
 							</div>
 						))}
