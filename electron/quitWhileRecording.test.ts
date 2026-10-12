@@ -62,6 +62,60 @@ describe("createQuitWhileRecordingPrompt", () => {
 		expect(stopAndOpen).not.toHaveBeenCalled();
 	});
 
+	it("closes the question when the take ends some other way, and stops nothing (E-5)", async () => {
+		let take = true;
+		const signals: AbortSignal[] = [];
+		const stopAndOpen = vi.fn();
+		const ask = vi.fn(
+			(signal: AbortSignal) =>
+				new Promise<boolean>((resolve) => {
+					signals.push(signal);
+					// Electron's message box resolves with its cancelId when its signal aborts.
+					signal.addEventListener("abort", () => resolve(false));
+				}),
+		);
+		const prompt = createQuitWhileRecordingPrompt({ isRecording: () => take, ask, stopAndOpen });
+
+		const open = prompt();
+		take = false;
+		prompt.dismiss();
+		await open;
+		expect(signals[0].aborted).toBe(true);
+		expect(stopAndOpen).not.toHaveBeenCalled();
+
+		// The next take asks again, with a fresh signal.
+		take = true;
+		const again = prompt();
+		expect(ask).toHaveBeenCalledTimes(2);
+		expect(signals[1].aborted).toBe(false);
+		prompt.dismiss();
+		await again;
+	});
+
+	it("ignores a stop answer that raced the dismissal", async () => {
+		const stopAndOpen = vi.fn();
+		const answer = deferred<boolean>();
+		const prompt = createQuitWhileRecordingPrompt({
+			isRecording: () => true,
+			ask: () => answer.promise,
+			stopAndOpen,
+		});
+		const open = prompt();
+		prompt.dismiss();
+		answer.resolve(true);
+		await open;
+		expect(stopAndOpen).not.toHaveBeenCalled();
+	});
+
+	it("dismisses nothing when no question is open", () => {
+		const prompt = createQuitWhileRecordingPrompt({
+			isRecording: () => true,
+			ask: async () => false,
+			stopAndOpen: vi.fn(),
+		});
+		expect(() => prompt.dismiss()).not.toThrow();
+	});
+
 	it("survives a dialog that fails", async () => {
 		const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
 		const prompt = createQuitWhileRecordingPrompt({

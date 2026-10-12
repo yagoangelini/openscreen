@@ -100,4 +100,67 @@ describe("documentToSrt", () => {
 		expect(srt).toContain("Olá pessoal.");
 		expect(srt).toMatch(/2\n00:00:11,000 --> 00:00:1\d,\d{3}\nAgora vamos\./);
 	});
+
+	it("leaves out a word a trim took from the middle of a line, and closes the gap", () => {
+		const base = createEmptyDocument({ projectId: "p", title: "t" });
+		const words = [
+			[1, 1.5, "Pessoal,"],
+			[1.6, 1.9, "né?"],
+			[2.0, 2.4, "hoje"],
+			[2.5, 3, "vamos."],
+		] as const;
+		const document = {
+			...base,
+			assets: [
+				{ id: "a1", kind: "video", label: "t", originalPath: "C:/t.mp4", cameraTrack: null },
+			],
+			transcripts: [
+				{
+					assetId: "a1",
+					language: "pt",
+					segments: [
+						{
+							id: "s1",
+							kind: "speech",
+							startSec: 1,
+							endSec: 3,
+							text: "Pessoal, né? hoje vamos.",
+							wordIds: ["w0", "w1", "w2", "w3"],
+						},
+					],
+					words: words.map(([startSec, endSec, text], i) => ({
+						id: `w${i}`,
+						segmentId: "s1",
+						startSec,
+						endSec,
+						text,
+					})),
+				},
+			],
+			timeline: {
+				...base.timeline,
+				clips: [
+					{
+						id: "c1",
+						assetId: "a1",
+						sourceStartSec: 0,
+						sourceEndSec: 10,
+						timelineStartSec: 0,
+						timelineEndSec: 10,
+						wordRefs: [],
+						origin: "system",
+						reason: "t",
+					},
+				],
+				// What "Limpar fala" writes for a hesitation: the word and its pauses.
+				trimRanges: [
+					{ id: "t1", assetId: "a1", startSec: 1.5, endSec: 2.0, origin: "system", reason: "né" },
+				],
+			},
+		} as AxcutDocument;
+		const srt = documentToSrt(document);
+		expect(srt).not.toContain("né");
+		// 1.0 s on the exported clock, and "vamos." ends 0.5 s earlier than it was spoken.
+		expect(srt).toBe("1\n00:00:01,000 --> 00:00:02,500\nPessoal, hoje vamos.\n");
+	});
 });

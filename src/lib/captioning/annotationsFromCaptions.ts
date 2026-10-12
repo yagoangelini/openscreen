@@ -248,11 +248,16 @@ function computeCaptionLineIndexRanges(
 /**
  * Groups per-word segments into on-screen lines using each token's Whisper timestamps
  * (no proportional stretching across a long phrase span).
+ *
+ * `gapSec` measures the pause between two words that breaks a line. By default it is the
+ * pause as spoken; the editor's captions pass the pause as it PLAYS, a cut inside it taken
+ * out, so a line a trim took a word from closes up instead of breaking at the hole.
  */
 export function groupTimedCaptionWordsIntoLines(
 	segments: CaptionSegment[],
 	minWords: number,
 	maxWords: number,
+	gapSec: (fromSec: number, toSec: number) => number = (fromSec, toSec) => toSec - fromSec,
 ): CaptionSegment[] {
 	const words = [...segments]
 		.filter((s) => s.text.trim())
@@ -284,7 +289,7 @@ export function groupTimedCaptionWordsIntoLines(
 	for (let i = 1; i < words.length; i++) {
 		const prev = words[i - 1]!;
 		const cur = words[i]!;
-		const gap = cur.startSec - prev.endSec;
+		const gap = gapSec(prev.endSec, cur.startSec);
 		if (gap >= WORD_RUN_BREAK_GAP_SEC) {
 			flushRun(i);
 			runStart = i;

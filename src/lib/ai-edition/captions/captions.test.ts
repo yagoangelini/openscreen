@@ -463,6 +463,100 @@ describe("deriveCaptionCues", () => {
 		expect(deriveCaptionCues(cut, ON, {})).toEqual([]);
 	});
 
+	describe("words a trim cut from the middle of a line (E-2 of the 2.5.0 E2E)", () => {
+		const LINES = { ...ON, minWordsPerLine: 1, maxWordsPerLine: 3 };
+		const trimmed = (trimRanges: AxcutDocument["timeline"]["trimRanges"]) =>
+			doc({ timeline: { ...doc().timeline, trimRanges } } as Partial<AxcutDocument>);
+
+		it("drops the cut word and re-times the line on what is left", () => {
+			const before = deriveCaptionCues(doc(), LINES, {});
+			expect(before[0]).toMatchObject({ text: "hello there friend", startMs: 0, endMs: 2000 });
+			const cues = deriveCaptionCues(
+				trimmed([
+					{
+						id: "t1",
+						assetId: "asset-1",
+						startSec: 0.6,
+						endSec: 1.2,
+						origin: "system",
+						reason: "",
+					},
+				]),
+				LINES,
+				{},
+			);
+			expect(cues.map((c) => c.text)).toEqual(["hello friend", "goodbye now"]);
+			expect(cues.map((c) => c.text).join(" ")).not.toContain("there");
+		});
+
+		it("drops a word at a line's edge, re-timing its start, for a trim anchored on the clip", () => {
+			const cues = deriveCaptionCues(
+				trimmed([
+					{
+						id: "t1",
+						assetId: "asset-1",
+						clipId: "clip-1",
+						startSec: 3.9,
+						endSec: 5,
+						origin: "user",
+						reason: "",
+					},
+				]),
+				LINES,
+				{},
+			);
+			expect(cues.at(-1)).toMatchObject({ text: "now", startMs: 5000, endMs: 6000 });
+		});
+
+		it("keeps a word a trim only grazes: the transcript pane's centre rule", () => {
+			const cues = deriveCaptionCues(
+				trimmed([
+					{
+						id: "t1",
+						assetId: "asset-1",
+						startSec: 1.1,
+						endSec: 1.5,
+						origin: "system",
+						reason: "",
+					},
+				]),
+				LINES,
+				{},
+			);
+			// "there" (0.6–1.2) has its centre at 0.9, kept; "friend" (1.2–2) at 1.6, kept.
+			expect(cues[0].text).toBe("hello there friend");
+		});
+
+		it("shows nothing for a take cut whole, instead of the segments' text", () => {
+			const cues = deriveCaptionCues(
+				trimmed([
+					{ id: "t1", assetId: "asset-1", startSec: 0, endSec: 10, origin: "user", reason: "" },
+				]),
+				LINES,
+				{},
+			);
+			expect(cues).toEqual([]);
+		});
+
+		it("drops the cut word from an untranslated unit's original words", () => {
+			const cues = deriveCaptionCues(
+				trimmed([
+					{
+						id: "t1",
+						assetId: "asset-1",
+						startSec: 0.6,
+						endSec: 1.2,
+						origin: "system",
+						reason: "",
+					},
+				]),
+				{ ...LINES, language: "fr" },
+				{},
+			);
+			expect(cues.map((c) => c.text).join(" ")).not.toContain("there");
+		});
+	});
+
 	it("shows the translation for a translated unit and the original for the rest", () => {
 		const translations = {
 			fr: {

@@ -109,6 +109,10 @@ function cancelledError(): Error {
 	return error;
 }
 
+function isAbortError(error: unknown): boolean {
+	return error instanceof Error && error.name === "AbortError";
+}
+
 /**
  * One transcription's cost, in both of the conventions this repo uses.
  *
@@ -226,6 +230,14 @@ export class SttManager {
 	private extraction: AbortController | null = null;
 
 	/**
+	 * The model download in flight (`load`), if any. Cancel aborts it: "Cancelar e usar só o
+	 * cursor" during a first run used to close the dialog while the download ran on to the
+	 * end, then the helper loaded the model and transcribed the take anyway (E-3 of the
+	 * 2.5.0 E2E: 264 MB for small, 874 MB and seconds of GPU for turbo).
+	 */
+	private modelDownload: AbortController | null = null;
+
+	/**
 	 * Attach a sink for the renderer status channel; returns its detach function.
 	 *
 	 * A SET rather than one slot: this used to be a single field that each IPC
@@ -257,6 +269,7 @@ export class SttManager {
 	cancel(): void {
 		this.cancelEpoch++;
 		this.extraction?.abort();
+		this.modelDownload?.abort(cancelledError());
 		for (const download of this.alignerDownloads.values()) download.abort(cancelledError());
 		// The epoch only stops the loop BETWEEN chunks, and a chunk is up to ~90 s of audio:
 		// the helper went on computing the one in flight, on the GPU, long after Cancel (E2E
@@ -341,7 +354,9 @@ export class SttManager {
 		try {
 			await this.load(wanted);
 		} catch (error) {
-			if (this.shuttingDown) throw cancelledError();
+			// A cancelled download is not a model that cannot run: no falling back to small,
+			// which would download THAT one instead.
+			if (this.shuttingDown || isAbortError(error)) throw cancelledError();
 			console.warn(
 				`[stt] ${wanted} could not start, using small: ` +
 					`${error instanceof Error ? error.message : String(error)}`,
@@ -361,20 +376,29 @@ export class SttManager {
 		// became a status message and a store update in the editor, which spent the whole
 		// first download, minutes, re-rendering and stopped answering (E2E 2.4.0, D-5).
 		const progress = throttledProgress(MODEL_PROGRESS_INTERVAL_MS);
-		await ensureModels({
-			baseDir: modelsDir,
-			whisperModel: model,
-			onProgress: (event) => {
-				if (!progress(event.id, event.downloadedBytes, event.totalBytes)) return;
-				this.emit({
-					phase: "model",
-					model: event.id,
-					downloadedBytes: event.downloadedBytes,
-					totalBytes: event.totalBytes,
-				});
-			},
-		});
-		if (this.shuttingDown) throw cancelledError();
+		const download = new AbortController();
+		this.modelDownload = download;
+		try {
+			await ensureModels({
+				baseDir: modelsDir,
+				whisperModel: model,
+				signal: download.signal,
+				onProgress: (event) => {
+					if (!progress(event.id, event.downloadedBytes, event.totalBytes)) return;
+					this.emit({
+						phase: "model",
+						model: event.id,
+						downloadedBytes: event.downloadedBytes,
+						totalBytes: event.totalBytes,
+					});
+				},
+			});
+		} finally {
+			if (this.modelDownload === download) this.modelDownload = null;
+		}
+		// Cancelled as the last file landed: the model stays on disk, the helper is not
+		// loaded with it.
+		if (this.shuttingDown || download.signal.aborted) throw cancelledError();
 
 		// A helper holding the other model has to go first: `start()` keeps a live one.
 		if (this.whisperModel !== null && this.whisperModel !== model) await this.server.stop();
@@ -482,9 +506,13 @@ export class SttManager {
 	}
 
 	async transcribe(req: SttTranscribeRequest): Promise<SttTranscribeResponse> {
-		await this.init({ model: req.model });
-
+		// Taken BEFORE the setup: a cancel while the model downloads or loads belongs to this
+		// run. Read after it, the epoch already counted that cancel and the run went on to
+		// transcribe (E-3 of the 2.5.0 E2E).
 		const epoch = this.cancelEpoch;
+		await this.init({ model: req.model });
+		if (this.cancelEpoch !== epoch) throw cancelledError();
+
 		if (this.helperStoppedByCancel && this.modelPath) {
 			this.helperStoppedByCancel = false;
 			await this.server.start({

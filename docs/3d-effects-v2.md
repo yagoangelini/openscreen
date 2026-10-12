@@ -482,8 +482,9 @@ de la pastille ; plus rien après sa fenêtre.
 - Le sprite plat et l'impact du plan (`regions::click_impact`, qui lit `at(t_c)` sur la piste
   lissée) ne convergent pas sur le point brut : leur rendu reste celui d'avant à l'octet. Sous un
   lissage fort, le rebond du sprite plat tombe donc à côté de la cible.
-- L'impact du mode 16 ne passe pas par les portes de celui du plan (vitesse ≥ 2×, flou de
-  confidentialité visible, fenêtre du clip).
+- L'impact du mode 16 ne passe pas par les portes de celui du plan (vitesse ≥ 2×, fenêtre du
+  clip). Un flou de confidentialité visible n'en est plus une depuis la 2.5.x du fork : son
+  masque suit le plan basculé (`privacy_mask`).
 
 ---
 

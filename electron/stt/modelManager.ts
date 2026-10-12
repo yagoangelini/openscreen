@@ -450,6 +450,11 @@ export interface EnsureModelsOptions {
 		totalBytes: number;
 	}) => void;
 	fetcher?: typeof fetch;
+	/**
+	 * Aborts the download in flight (its `.partial` is removed, see `ensureFile`) and the
+	 * files not started yet. Rejects with the signal's reason.
+	 */
+	signal?: AbortSignal;
 }
 
 /** Ensure the GGML model files are present locally; downloads with progress + retry. */
@@ -462,6 +467,7 @@ export async function ensureModels(opts: EnsureModelsOptions): Promise<void> {
 	}));
 
 	for (const { id, file, filePath } of targets) {
+		opts.signal?.throwIfAborted();
 		await mkdir(path.dirname(filePath), { recursive: true });
 
 		await ensureFile(filePath, file.url, file.expectedSha256, {
@@ -473,6 +479,10 @@ export async function ensureModels(opts: EnsureModelsOptions): Promise<void> {
 					totalBytes: file.approximateBytes,
 				}),
 			fetcher: opts.fetcher,
+			signal: opts.signal,
 		});
 	}
+	// The last file's hash check can outlast the abort: a model that landed whole is kept
+	// (it is valid), but the caller asked to stop, and must hear it.
+	opts.signal?.throwIfAborted();
 }

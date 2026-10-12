@@ -3897,9 +3897,13 @@ pub fn cursor_plane_point(cut: [f32; 4], uv_max: [f32; 2], p: (f32, f32)) -> Opt
 ///   (un glisser sur un champ numérique) : le couper là ferait sauter l'écran en plein creux ;
 /// - clics dans la fenêtre source du clip actif seulement (cf. `click_impact`) ;
 /// - vitesse : poids `clamp(2 − vitesse, 0, 1)`. À 100× une frame couvre 3,3 s de source, la
-///   courbe serait échantillonnée une fois, au hasard : une secousse d'une frame ;
-/// - masques de confidentialité : rien tant qu'un flou/mosaïque est visible. Le masque suit
-///   déjà le quad dynamique (`privacy_mask`), c'est une marge de sûreté que la spec demande.
+///   courbe serait échantillonnée une fois, au hasard : une secousse d'une frame.
+///
+/// No gate on the privacy blurs. It used to switch off while any blur was visible, as a
+/// safety margin, but the auto-redact blurs span the whole clip, so the impact (and the lean)
+/// never ran on a redacted take. The margin bought nothing: `privacy_mask` draws each mask
+/// through the same `screen_tilt` quad as the screen (the dynamic part included), and the flat
+/// recoil only moves `s_dst`, which the upright mask is measured on.
 fn click_impact_at(
     scene: &Scene,
     cfg: &Cfg,
@@ -3910,12 +3914,6 @@ fn click_impact_at(
     uv_max: [f32; 2],
 ) -> ([f32; 3], f32) {
     let Some(clip) = scene.clips.get(scene.active_clip_index) else { return ([0.0; 3], 0.0) };
-    let masked = scene.annotations.iter().any(|a| {
-        a.kind == "blur" && a.blur.is_some() && t >= a.start_sec as f32 && t < a.end_sec as f32
-    });
-    if masked {
-        return ([0.0; 3], 0.0);
-    }
     let speed = crate::regions::speed_at(&scene.speed_regions, scene.active_clip_index, t as f64);
     let speed_weight = (2.0 - speed as f32).clamp(0.0, 1.0);
     let weight = cursor_alpha(Some(scene), cfg, live, track, t) * speed_weight;
@@ -3931,7 +3929,8 @@ fn click_impact_at(
 }
 
 /// `regions::click_lean` under the same gates as the click impact (`click_impact_at`): the
-/// pointer's visibility, no privacy blur, not at a fast speed.
+/// pointer's visibility, not at a fast speed. Blurs do not gate it: their masks lean with the
+/// screen (`privacy_mask`).
 fn click_lean_at(
     scene: &Scene,
     cfg: &Cfg,
@@ -3942,11 +3941,6 @@ fn click_lean_at(
     uv_max: [f32; 2],
 ) -> [f32; 3] {
     let Some(clip) = scene.clips.get(scene.active_clip_index) else { return [0.0; 3] };
-    if scene.annotations.iter().any(|a| {
-        a.kind == "blur" && a.blur.is_some() && t >= a.start_sec as f32 && t < a.end_sec as f32
-    }) {
-        return [0.0; 3];
-    }
     let speed = crate::regions::speed_at(&scene.speed_regions, scene.active_clip_index, t as f64);
     let weight = cursor_alpha(Some(scene), cfg, live, track, t) * (2.0 - speed as f32).clamp(0.0, 1.0);
     if weight <= 0.0 {
@@ -7385,9 +7379,9 @@ mod tests {
     }
 
     /// L'impact du clic passe par `plan_frame` et chacune de ses portes l'éteint : réglage absent,
-    /// curseur masqué (réglage ou région), clic hors du clip actif ou de la coupe, vitesse ≥ 2×,
-    /// masque de flou visible. Sous un angle fixe il fait basculer le plan ; sans préset, il fait
-    /// reculer l'écran droit, par les mêmes portes.
+    /// curseur masqué (réglage ou région), clic hors du clip actif ou de la coupe, vitesse ≥ 2×.
+    /// Sous un angle fixe il fait basculer le plan ; sans préset, il fait reculer l'écran droit,
+    /// par les mêmes portes. A visible privacy blur is not a gate (E-1 of the 2.5.0 E2E).
     #[test]
     fn every_gate_cancels_the_click_impact() {
         let cfg = crate::config::all().pop().expect("au moins une config");
@@ -7433,13 +7427,12 @@ mod tests {
         let insert = |field: &'static str| {
             move |s: String| s.replace(r#""cursor":"#, &format!(r#"{field},"cursor":"#))
         };
-        let cases: [(&str, Box<dyn Fn(String) -> String>); 6] = [
+        let cases: [(&str, Box<dyn Fn(String) -> String>); 5] = [
             ("option absente", Box::new(off)),
             ("curseur masqué", Box::new(|s: String| s.replace(r#""show":true"#, r#""show":false"#))),
             ("région hideCursor", Box::new(|s: String| s.replace(r#""rotation":"iso""#, r#""rotation":"iso","hideCursor":true"#))),
             ("clic avant le clip", Box::new(|s: String| s.replace(r#""sourceStartSec":0"#, r#""sourceStartSec":1.46"#))),
             ("vitesse 2x", Box::new(insert(r#""speedRegions":[{"clipIndex":0,"startSec":1.0,"endSec":2.0,"speed":2.0}]"#))),
-            ("flou visible", Box::new(insert(r#""annotations":[{"id":"b","startSec":1.0,"endSec":2.0,"kind":"blur","x":0.1,"y":0.1,"w":0.2,"h":0.2,"blur":{"style":"mosaic","shape":"rectangle","color":"black","intensity":8,"blockSize":16}}]"#))),
         ];
         for (name, edit) in &cases {
             assert_eq!(dyn_of(edit.as_ref(), on_edge), [0.0; 3], "{name}");
@@ -7447,9 +7440,12 @@ mod tests {
         }
         assert_eq!(dyn_of(&same, track_at(0.9)), [0.0; 3], "clic hors du crop");
 
-        // Un flou qui n'est plus visible ne retient rien ; une vitesse 1,5× pèse moitié.
-        let later_blur = insert(r#""annotations":[{"id":"b","startSec":3.0,"endSec":4.0,"kind":"blur","x":0.1,"y":0.1,"w":0.2,"h":0.2,"blur":{"style":"blur","shape":"rectangle","color":"black","intensity":8,"blockSize":16}}]"#);
-        assert_eq!(dyn_of(&later_blur, on_edge), on);
+        // A visible blur (here the whole clip, as an auto-redact one) keeps the impact whole,
+        // tilted and flat: its mask follows the plane (`privacy_mask`). Une vitesse 1,5× pèse
+        // moitié.
+        let blur = insert(r#""annotations":[{"id":"b","startSec":0.0,"endSec":10.0,"kind":"blur","x":0.1,"y":0.1,"w":0.2,"h":0.2,"blur":{"style":"mosaic","shape":"rectangle","color":"black","intensity":8,"blockSize":16}}]"#);
+        assert_eq!(dyn_of(&blur, on_edge), on, "flou visible, angle fixe");
+        assert_eq!(box_of(&blur, on_edge), pushed.s_dst, "flou visible, écran droit");
         let slow = dyn_of(
             &insert(r#""speedRegions":[{"clipIndex":0,"startSec":1.0,"endSec":2.0,"speed":1.5}]"#),
             on_edge,
@@ -7664,6 +7660,95 @@ mod tests {
             "garde : sous ce préset l'ancien rect devrait rater le contenu"
         );
         assert!(m.strength >= 1.0);
+    }
+
+    /// "Inclinar para o clique" on a take with a blur over the whole clip (what auto-redact
+    /// writes): the screen still leans toward the click, and the blur's mask is the blurred
+    /// content warped through that same leaned quad, a little larger, so the secret stays under
+    /// it (E-1 of the 2.5.0 E2E: any visible blur used to switch the lean off).
+    #[test]
+    fn the_screen_leans_under_a_blur_and_the_mask_leans_with_it() {
+        let cfg = crate::config::all().pop().expect("au moins une config");
+        // A still pointer near the crop's right edge (0.61 wide), a click 0.5 s before the
+        // golden instant (1.5 s): the lean is held.
+        let track: &'static crate::cursor::CursorTrack = Box::leak(Box::new(
+            crate::cursor::CursorTrack::new(
+                (0..=90).map(|i| (i as f32 / 30.0, 0.6, 0.3)).collect(),
+                vec![1.0],
+                vec![],
+            ),
+        ));
+        let blur = r#""annotations":[{"id":"secret","startSec":0,"endSec":10,"kind":"blur","x":0.62,"y":0.18,"w":0.2,"h":0.1,"blur":{"style":"mosaic","shape":"rectangle","color":"white","intensity":12,"blockSize":12}}]"#;
+        let plan = |lean: bool, with_blur: bool| {
+            let mut json = zoomed_golden_scene_json().to_string();
+            if lean {
+                json = json.replace(r#""motionBlur":0.35},"#, r#""motionBlur":0.35,"leanToClicks":true},"#);
+            }
+            if with_blur {
+                json = json.replace(r#""cropByClip":"#, &format!(r#"{blur},"cropByClip":"#));
+            }
+            let scene = Scene::from_json(&json).expect("scène");
+            assert_eq!(scene.effects.lean_to_clicks, lean, "garde : la clé est lue");
+            assert_eq!(scene.annotations.len(), usize::from(with_blur), "garde : le flou est lu");
+            plan_frame(&FrameGeometryInput { cursor: Some(track), ..golden_input(&scene, &cfg) })
+        };
+        let bare = plan(true, false);
+        assert!(bare.zoom_rotation_dyn[1] < -0.5, "garde : le clic à droite penche : {:?}", bare.zoom_rotation_dyn);
+        let g = plan(true, true);
+        assert_eq!(g.zoom_rotation_dyn, bare.zoom_rotation_dyn, "le flou ne retient plus la bascule");
+        assert!(g.tilted());
+        assert_eq!(plan(false, true).zoom_rotation_dyn, [0.0; 3], "réglage éteint : rien");
+
+        let a = blur_annotation("");
+        let render = [1170.0, 658.0];
+        let m = g.privacy_mask(&a, render).expect("masque");
+        let warp = m.warp.expect("un écran penché demande un masque warpé");
+        let s_px = [g.s_dst[2] * render[0], g.s_dst[3] * render[1]];
+        let quad = g.screen_tilt(s_px).expect("penché");
+        let centre = [
+            (g.s_dst[0] + g.s_dst[2] * 0.5) * render[0],
+            (g.s_dst[1] + g.s_dst[3] * 0.5) * render[1],
+        ];
+        let drawn = |fx: f32, fy: f32| {
+            let (px, py) = quad.point_px(fx, fy);
+            [centre[0] + px, centre[1] + py]
+        };
+        let mid = drawn(a.x + a.w * 0.5, a.y + a.h * 0.5);
+        let from_mid = |p: [f32; 2]| (p[0] - mid[0]).hypot(p[1] - mid[1]);
+        let origin = [m.dst[0] * render[0], m.dst[1] * render[1]];
+        let content = [(a.x, a.y), (a.x + a.w, a.y), (a.x + a.w, a.y + a.h), (a.x, a.y + a.h)];
+        for (k, &(fx, fy)) in content.iter().enumerate() {
+            let want = drawn(fx, fy);
+            let got = [origin[0] + warp[k][0], origin[1] + warp[k][1]];
+            let gap = (got[0] - want[0]).hypot(got[1] - want[1]);
+            assert!(gap < 3.5, "coin {k} : {got:?} à {gap} px du contenu penché {want:?}");
+            assert!(from_mid(got) > from_mid(want), "coin {k} rentré dans le contenu");
+        }
+        // The lean really moves the content: the upright mask of the same blur misses a corner
+        // of the leaned secret by more than the pad.
+        let upright = bare_upright_mask_corners(&plan(false, true), &a, render);
+        let moved = content
+            .iter()
+            .zip(upright)
+            .map(|(&(fx, fy), u)| {
+                let p = drawn(fx, fy);
+                (p[0] - u[0]).hypot(p[1] - u[1])
+            })
+            .fold(0.0f32, f32::max);
+        assert!(moved > 4.0, "garde : la bascule doit déplacer le contenu de plusieurs px ({moved})");
+    }
+
+    /// The corners TL, TR, BR, BL of an upright mask's content, in output px.
+    fn bare_upright_mask_corners(
+        g: &FrameGeometry,
+        a: &crate::scene::SceneAnnotation,
+        render: [f32; 2],
+    ) -> [[f32; 2]; 4] {
+        assert!(!g.tilted(), "garde : écran droit");
+        let r = annotation_dst_in(g.s_dst, a.x, a.y, a.w, a.h);
+        let [x0, y0, x1, y1] =
+            [r[0] * render[0], r[1] * render[1], (r[0] + r[2]) * render[0], (r[1] + r[3]) * render[1]];
+        [[x0, y0], [x1, y0], [x1, y1], [x0, y1]]
     }
 
     /// Pendant une rampe de zoom, le flou de mouvement du mode 0 étale le contenu jusqu'à sa
