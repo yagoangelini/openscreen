@@ -8,15 +8,22 @@
 
 import type { InstallChannel } from "./install-channel";
 
-export const WEBSITE_URL = "https://getopenscreen.com";
+/** This fork's home: where its releases, issues and source live. */
+export const WEBSITE_URL = "https://github.com/yagoangelini/openscreen";
+/** The project this fork continues, credited in every About box. */
+export const UPSTREAM_URL = "https://github.com/getopenscreen/openscreen";
 /** The brand spelling, for the surfaces we render ourselves. NOT `app.name`: that resolves to
  *  electron-builder's `productName` ("Openscreen") when packaged and to package.json's `name`
  *  ("openscreen") in dev, so the About box would disagree with its own title bar. */
 export const PRODUCT_NAME = "OpenScreen";
-/** The collective form, and deliberately NOT the whole of LICENSE. LICENSE carries two holders:
- *  Siddharth Vaddem, who created the project — MIT obliges us to keep that notice on a codebase
- *  that still contains his code — and the contributors collectively. This is the line every user
- *  sees, so it names the group that maintains the app rather than one person who no longer does.
+/** Who makes this build: the fork's owner, also package.json's `author`. */
+export const FORK_OWNER = "Yago Angelini";
+/** Who makes the app it is based on, named as upstream names itself. */
+export const UPSTREAM_AUTHORS = "Etienne Lescot / getopenscreen";
+/** The fork's holder, then upstream's collective notice, and deliberately NOT the whole of
+ *  LICENSE. LICENSE also names Siddharth Vaddem, who created the project (MIT obliges us to keep
+ *  that notice on a codebase that still contains his code); this is the line every user sees,
+ *  so it names who maintains the app.
  *
  *  "contributors" and not "OpenScreen": getopenscreen is a GitHub organisation, not a legal
  *  entity, and copyright cannot vest in something that does not exist. Each author keeps their
@@ -25,8 +32,19 @@ export const PRODUCT_NAME = "OpenScreen";
  *  Must stay byte-identical to `copyright` in electron-builder.json5, which feeds Info.plist's
  *  NSHumanReadableCopyright and the Windows LegalCopyright. That key is declared explicitly
  *  BECAUSE electron-builder otherwise derives those from package.json's `author` — a single
- *  name, which put a second attribution on the same binary this string appears in. */
-export const COPYRIGHT = "© 2025-2026 OpenScreen contributors — MIT License";
+ *  name, which would drop upstream's notice from the binary this string appears in. */
+export const COPYRIGHT = "© 2026 Yago Angelini · © 2025-2026 OpenScreen contributors — MIT License";
+
+/** The two credit lines at the top of the About box, translated by the caller: who makes this
+ *  build, and what it is based on. `t` gets the key under `common.about` and its variables. */
+export function formatAboutCredits(
+	t: (key: "credit" | "basedOn", vars: Record<string, string>) => string,
+): string {
+	return [
+		t("credit", { product: PRODUCT_NAME, owner: FORK_OWNER }),
+		t("basedOn", { product: PRODUCT_NAME, upstream: UPSTREAM_AUTHORS }),
+	].join("\n");
+}
 
 /** macOS opens its own About panel (the app menu's `role: "about"`), so it is the one platform
  *  that must not be shown the message box we build, and the only one whose panel needs
@@ -57,5 +75,6 @@ export function formatAboutDetail(facts: AboutFacts): string {
 		`Electron ${facts.electron} · Chromium ${facts.chrome} · Node ${facts.node}`,
 		`${facts.platform} ${facts.arch} · ${facts.channel}`,
 		WEBSITE_URL,
+		UPSTREAM_URL,
 	].join("\n");
 }

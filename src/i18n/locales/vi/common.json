@@ -80,5 +80,9 @@
 	"notifications": "Notifications",
 	"windowTitles": {
 		"notes": "Notes"
+	},
+	"about": {
+		"credit": "{{product}} của {{owner}}",
+		"basedOn": "Dựa trên {{product}} của {{upstream}}"
 	}
 }

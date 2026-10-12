@@ -80,5 +80,9 @@
 	"notifications": "Notifications",
 	"windowTitles": {
 		"notes": "Notes"
+	},
+	"about": {
+		"credit": "{{owner}}의 {{product}}",
+		"basedOn": "{{upstream}}의 {{product}} 기반"
 	}
 }
