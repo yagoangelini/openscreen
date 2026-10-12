@@ -54,11 +54,67 @@ describe("cursor path smoothing", () => {
 		const rawRough = roughness(cyAt(raw), 0, driftEnd);
 		expect(smoothRough).toBeLessThan(rawRough * 0.25);
 
-		// After the cursor rests, the spring settles onto the true target (click accuracy).
+		// Once the cursor rests, the smoothed path is on the true target.
 		const end = samples[samples.length - 1].timeMs;
 		const last = smoothed.sampleAt(end)!;
 		expect(last.cx).toBeCloseTo(0.8, 2);
 		expect(last.cy).toBeCloseTo(0.5, 2);
+	});
+
+	it("draws a steady ramp without phase lag at every strength", () => {
+		// 0.1 -> 0.9 in 2 s, sampled at 30 Hz like the sidecar.
+		const samples: CursorRecordingSample[] = [];
+		for (let i = 0; i <= 60; i++) {
+			samples.push({
+				timeMs: i * 33.3,
+				cx: 0.1 + 0.4 * ((i * 33.3) / 1000),
+				cy: 0.5,
+				visible: true,
+			});
+		}
+		const data = makeRecording(samples);
+		const raw = getSmoothedCursorPath(data, 0)!;
+		const firstReach = (path: typeof raw, x: number) => {
+			for (let t = 0; t <= 2000; t += 0.1) if (path.sampleAt(t)!.cx >= x) return t;
+			return Number.NaN;
+		};
+		for (const strength of [0.1, 0.3, 0.67, 1]) {
+			const smoothed = getSmoothedCursorPath(data, strength)!;
+			for (const x of [0.3, 0.5, 0.7]) {
+				expect(Math.abs(firstReach(smoothed, x) - firstReach(raw, x))).toBeLessThan(0.5);
+			}
+			for (let t = 200; t <= 1800; t += 10) {
+				expect(smoothed.sampleAt(t)!.cx).toBeCloseTo(raw.sampleAt(t)!.cx, 4);
+			}
+		}
+	});
+
+	it("passes exactly through each click, even mid-stroke", () => {
+		// A zigzag, so the smoothing has corners to round, sampled at 30 Hz.
+		const at = (t: number) => ({
+			cx: 0.2 + 0.6 * (1 - Math.abs(2 * ((t * 2.5) % 1) - 1)),
+			cy: 0.3 + 0.2 * t,
+		});
+		const samples: CursorRecordingSample[] = [];
+		for (let i = 0; i <= 60; i++) {
+			samples.push({ timeMs: i * (1000 / 30), ...at(i / 30), visible: true });
+		}
+		// A click mid-stroke, between two samples, at the hook's own point.
+		const clicked = at(1.2345);
+		samples.push({ timeMs: 1234.5, ...clicked, visible: true, interactionType: "click" });
+		samples.sort((a, b) => a.timeMs - b.timeMs);
+		const data = makeRecording(samples);
+		for (const strength of [0.3, 0.67, 1]) {
+			const path = getSmoothedCursorPath(data, strength)!;
+			expect(path.sampleAt(1234.5)).toEqual(clicked);
+			// Continuous around it.
+			for (let t = 1100; t < 1400; t += 1) {
+				const a = path.sampleAt(t)!;
+				const b = path.sampleAt(t + 1)!;
+				expect(Math.abs(a.cx - b.cx)).toBeLessThan(4e-3);
+				expect(Math.abs(a.cy - b.cy)).toBeLessThan(4e-3);
+			}
+		}
 	});
 
 	it("is a passthrough at smoothing 0", () => {

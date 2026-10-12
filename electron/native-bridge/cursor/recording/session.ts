@@ -8,5 +8,5 @@ export interface CursorRecordingSession {
 	 * arrival order, for the crash-safe checkpoint to append from. Optional: a
 	 * session without it simply is not checkpointed.
 	 */
-	peek?(): Pick<CursorRecordingData, "samples" | "assets">;
+	peek?(): Pick<CursorRecordingData, "samples" | "assets" | "path">;
 }

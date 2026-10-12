@@ -6,6 +6,7 @@ import { app, screen } from "electron";
 import type { CursorInputSignal } from "../../../../src/lib/cursor/inputSignals";
 import { parseWindowHandleFromSourceId } from "../../../../src/lib/nativeWindowsRecording";
 import type {
+	CursorPathPoint,
 	CursorRecordingData,
 	CursorRecordingSample,
 	NativeCursorAsset,
@@ -15,6 +16,7 @@ import type { CursorRecordingSession } from "./session";
 import type {
 	WindowsCursorEvent,
 	WindowsCursorInputEvent,
+	WindowsCursorMoveEvent,
 	WindowsCursorPopupEvent,
 	WindowsCursorSampleEvent,
 	WindowsNativeRecordingSessionOptions,
@@ -59,11 +61,23 @@ interface NormalizedSample {
  * going to stay up, and the take carries on without it.
  */
 const MAX_HELPER_RESTARTS = 5;
+
+/**
+ * Fine ticks per sample: between two samples the helper writes where the pointer is (`move`
+ * events), at a quarter of the sample interval, 8.25 ms for 33, only when it moved. They become
+ * the sidecar's `path`, which the compositor draws the cursor along: a 121 Hz path instead of a
+ * 30 Hz one, so a fast flick is not cut into 33 ms straight segments. The samples, which the
+ * auto-zoom reads, keep their cadence.
+ */
+const PATH_SUBDIVISIONS = 4;
+/** Normalized coordinates in the path: 1e-5 of a 4K width is 0.04 px. */
+const PATH_PRECISION = 1e5;
 const HELPER_RESTART_DELAY_MS = 500;
 
 export class WindowsNativeRecordingSession implements CursorRecordingSession {
 	private assets = new Map<string, NativeCursorAsset>();
 	private samples: CursorRecordingSample[] = [];
+	private path: CursorPathPoint[] = [];
 	private process: ChildProcessByStdio<null, Readable, Readable> | null = null;
 	private lineBuffer = "";
 	private startTimeMs = 0;
@@ -94,6 +108,7 @@ export class WindowsNativeRecordingSession implements CursorRecordingSession {
 	async start(): Promise<void> {
 		this.assets.clear();
 		this.samples = [];
+		this.path = [];
 		this.lineBuffer = "";
 		this.startTimeMs = this.options.startTimeMs ?? Date.now();
 		this.sampleCount = 0;
@@ -115,8 +130,12 @@ export class WindowsNativeRecordingSession implements CursorRecordingSession {
 		}
 
 		const windowHandle = parseWindowHandleFromSourceId(this.options.sourceId);
-		const args = [String(this.options.sampleIntervalMs)];
-		if (windowHandle) args.push(windowHandle);
+		// An older helper reads only the first two and writes no path.
+		const args = [
+			String(this.options.sampleIntervalMs),
+			windowHandle ?? "null",
+			String(PATH_SUBDIVISIONS),
+		];
 		this.helperPath = helperPath;
 		this.helperArgs = args;
 
@@ -234,16 +253,18 @@ export class WindowsNativeRecordingSession implements CursorRecordingSession {
 		// Input events are written by the helper's own thread, a moment after the ticks around
 		// them: put them back in time order (a stable sort keeps a tick's order).
 		this.samples.sort((a, b) => a.timeMs - b.timeMs);
+		this.path.sort((a, b) => a[0] - b[0]);
 		return {
 			version: 2,
 			provider: this.assets.size > 0 ? "native" : "none",
 			samples: this.samples,
 			assets: [...this.assets.values()],
+			...(this.path.length > 0 ? { path: this.path } : {}),
 		};
 	}
 
 	peek() {
-		return { samples: this.samples, assets: [...this.assets.values()] };
+		return { samples: this.samples, assets: [...this.assets.values()], path: this.path };
 	}
 
 	private handleStdoutChunk(chunk: string) {
@@ -302,6 +323,11 @@ export class WindowsNativeRecordingSession implements CursorRecordingSession {
 
 		if (payload.type === "input" || payload.type === "popup") {
 			this.samples.push(this.normalizeSignal(payload));
+			return;
+		}
+
+		if (payload.type === "move") {
+			this.path.push(this.normalizePathPoint(payload));
 			return;
 		}
 
@@ -440,6 +466,17 @@ export class WindowsNativeRecordingSession implements CursorRecordingSession {
 			interactionType,
 			input,
 		};
+	}
+
+	/** A `move` event as a path point, against the surface the last sample reported. */
+	private normalizePathPoint(payload: WindowsCursorMoveEvent): CursorPathPoint {
+		const b = this.lastPhysicalBounds ?? this.physicalBoundsOf(null);
+		const round = (value: number) => Math.round(value * PATH_PRECISION) / PATH_PRECISION;
+		return [
+			Math.max(0, payload.timestampMs - this.startTimeMs),
+			round((payload.x - b.x) / Math.max(1, b.width)),
+			round((payload.y - b.y) / Math.max(1, b.height)),
+		];
 	}
 
 	private normalizeSample(

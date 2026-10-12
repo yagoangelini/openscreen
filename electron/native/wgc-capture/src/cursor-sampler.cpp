@@ -12,6 +12,7 @@
 #include <atomic>
 #include <algorithm>
 #include <chrono>
+#include <climits>
 #include <cinttypes>
 #include <condition_variable>
 #include <cstdint>
@@ -619,10 +620,49 @@ static std::string buildAssetJson(
 // ─────────────────────────────────────────────────────────────────────────────
 // Sampling loop (background thread)
 // ─────────────────────────────────────────────────────────────────────────────
-static void runSamplingLoop(int intervalMs, HWND targetWindow, const CLSID& pngClsid) {
+// The pointer between two samples. A full sample every `intervalMs` carries everything (state,
+// image, buttons, bounds), and the auto-zoom reads that cadence; in between, `subdivisions - 1`
+// ticks write only where the pointer is, and only when it moved: a compact
+// {"type":"move","timestampMs":..,"x":..,"y":..} line the app keeps as the drawn cursor's fine
+// path. At 33 ms / 4 the drawn cursor follows a 121 Hz path instead of a 30 Hz one, for a few
+// kilobytes a second while the hand moves and nothing while it rests.
+static void writeMoveIfChanged(POINT& last) {
+    POINT pt{};
+    if (!GetCursorPos(&pt) || (pt.x == last.x && pt.y == last.y)) {
+        return;
+    }
+    last = pt;
+    char buf[96];
+    std::snprintf(buf, sizeof(buf), "{\"type\":\"move\",\"timestampMs\":%" PRId64 ",\"x\":%ld,\"y\":%ld}",
+        nowMs(), pt.x, pt.y);
+    writeJsonLine(buf);
+}
+
+static void runSamplingLoop(int intervalMs, int subdivisions, HWND targetWindow, const CLSID& pngClsid) {
     HCURSOR lastCursor = nullptr;
+    POINT lastPoint{LONG_MIN, LONG_MIN};
+    // Ticks on deadlines, not `sleep_for` after the work: the full samples keep their cadence
+    // (it was 34 ms for 33 asked) and the fine ones fall evenly between them.
+    const auto tick = std::chrono::duration_cast<std::chrono::steady_clock::duration>(
+        std::chrono::duration<double, std::milli>(static_cast<double>(intervalMs) / subdivisions));
+    auto deadline = std::chrono::steady_clock::now();
+    int64_t tickIndex = -1;
 
     while (!g_stop.load(std::memory_order_relaxed)) {
+        tickIndex += 1;
+        if (tickIndex > 0) {
+            deadline += tick;
+            const auto now = std::chrono::steady_clock::now();
+            if (deadline < now - tick) {
+                // Asleep far past it (a suspended machine): count again from now.
+                deadline = now;
+            }
+            std::this_thread::sleep_until(deadline);
+        }
+        if (tickIndex % subdivisions != 0) {
+            writeMoveIfChanged(lastPoint);
+            continue;
+        }
         const int downCount = g_leftDownCount.exchange(0, std::memory_order_relaxed);
         const int upCount   = g_leftUpCount.exchange(0,   std::memory_order_relaxed);
 
@@ -634,10 +674,10 @@ static void runSamplingLoop(int intervalMs, HWND targetWindow, const CLSID& pngC
                 "{\"type\":\"error\",\"timestampMs\":%" PRId64 ",\"message\":\"GetCursorInfo failed\"}",
                 nowMs());
             writeJsonLine(buf);
-            std::this_thread::sleep_for(std::chrono::milliseconds(intervalMs));
             continue;
         }
 
+        lastPoint = ci.ptScreenPos;
         const bool    visible   = (ci.flags & CURSOR_SHOWING) != 0;
         const HCURSOR hc        = ci.hCursor;
 
@@ -708,8 +748,6 @@ static void runSamplingLoop(int intervalMs, HWND targetWindow, const CLSID& pngC
             PostThreadMessage(g_mainThreadId, WM_QUIT, 0, 0);
             break;
         }
-
-        std::this_thread::sleep_for(std::chrono::milliseconds(intervalMs));
     }
 }
 
@@ -737,11 +775,13 @@ int main(int argc, char* argv[]) {
     const HighResolutionTiming highResolutionTiming;
 
     if (argc < 2) {
-        std::cerr << "Usage: cursor-sampler <intervalMs> [windowHandle]" << std::endl;
+        std::cerr << "Usage: cursor-sampler <intervalMs> [windowHandle|null] [subdivisions]" << std::endl;
         return 1;
     }
 
     const int intervalMs = std::max(1, std::atoi(argv[1]));
+    // Fine ticks per sample (`writeMoveIfChanged`); 1, the default, writes samples only.
+    const int subdivisions = argc >= 4 ? std::clamp(std::atoi(argv[3]), 1, 16) : 1;
 
     HWND targetWindow = nullptr;
     if (argc >= 3) {
@@ -819,7 +859,7 @@ int main(int argc, char* argv[]) {
     }
 
     // Start sampling on a background thread
-    std::thread sampler(runSamplingLoop, intervalMs, targetWindow, std::cref(pngClsid));
+    std::thread sampler(runSamplingLoop, intervalMs, subdivisions, targetWindow, std::cref(pngClsid));
 
     // Run the message pump on the main thread — required for WH_MOUSE_LL callbacks
     MSG msg;

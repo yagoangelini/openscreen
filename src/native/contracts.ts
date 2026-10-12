@@ -55,11 +55,22 @@ export interface NativeCursorAsset {
 	cursorType?: NativeCursorType | null;
 }
 
+/** `[timeMs, cx, cy]`: where the pointer was between two samples, normalized like a sample. */
+export type CursorPathPoint = [number, number, number];
+
 export interface CursorRecordingData {
 	version: number;
 	provider: CursorProviderKind;
 	samples: CursorRecordingSample[];
 	assets: NativeCursorAsset[];
+	/**
+	 * The pointer between the samples, for the drawn cursor only: the Windows sampler reads it
+	 * about every 8 ms while it moves (the samples stay at ~30 Hz, the cadence the auto-zoom reads).
+	 * Positions only; visibility, clicks and cursor states are the samples'. The compositor merges
+	 * it into the track it draws (`CursorTrack::load`). Absent from older sidecars and other
+	 * platforms.
+	 */
+	path?: CursorPathPoint[];
 }
 
 export interface CursorCapabilities {

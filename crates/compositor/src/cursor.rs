@@ -23,6 +23,14 @@ const PIN_APPROACH_S: f32 = 0.25;
 const PIN_HOLD_S: f32 = 0.1;
 const PIN_RELEASE_S: f32 = 0.25;
 
+/// Spread (one standard deviation) of the cursor smoothing at slider 1. The smoothing is a
+/// centred Gaussian over the whole known path (`smoothed`): it rounds off tremor and the corners
+/// of a 30 Hz track without moving the cursor in time. 30 ms at full strength keeps every corner
+/// within about one 60 fps frame of the real one.
+const SMOOTHING_SIGMA_MAX_S: f32 = 0.030;
+/// Grid the smoothing runs on: fine enough for any export fps.
+const SMOOTHING_STEP_S: f32 = 1.0 / 240.0;
+
 fn smoothstep01(x: f32) -> f32 {
     let u = x.clamp(0.0, 1.0);
     u * u * (3.0 - 2.0 * u)
@@ -292,7 +300,7 @@ impl CursorTrack {
                 visibility.push((t, visible));
             }
             if visible && s["interactionType"].as_str() == Some("click") {
-                clicks.push(t);
+                clicks.push((t, (cx, cy)));
             }
             // Seules les TRANSITIONS sont retenues — voir `types`. Le helper
             // macOS rend nil hors texte/pointeur pour que le rendu retombe sur
@@ -311,13 +319,33 @@ impl CursorTrack {
                 types.push((t, ct.to_string()));
             }
         }
+        // The pointer between the samples: `[timeMs, cx, cy]` points the Windows sampler reads at
+        // ~120 Hz while the cursor moves (absent from older sidecars, and from other platforms).
+        // Positions only: visibility, clicks and cursor states stay those of `samples`.
+        if let Some(path) = v["path"].as_array() {
+            for point in path {
+                let Some([tm, cx, cy]) = point.as_array().and_then(|p| {
+                    Some([p.first()?.as_f64()?, p.get(1)?.as_f64()?, p.get(2)?.as_f64()?])
+                }) else {
+                    continue;
+                };
+                if tm < offset_ms || tm > end {
+                    continue;
+                }
+                samples.push((((tm - offset_ms) / 1000.0) as f32, cx as f32, cy as f32));
+            }
+        }
         samples.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
-        clicks.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        clicks.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
         types.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
         visibility.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
-        Ok(CursorTrack::new_with_visibility(
-            samples, clicks, types, visibility,
-        ))
+        let (click_times, click_points): (Vec<f32>, Vec<(f32, f32)>) = clicks.into_iter().unzip();
+        // Each click lands on the point its own sample recorded (the hook's), not on whatever
+        // the merged track interpolates to at that instant.
+        Ok(CursorTrack {
+            click_points,
+            ..CursorTrack::new_with_visibility(samples, click_times, types, visibility)
+        })
     }
 
     /// Position lissée au temps `t`, pour le suivi auto du zoom. La télémétrie brute est
@@ -463,9 +491,9 @@ impl CursorTrack {
     }
 
     /// `at(t)`, ramenée sur la position brute de chaque clic autour de lui : la pointe du curseur
-    /// modélisé doit toucher le pixel cliqué. Sur une piste lissée, le ressort traîne derrière la
-    /// souris et le contact tombait à côté de la cible ; sans lissage, la piste brute dérive pendant
-    /// le contact dès que la souris repart.
+    /// modélisé doit toucher le pixel cliqué pendant tout son appui, alors que la piste (lissée ou
+    /// brute) dérive pendant le contact dès que la souris repart. La piste lissée passe déjà par le
+    /// point cliqué à l'instant du clic (`smoothed`).
     ///
     /// Pour chaque clic `tc`, un poids vers son point : il monte en smoothstep sur
     /// `PIN_APPROACH_S`, vaut 1 sur `[tc, tc + PIN_HOLD_S]` (le contact), puis retombe en
@@ -556,23 +584,35 @@ impl CursorTrack {
         &self.clicks[a..b.max(a)]
     }
 
-    /// Piste repositionnée par un ressort-amortisseur (parité `cursorPathSmoothing.ts` :
-    /// resample à 240 Hz + intégration semi-implicite d'Euler). `factor` 0..1 = valeur brute
-    /// du slider (0 = passthrough, retourne un clone). Les clics restent sur leurs instants
-    /// bruts (le bounce est temporel, pas positionnel — ne doit pas suivre le lissage).
+    /// The track as drawn at smoothing `factor` (the raw slider value, 0..1; 0 returns a clone).
+    ///
+    /// Zero-phase: the whole path is known, so each point is the centred Gaussian average of the
+    /// raw path around it (`SMOOTHING_SIGMA_MAX_S` × `factor`), resampled on a 240 Hz grid. A
+    /// pointer moving at any steady speed is drawn exactly where it is, at the time it is there;
+    /// only tremor and the corners of the sampled path are rounded off. The spring this replaced
+    /// trailed the pointer by its damping over its stiffness: 189 ms at the default 0.67, measured
+    /// 198 ms behind the real pointer in an export of a real take.
+    ///
+    /// Each visible run is smoothed on its own, its ends held (a cursor that reappears starts on
+    /// its first visible point), and each click is pulled back onto its raw point at its own
+    /// instant (`pin_clicks`): the smoothed path passes exactly where the user clicked. Clicks and
+    /// cursor states keep their raw instants. Mirrored by `cursorPathSmoothing.ts`.
     pub fn smoothed(&self, factor: f32) -> CursorTrack {
-        if self.samples.len() < 2 || factor <= 0.0 {
-            return CursorTrack::new_with_visibility(
-                self.samples.clone(),
-                self.clicks.clone(),
-                self.types.clone(),
-                self.visibility.clone(),
-            );
+        let sigma = factor.clamp(0.0, 1.0) * SMOOTHING_SIGMA_MAX_S;
+        if self.samples.len() < 2 || !(sigma > 0.0) {
+            return CursorTrack {
+                click_points: self.click_points.clone(),
+                ..CursorTrack::new_with_visibility(
+                    self.samples.clone(),
+                    self.clicks.clone(),
+                    self.types.clone(),
+                    self.visibility.clone(),
+                )
+            };
         }
-        const STEP_S: f32 = 1.0 / 240.0;
         let start = self.samples[0].0;
         let end = self.samples[self.samples.len() - 1].0;
-        let step_count = (((end - start) / STEP_S).round() as usize).max(1);
+        let step_count = (((end - start) / SMOOTHING_STEP_S).round() as usize).max(1);
         let n = step_count + 1;
         let mut times = Vec::with_capacity(n);
         let mut raw_x = Vec::with_capacity(n);
@@ -581,16 +621,14 @@ impl CursorTrack {
             let t = if i == n - 1 {
                 end
             } else {
-                start + i as f32 * STEP_S
+                start + i as f32 * SMOOTHING_STEP_S
             };
             let (cx, cy) = self.at(t).unwrap_or((0.0, 0.0));
             times.push(t);
             raw_x.push(cx);
             raw_y.push(cy);
         }
-        let (stiffness, damping, mass) = cursor_spring_config(factor);
-        // Une phase masquée coupe le ressort. Au retour, le curseur repart du premier point
-        // réellement visible au lieu de traverser la trajectoire cachée avec du retard.
+        let kernel = gaussian_kernel(sigma, SMOOTHING_STEP_S);
         let mut xs = Vec::with_capacity(n);
         let mut ys = Vec::with_capacity(n);
         let mut run_start = 0;
@@ -600,31 +638,17 @@ impl CursorTrack {
             while run_end < n && self.visible_at(times[run_end]) == visible {
                 run_end += 1;
             }
-            xs.extend(spring_smooth(
-                &raw_x[run_start..run_end],
-                stiffness,
-                damping,
-                mass,
-                STEP_S,
-            ));
-            ys.extend(spring_smooth(
-                &raw_y[run_start..run_end],
-                stiffness,
-                damping,
-                mass,
-                STEP_S,
-            ));
+            xs.extend(gaussian_smooth(&raw_x[run_start..run_end], &kernel));
+            ys.extend(gaussian_smooth(&raw_y[run_start..run_end], &kernel));
             run_start = run_end;
         }
-        let samples = times
+        let mut samples: Vec<(f32, f32, f32)> = times
             .into_iter()
             .zip(xs)
             .zip(ys)
             .map(|((t, x), y)| (t, x, y))
             .collect();
-        // Comme les clics, les changements d'état gardent leurs instants bruts : le lissage
-        // déplace la trajectoire, pas la chronologie de ce que faisait l'utilisateur. Les points
-        // cliqués restent ceux de la piste brute.
+        self.pin_clicks(&mut samples, 3.0 * sigma);
         CursorTrack {
             click_points: self.click_points.clone(),
             ..CursorTrack::new_with_visibility(
@@ -634,6 +658,39 @@ impl CursorTrack {
                 self.visibility.clone(),
             )
         }
+    }
+
+    /// Moves a smoothed track back onto each click's raw point at the click's instant. The offset
+    /// there is applied in full and faded out over `reach` on both sides (smoothstep), so the
+    /// motion keeps its shape; `reach` is the smoothing kernel's, past which the smoothed path
+    /// already is the raw one. The instant itself becomes a point of the track, so the drawn
+    /// cursor sits on the clicked pixel whatever the grid. Points of another visibility phase are
+    /// left alone.
+    fn pin_clicks(&self, samples: &mut Vec<(f32, f32, f32)>, reach: f32) {
+        let reach = reach.max(SMOOTHING_STEP_S);
+        let mut instants = Vec::with_capacity(self.clicks.len());
+        for (&tc, &(cx, cy)) in self.clicks.iter().zip(&self.click_points) {
+            let Some((sx, sy)) = sample_at(samples, tc) else {
+                continue;
+            };
+            let (dx, dy) = (cx - sx, cy - sy);
+            let visible = self.visible_at(tc);
+            let lo = samples.partition_point(|s| s.0 < tc - reach);
+            let hi = samples.partition_point(|s| s.0 <= tc + reach);
+            for s in &mut samples[lo..hi] {
+                if self.visible_at(s.0) != visible {
+                    continue;
+                }
+                let w = 1.0 - smoothstep01((s.0 - tc).abs() / reach);
+                s.1 += dx * w;
+                s.2 += dy * w;
+            }
+            instants.push((tc, cx, cy));
+        }
+        // Merged once: an insert per click would move the whole track each time. The sort is
+        // stable, so a click on a grid instant comes after it, and `sample_at` reads the click.
+        samples.extend(instants);
+        samples.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
     }
 
     /// Opacité du curseur (0.0..1.0) selon l'inactivité (auto-hide).
@@ -718,45 +775,33 @@ impl CursorTrack {
     }
 }
 
-/// Ressort-amortisseur, intégration semi-implicite (symplectique) d'Euler — stable pour ces
-/// raideurs à la grille 240 Hz (port direct de `springSmooth` en TS).
-fn spring_smooth(
-    targets: &[f32],
-    stiffness: f32,
-    damping: f32,
-    mass: f32,
-    step_s: f32,
-) -> Vec<f32> {
-    let mut out = vec![0.0f32; targets.len()];
-    if targets.is_empty() {
-        return out;
-    }
-    let mut x = targets[0];
-    let mut v = 0.0f32;
-    out[0] = x;
-    for i in 1..targets.len() {
-        let accel = (-stiffness * (x - targets[i]) - damping * v) / mass;
-        v += accel * step_s;
-        x += v * step_s;
-        out[i] = x;
-    }
-    out
+/// An unnormalised Gaussian of spread `sigma`, sampled every `step` out to 3 sigma on each side.
+fn gaussian_kernel(sigma: f32, step: f32) -> Vec<f32> {
+    let radius = ((3.0 * sigma / step).ceil() as usize).max(1);
+    (0..=2 * radius)
+        .map(|i| {
+            let d = (i as f32 - radius as f32) * step / sigma;
+            (-0.5 * d * d).exp()
+        })
+        .collect()
 }
 
-/// Port direct de `getCursorSpringConfig` (TS) → (stiffness, damping, mass). N'accepte que
-/// 0..1 (plage réelle du slider, cf. `RightPanes.tsx` : `smoothing * 100` sur un slider 0..100).
-fn cursor_spring_config(smoothing_factor: f32) -> (f32, f32, f32) {
-    let clamped = smoothing_factor.clamp(0.0, 2.0);
-    if clamped <= 0.0 {
-        return (1000.0, 100.0, 1.0);
-    }
-    const LEGACY_MAX: f32 = 0.5;
-    if clamped <= LEGACY_MAX {
-        let n = (clamped / LEGACY_MAX).clamp(0.0, 1.0);
-        return (760.0 - n * 420.0, 34.0 + n * 24.0, 0.55 + n * 0.45);
-    }
-    let n = ((clamped - LEGACY_MAX) / (2.0 - LEGACY_MAX)).clamp(0.0, 1.0);
-    (340.0 - n * 180.0, 58.0 + n * 22.0, 1.0 + n * 0.35)
+/// Centred convolution of an evenly spaced series with `kernel` (odd length), each end held:
+/// zero phase, so a ramp comes out where it went in.
+fn gaussian_smooth(values: &[f32], kernel: &[f32]) -> Vec<f32> {
+    let radius = kernel.len() / 2;
+    let last = values.len().saturating_sub(1);
+    let total: f32 = kernel.iter().sum();
+    (0..values.len())
+        .map(|i| {
+            let mut sum = 0.0f32;
+            for (j, w) in kernel.iter().enumerate() {
+                let k = (i + j).saturating_sub(radius).min(last);
+                sum += values[k] * w;
+            }
+            sum / total
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -993,7 +1038,7 @@ mod tests {
         let reappeared = smoothed.at(0.6).expect("position at reappearance");
         assert!(
             (reappeared.0 - 0.9).abs() < 0.02 && (reappeared.1 - 0.9).abs() < 0.02,
-            "le ressort redémarre au point visible, sans traîne: {reappeared:?}"
+            "the smoothing restarts on the visible point, with no trail: {reappeared:?}"
         );
     }
 
@@ -1088,8 +1133,161 @@ mod tests {
             }
             println!("au clic, piste en {lag:?}, point cliqué {clicked:?}");
         }
-        // Le lissage traîne bel et bien : sans la convergence, le contact tomberait à côté.
-        assert!(raw.smoothed(0.5).at(1.0).unwrap().0 < 0.69);
+        // The smoothed track already passes through the clicked point at the click.
+        for factor in [0.5, 1.0] {
+            assert_eq!(raw.smoothed(factor).at(1.0), Some(clicked), "smoothing {factor}");
+        }
+    }
+
+    /// When a track first reaches `x` (interpolated between its points), at or after `from`.
+    fn first_reach(track: &CursorTrack, x: f32, from: f32) -> f32 {
+        let mut t = from;
+        while track.at(t).unwrap().0 < x {
+            t += 1e-4;
+            assert!(t < from + 10.0, "never reaches {x}");
+        }
+        t
+    }
+
+    /// The smoothing has no phase lag: a pointer crossing the screen at a steady speed is drawn
+    /// where it is, when it is there, at every strength. The spring it replaced was 189 ms late
+    /// at the default strength.
+    #[test]
+    fn a_steady_ramp_is_drawn_without_lag() {
+        // 0.1 -> 0.9 in 2 s (768 px/s at 1080p width), sampled at 30 Hz like the sidecar.
+        let raw = CursorTrack::new(
+            (0..=90)
+                .map(|k| {
+                    let t = k as f32 / 30.0;
+                    (t, (0.1 + 0.4 * t).min(0.9), 0.5)
+                })
+                .collect(),
+            vec![],
+            vec![],
+        );
+        for factor in [0.1, 0.3, 0.67, 1.0] {
+            let drawn = raw.smoothed(factor);
+            for x in [0.3, 0.5, 0.7] {
+                let lag_ms = (first_reach(&drawn, x, 0.0) - first_reach(&raw, x, 0.0)) * 1000.0;
+                assert!(lag_ms.abs() < 0.5, "smoothing {factor}, x {x}: {lag_ms} ms");
+            }
+            for k in 20..=170 {
+                let t = k as f32 / 100.0;
+                let (a, b) = (drawn.at(t).unwrap(), raw.at(t).unwrap());
+                assert!((a.0 - b.0).abs() < 1e-4, "smoothing {factor} at {t}: {a:?} vs {b:?}");
+            }
+        }
+    }
+
+    /// The smoothing rounds a corner symmetrically: the drawn cursor turns as much before the
+    /// real turn as after it, it never trails the turn, and it stops where the pointer stopped.
+    #[test]
+    fn a_stop_is_reached_where_and_when_it_happens() {
+        // Moves right until 1 s, then holds still.
+        let raw = CursorTrack::new(
+            (0..=60)
+                .map(|k| {
+                    let t = k as f32 / 30.0;
+                    (t, 0.1 + 0.5 * t.min(1.0), 0.5)
+                })
+                .collect(),
+            vec![],
+            vec![],
+        );
+        let drawn = raw.smoothed(1.0);
+        // Symmetric about the stop: as far behind before it as it is short after it.
+        let before = 0.6 - drawn.at(0.97).unwrap().0 - (0.6 - raw.at(0.97).unwrap().0);
+        let after = 0.6 - drawn.at(1.03).unwrap().0;
+        assert!((before - after).abs() < 1e-3, "before {before}, after {after}");
+        // 3 sigma after the stop, exactly on it.
+        assert!((drawn.at(1.0 + 3.0 * SMOOTHING_SIGMA_MAX_S + 0.005).unwrap().0 - 0.6).abs() < 1e-4);
+    }
+
+    /// A click in the middle of a fast stroke: the smoothed path passes through the raw clicked
+    /// point at the click's instant, at every strength, and stays continuous around it.
+    #[test]
+    fn the_smoothed_path_passes_through_every_click() {
+        // A zigzag, so the smoothing has corners to round at the clicks, sampled at 30 Hz.
+        let samples: Vec<(f32, f32, f32)> = (0..=60)
+            .map(|k| {
+                let t = k as f32 / 30.0;
+                let tri = 1.0 - (2.0 * (t * 2.5).fract() - 1.0).abs();
+                (t, 0.2 + 0.6 * tri, 0.3 + 0.2 * t)
+            })
+            .collect();
+        // Clicks on a corner, mid-stroke and between two samples.
+        let clicks = vec![0.4, 0.55, 1.2345];
+        let raw = CursorTrack::new(samples, clicks.clone(), vec![]);
+        for factor in [0.3, 0.67, 1.0] {
+            let drawn = raw.smoothed(factor);
+            for &tc in &clicks {
+                assert_eq!(drawn.at(tc), raw.at(tc), "smoothing {factor}, click at {tc}");
+            }
+            for k in 0..1999 {
+                let (a, b) = (
+                    drawn.at(k as f32 * 0.001).unwrap(),
+                    drawn.at((k + 1) as f32 * 0.001).unwrap(),
+                );
+                assert!(
+                    (a.0 - b.0).abs() < 4e-3 && (a.1 - b.1).abs() < 4e-3,
+                    "jump at {k} ms: {a:?} -> {b:?}"
+                );
+            }
+        }
+    }
+
+    fn write_temp_sidecar(tag: &str, json: &str) -> std::path::PathBuf {
+        let unique = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        let path = std::env::temp_dir().join(format!(
+            "openscreen-cursor-{tag}-{}-{}.json",
+            std::process::id(),
+            unique
+        ));
+        std::fs::write(&path, json).expect("write temp sidecar");
+        path
+    }
+
+    /// A sidecar from before the fine path loads exactly as it did: positions from `samples`.
+    /// One with a `path` fills in between the samples, while visibility, clicks and their points
+    /// still come from the samples.
+    #[test]
+    fn the_fine_path_fills_in_between_samples_and_old_sidecars_are_unchanged() {
+        let samples = r#"
+            {"timeMs":0,"cx":0.1,"cy":0.1,"visible":true},
+            {"timeMs":40,"cx":0.3,"cy":0.1,"visible":true,"interactionType":"click"},
+            {"timeMs":80,"cx":0.5,"cy":0.1,"visible":false},
+            {"timeMs":120,"cx":0.5,"cy":0.5,"visible":true}"#;
+        let old = write_temp_sidecar("old", &format!(r#"{{"samples":[{samples}]}}"#));
+        let fine = write_temp_sidecar(
+            "fine",
+            &format!(
+                r#"{{"samples":[{samples}],"path":[[10,0.2,0.15],[20,0.24,0.2],[40,0.31,0.1],[60,0.4,0.12],"bad",[70]]}}"#
+            ),
+        );
+        let old_track = CursorTrack::load(old.to_str().unwrap(), 0.0, 1.0).expect("old sidecar");
+        let fine_track = CursorTrack::load(fine.to_str().unwrap(), 0.0, 1.0).expect("fine sidecar");
+        let _ = std::fs::remove_file(&old);
+        let _ = std::fs::remove_file(&fine);
+
+        // Old: linear between the samples, as before.
+        assert_eq!(old_track.sample_count(), 4);
+        let mid = old_track.at(0.02).unwrap();
+        assert!((mid.0 - 0.2).abs() < 1e-6 && (mid.1 - 0.1).abs() < 1e-6, "{mid:?}");
+        // Fine: the path points are drawn, malformed entries skipped.
+        assert_eq!(fine_track.sample_count(), 8);
+        assert_eq!(fine_track.at(0.02), Some((0.24, 0.2)));
+        assert_eq!(fine_track.at(0.06), Some((0.4, 0.12)));
+        // The click keeps its own recorded point, not the path point at the same instant.
+        assert_eq!(fine_track.clicks, vec![0.04]);
+        assert_eq!(fine_track.click_points, vec![(0.3, 0.1)]);
+        assert_eq!(old_track.click_points, vec![(0.3, 0.1)]);
+        // Visibility is the samples'.
+        assert!(fine_track.visible_at(0.06));
+        assert!(!fine_track.visible_at(0.1));
+        assert!(fine_track.visible_at(0.12));
     }
 
     /// Enveloppe du click bounce : neutre hors fenêtre, continue aux jonctions, creux à 0.76 et
