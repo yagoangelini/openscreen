@@ -153,6 +153,7 @@ import {
 	readWebcamDark,
 	readWebcamFormat,
 	readWebcamUnavailable,
+	reapNativeWindowsCapture,
 	terminateNativeWindowsCapture,
 	waitForNativeWindowsCaptureStop,
 } from "../recording/nativeWindowsCaptureStop";
@@ -880,6 +881,12 @@ let nativeWindowsCaptureDrainCleanup: (() => void) | null = null;
  * because it was asked to is not mistaken for the take dying on its own.
  */
 let nativeWindowsStopInFlight = false;
+/**
+ * The previous helper finishing its shutdown after its take was handed over
+ * (`outputs-closed`). A new take waits for it: two helpers would share the
+ * output buffer and the encoders.
+ */
+let nativeWindowsHelperExit: Promise<void> | null = null;
 /**
  * The helper ended the take before anyone asked it to: it reported a failure,
  * or simply exited. Read at stop to tell the user the take ends early.
@@ -1675,6 +1682,13 @@ export function readStartTiming(output: string) {
 		.join(" ");
 }
 
+/** The helper's `[stop-timing]` steps, finished ones only (a `phase=begin` line is not a step's end). */
+export function readStopTiming(output: string) {
+	return [...output.matchAll(/\[stop-timing\] step=(\S+) elapsed_ms=(\d+)(?!\d| phase=begin)/g)]
+		.map((match) => `${match[1]}=${match[2]}`)
+		.join(" ");
+}
+
 function waitForNativeWindowsCaptureStart(proc: ChildProcessWithoutNullStreams, delayMs = 0) {
 	return new Promise<void>((resolve, reject) => {
 		// The countdown the helper waits out is not time it spent failing to start.
@@ -2230,6 +2244,8 @@ export function registerIpcHandlers(
 	getCountdownOverlayWindow?: () => BrowserWindow | null,
 	onRecordingStateChange?: (recording: boolean, sourceName: string) => void,
 	_switchToHud?: () => void,
+	/** The editor loaded hidden during a stop, so it is ready when the take is (main.ts). */
+	editorPrewarm?: { open: () => void; discard: (afterMs?: number) => void },
 ) {
 	const appSettings = new AppSettingsStore(app.getPath("userData"));
 	const broadcastSelectedSource = (source: SelectedSource | null) => {
@@ -3204,6 +3220,8 @@ export function registerIpcHandlers(
 				if (nativeWindowsCaptureProcess) {
 					return { success: false, error: "Native Windows capture is already running." };
 				}
+				// Bounded by the reaper's own kill (NATIVE_WINDOWS_CAPTURE_REAP_TIMEOUT_MS).
+				await nativeWindowsHelperExit;
 
 				const helperPath = await findNativeWindowsCaptureHelperPath();
 				if (!helperPath) {
@@ -3954,6 +3972,38 @@ export function registerIpcHandlers(
 		return nativeWindowsStopPromise;
 	};
 
+	/**
+	 * The rest of a helper whose take was already handed over: closing WGC and the
+	 * process exit. Logged when it is gone, with the steps the stop line could not
+	 * carry yet.
+	 */
+	const reapStoppedNativeWindowsHelper = (
+		proc: ChildProcessWithoutNullStreams,
+		stopRequestedAtMs: number,
+	) => {
+		// Taken now: the stop's `finally` forgets it before this helper is gone.
+		const detachDrain = nativeWindowsCaptureDrainCleanup;
+		const exit: Promise<void> = reapNativeWindowsCapture(proc)
+			.then((exited) => {
+				if (!exited) {
+					// Survived the kill: its output must not reach the next take's buffer.
+					detachDrain?.();
+				}
+				console.info("[native-wgc] helper gone after the hand-off", {
+					exited,
+					code: proc.exitCode,
+					sinceStopMs: Date.now() - stopRequestedAtMs,
+					stopTiming: readStopTiming(nativeWindowsCaptureOutput),
+				});
+			})
+			.finally(() => {
+				if (nativeWindowsHelperExit === exit) {
+					nativeWindowsHelperExit = null;
+				}
+			});
+		nativeWindowsHelperExit = exit;
+	};
+
 	const runNativeWindowsCaptureStop = async ({
 		proc,
 		discard,
@@ -4004,6 +4054,18 @@ export function registerIpcHandlers(
 		// fragmented file. Reported so a bug report can tell a clean stop from a
 		// recovered one; the user-facing path is deliberately identical.
 		let recovered = false;
+		// Where the stop goes on this side, step by step, next to the helper's own
+		// [stop-timing]: ms since the stop request reached the main process.
+		const stopRequestedAtMs = Date.now();
+		const mainStopTiming: string[] = [];
+		const markStop = (step: string) => {
+			mainStopTiming.push(`${step}=${Date.now() - stopRequestedAtMs}`);
+		};
+
+		// Stopped with the picture, at the click, and alongside the helper's finalize rather
+		// than after it: the samples end where the take does, and the save no longer waits
+		// for one and then the other.
+		let cursorStopped: Promise<void> | null = null;
 
 		try {
 			completeNativeWindowsCursorPauseRange();
@@ -4015,7 +4077,14 @@ export function registerIpcHandlers(
 			if (!sendNativeWindowsStopCommand(proc)) {
 				console.warn("[native-wgc] stop command channel was already closed");
 			}
+			markStop("stop-sent");
+			cursorStopped = stopCursorRecording();
 			const stopResult = await stopPromise;
+			markStop(stopResult.ok && stopResult.helperRunning ? "outputs-closed" : "helper-exited");
+			if (stopResult.ok && stopResult.helperRunning) {
+				// Every file of the take is closed; closing WGC and the exit go on without us.
+				reapStoppedNativeWindowsHelper(proc, stopRequestedAtMs);
+			}
 			if (!stopResult.ok) {
 				console.error("[native-wgc] stop failed", {
 					reason: stopResult.reason,
@@ -4048,7 +4117,7 @@ export function registerIpcHandlers(
 					});
 					recovered = true;
 				} else {
-					await stopCursorRecording();
+					await cursorStopped;
 					// Same as the discard path. `startCursorRecording` clears this on
 					// the next recording anyway, so this is not what keeps the samples
 					// from being written next to someone else's video -- it just stops
@@ -4095,11 +4164,11 @@ export function registerIpcHandlers(
 				);
 			}
 
-			if (cursorCaptureMode === "editable-overlay") {
-				await stopCursorRecording();
-			} else {
+			await cursorStopped;
+			if (cursorCaptureMode !== "editable-overlay") {
 				pendingCursorRecordingData = null;
 			}
+			markStop("cursor-stopped");
 
 			// From here on the video is final and playable. Everything below is
 			// bookkeeping around it, and none of it may turn a saved take into a
@@ -4107,7 +4176,14 @@ export function registerIpcHandlers(
 			// not be saved", and leave the MP4 orphaned on disk. A full disk can
 			// fail any of these writes, and the take matters more than its
 			// sidecars -- a take without its cursor file still opens.
-			if (cursorCaptureMode === "editable-overlay") {
+			//
+			// The writes run side by side, in two rounds: the media links need the
+			// cursor file and the camera's verdict, everything else needs the session.
+			// One after the other they cost about 100 ms of every stop.
+			const cursorWritten = (async () => {
+				if (cursorCaptureMode !== "editable-overlay") {
+					return;
+				}
 				try {
 					compactPendingCursorTelemetryPauseRanges(nativeWindowsPauseRanges);
 					shiftPendingCursorTelemetry(nativeWindowsCursorOffsetMs);
@@ -4123,9 +4199,11 @@ export function registerIpcHandlers(
 					// when the write failed -- it is then the only copy of the samples.
 					stopCursorCheckpointTimer();
 				}
-			}
-			let webcamVideoPath: string | undefined;
-			if (preferredWebcamPath) {
+			})();
+			const webcamChecked = (async (): Promise<string | undefined> => {
+				if (!preferredWebcamPath) {
+					return undefined;
+				}
 				try {
 					// Size, not just existence. A camera that opened but delivered no
 					// frame still gets a file created for it, and its `Finalize()` then
@@ -4136,62 +4214,79 @@ export function registerIpcHandlers(
 					// which is how a webcam that never recorded showed up as the desktop
 					// duplicated into its own corner (getopenscreen/openscreen#387).
 					const webcamStat = await fs.stat(preferredWebcamPath);
-					webcamVideoPath = webcamStat.size > 0 ? preferredWebcamPath : undefined;
-					if (!webcamVideoPath) {
-						console.warn("[native-wgc] the webcam file is empty; saving without a camera", {
-							path: preferredWebcamPath,
-						});
-						// Nothing to keep: no demuxer opens it, and left beside the take it
-						// reads as a camera recording that is not there.
-						await fs.rm(preferredWebcamPath, { force: true }).catch(() => undefined);
+					if (webcamStat.size > 0) {
+						return preferredWebcamPath;
 					}
+					console.warn("[native-wgc] the webcam file is empty; saving without a camera", {
+						path: preferredWebcamPath,
+					});
+					// Nothing to keep: no demuxer opens it, and left beside the take it
+					// reads as a camera recording that is not there.
+					await fs.rm(preferredWebcamPath, { force: true }).catch(() => undefined);
+					return undefined;
 				} catch {
-					webcamVideoPath = undefined;
+					return undefined;
 				}
-			}
+			})();
+			const [, webcamVideoPath] = await Promise.all([cursorWritten, webcamChecked]);
+			markStop("cursor-written");
 			const session: RecordingSession = webcamVideoPath
 				? { screenVideoPath, webcamVideoPath, createdAt: recordingId, cursorCaptureMode }
 				: { screenVideoPath, createdAt: recordingId, cursorCaptureMode };
+			// The hand-off itself: the editor's import reads this, and only this. The HUD
+			// used to set it again on the way to the editor, which could land after the
+			// editor had already consumed it and hand the same take over twice.
 			setCurrentRecordingSessionState(session);
+			currentVideoPath = screenVideoPath;
 			currentProjectPath = null;
 
 			const sessionManifestPath = path.join(
 				path.dirname(screenVideoPath),
 				`${path.parse(screenVideoPath).name}${RECORDING_SESSION_SUFFIX}`,
 			);
-			try {
-				await fs.writeFile(sessionManifestPath, JSON.stringify(session, null, 2), "utf-8");
-			} catch (error) {
-				console.warn("[native-wgc] could not write the session manifest", error);
-			}
-			try {
-				await registerRecordingMediaLinks(screenVideoPath, { webcamVideoPath, cursorCaptureMode });
-			} catch (error) {
-				console.warn("[native-wgc] could not register the recording's media links", error);
-			}
-			if (nativeWindowsMarkersMs.length > 0) {
-				try {
-					await fs.writeFile(
-						`${screenVideoPath}${RECORDING_MARKERS_SUFFIX}`,
-						JSON.stringify({ version: 1, markersMs: nativeWindowsMarkersMs }, null, 2),
-						"utf-8",
-					);
-				} catch (error) {
-					console.warn("[native-wgc] could not write the take's markers", error);
-				}
-			}
-			// The layout written during the take, made final. Without the camera it says
-			// nothing (there is no face to show), so it goes.
-			await persistNativeWindowsCameraLayout(webcamVideoPath ? screenVideoPath : null);
-			if (preferredPath && (!webcamVideoPath || preferredPath !== screenVideoPath)) {
-				await fs
-					.rm(`${preferredPath}${RECORDING_LAYOUT_SUFFIX}`, { force: true })
-					.catch(() => undefined);
-			}
-			// The journal keeps the session as it was saved, so a take that never
-			// reaches the editor -- the app quit, or the editor never opened -- is
-			// offered back with its camera, not just the screen.
-			await recordPendingTake(RECORDINGS_DIR, session).catch(() => undefined);
+			await Promise.all([
+				fs
+					.writeFile(sessionManifestPath, JSON.stringify(session, null, 2), "utf-8")
+					.catch((error) => {
+						console.warn("[native-wgc] could not write the session manifest", error);
+					}),
+				registerRecordingMediaLinks(screenVideoPath, { webcamVideoPath, cursorCaptureMode }).catch(
+					(error) => {
+						console.warn("[native-wgc] could not register the recording's media links", error);
+					},
+				),
+				nativeWindowsMarkersMs.length > 0
+					? fs
+							.writeFile(
+								`${screenVideoPath}${RECORDING_MARKERS_SUFFIX}`,
+								JSON.stringify({ version: 1, markersMs: nativeWindowsMarkersMs }, null, 2),
+								"utf-8",
+							)
+							.catch((error) => {
+								console.warn("[native-wgc] could not write the take's markers", error);
+							})
+					: undefined,
+				(async () => {
+					// The layout written during the take, made final. Without the camera it says
+					// nothing (there is no face to show), so it goes.
+					await persistNativeWindowsCameraLayout(webcamVideoPath ? screenVideoPath : null);
+					if (preferredPath && (!webcamVideoPath || preferredPath !== screenVideoPath)) {
+						await fs
+							.rm(`${preferredPath}${RECORDING_LAYOUT_SUFFIX}`, { force: true })
+							.catch(() => undefined);
+					}
+				})(),
+				// The journal keeps the session as it was saved, so a take that never
+				// reaches the editor -- the app quit, or the editor never opened -- is
+				// offered back with its camera, not just the screen.
+				recordPendingTake(RECORDINGS_DIR, session).catch(() => undefined),
+			]);
+			markStop("sidecars-written");
+			console.info("[native-wgc] capture stopped", {
+				stopRequestedAtMs,
+				stopTiming: readStopTiming(nativeWindowsCaptureOutput),
+				mainStopTiming: mainStopTiming.join(" "),
+			});
 
 			const captureFailureStage = readCaptureFailureStage(nativeWindowsCaptureOutput);
 			const interrupted = nativeWindowsTakeEndedEarly || captureFailureStage !== null;
@@ -4224,7 +4319,7 @@ export function registerIpcHandlers(
 			};
 		} catch (error) {
 			console.error("Failed to stop native Windows recording:", error);
-			await stopCursorRecording();
+			await (cursorStopped ?? stopCursorRecording());
 			return { success: false, error: String(error) };
 		} finally {
 			resetNativeWindowsCaptureState();
@@ -4235,9 +4330,26 @@ export function registerIpcHandlers(
 		}
 	};
 
-	ipcMain.handle("stop-native-windows-recording", (_, discard?: boolean) =>
-		stopNativeWindowsCapture(discard),
-	);
+	ipcMain.handle("stop-native-windows-recording", async (_, discard?: boolean) => {
+		// The editor's window and page load while the take finalizes: the HUD asks for
+		// it the moment the take is saved, and it is already there. Only for the stop that
+		// starts the save; a second stop joins it.
+		const opensEditor =
+			!discard && Boolean(nativeWindowsCaptureProcess) && !nativeWindowsStopPromise;
+		// The stop command goes out first, synchronously: building a window blocks this
+		// thread for tens of ms, and the take would run on for them after the click.
+		const stopped = stopNativeWindowsCapture(discard);
+		if (opensEditor) {
+			editorPrewarm?.open();
+		}
+		const result = await stopped;
+		if (opensEditor) {
+			// Saved: the HUD switches to it now. Kept a while for a HUD that died on the way,
+			// whose take the journal offers back anyway.
+			editorPrewarm?.discard(result.success && !("discarded" in result) ? 30_000 : 0);
+		}
+		return result;
+	});
 
 	/**
 	 * Stops and saves the take without the HUD's help, for the callers that
@@ -5686,7 +5798,13 @@ export function registerIpcHandlers(
 		return { success: true, session: currentRecordingSession };
 	});
 
-	ipcMain.handle("get-current-recording-session", () => {
+	ipcMain.handle("get-current-recording-session", async () => {
+		// An editor opened during a stop -- the one loaded while the take finalizes --
+		// asks before the take is handed over. It waits for that answer instead of
+		// finding no take and opening the last project.
+		if (nativeWindowsStopPromise) {
+			await nativeWindowsStopPromise.catch(() => undefined);
+		}
 		if (!currentRecordingSession) {
 			return { success: false };
 		}

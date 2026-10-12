@@ -76,7 +76,16 @@ const STOP_TIMEOUT_EVENT_PATTERN = /"event":"stop-timeout"[^\n]*"step":"([^"]+)"
 export type NativeWindowsCaptureStopReason = "stop-timeout" | "helper-failed";
 
 export type NativeWindowsCaptureStopResult =
-	| { ok: true; screenVideoPath: string }
+	| {
+			ok: true;
+			screenVideoPath: string;
+			/**
+			 * Settled on the helper's `outputs-closed` line, before it exited: every file is
+			 * closed, and what is left of the helper (closing WGC, the process exit) is the
+			 * caller's to wait out in the background (`reapNativeWindowsCapture`).
+			 */
+			helperRunning?: boolean;
+	  }
 	| {
 			ok: false;
 			reason: NativeWindowsCaptureStopReason;
@@ -92,6 +101,18 @@ export function readStemsFinalized(output: string) {
 
 export function readStoppedPath(output: string) {
 	return output.match(RECORDING_STOPPED_PATTERN)?.[1]?.trim() || null;
+}
+
+/**
+ * Has the helper closed every file of the take (screen, stems and camera)?
+ *
+ * It says so after the last Finalize and before it closes WGC and exits, the part
+ * of the stop that touches no file of the take but used to cost 100-450 ms after
+ * every click. A whole line only: the event is the end of its line, and a chunk
+ * can end halfway through it.
+ */
+export function readOutputsClosed(output: string) {
+	return /\{"event":"outputs-closed"[^\n]*\}\r?\n/.test(output);
 }
 
 /** The step the helper's shutdown watchdog gave up on, if it fired. */
@@ -388,7 +409,30 @@ export async function terminateNativeWindowsCapture(
 }
 
 /**
- * Waits for the helper to report a finalized recording.
+ * How long a helper that already closed every file of the take gets to finish
+ * its own shutdown before it is killed. Above its step budget (8 s, see
+ * `OPENSCREEN_WGC_STEP_BUDGET_MS` in main.cpp), so its own watchdog speaks first.
+ */
+export const NATIVE_WINDOWS_CAPTURE_REAP_TIMEOUT_MS = 12_000;
+
+/**
+ * Waits out the rest of a helper whose stop already settled on `outputs-closed`,
+ * killing it if it does not exit in time. Resolves to whether it is gone; never
+ * rejects, because nothing of the take depends on it any more.
+ */
+export async function reapNativeWindowsCapture(
+	proc: ChildProcessWithoutNullStreams,
+	options: { timeoutMs?: number; forceKill?: (pid: number) => Promise<void> } = {},
+) {
+	if (await waitForExit(proc, options.timeoutMs ?? NATIVE_WINDOWS_CAPTURE_REAP_TIMEOUT_MS)) {
+		return true;
+	}
+	return terminateNativeWindowsCapture(proc, { forceKill: options.forceKill }).catch(() => false);
+}
+
+/**
+ * Waits for the helper to report a finalized recording: its `outputs-closed`
+ * line (every file closed, `helperRunning: true`), or its exit.
  *
  * Resolves rather than rejects on failure: the caller needs to tell a stop
  * timeout apart from a helper error to pick the right message, and an `Error`
@@ -463,10 +507,27 @@ export function waitForNativeWindowsCaptureStop(options: {
 				exited: hasExited(proc),
 			});
 		};
+		// The take is whole once the helper has closed its files; the rest of its
+		// shutdown is no reason to keep the user waiting. Checked a turn after each
+		// chunk, so the output drain (another listener on the same stream) has
+		// appended it whatever order the two were registered in.
+		const onOutput = () => {
+			setImmediate(() => {
+				if (settled) return;
+				const output = readOutput();
+				const stoppedPath = readOutputsClosed(output) ? readStoppedPath(output) : null;
+				if (!stoppedPath || hasExited(proc)) return;
+				cleanup();
+				resolve({ ok: true, screenVideoPath: stoppedPath, helperRunning: true });
+			});
+		};
+		let settled = false;
 		const cleanup = () => {
+			settled = true;
 			clearTimeout(timer);
 			proc.off("close", onClose);
 			proc.off("error", onError);
+			proc.stdout.off("data", onOutput);
 		};
 
 		const timer = setTimeout(() => {
@@ -507,5 +568,6 @@ export function waitForNativeWindowsCaptureStop(options: {
 
 		proc.once("close", onClose);
 		proc.once("error", onError);
+		proc.stdout.on("data", onOutput);
 	});
 }

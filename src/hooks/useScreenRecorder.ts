@@ -816,12 +816,10 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 						{ duration: 15_000 },
 					);
 				}
-				if (result.session) {
-					await window.electronAPI.setCurrentRecordingSession(result.session);
-				} else if (result.path) {
-					await window.electronAPI.setCurrentVideoPath(result.path);
-				}
-
+				// The main process already handed the take over when it saved it: the
+				// editor (possibly loaded while the take finalized) imports straight from
+				// there. Setting it again from here could land after that import consumed
+				// it, and offer the same take a second time.
 				await window.electronAPI.switchToEditor();
 				return true;
 			} catch (error) {

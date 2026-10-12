@@ -1926,14 +1926,24 @@ int wmain(int argc, wchar_t* argv[]) {
     // means wgcDrained was true above: the branch that was not is a
     // TerminateProcess call, not a fallthrough.
     beginStopStep("encoder-finalize", shutdownBudgetMs);
-    const bool screenFinalized = encoder.finalize();
-    logStopStep("encoder-finalize");
     // After the mixer has stopped, so no chunk is still on its way to them. Both are closed
     // whatever the other's outcome; only two whole stems are announced, and the app deletes
     // stems the stop line does not name, so a stem that dropped out mid-take never replaces
     // the mixed track.
-    const bool voiceStemDone = voiceStem.isOpen() && voiceStem.finalize();
-    const bool systemStemDone = systemStem.isOpen() && systemStem.finalize();
+    //
+    // On their own thread, beside the screen's Finalize: the stems are separate sink writers
+    // with their own MFStartup (MFShutdown only counts down), no D3D device and no lock
+    // shared with the screen encoder, so the user no longer waits for one after the other.
+    bool voiceStemDone = false;
+    bool systemStemDone = false;
+    std::thread stemFinalizer([&] {
+        voiceStemDone = voiceStem.isOpen() && voiceStem.finalize();
+        systemStemDone = systemStem.isOpen() && systemStem.finalize();
+    });
+    const bool screenFinalized = encoder.finalize();
+    logStopStep("encoder-finalize");
+    stemFinalizer.join();
+    logStopStep("stems-finalize");
     const bool stemsFinalized = voiceStemDone && systemStemDone;
     if (!screenFinalized) {
         std::cerr << "ERROR: Failed to finalize the recording" << std::endl;
@@ -1987,6 +1997,14 @@ int wmain(int argc, wchar_t* argv[]) {
         if (!webcamFinalized) {
             std::cerr << "ERROR: Failed to finalize the webcam recording" << std::endl;
         }
+    }
+    // Every file of the take is closed from here on: the app hands the take to the editor on
+    // this line instead of waiting for the teardown below and the process exit, which cost the
+    // user 100-450 ms after each stop for nothing the take needs. Printed whether the webcam
+    // finalized or not -- a camera file that failed is told apart by its size, as before.
+    if (screenFinalized) {
+        std::cout << "{\"event\":\"outputs-closed\",\"schemaVersion\":2,\"webcamFinalized\":"
+                  << (webcamFinalized ? "true" : "false") << "}" << std::endl;
     }
 
     // Releasing the device goes last, after every encoder that might still
