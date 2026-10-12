@@ -59,6 +59,10 @@ if (editorBefore) {
 }
 const hud = await find("hud-overlay");
 if (!hud) throw new Error("no HUD window");
+// The HUD's own account of the start (`[start-timing]` in useScreenRecorder).
+hud.on("console", (message) => {
+	if (message.text().includes("start-timing")) console.log("hud:", message.text());
+});
 
 if (screenIndex !== null) {
 	const picked = await hud.evaluate(async (index) => {

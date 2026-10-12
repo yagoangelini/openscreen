@@ -144,6 +144,18 @@ As decisões e o porquê de cada fase estão em [`PLANO-FORK.md`](PLANO-FORK.md)
 - **Take salvo ao sair ou num crash é oferecido de novo.** O diário `.pending-takes.json` era apagado quando o editor *pedia* o take; se o app morresse antes de o projeto ser salvo (por exemplo o editor aberto pelo stop que o main faz quando o HUD morre, e o resto do app morto em seguida), o take ficava salvo e nunca mais era oferecido. Agora ele sai do diário só quando o take está num projeto salvo (`settlePendingTakeHandOff`, no `set-current-recording-session(null)` da importação) ou quando o `record` da CLI termina. Um take reaberto pela oferta sem `.session.json` (crash) ganha o manifesto antes de abrir, e o editor liga a câmera dele (antes voltava só a tela).
   - **Verificado:** sair pelo `app.quit` (o Sair da bandeja) no meio do take → ao abrir de novo, a janela "Recover recording" → "Open in editor" abre o take com câmera e o pedaço de rosto. Matar o processo main no meio do take → idem, com a câmera e o cursor do checkpoint. O log do main agora diz `[recovery] offering a take` e `[recovery] answer`.
 
+**Parada instantânea e início no fim da contagem** (branch `perf/instant-stop`, pedido de 12/10 e D-2/D-4 do E2E da 2.4.0):
+
+- **O que já era instantâneo, medido:** o take termina no clique (o último quadro do arquivo fica de −59 a +3 ms do clique, medido com o quadrado de `record-take.mjs --marker`; o áudio passa do vídeo 10–40 ms) e o HUD mostra "Salvando…" em 4–18 ms. O que demorava era o editor.
+- **Parada (Windows):**
+  - O `wgc-capture` imprime `{"event":"outputs-closed"}` depois do último Finalize (tela, stems e câmera) e finaliza os stems numa thread ao lado da tela. O main (`waitForNativeWindowsCaptureStop`, `readOutputsClosed`) fecha a parada nessa linha, sem esperar o WGC fechar e o processo sair (100–450 ms por parada); `reapNativeWindowsCapture` espera o resto em segundo plano (mata depois de 12 s) e o próximo take espera esse fim (`nativeWindowsHelperExit`). Log: `[native-wgc] helper gone after the hand-off`.
+  - O leitor do cursor para junto com o comando de parar (não depois do helper), e os sidecars são gravados em paralelo, em duas rodadas.
+  - **Editor pré-aberto:** o IPC de parar manda o `stop` primeiro e então cria o editor escondido (`prewarmEditorWindow` em `main.ts`, `createEditorWindow(…, { deferShow })` e `revealEditorWindow` em `windows.ts`). O `switch-to-editor` do HUD mostra essa janela já carregada. `get-current-recording-session` espera a parada em andamento, e só o main entrega o take (o HUD não chama mais `setCurrentRecordingSession`, que podia chegar depois da importação e oferecer o take duas vezes). Parada que falha fecha o editor escondido; um que ninguém pede some em 30 s.
+  - **Medido** (instância isolada, tela + mic + som, sem câmera, 5 takes de cada lado, intercalados): navegação do editor 718–1123 ms → 172–313 ms depois do clique; prévia pronta 1393–2316 ms → 929–1827 ms. Log por take: `[native-wgc] capture stopped` com `stopTiming` (passos do helper) e `mainStopTiming` (passos do main).
+- **Início (D-2):** o renderer começa as checagens (disco, microfone, helper disponível) no clique, lê a fonte uma vez só (cada `getSelectedSource` enumera as fontes, ~0,4 s) e pede o take no instante em que a contagem começa. Pedido do take: 0,9–2,1 s → 0,5–0,9 s depois do clique, ou seja 3,0 s antes do fim da contagem em vez de 1,8–2,5 s. Se mesmo assim o helper não abrir tudo a tempo (encoder NVENC levou 4–9 s com a CPU a 100 %), **a contagem fica no último número até o take começar**, para ninguém falar antes do primeiro quadro (a janela da contagem tem proteção de conteúdo). Log: `rendererStartTiming` e `requestedBeforeCountdownEndMs` no `[native-wgc] capture started`; `afterCountdownMs` passou a ser medido contra o fim pedido.
+  - **Medido** (contagem 3 s, sem câmera): `afterCountdownMs` 47, 145, 154, 382 com carga normal; 1498–6896 com a CPU a 100 % (outras compilações na máquina), agora com a contagem segurada. **Com câmera não foi medido** (a câmera estava em uso por outro teste).
+- **Câmera escura (D-4):** quando a câmera não entregou nenhum quadro antes do take (a C920 pode levar mais de 1 s), o helper julga o primeiro segundo de quadros do take e emite `webcam-dark` se nenhum tiver imagem. O main repassa ao HUD (`native-recording-camera-dark` → `onNativeRecordingCameraDark` → toast `recording.cameraDark`). **Não verificado com a lente tampada** pelo mesmo motivo.
+
 Os PRs do fork são abertos e mesclados com `gh pr merge N --merge`, sem CI. Antes do merge, rode todo o portão de validação abaixo.
 
 ## Onde mora cada recurso do fork
@@ -286,6 +298,8 @@ As ferramentas estão em `scripts/fork-e2e/`. O roteiro:
    ```bash
    node scripts/fork-e2e/record-take.mjs --port 9233 --keys
    ```
+
+   - `--marker` mostra um quadrado no canto da tela principal (`stop-marker.cjs`) que fica branco 0,5 s antes do clique de parar: os quadros brancos no fim do arquivo, menos esse meio segundo, são o que foi gravado depois do clique. Toda execução imprime `stop timing:` (HUD, janela do editor, prévia).
 
    - `--screen 1` grava o monitor da RTX (caminho NVENC/DXGI) e `--screen 0` a tela do notebook (Intel, caminho de CPU).
    - `--keys` digita atalhos numa janela própria. Só digita se essa janela estiver em primeiro plano.
@@ -453,9 +467,11 @@ Valide com `record-take.mjs`, com um take que comece no rosto e passe para a tel
 12. Poll do HUD ainda a cada 32 ms (item 3.5 não revisto).
 13. Fila do mixer de áudio sem limite e sem compensar a diferença de relógio (`AudioMixer::append` em `audio_sample_utils.cpp`). Vai junto com o item 6. O colchão de 100 ms do 2.0 resolveu a oscilação (as microfalhas), não a deriva de relógio.
 14. Erros WinRT: proteger `CreateFreeThreaded`, `CreateCaptureSession` e o caminho legado `onFrameArrived` (`wgc_session.cpp`).
-15. Parada: `webcamCapture.stop()` roda antes de finalizar a tela (`main.cpp`), limitado só pelo watchdog de 8 s.
+15. Parada: `webcamCapture.stop()` roda antes de finalizar a tela (`main.cpp`), limitado só pelo watchdog de 8 s. A finalização da câmera ainda é depois da tela (não em paralelo, por falta de teste com câmera); o `outputs-closed` espera por ela.
 16. Whisper em prioridade baixa, ou só com o player parado (`electron/stt/whisperServer.ts`).
 17. Não incomodar como aviso antes de gravar. Hoje é uma linha fixa no modo Record.
+18. Medir a parada e o início **com câmera** (1080p e 2160p, e a lente tampada para o D-4) depois do `perf/instant-stop`.
+19. Um início que estoura o prazo de 12 s (`Timed out waiting for native Windows capture to start`, visto com a CPU a 100 %) parece deixar o leitor do cursor do take seguinte ser parado pela limpeza atrasada do anterior (o cursor saiu com 121 amostras). Não investigado.
 
 Nenhum desses itens foi pedido de novo. A ordem sugerida é a da prioridade do usuário: 13/6, 14, 15 e 3 protegem gravações; o resto é conforto.
 

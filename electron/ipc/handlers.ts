@@ -1747,6 +1747,8 @@ function waitForNativeWindowsCaptureStart(proc: ChildProcessWithoutNullStreams, 
 function attachNativeWindowsCaptureOutputDrain(
 	proc: ChildProcessWithoutNullStreams,
 	onTakeEnded: () => void,
+	/** A `webcam-dark` warning, whenever it comes; the caller decides if it is news. */
+	onCameraDark: () => void = () => undefined,
 ) {
 	// The same watch macOS has had since #621. Without it a take that died
 	// mid-recording -- a full disk, a GPU reset, a helper crash -- went
@@ -1778,6 +1780,9 @@ function attachNativeWindowsCaptureOutputDrain(
 			const event = tryParseNativeHelperEvent(line.trim());
 			if (event) {
 				watchLiveTake(event);
+				if (event.event === "warning" && event.code === "webcam-dark") {
+					onCameraDark();
+				}
 			}
 		}
 	};
@@ -3201,6 +3206,7 @@ export function registerIpcHandlers(
 		"start-native-windows-recording",
 		async (_, request: NativeWindowsRecordingRequest) => {
 			nativeWindowsStartCancelled = false;
+			const startRequestedAtMs = Date.now();
 			// The end of the countdown, if the renderer sent one that makes sense: the helper
 			// opens everything now and starts the take then.
 			const startAtEpochMs =
@@ -3408,8 +3414,24 @@ export function registerIpcHandlers(
 					windowsHide: true,
 				});
 				nativeWindowsCaptureProcess = proc;
-				nativeWindowsCaptureDrainCleanup = attachNativeWindowsCaptureOutputDrain(proc, () =>
-					handleNativeWindowsTakeEndedEarly(),
+				nativeWindowsCaptureDrainCleanup = attachNativeWindowsCaptureOutputDrain(
+					proc,
+					() => handleNativeWindowsTakeEndedEarly(),
+					() => {
+						// Before the start answered, the start result carries it (`webcamDark`).
+						// After, it is a camera that came up only once the take had begun: the
+						// HUD says it now, while the take is young enough to redo.
+						if (nativeWindowsCaptureProcess !== proc || nativeWindowsCaptureStartedAtMs === null) {
+							return;
+						}
+						console.warn(
+							"[native-wgc] the camera delivers only dark frames (seen during the take)",
+						);
+						const hud = getMainWindow();
+						if (hud && !hud.isDestroyed()) {
+							hud.webContents.send("native-recording-camera-dark");
+						}
+					},
 				);
 				console.info("[native-wgc] helper spawned", { pid: proc.pid });
 				// Journaled before the first frame, not after the stop: everything
@@ -3455,8 +3477,16 @@ export function registerIpcHandlers(
 					secondaryWindowsApplied: readSecondaryWindowsApplied(nativeWindowsCaptureOutput),
 					// What the user waited through after the countdown, step by step.
 					startTiming: readStartTiming(nativeWindowsCaptureOutput),
+					// The renderer's steps before the request (ms since the click), and how much of
+					// the countdown was left when it arrived: the time the helper had to open everything.
+					rendererStartTiming: request.rendererStartTiming,
+					...(typeof request.startAtEpochMs === "number"
+						? { requestedBeforeCountdownEndMs: request.startAtEpochMs - startRequestedAtMs }
+						: {}),
 					// How long after the countdown the first frame came (0 or a few ms when on time).
-					...(startAtEpochMs ? { afterCountdownMs: captureStartedAtMs - startAtEpochMs } : {}),
+					...(typeof request.startAtEpochMs === "number"
+						? { afterCountdownMs: captureStartedAtMs - request.startAtEpochMs }
+						: {}),
 				});
 
 				const source = selectedSource || { name: "Screen" };

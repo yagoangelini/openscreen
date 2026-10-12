@@ -125,6 +125,17 @@ type UseScreenRecorderReturn = {
 	recordingPrefsLoaded: boolean;
 };
 
+type ElectronApi = Window["electronAPI"];
+
+/** The checks a start awaits, begun as early as the click (`beginStartPrechecks`). */
+type StartPrechecks = {
+	storage: Promise<
+		Awaited<ReturnType<NonNullable<ElectronApi["checkRecordingStorage"]>>> | undefined
+	>;
+	microphone: Promise<boolean>;
+	nativeWindows: ReturnType<ElectronApi["isNativeWindowsCaptureAvailable"]> | null;
+};
+
 type NativeWindowsRecordingHandle = {
 	recordingId: number;
 	finalizing: boolean;
@@ -262,6 +273,13 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			toast.warning(tRef.current("recording.systemAudioUnavailable"));
 		});
 	}, []);
+	// A camera whose first frame came only after the take began (the C920 can take more
+	// than a second) is judged from its first second of the take, and said here.
+	useEffect(() => {
+		return window.electronAPI?.onNativeRecordingCameraDark?.(() => {
+			toast.warning(tRef.current("recording.cameraDark"), { duration: 15_000 });
+		});
+	}, []);
 	const [recording, setRecording] = useState(false);
 	const [paused, setPaused] = useState(false);
 	const [saving, setSaving] = useState(false);
@@ -366,6 +384,16 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 	const discardRecordingId = useRef<number | null>(null);
 	const restarting = useRef(false);
 	const countdownRunId = useRef(0);
+	/**
+	 * Where the start goes on this side, step by step (ms since the click), logged as
+	 * `[start-timing]` once the take started: next to the main process's
+	 * `afterCountdownMs`, it says which side a late start came from.
+	 */
+	const startTiming = useRef<{ startedAtMs: number; steps: string[] } | null>(null);
+	const markStartStep = (step: string) => {
+		const timing = startTiming.current;
+		if (timing) timing.steps.push(`${step}=${Date.now() - timing.startedAtMs}`);
+	};
 	const cursorAccessibilityWarningShown = useRef(false);
 	const [countdownActive, setCountdownActive] = useState(false);
 	const webcamReady = useRef(false);
@@ -1240,6 +1268,26 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 	const isCountdownRunActive = (runId?: number) =>
 		runId === undefined || countdownRunId.current === runId;
 
+	/**
+	 * The start's checks, begun together. Each also gets a no-op catch, so one nobody
+	 * awaits (a countdown cancelled first) is not an unhandled rejection; `startRecording`
+	 * awaits the originals and still sees every failure.
+	 */
+	const beginStartPrechecks = (): StartPrechecks => {
+		const prechecks: StartPrechecks = {
+			storage: Promise.resolve(window.electronAPI.checkRecordingStorage?.()),
+			microphone: shouldRecordMicrophone(microphoneEnabled),
+			nativeWindows:
+				window.electronAPI.getPlatform() === "win32"
+					? window.electronAPI.isNativeWindowsCaptureAvailable()
+					: null,
+		};
+		for (const pending of [prechecks.storage, prechecks.microphone, prechecks.nativeWindows]) {
+			pending?.catch(() => undefined);
+		}
+		return prechecks;
+	};
+
 	const waitForWebcamReady = async () => {
 		if (webcamReady.current) {
 			return;
@@ -1264,6 +1312,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 		recordMicrophone: boolean,
 		countdownRunToken?: number,
 		startAtEpochMs?: number,
+		prefetchedAvailability?: StartPrechecks["nativeWindows"],
 	) => {
 		try {
 			const platform = window.electronAPI.getPlatform();
@@ -1271,7 +1320,9 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				return false;
 			}
 
-			const availability = await window.electronAPI.isNativeWindowsCaptureAvailable();
+			const availability = await (prefetchedAvailability ??
+				window.electronAPI.isNativeWindowsCaptureAvailable());
+			markStartStep("helper-available");
 			if (!availability.success || !availability.available) {
 				if (availability.reason === "unsupported-os") {
 					return false;
@@ -1362,6 +1413,11 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				},
 				...(startAtEpochMs ? { startAtEpochMs } : {}),
 			};
+			markStartStep("start-requested");
+			if (startTiming.current) {
+				request.rendererStartTiming = startTiming.current.steps.join(" ");
+				startTiming.current = null;
+			}
 			const result = await window.electronAPI.startNativeWindowsRecording(request);
 			// The countdown was cancelled while the helper opened its devices: no take.
 			if (result.cancelled) {
@@ -1757,6 +1813,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 
 		const runId = countdownRunId.current + 1;
 		countdownRunId.current = runId;
+		startTiming.current = { startedAtMs: Date.now(), steps: [] };
 		// On Windows with a countdown, the take is started as the countdown begins (below) and
 		// the helper opens the camera itself, with the countdown to come up in.
 		const startsWithCountdown =
@@ -1767,6 +1824,12 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			setWebcamArmed(true);
 		}
 
+		// The checks the start needs, begun at the click and side by side with the source
+		// read below rather than one after the other once the countdown is up: the helper
+		// needs the countdown to open the encoders, the camera and the audio (D-2 of the
+		// 2.4.0 E2E: they used to cost it 0.9-2.1 s of its 3 s).
+		const prechecks = startsWithCountdown ? beginStartPrechecks() : null;
+
 		let selectedSource: ProcessedDesktopSource | null = null;
 		try {
 			selectedSource = await window.electronAPI.getSelectedSource();
@@ -1776,6 +1839,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 
 		// Resolved before the liveness check below so every await stays ahead of it.
 		const portalOwnsSource = await portalOwnsSourceSelection(window.electronAPI);
+		markStartStep("source-checked");
 
 		if (!isCountdownRunActive(runId)) {
 			return;
@@ -1862,6 +1926,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 
 		let overlayHiddenBeforeStart = false;
 		let earlyStart: Promise<void> | null = null;
+		let earlyStartSettled = false;
 		try {
 			const countdownSeconds = countdownSecondsRef.current;
 			const values = Array.from(
@@ -1871,6 +1936,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			// No countdown at all: no overlay to show, and nothing to wait out.
 			const overlayShown =
 				values.length > 0 ? await safeShowCountdownOverlay(values[0], runId) : false;
+			markStartStep("overlay-shown");
 
 			if (countdownRunId.current !== runId) {
 				return;
@@ -1879,9 +1945,17 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			// The start runs alongside the countdown and takes its first frame as it ends: the
 			// camera, the encoders and the audio open during it, not after. It is awaited below.
 			const countdownEndsAt = Date.now() + values.length * 1000;
+			markStartStep("countdown-started");
 			earlyStart =
 				startsWithCountdown && values.length > 0
-					? startRecording(runId, preparedRecordingId, countdownEndsAt)
+					? startRecording(
+							runId,
+							preparedRecordingId,
+							countdownEndsAt,
+							selectedSource ? { source: selectedSource, prechecks } : undefined,
+						).finally(() => {
+							earlyStartSettled = true;
+						})
 					: null;
 
 			for (const [index, value] of values.entries()) {
@@ -1910,6 +1984,18 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 
 			if (countdownRunId.current !== runId) {
 				return;
+			}
+
+			// A helper that could not open everything within the countdown (a busy GPU took
+			// its encoder 4-6 s in the 2.4.0 E2E) starts as soon as it can: the countdown
+			// stays on its last number until then, so nobody starts talking into a take that
+			// has not begun. Content-protected, so it is not in the take's first frames.
+			if (earlyStart && !earlyStartSettled) {
+				markStartStep("countdown-held");
+				await earlyStart;
+				if (countdownRunId.current !== runId) {
+					return;
+				}
 			}
 
 			setCountdownActive(false);
@@ -1945,6 +2031,8 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 		countdownRunToken?: number,
 		preparedRecordingId?: number | null,
 		startAtEpochMs?: number,
+		/** Read and begun at the click by a countdown that starts the take with it. */
+		early?: { source: ProcessedDesktopSource; prechecks: StartPrechecks | null },
 	) => {
 		const platform = window.electronAPI.getPlatform();
 		const browserCursorCaptureMode = effectiveBrowserCursorMode(platform, cursorCaptureMode);
@@ -1956,12 +2044,14 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			}
 			// Every path below records into the same folder, so one check covers them all. A
 			// take that fills the disk is otherwise lost only when it is saved.
-			const storage = await window.electronAPI.checkRecordingStorage?.();
+			const prechecks = early?.prechecks ?? beginStartPrechecks();
+			const storage = await prechecks.storage;
 			if (storage && !storage.success) {
 				throw new Error(storage.error);
 			}
 			// Resolved once, for whichever path records the take (#995).
-			const recordMicrophone = await shouldRecordMicrophone(microphoneEnabled);
+			const recordMicrophone = await prechecks.microphone;
+			markStartStep("checked");
 			if (microphoneEnabled && !recordMicrophone) {
 				toast.error(t("rec.noMicrophoneFound"));
 			}
@@ -1983,7 +2073,8 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				return;
 			}
 
-			const selectedSource = await window.electronAPI.getSelectedSource();
+			// Read once: the countdown already read (and enumerated) it a moment ago.
+			const selectedSource = early?.source ?? (await window.electronAPI.getSelectedSource());
 			if (!selectedSource) {
 				alert(t("recording.selectSource"));
 				return;
@@ -1995,6 +2086,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 					recordMicrophone,
 					countdownRunToken,
 					startAtEpochMs,
+					prechecks.nativeWindows,
 				)
 			) {
 				return;

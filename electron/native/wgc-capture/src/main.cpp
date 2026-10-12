@@ -1111,6 +1111,12 @@ int wmain(int argc, wchar_t* argv[]) {
     // the pre-roll wait below runs out on a dark or covered lens -- the dark one
     // it has. From then on every frame is taken as it comes.
     bool hasWebcamFrame = false;
+    // Set when the camera gave no frame at all before the take began (a C920 can take more
+    // than a second to deliver its first one, longer than the pre-roll had left -- D-4 of
+    // the 2.4.0 E2E): the writer then judges the camera from its first second of frames in
+    // the take, and says `webcam-dark` if none of them has a picture.
+    bool webcamDarkWatch = false;
+    std::chrono::steady_clock::time_point webcamDarkWatchFirstFrame{};
 
     // Legacy-path-only state. frameMutex guards latestFrameTexture/
     // legacyLatestFrameTimestampHns between WGC's callback thread (writer)
@@ -1293,6 +1299,22 @@ int wmain(int argc, wchar_t* argv[]) {
                     // black, as it should, instead of freezing on the last bright frame.
                     WebcamFrameSnapshot candidateWebcamFrame;
                     if (webcamCapture.copyLatestFrame(candidateWebcamFrame, latestWebcamSequence)) {
+                        if (webcamDarkWatch) {
+                            const auto now = std::chrono::steady_clock::now();
+                            if (!hasWebcamFrame) {
+                                webcamDarkWatchFirstFrame = now;
+                            }
+                            if (hasVisibleWebcamContent(candidateWebcamFrame.data, webcamCapture.deliversNv12())) {
+                                webcamDarkWatch = false;
+                            } else if (now - webcamDarkWatchFirstFrame >= std::chrono::seconds(1)) {
+                                webcamDarkWatch = false;
+                                std::cerr << "WARNING: Native webcam frames are dark; recording them anyway"
+                                          << std::endl;
+                                std::cout << "{\"event\":\"warning\",\"code\":\"webcam-dark\",\"message\":"
+                                             "\"The camera delivers only dark frames\"}"
+                                          << std::endl;
+                            }
+                        }
                         latestWebcamFrame = std::move(candidateWebcamFrame.data);
                         latestWebcamWidth = candidateWebcamFrame.width;
                         latestWebcamHeight = candidateWebcamFrame.height;
@@ -1632,6 +1654,7 @@ int wmain(int argc, wchar_t* argv[]) {
         } else if (!hasWebcamFrame) {
             std::cerr << "WARNING: Native webcam started but no frame was available before screen capture"
                       << std::endl;
+            webcamDarkWatch = true;
         }
     }
 

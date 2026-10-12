@@ -43,6 +43,11 @@ export type NativeWindowsRecordingRequest = {
 	 * on time. Absent: as soon as everything is open, as before.
 	 */
 	startAtEpochMs?: number;
+	/**
+	 * The renderer's steps before this request, `step=ms` since the click, for the main
+	 * process's start log (the renderer's own console is stripped from a build).
+	 */
+	rendererStartTiming?: string;
 };
 
 export type NativeWindowsRecordingStartResult = {
