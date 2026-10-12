@@ -425,6 +425,18 @@
     ],
     "icon": "icons/icons/win/icon.ico",
     "artifactName": "${productName}.Setup.${version}-${arch}.${ext}",
+    // Signed with the owner's self-signed certificate "CN=Yago Angelini" in the build
+    // machine's CurrentUser\My store (created once; see docs/HANDOFF.md, "Assinatura"). Trusted
+    // only where that certificate is imported as a root: the owner's PC. A machine without
+    // the certificate cannot build the fork's installer until it creates its own.
+    "signtoolOptions": {
+      "certificateSubjectName": "Yago Angelini",
+      "signingHashAlgorithms": ["sha256"],
+      "rfc3161TimeStampServer": "http://timestamp.digicert.com"
+    },
+    // Every executable and addon of the app, the capture helpers in resources included. Not
+    // the DLLs: third-party ones (onnxruntime) carry their vendor's signature.
+    "signExts": [".exe", ".node"],
     "extraResources": [
       {
         "from": "electron/native/bin",
