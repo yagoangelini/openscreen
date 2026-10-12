@@ -40,7 +40,7 @@ export function offersStarPrompt(state: StarPromptState): boolean {
  *  a Store copy that is the second, parallel install `install-channel.ts` exists to prevent, and
  *  on every other channel it is simply not what the ask is about. Lives here so main, the app
  *  menu and the export prompt cannot drift to three different links. */
-export const REPO_URL = "https://github.com/getopenscreen/openscreen";
+export const REPO_URL = "https://github.com/yagoangelini/openscreen";
 
 /** The Store listing this app ships under: the same id in the website's Store link and in the
  *  `winget install --source msstore` command the README recommends. */

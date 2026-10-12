@@ -17,6 +17,7 @@ import { sourceDisplayName } from "../src/lib/sourceDisplayName";
 import {
 	type AboutFacts,
 	COPYRIGHT,
+	formatAboutCredits,
 	formatAboutDetail,
 	PRODUCT_NAME,
 	usesNativeAboutPanel,
@@ -678,9 +679,14 @@ function aboutFacts(): AboutFacts {
 	};
 }
 
+/** "OpenScreen by Yago Angelini" and the upstream credit, in the current locale. */
+function aboutCredits(): string {
+	return formatAboutCredits((key, vars) => mainT("common", `about.${key}`, vars));
+}
+
 /** macOS gets its native About panel (the app menu's `role: "about"` opens it) because that
- *  is the window its users expect; this is the only chance to put our facts in it. Nothing
- *  here is translated, so it needs no re-run when the locale changes. */
+ *  is the window its users expect; this is the only chance to put our facts in it. Only the
+ *  two credit lines are translated, in the locale the app started in. */
 function configureAboutPanel() {
 	if (!usesNativeAboutPanel(process.platform)) return;
 	const facts = aboutFacts();
@@ -691,7 +697,7 @@ function configureAboutPanel() {
 		// channel is worth more there than a second copy of the version.
 		version: facts.channel,
 		copyright: COPYRIGHT,
-		credits: formatAboutDetail(facts),
+		credits: `${aboutCredits()}\n\n${formatAboutDetail(facts)}`,
 	});
 }
 
@@ -715,7 +721,7 @@ async function showAboutDialog() {
 
 async function presentAboutDialog() {
 	const facts = aboutFacts();
-	const detail = `${formatAboutDetail(facts)}\n${COPYRIGHT}`;
+	const detail = `${aboutCredits()}\n\n${formatAboutDetail(facts)}\n${COPYRIGHT}`;
 	const heading = `${PRODUCT_NAME} ${facts.version}`;
 	const choice = await showMessageBox({
 		type: "info",

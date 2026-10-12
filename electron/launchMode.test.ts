@@ -114,6 +114,28 @@ describe("taskbar identities agree with the installer", () => {
 		);
 	});
 
+	it("is the fork's own identity, not upstream's", () => {
+		expect(STUDIO_APP_USER_MODEL_ID).toBe("com.yagoangelini.openscreen");
+		expect(RECORDER_APP_USER_MODEL_ID).toBe(`${STUDIO_APP_USER_MODEL_ID}.recorder`);
+	});
+
+	// The NSIS GUID is what makes the next installer replace the 2.4.0 install instead of
+	// landing beside it: electron-builder derives it from appId unless pinned, and appId moved
+	// off upstream's. This is the GUID it derived from "com.etiennelescot.openscreen".
+	it("keeps the installer's product GUID and folders from before the appId change", () => {
+		const config = readFileSync(path.join(ROOT, "electron-builder.json5"), "utf8");
+		expect(config).toMatch(/"guid":\s*"5b412b41-8d8b-5faf-b557-de4fe681e5fc"/);
+		expect(config).toMatch(/"productName":\s*"Openscreen"/);
+	});
+
+	it("retags existing shortcuts and taskbar pins on every install", () => {
+		const nsh = readFileSync(path.join(ROOT, "build", "installer.nsh"), "utf8");
+		const customInstall = nsh.slice(nsh.indexOf("!macro customInstall"));
+		expect(customInstall).toContain("!insertmacro openscreenRetagShortcuts");
+		expect(nsh).toContain("User Pinned\\TaskBar");
+		expect(nsh).toContain('"$appExe" "${APP_ID}" "${RECORDER_APP_ID}"');
+	});
+
 	it("stamps the recorder's ID and switch on the installer's Recorder shortcuts", () => {
 		const nsh = readFileSync(path.join(ROOT, "build", "installer.nsh"), "utf8");
 		expect(nsh).toContain(`!define RECORDER_APP_ID "${RECORDER_APP_USER_MODEL_ID}"`);

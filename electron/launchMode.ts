@@ -10,10 +10,13 @@
 /** The process-wide AppUserModelID. Must equal `appId` in electron-builder.json5: the
  *  installer stamps it on the Studio shortcuts, and a pinned taskbar icon only groups the
  *  windows whose ID matches its own. */
-export const STUDIO_APP_USER_MODEL_ID = "com.etiennelescot.openscreen";
+export const STUDIO_APP_USER_MODEL_ID = "com.yagoangelini.openscreen";
 /** The recorder windows' own ID, so they get a taskbar button of their own. Also stamped
  *  on the "OpenScreen Recorder" shortcuts by build/installer.nsh. */
-export const RECORDER_APP_USER_MODEL_ID = "com.etiennelescot.openscreen.recorder";
+export const RECORDER_APP_USER_MODEL_ID = "com.yagoangelini.openscreen.recorder";
+// Up to 2.4.0 both IDs were upstream's (`com.etiennelescot.openscreen[.recorder]`).
+// build/installer.nsh retags every shortcut and taskbar pin that points at the installed
+// exe, so a pin made under the old ID keeps grouping these windows.
 
 export const STUDIO_NAME = "OpenScreen Studio";
 export const RECORDER_NAME = "OpenScreen Recorder";
