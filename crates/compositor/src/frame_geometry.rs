@@ -2060,6 +2060,90 @@ pub fn annotation_dst_in(anchor: [f32; 4], x: f32, y: f32, w: f32, h: f32) -> [f
     [anchor[0] + x * anchor[2], anchor[1] + y * anchor[3], w * anchor[2], h * anchor[3]]
 }
 
+/// Shader mode of a `kind: "shape"` annotation: a rounded rectangle filled, or the whole output
+/// around it (`invert`), with a soft edge and an optional border. A plain layer, no model.
+pub const SHAPE_MODE: f32 = 21.0;
+
+/// How far the "Dolly" setting pushes the composition in at full strength: 8 %. Enough to read
+/// as the camera moving in, small enough that a corner camera stays on the frame.
+pub const DOLLY_MAX: f32 = 0.08;
+
+/// The layer of a `kind: "shape"` annotation at `elapsed_ms` into its `region_ms`, or `None` when
+/// it draws nothing (no shape data, fully transparent, or an animation at zero).
+///
+/// Shared by the three backends, like `annotation_dst_in`: each one only draws the returned
+/// layer, so the highlight rectangle and the step marker's disc are the same pixels everywhere,
+/// preview and export included. `dst` is the annotation's box (`annotation_dst_in`), `anchor`
+/// the box its lengths are measured on, `render_px` the render target.
+///
+/// Slots (mirrored by mode 21 in `shaders.hlsl`, `shaders.metal` and `layer.wgsl`):
+/// - `src`: centre and half size of the box, px local to the drawn quad;
+/// - `fx`: corner radius, soft edge, border width (px), `invert` (0/1);
+/// - `color`: the fill, straight alpha; `dst_prev`: the border, straight alpha;
+/// - `mb.x`: opacity of the whole layer (the animation's).
+pub fn shape_annotation_cb(
+    annotation: &crate::scene::SceneAnnotation,
+    anchor: [f32; 4],
+    dst: [f32; 4],
+    render_px: [f32; 2],
+    elapsed_ms: f32,
+    region_ms: f32,
+) -> Option<LayerCB> {
+    let shape = annotation.shape.as_ref()?;
+    let [rw, rh] = render_px;
+    let anim = crate::text_anim::text_animation_state(shape.animation.as_deref(), elapsed_ms, region_ms);
+    if anim.opacity <= 0.0 || anim.scale <= 0.0 {
+        return None;
+    }
+    let fill = parse_hex(&shape.fill).unwrap_or([0.0, 0.0, 0.0, 0.0]);
+    let border_px = shape.border_rel.max(0.0) * anchor[3] * rh;
+    let border = match shape.border_color.as_deref().map(parse_hex) {
+        Some(Some(c)) if border_px > 0.0 => c,
+        _ => [0.0; 4],
+    };
+    if fill[3] <= 0.0 && border[3] <= 0.0 {
+        return None;
+    }
+    // The box in px, scaled about its centre by the animation (the step's pop), offsets at the
+    // reference height like the text they animate with.
+    let anim_px = rh / crate::text_anim::ANIMATION_REFERENCE_HEIGHT;
+    let centre = [
+        (dst[0] + dst[2] * 0.5) * rw + anim.translate_x * anim_px,
+        (dst[1] + dst[3] * 0.5) * rh + anim.translate_y * anim_px,
+    ];
+    let half = [dst[2] * rw * 0.5 * anim.scale, dst[3] * rh * 0.5 * anim.scale];
+    if half[0] <= 0.0 || half[1] <= 0.0 {
+        return None;
+    }
+    let radius = (shape.radius_rel.max(0.0) * anchor[3] * rh * anim.scale).min(half[0].min(half[1]));
+    let feather = shape.feather_rel.max(0.0) * anchor[3] * rh;
+    // The drawn quad: the whole output for a highlight, which dims everything around its box;
+    // the box grown by the soft edge and the border otherwise, so neither is cut.
+    let quad = if shape.invert {
+        [0.0, 0.0, 1.0, 1.0]
+    } else {
+        let grow = feather * 0.5 + border_px * 0.5 + 2.0;
+        [
+            (centre[0] - half[0] - grow) / rw,
+            (centre[1] - half[1] - grow) / rh,
+            (2.0 * (half[0] + grow)) / rw,
+            (2.0 * (half[1] + grow)) / rh,
+        ]
+    };
+    let origin = [quad[0] * rw, quad[1] * rh];
+    Some(LayerCB {
+        dst: quad,
+        quad_px: [quad[2] * rw, quad[3] * rh],
+        mode: SHAPE_MODE,
+        src: [centre[0] - origin[0], centre[1] - origin[1], half[0], half[1]],
+        fx: [radius, feather, border_px, if shape.invert { 1.0 } else { 0.0 }],
+        color: fill,
+        dst_prev: border,
+        mb: [anim.opacity.clamp(0.0, 1.0), 0.0, 0.0, 0.0],
+        ..Default::default()
+    })
+}
+
 impl FrameGeometry {
     /// Le quad de l'écran incliné pour une boîte de `s_px` px, `None` quand l'écran est droit.
     /// LE point de passage de l'écran, de son ombre, du curseur et du masque de flou : tous
@@ -2132,7 +2216,11 @@ impl FrameGeometry {
 
     /// L'écran passe-t-il par le plan projeté (modes 8, 12, 13, 14) plutôt que par le rect droit ?
     pub fn tilted(&self) -> bool {
-        self.camera.is_some() || !crate::regions::is_identity_rotation(self.zoom_rotation)
+        // The dynamic part alone tilts only a flat screen leaning toward a click
+        // (`regions::click_lean`): every other dynamic tilt is gated on a base rotation.
+        self.camera.is_some()
+            || !crate::regions::is_identity_rotation(self.zoom_rotation)
+            || !crate::regions::is_identity_rotation(self.zoom_rotation_dyn)
     }
 
     /// La profondeur de champ tourne-t-elle sur CETTE frame ? Réglage allumé, écran réellement
@@ -3334,8 +3422,15 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
         // d'atteindre les bords du cadre. On rend le zoom à la BOÎTE (cf. `remap_box`) :
         // la coupe dessinée redevient le crop nu, la boîte porte le grossissement et
         // déborde le padding — c'est la géométrie de `applyZoomTransform` (TS).
-        let s_box = fit_screen(p.screen.dst);
-        let s_box_prev = fit_screen(pp.screen.dst);
+        // Dolly: the composition pushes in with each zoom, about the frame's centre, on the
+        // zoom's envelope (the frame before on its own, so the push is motion-blurred like a zoom).
+        let dolly = scene.map(|s| s.effects.dolly.clamp(0.0, 1.0)).unwrap_or(0.0);
+        let dolly_at = |strength: f32| 1.0 + DOLLY_MAX * dolly * strength.clamp(0.0, 1.0);
+        let (dolly_k, dolly_k_prev) = (dolly_at(zoom_strength), dolly_at(zoom_strength_prev));
+        // Untouched, to the bit, at a factor of 1: the scale about the centre rounds.
+        let dolly_box = |b: [f32; 4], k: f32| if k == 1.0 { b } else { scale_frame(b, k) };
+        let s_box = dolly_box(fit_screen(p.screen.dst), dolly_k);
+        let s_box_prev = dolly_box(fit_screen(pp.screen.dst), dolly_k_prev);
         // Le cadre ne touche PAS à la boîte écran : il pousse vers l'extérieur, dans la place que
         // le layout de l'app lui a faite (le padding se mesure depuis son bord extérieur,
         // `computeCompositeLayout`). Ombre, masques, annotations et curseurs, ancrés sur `s_dst`,
@@ -3468,13 +3563,24 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
             cut_ref[2] / u_max.max(1e-6),
             cut_ref[3] / v_max.max(1e-6),
         ];
-        let zoom_rotation_dyn = crate::regions::dynamic_tilt(
+        let mut zoom_rotation_dyn = crate::regions::dynamic_tilt(
             source_t,
             parallax_track,
             cut_norm,
             zoom_tilt,
             impact,
         );
+        // "Inclinar para o clique": only a flat screen leans — a preset has its own impact, the
+        // real camera its own press — and only under a visible pointer (`parallax_track`).
+        if let (Some(s), Some(track)) = (scene, parallax_track) {
+            if s.effects.lean_to_clicks
+                && zoom_camera <= 0.0
+                && crate::regions::is_identity_rotation(zoom_rotation)
+                && crate::regions::is_identity_rotation(zoom_rotation_dyn)
+            {
+                zoom_rotation_dyn = click_lean_at(s, cfg, &lp, track, source_t, cut, [u_max, v_max]);
+            }
+        }
         let s_dst_prev = pressed(remap_box(s_base_prev, cut_ref_prev, cut));
         // le padding n'affecte QUE l'écran (la quantité de fond révélée). La webcam reste ancrée
         // en bas-droite à sa marge fixe, quelle que soit la valeur de padding (pas de scale_frame)
@@ -3520,6 +3626,13 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
         // "Sans caméra" : la boîte rétrécit vers l'ancre de la caméra jusqu'à rien, comme le zoom
         // réactif, sans toucher aux shaders. Les deux zones ne se chevauchent jamais (une pièce
         // de la piste n'a qu'un mode), donc l'ordre avec Full Camera n'importe pas.
+        // Dolly: the camera box comes in with the screen, except as it takes the frame.
+        if dolly > 0.0 {
+            let k = 1.0 + (dolly_k - 1.0) * (1.0 - cam_progress.clamp(0.0, 1.0));
+            let k_prev = 1.0 + (dolly_k_prev - 1.0) * (1.0 - cam_progress_prev.clamp(0.0, 1.0));
+            w_dst = dolly_box(w_dst, k);
+            w_dst_prev = dolly_box(w_dst_prev, k_prev);
+        }
         let webcam_hidden = hide_progress >= 1.0;
         if hide_progress > 0.0 {
             w_dst = scale_anchored(w_dst, 1.0 - hide_progress.clamp(0.0, 1.0));
@@ -3815,6 +3928,32 @@ fn click_impact_at(
         crate::regions::click_impact(t, track, window, aim).map(|d| d * weight),
         crate::regions::click_press(t, track, window, aim) * weight,
     )
+}
+
+/// `regions::click_lean` under the same gates as the click impact (`click_impact_at`): the
+/// pointer's visibility, no privacy blur, not at a fast speed.
+fn click_lean_at(
+    scene: &Scene,
+    cfg: &Cfg,
+    live: &LiveParams,
+    track: &crate::cursor::CursorTrack,
+    t: f32,
+    cut: [f32; 4],
+    uv_max: [f32; 2],
+) -> [f32; 3] {
+    let Some(clip) = scene.clips.get(scene.active_clip_index) else { return [0.0; 3] };
+    if scene.annotations.iter().any(|a| {
+        a.kind == "blur" && a.blur.is_some() && t >= a.start_sec as f32 && t < a.end_sec as f32
+    }) {
+        return [0.0; 3];
+    }
+    let speed = crate::regions::speed_at(&scene.speed_regions, scene.active_clip_index, t as f64);
+    let weight = cursor_alpha(Some(scene), cfg, live, track, t) * (2.0 - speed as f32).clamp(0.0, 1.0);
+    if weight <= 0.0 {
+        return [0.0; 3];
+    }
+    let window = [clip.source_start_sec as f32, clip.source_end_sec as f32];
+    crate::regions::click_lean(t, track, window, |p| cursor_plane_point(cut, uv_max, p)).map(|d| d * weight)
 }
 
 /// `None` = rien à dessiner cette frame : curseur masqué, pointeur hors du rect source
@@ -4800,6 +4939,138 @@ mod tests {
     }
 
     use super::*;
+
+    fn shape_annotation(shape_json: &str) -> crate::scene::SceneAnnotation {
+        serde_json::from_str(&format!(
+            r#"{{"id":"hl","startSec":0,"endSec":4,"kind":"shape","space":"frame",
+                "x":0.25,"y":0.25,"w":0.5,"h":0.5,"shape":{shape_json}}}"#
+        ))
+        .expect("annotation forme valide")
+    }
+
+    fn zoomed_golden(dolly: f32, zoom: bool) -> FrameGeometry {
+        let cfg = crate::config::all().pop().expect("au moins une config");
+        let mut scene = golden_scene();
+        scene.effects.dolly = dolly;
+        if zoom {
+            scene.zoom_regions = vec![serde_json::from_str(
+                r#"{"id":"z","startSec":0,"endSec":10,"scale":1.5,"focusX":0.5,"focusY":0.5,"rotation":null}"#,
+            )
+            .expect("zoom")];
+        }
+        plan_frame(&golden_input(&scene, &cfg))
+    }
+
+    #[test]
+    fn the_dolly_pushes_the_composition_in_with_the_zoom_about_the_frame_centre() {
+        let (off, on) = (zoomed_golden(0.0, true), zoomed_golden(1.0, true));
+        let k = on.s_ann[2] / off.s_ann[2];
+        assert!(k > 1.0 && k <= 1.0 + DOLLY_MAX + 1e-4, "push {k}");
+        // About the frame's centre: the box's centre moves away from it by the same factor.
+        let centre = |r: [f32; 4]| [r[0] + r[2] * 0.5 - 0.5, r[1] + r[3] * 0.5 - 0.5];
+        let (a, b) = (centre(off.s_ann), centre(on.s_ann));
+        assert!((b[0] - a[0] * k).abs() < 1e-4 && (b[1] - a[1] * k).abs() < 1e-4, "{a:?} {b:?}");
+        assert!(on.w_dst[2] > off.w_dst[2], "the camera comes in too");
+        // No zoom, no push; the setting off, nothing changed at all.
+        assert_eq!(zoomed_golden(1.0, false).s_dst, zoomed_golden(0.0, false).s_dst);
+        assert!(!on.tilted());
+    }
+
+    #[test]
+    fn a_highlight_dims_the_whole_frame_around_its_box() {
+        let a = shape_annotation(
+            r#"{"fill":"rgba(0,0,0,0.6)","radiusRel":0.02,"featherRel":0.01,"invert":true}"#,
+        );
+        let render = [1920.0, 1080.0];
+        let anchor = [0.0, 0.0, 1.0, 1.0];
+        let dst = annotation_dst_in(anchor, a.x, a.y, a.w, a.h);
+        let cb = shape_annotation_cb(&a, anchor, dst, render, 2000.0, 4000.0).expect("calque");
+        assert_eq!(cb.mode, SHAPE_MODE);
+        assert_eq!(cb.dst, [0.0, 0.0, 1.0, 1.0], "inverted: the whole output");
+        assert_eq!(cb.src, [960.0, 540.0, 480.0, 270.0], "box centre and half size in px");
+        assert!((cb.fx[0] - 0.02 * 1080.0).abs() < 1e-3, "radius {:?}", cb.fx);
+        assert!((cb.fx[1] - 0.01 * 1080.0).abs() < 1e-3, "feather {:?}", cb.fx);
+        assert_eq!(cb.fx[3], 1.0);
+        assert!((cb.color[3] - 0.6).abs() < 1e-6);
+        assert_eq!(cb.mb[0], 1.0, "no animation: fully shown");
+        // The same scene at preview size lays it out at the same FRACTIONS: parity by construction.
+        let small = shape_annotation_cb(&a, anchor, dst, [960.0, 540.0], 2000.0, 4000.0).unwrap();
+        assert_eq!(small.src.map(|v| v * 2.0), cb.src);
+        assert!((small.fx[0] * 2.0 - cb.fx[0]).abs() < 1e-3);
+    }
+
+    #[test]
+    fn a_highlight_fades_in_and_out_over_its_span() {
+        let a = shape_annotation(r#"{"fill":"rgba(0,0,0,0.6)","invert":true,"animation":"fade"}"#);
+        let anchor = [0.0, 0.0, 1.0, 1.0];
+        let dst = annotation_dst_in(anchor, a.x, a.y, a.w, a.h);
+        let at = |ms: f32| {
+            shape_annotation_cb(&a, anchor, dst, [1920.0, 1080.0], ms, 4000.0).map(|cb| cb.mb[0])
+        };
+        assert_eq!(at(0.0), None, "invisible at its first frame");
+        let rising = at(200.0).unwrap();
+        assert!(rising > 0.0 && rising < 1.0, "{rising}");
+        assert_eq!(at(2000.0), Some(1.0));
+        let falling = at(3900.0).unwrap();
+        assert!(falling > 0.0 && falling < 1.0, "{falling}");
+    }
+
+    #[test]
+    fn a_step_disc_pops_about_its_centre_and_never_leaves_its_quad() {
+        let a = shape_annotation(
+            r##"{"fill":"#2563eb","radiusRel":1,"borderColor":"#ffffff","borderRel":0.004,"animation":"pop"}"##,
+        );
+        let render = [1920.0, 1080.0];
+        let anchor = [0.0, 0.0, 1.0, 1.0];
+        // A square box: 0.1 of the height, 0.1·9/16 of the width.
+        let dst = annotation_dst_in(anchor, 0.4, 0.4, 0.1 * 9.0 / 16.0, 0.1);
+        let mut max_half = 0.0f32;
+        for ms in (0..700).step_by(20) {
+            let Some(cb) = shape_annotation_cb(&a, anchor, dst, render, ms as f32, 4000.0) else {
+                continue;
+            };
+            let centre = [cb.dst[0] * render[0] + cb.src[0], cb.dst[1] * render[1] + cb.src[1]];
+            assert!((centre[0] - (0.4 + 0.05 * 9.0 / 16.0) * 1920.0).abs() < 0.01, "{centre:?}");
+            assert!((centre[1] - 0.45 * 1080.0).abs() < 0.01, "{centre:?}");
+            // A disc: the radius is the half side, whatever the scale.
+            assert!((cb.fx[0] - cb.src[2].min(cb.src[3])).abs() < 1e-3, "{:?}", cb.fx);
+            assert!(cb.src[0] - cb.src[2] >= 0.0 && cb.src[0] + cb.src[2] <= cb.quad_px[0]);
+            max_half = max_half.max(cb.src[3]);
+        }
+        assert!(max_half > 54.0, "the pop overshoots its rest size: {max_half}");
+        let rest = shape_annotation_cb(&a, anchor, dst, render, 2000.0, 4000.0).unwrap();
+        assert!((rest.src[3] - 54.0).abs() < 1e-3);
+    }
+
+    #[test]
+    fn a_shape_without_paint_draws_nothing() {
+        let a = shape_annotation(r#"{"fill":"transparent"}"#);
+        let anchor = [0.0, 0.0, 1.0, 1.0];
+        let dst = annotation_dst_in(anchor, a.x, a.y, a.w, a.h);
+        assert!(shape_annotation_cb(&a, anchor, dst, [1920.0, 1080.0], 0.0, 1000.0).is_none());
+        let none = shape_annotation(r#"{"fill":"rgba(0,0,0,0.5)"}"#);
+        assert!(shape_annotation_cb(&none, anchor, dst, [1920.0, 1080.0], 0.0, 1000.0).is_some());
+        assert!(!LayerCB { mode: SHAPE_MODE, ..Default::default() }.needs_models());
+    }
+
+    /// The Linux backend compiles `layer.wgsl` at run time: a typo there only shows on Linux. naga
+    /// (wgpu's own front end) parses and validates both pipelines here, on every platform.
+    #[test]
+    fn the_wgsl_layer_shader_validates_with_and_without_models() {
+        use wgpu::naga;
+        let source = include_str!("vk_shaders/layer.wgsl");
+        for models in [false, true] {
+            let full = format!("const LAYER_MODELS: bool = {models};\n{source}");
+            let module = naga::front::wgsl::parse_str(&full)
+                .unwrap_or_else(|e| panic!("layer.wgsl (models {models}): {}", e.emit_to_string(&full)));
+            naga::valid::Validator::new(
+                naga::valid::ValidationFlags::all(),
+                naga::valid::Capabilities::all(),
+            )
+            .validate(&module)
+            .unwrap_or_else(|e| panic!("layer.wgsl (models {models}) invalid: {e:?}"));
+        }
+    }
 
     /// La scène de référence du golden : un cas qui exerce le padding, le crop, le zoom,
     /// une caméra PiP décalée, un rayon et une inclinaison nulle.

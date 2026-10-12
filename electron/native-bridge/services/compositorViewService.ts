@@ -955,4 +955,15 @@ export class CompositorViewService {
 		}
 		return addon.loudnessGainDb(filePath);
 	}
+
+	/** "Melhorar a voz": writes `input` enhanced as the export enhances it, to `output` (a WAV
+	 *  the preview plays in place of the voice). False when the addon predates it. */
+	async enhanceVoiceFile(input: string, output: string, strength: number): Promise<boolean> {
+		const addon = this.ensureAddon();
+		if (!addon?.enhanceVoiceFile) {
+			return false;
+		}
+		await addon.enhanceVoiceFile(input, output, strength);
+		return true;
+	}
 }

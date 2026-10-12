@@ -8,7 +8,9 @@
 		"addAnnotation": "Přidat text, šipku, obrázek nebo rozmazání v aktuálním čase",
 		"addSpeed": "Přidat změnu rychlosti v aktuálním čase",
 		"addCameraFullscreen": "Přidat Celou kameru: zobrazí kameru na celou obrazovku v aktuálním čase",
-		"splitCamera": "Rozdělit kameru v aktuálním čase: každý díl se pak upravuje zvlášť"
+		"splitCamera": "Rozdělit kameru v aktuálním čase: každý díl se pak upravuje zvlášť",
+		"addHighlight": "Highlight an area at the current time: everything around it is dimmed",
+		"addStep": "Add a numbered step at the current time, where the pointer was"
 	},
 	"hints": {
 		"pressZoom": "Stiskněte {{key}} pro přidání přiblížení",
@@ -109,7 +111,9 @@
 		"waitLength": "{{seconds}} s",
 		"speedUpPicked": "Zrychlit vybrané ({{speed}}×)",
 		"noWaits": "V této nahrávce není žádné dlouhé čekání",
-		"waitsSpedUp": "Zrychlená čekání: {{count}}"
+		"waitsSpedUp": "Zrychlená čekání: {{count}}",
+		"highlightPill": "Highlight",
+		"stepPill": "Step {{number}}"
 	},
 	"audio": {
 		"addVoiceover": "Přidat komentář",

@@ -8,7 +8,9 @@
 		"addAnnotation": "Add text, an arrow, an image or a blur at the current time",
 		"addSpeed": "Add a speed change at the current time",
 		"addCameraFullscreen": "Add Full Camera: shows the camera full screen at the current time",
-		"splitCamera": "Split the camera at the current time: each piece is then edited on its own"
+		"splitCamera": "Split the camera at the current time: each piece is then edited on its own",
+		"addHighlight": "Highlight an area at the current time: everything around it is dimmed",
+		"addStep": "Add a numbered step at the current time, where the pointer was"
 	},
 	"hints": {
 		"pressZoom": "Press {{key}} to add zoom",
@@ -109,7 +111,9 @@
 		"waitLength": "{{seconds}} s",
 		"speedUpPicked": "Speed up the picked ones ({{speed}}×)",
 		"noWaits": "No long waits in this take",
-		"waitsSpedUp": "Waits sped up: {{count}}"
+		"waitsSpedUp": "Waits sped up: {{count}}",
+		"highlightPill": "Highlight",
+		"stepPill": "Step {{number}}"
 	},
 	"audio": {
 		"addVoiceover": "Add voiceover",

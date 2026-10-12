@@ -76,6 +76,8 @@ export function AnnotationOverlay({
 	isSelectedBoost,
 }: AnnotationOverlayProps) {
 	const isText = annotation.type === "text";
+	// A step badge is a disc: its box stays square, and grows from its corners like an arrow.
+	const isStep = annotation.type === "step";
 	const arrow =
 		annotation.type === "figure"
 			? {
@@ -228,7 +230,7 @@ export function AnnotationOverlay({
 			bounds="parent"
 			// Un texte garde sa forme : sa boîte est celle de ses mots, seule la taille change. Une
 			// flèche aussi : elle ne s'étire pas, elle grandit.
-			lockAspectRatio={isText || arrow !== null}
+			lockAspectRatio={isText || arrow !== null || isStep}
 			className={cn(
 				"cursor-move",
 				isSelected && "ring-2 ring-[#34B27B] ring-offset-2 ring-offset-transparent",
@@ -241,7 +243,7 @@ export function AnnotationOverlay({
 				boxShadow: isSelected ? "0 0 0 1px rgba(52, 178, 123, 0.35)" : "none",
 			}}
 			// Un texte et une flèche ne se tirent que par leurs coins, qui les agrandissent.
-			enableResizing={isSelected ? (isText || arrow ? CORNERS_ONLY : true) : false}
+			enableResizing={isSelected ? (isText || arrow || isStep ? CORNERS_ONLY : true) : false}
 			disableDragging={!isSelected}
 			resizeHandleStyles={{
 				topLeft: {

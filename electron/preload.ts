@@ -463,6 +463,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	getLoudnessGain: (filePath: string) => {
 		return ipcRenderer.invoke("get-loudness-gain", filePath);
 	},
+	/** "Melhorar a voz": the voice file enhanced for the preview. See the handler. */
+	prepareEnhancedVoice: (filePath: string, strength: number) => {
+		return ipcRenderer.invoke("prepare-enhanced-voice", filePath, strength);
+	},
 	clearCurrentVideoPath: () => {
 		return ipcRenderer.invoke("clear-current-video-path");
 	},

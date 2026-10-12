@@ -1049,6 +1049,7 @@ fn run_multi_inner(
     let mut clip_frame_counts: Vec<u64> = vec![0; clips.len()];
 
     let scene = comp.scene_snapshot();
+    let voice_enhance = scene.as_ref().and_then(|s| s.voice_enhance).map(|v| v.strength);
     let audio_settings = scene.as_ref().map(|scene| scene.audio).unwrap_or_default();
     // Imported audio tracks (issue #350), cloned out of the borrowed scene so the
     // mix step below owns them. Empty for a project with no imported audio.
@@ -1185,6 +1186,7 @@ fn run_multi_inner(
                             source_end_sec,
                             &segments,
                             out_fps as f64,
+                            voice_enhance,
                         )
                     });
                 }

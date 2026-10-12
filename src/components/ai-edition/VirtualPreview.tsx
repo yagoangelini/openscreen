@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { toFileUrl } from "@/components/video-editor/projectPersistence";
 import {
 	type CropRegion,
 	DEFAULT_CROP_REGION,
@@ -50,6 +51,7 @@ import {
 	computeZoomPreviewTransform,
 	IDENTITY_ZOOM_TRANSFORM,
 } from "@/lib/ai-edition/timeline/zoom-preview";
+import { roundedVoiceEnhanceStrength } from "@/native/sceneDescription";
 import {
 	describeMediaError,
 	formatMediaError,
@@ -693,6 +695,33 @@ export function VirtualPreview({
 			);
 		}
 	}, [voicePathsKey, retryToken, activeVoicePath]);
+	// "Melhorar a voz": the voice file as the export will enhance it, rendered by the compositor
+	// (`prepare-enhanced-voice`) and played in place of the voice once ready; until then, and
+	// whenever it fails, the voice as recorded. Same samples, same length: the clock is unchanged,
+	// and the loudness gain above stays the original file's, which is what the export applies.
+	const enhanceStrength = settings.voiceEnhance
+		? roundedVoiceEnhanceStrength(settings.voiceEnhanceStrength)
+		: null;
+	const [enhancedVoice, setEnhancedVoice] = useState<{ key: string; src: string } | null>(null);
+	const enhanceKey =
+		activeVoicePath && enhanceStrength !== null ? `${activeVoicePath}|${enhanceStrength}` : null;
+	useEffect(() => {
+		const prepare = window.electronAPI?.prepareEnhancedVoice;
+		if (!enhanceKey || !activeVoicePath || enhanceStrength === null || !prepare) return;
+		let cancelled = false;
+		void prepare(activeVoicePath, enhanceStrength).then(
+			(result) => {
+				if (cancelled || !result.success || !result.path) return;
+				setEnhancedVoice({ key: enhanceKey, src: toFileUrl(result.path) });
+			},
+			() => undefined,
+		);
+		return () => {
+			cancelled = true;
+		};
+	}, [enhanceKey, activeVoicePath, enhanceStrength]);
+	const enhancedVoiceSrc =
+		enhancedVoice && enhancedVoice.key === enhanceKey ? enhancedVoice.src : null;
 	// Loudness, plus the Voice volume when the voice plays on its own.
 	const voiceGainDb =
 		(activeVoicePath ? (loudnessGainDbByPath.get(activeVoicePath) ?? 0) : 0) +
@@ -1899,9 +1928,9 @@ export function VirtualPreview({
 						<audio
 							// A new element when the stems give way to the mixed track: the Web Audio
 							// source node is bound to its element for good.
-							key={`${activeSource.id}:primary-audio${activeStems ? ":stem" : ""}`}
+							key={`${activeSource.id}:primary-audio${activeStems ? ":stem" : ""}${enhancedVoiceSrc ? ":enhanced" : ""}`}
 							ref={setPrimaryAudioElement}
-							src={activeStems?.voiceSrc ?? activeSource.src}
+							src={enhancedVoiceSrc ?? activeStems?.voiceSrc ?? activeSource.src}
 							preload="metadata"
 							aria-hidden="true"
 							data-testid="preview-audio-primary"

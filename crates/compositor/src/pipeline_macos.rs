@@ -1290,6 +1290,7 @@ fn run_multi_inner(
     // exactement le bug de troncature en slow-motion que la doc de `walk_composited_timeline`
     // raconte avoir déjà coûté une fois.
     let scene = comp.scene_snapshot();
+    let voice_enhance = scene.as_ref().and_then(|s| s.voice_enhance).map(|v| v.strength);
     let audio_settings = scene.as_ref().map(|scene| scene.audio).unwrap_or_default();
     // Imported audio tracks (issue #350), cloned out of the borrowed scene.
     let audio_tracks = scene
@@ -1345,6 +1346,7 @@ fn run_multi_inner(
                             source_end_sec,
                             &segments,
                             out_fps as f64,
+                            voice_enhance,
                         )
                     });
                 }

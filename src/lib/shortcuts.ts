@@ -11,6 +11,8 @@ export const SHORTCUT_ACTIONS = [
 	"addCameraFullscreen",
 	"splitCamera",
 	"addAnnotation",
+	"addHighlight",
+	"addStep",
 	"addAudio",
 	"addVoiceover",
 	"deleteSelected",
@@ -165,6 +167,9 @@ export const DEFAULT_SHORTCUTS: ShortcutsConfig = {
 	// B, as in a blade: S is already speed.
 	splitCamera: { key: "b" },
 	addAnnotation: { key: "a" },
+	// Tutorial annotations: H for a highlight rectangle, N for a numbered step.
+	addHighlight: { key: "h" },
+	addStep: { key: "n" },
 	addAudio: { key: "m" },
 	// Record a voiceover over the timeline from the playhead.
 	addVoiceover: { key: "v" },
@@ -187,6 +192,8 @@ export const SHORTCUT_LABELS: Record<ShortcutAction, string> = {
 	addCameraFullscreen: "Add Full Camera",
 	splitCamera: "Split Camera at Playhead",
 	addAnnotation: "Add Annotation",
+	addHighlight: "Add Highlight",
+	addStep: "Add Numbered Step",
 	addAudio: "Add Audio",
 	addVoiceover: "Record Voiceover",
 	deleteSelected: "Delete Selected",

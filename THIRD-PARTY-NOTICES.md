@@ -249,6 +249,13 @@ generated at build time and shipped beside this file.
 - **CC0-1.0** (1): hexf-parse 0.2.1.
 - **Apache-2.0 OR GPL-2.0-only** (1): self_cell 1.3.0.
 - **(MIT OR Apache-2.0) AND Unicode-3.0** (1): unicode-ident 1.0.24.
+- **Added for "Melhorar a voz"** (voice enhancement, `voice_enhance.rs`): nnnoiseless
+  0.5.2 (BSD-3-Clause; a Rust port of RNNoise, its model weights included —
+  © Joe Neeman, Mozilla, Jean-Marc Valin, Xiph.Org Foundation, Mark Borgerding), and
+  its dependencies easyfft 0.4.2, rustfft 6.4.1, primal-check 0.3.4, strength_reduce
+  0.2.4, transpose 0.2.3, array-init 2.1.0, generic_singleton 0.5.3 (MIT OR
+  Apache-2.0), realfft 3.5.0 (MIT), anymap3 1.1.0 (BlueOak-1.0.0 OR MIT OR
+  Apache-2.0, used under MIT).
 
 ## Kenney UI Audio — click sounds
 

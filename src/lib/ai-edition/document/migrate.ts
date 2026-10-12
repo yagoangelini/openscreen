@@ -247,6 +247,8 @@ export function migrateProjectDataToAxcutDocument(
 				: {}),
 			...(region.figureData ? { figureData: region.figureData } : {}),
 			...(region.blurData ? { blurData: region.blurData } : {}),
+			...(region.highlightData ? { highlightData: region.highlightData } : {}),
+			...(region.stepData ? { stepData: region.stepData } : {}),
 		}));
 
 	const legacyEditor: AxcutLegacyEditor = input.editor ? { ...input.editor } : null;
@@ -386,6 +388,8 @@ export function migrateAxcutDocumentToProjectData(input: AxcutDocument): EditorP
 			...(region.annotationSource ? { annotationSource: region.annotationSource } : {}),
 			...(region.figureData ? { figureData: region.figureData } : {}),
 			...(region.blurData ? { blurData: region.blurData } : {}),
+			...(region.highlightData ? { highlightData: region.highlightData } : {}),
+			...(region.stepData ? { stepData: region.stepData } : {}),
 		}),
 	);
 	editor.annotationRegions = reverseAnnotationRegions;
