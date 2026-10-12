@@ -112,6 +112,78 @@ describe("WindowsNativeRecordingSession bounds handling", () => {
 	});
 });
 
+describe("WindowsNativeRecordingSession fine path", () => {
+	const REAL_PLATFORM = process.platform;
+	const setPlatform = (value: NodeJS.Platform) =>
+		Object.defineProperty(process, "platform", { value, configurable: true });
+
+	beforeEach(() => {
+		setPlatform("win32");
+		process.env.OPENSCREEN_CURSOR_SAMPLER_EXE = __filename;
+		dipToScreenRect.mockReturnValue(PHYSICAL_BOUNDS);
+		vi.spyOn(console, "error").mockImplementation(() => undefined);
+		vi.spyOn(console, "info").mockImplementation(() => undefined);
+	});
+
+	afterEach(() => {
+		setPlatform(REAL_PLATFORM);
+		process.env.OPENSCREEN_CURSOR_SAMPLER_EXE = undefined;
+		spawn.mockReset();
+		dipToScreenRect.mockReset();
+		vi.restoreAllMocks();
+	});
+
+	const record = async (lines: Record<string, unknown>[]) => {
+		const { child, stdout } = fakeHelper();
+		spawn.mockReturnValue(child);
+		const session = new WindowsNativeRecordingSession({
+			getDisplayBounds: () => DIP_BOUNDS,
+			maxSamples: Number.POSITIVE_INFINITY,
+			sampleIntervalMs: 33,
+			startTimeMs: 1000,
+		});
+		const started = session.start();
+		stdout.push(`${JSON.stringify({ type: "ready", timestampMs: 1000 })}\n`);
+		await started;
+		for (const line of lines) stdout.push(`${JSON.stringify(line)}\n`);
+		await new Promise((resolve) => setImmediate(resolve));
+		return session.stop();
+	};
+	const tick = (timestampMs: number, x: number) => ({
+		type: "sample",
+		timestampMs,
+		x,
+		y: 540,
+		visible: true,
+		handle: "0x10003",
+		asset: null,
+	});
+
+	it("asks the helper for four fine ticks per sample", async () => {
+		await record([]);
+		expect(spawn.mock.calls[0][1]).toEqual(["33", "null", "4"]);
+	});
+
+	it("keeps move events as the path, not as samples, against the sample's surface", async () => {
+		const data = await record([
+			tick(1100, 960),
+			{ type: "move", timestampMs: 1108, x: 1000, y: 540 },
+			{ type: "move", timestampMs: 1117, x: 1043, y: 545 },
+			tick(1133, 1080),
+		]);
+		expect(data.samples.map((s) => s.timeMs)).toEqual([100, 133]);
+		expect(data.path).toEqual([
+			[108, 0.52083, 0.5],
+			[117, 0.54323, 0.50463],
+		]);
+	});
+
+	it("writes no path for a pointer that never moved between samples", async () => {
+		const data = await record([tick(1100, 960), tick(1133, 960)]);
+		expect("path" in data).toBe(false);
+	});
+});
+
 describe("WindowsNativeRecordingSession input events", () => {
 	const REAL_PLATFORM = process.platform;
 	const setPlatform = (value: NodeJS.Platform) =>

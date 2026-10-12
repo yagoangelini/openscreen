@@ -53,6 +53,32 @@ describe("cursor pause and offset", () => {
 		expect(out.samples.map((s) => s.timeMs)).toEqual([0, 500]);
 	});
 
+	it("moves and compacts the fine path like the samples", () => {
+		const withPath: CursorRecordingData = {
+			...data([100, 1500, 3000]),
+			path: [
+				[50, 0.1, 0.1],
+				[1200, 0.2, 0.2],
+				[2500, 0.3, 0.3],
+				[3100, 0.4, 0.4],
+			],
+		};
+		const compacted = compactCursorPauseRanges(withPath, [{ startMs: 1000, endMs: 2000 }]);
+		expect(compacted.path).toEqual([
+			[50, 0.1, 0.1],
+			[1500, 0.3, 0.3],
+			[2100, 0.4, 0.4],
+		]);
+		// Before the first frame it goes: the sample at 0 holds where the pointer was.
+		expect(shiftCursorTelemetry(compacted, 400).path).toEqual([
+			[1100, 0.3, 0.3],
+			[1700, 0.4, 0.4],
+		]);
+		// An old recording without a path stays without one.
+		expect("path" in shiftCursorTelemetry(data([100, 900]), 400)).toBe(false);
+		expect("path" in compactCursorPauseRanges(data([100]), [{ startMs: 1, endMs: 2 }])).toBe(false);
+	});
+
 	it("drops a click made before the first frame, keeping where the cursor was", () => {
 		const out = shiftCursorTelemetry(
 			{
@@ -108,6 +134,28 @@ describe("cursor checkpoint", () => {
 		expect(rebuilt?.samples[1].interactionType).toBe("click");
 		expect(rebuilt?.assets).toEqual([asset]);
 		expect(rebuilt?.provider).toBe("native");
+	});
+
+	it("checkpoints the fine path and rebuilds it with the samples", async () => {
+		const video = path.join(dir, "take.mp4");
+		const writer = new CursorCheckpointWriter(`${video}${CURSOR_CHECKPOINT_SUFFIX}`);
+		const samples = [sample(500)];
+		const fine: Array<[number, number, number]> = [[510, 0.51, 0.5]];
+		writer.meta(400);
+		await writer.flush({ samples, assets: [asset], path: fine });
+		fine.push([520, 0.52, 0.5], [530, 0.53, 0.5]);
+		await writer.flush({ samples, assets: [asset], path: fine });
+		await writer.flush({ samples, assets: [asset], path: fine });
+
+		const text = await fs.readFile(`${video}${CURSOR_CHECKPOINT_SUFFIX}`, "utf-8");
+		// One line per flush with something new, each with only what is new.
+		expect(text.split("\n").filter((line) => line.includes('"type":"path"'))).toHaveLength(2);
+		const rebuilt = rebuildCursorTelemetry(`${text}{"type":"path","points":[[540,"x",1],[550]]}\n`);
+		expect(rebuilt?.path).toEqual([
+			[110, 0.51, 0.5],
+			[120, 0.52, 0.5],
+			[130, 0.53, 0.5],
+		]);
 	});
 
 	it("survives the line the crash cut short", () => {

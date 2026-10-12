@@ -104,6 +104,16 @@ int main() {
     }
     expectEqual("no rounding drift over an hour", hour.nextDueHns(), 3600 * kSecondHns);
 
+    // The first frame's wall-clock time, for the cursor's alignment: a frame
+    // stamped 12.5 ms before the reading is 12.5 ms before its wall clock.
+    expectEqual("frame epoch is the reading minus the frame's age",
+                static_cast<int64_t>(epochMsOfQpcHns(1'000'000'000, 1'000'125'000, 1'700'000'000'000.0) * 10),
+                static_cast<int64_t>(1'699'999'999'987.5 * 10));
+    // Twenty days of uptime at a 10 MHz counter: ticks * 1e7 would overflow.
+    const int64_t uptimeTicks = 20LL * 86'400 * 10'000'000 + 7;
+    expectEqual("QPC ticks to hns without overflow", qpcTicksToHns(uptimeTicks, 10'000'000), uptimeTicks);
+    expectEqual("QPC ticks to hns at 3 MHz", qpcTicksToHns(3'000'000LL * 5 + 3, 3'000'000), 50'000'010);
+
     if (failures == 0) {
         std::printf("frame_slot_clock_test: all assertions passed\n");
         return 0;

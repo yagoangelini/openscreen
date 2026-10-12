@@ -1128,6 +1128,26 @@ int wmain(int argc, wchar_t* argv[]) {
     const bool legacyFrameCallback = useLegacyFrameCallback();
     CaptureControl control;
     std::atomic<bool> firstFrameWritten = false;
+    // The wall-clock time of the video's 0 s: when its first frame was composed, not when the app
+    // reads `recording-started` (10 ms of polling, a pipe and the app's event loop later). The app
+    // times the cursor against it. Written once, before `firstFrameWritten`.
+    std::atomic<double> firstFrameEpochMs = 0.0;
+    auto noteFirstFrameEpoch = [&](int64_t frameTimestampHns) {
+        if (firstFrameEpochMs.load() != 0.0) {
+            return;
+        }
+        LARGE_INTEGER qpc{};
+        LARGE_INTEGER frequency{};
+        QueryPerformanceCounter(&qpc);
+        QueryPerformanceFrequency(&frequency);
+        const double nowEpochMs = std::chrono::duration<double, std::milli>(
+            std::chrono::system_clock::now().time_since_epoch()).count();
+        const int64_t nowHns = qpcTicksToHns(qpc.QuadPart, frequency.QuadPart);
+        // A frame without a timestamp is taken as composed now.
+        firstFrameEpochMs = frameTimestampHns > 0
+            ? epochMsOfQpcHns(frameTimestampHns, nowHns, nowEpochMs)
+            : nowEpochMs;
+    };
     std::atomic<bool> encodeFailed = false;
     // Says so the moment a take dies, not at the next stop. Until this the
     // only trace was an ERROR line on stderr that nobody reads mid-recording,
@@ -1207,6 +1227,7 @@ int wmain(int argc, wchar_t* argv[]) {
             }
             session.context()->CopyResource(latestFrameTexture.Get(), texture);
             legacyLatestFrameTimestampHns = timestampHns;
+            noteFirstFrameEpoch(timestampHns);
             if (!firstFrameWritten.exchange(true)) {
                 frameCv.notify_all();
             }
@@ -1328,6 +1349,7 @@ int wmain(int argc, wchar_t* argv[]) {
                         // lock down with it.
                         session.context()->CopyResource(latestFrameTexture.Get(), wgcTexture);
                         latestFrameTimestampHns = wgcTimestampHns;
+                        noteFirstFrameEpoch(wgcTimestampHns);
                         firstFrameWritten = true;
                     } else if (!latestFrameTexture) {
                         // No frame captured yet at all: nothing to encode
@@ -1798,7 +1820,13 @@ int wmain(int argc, wchar_t* argv[]) {
     }
 
     startTiming("first-frame");
-    std::cout << "{\"event\":\"recording-started\",\"schemaVersion\":2}" << std::endl;
+    {
+        char started[128];
+        std::snprintf(started, sizeof(started),
+            "{\"event\":\"recording-started\",\"schemaVersion\":2,\"firstFrameEpochMs\":%.3f}",
+            firstFrameEpochMs.load());
+        std::cout << started << std::endl;
+    }
     std::cout << "Recording started" << std::endl;
 
     control.waitForStop();

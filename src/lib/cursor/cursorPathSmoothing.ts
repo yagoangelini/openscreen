@@ -1,13 +1,16 @@
-import { getCursorSpringConfig } from "@/lib/zoomMath/motionSmoothing";
 import type { CursorRecordingData, CursorRecordingSample } from "@/native/contracts";
 import { clamp } from "@/utils/math";
 
 /**
- * Offline cursor-path smoothing for native recordings.
+ * Offline cursor-path smoothing for native recordings. TypeScript mirror of the compositor's
+ * `CursorTrack::smoothed` (crates/compositor/src/cursor.rs), which draws the cursor in the
+ * preview and the export; keep the two in step.
  *
- * We have the whole path up front, so instead of a per-frame causal filter we precompute once:
- * resample to a fixed high rate, then run a spring-damper over it. The spring gives the motion
- * inertia (it trails the real cursor) and is deterministic, so preview and export match exactly.
+ * The whole path is known up front, so the smoothing is zero-phase: resample to 240 Hz, then
+ * replace each point with the centred Gaussian average of the path around it. A pointer moving at
+ * a steady speed is drawn exactly where it is, when it is there; only tremor and the corners of
+ * the sampled path are rounded off. Each click is pulled back onto its raw point at its instant.
+ * The spring this replaced trailed the real pointer by ~190 ms at the default strength.
  */
 
 export interface SmoothedCursorPosition {
@@ -20,23 +23,20 @@ export interface SmoothedCursorPath {
 	sampleAt(timeMs: number): SmoothedCursorPosition | null;
 }
 
-/** 240 steps/sec keeps the spring stable and crisp at any playback fps. */
+/** 240 steps/sec, the compositor's grid. */
 const STEP_MS = 1000 / 240;
-const STEP_S = STEP_MS / 1000;
+/** Spread (one standard deviation) of the Gaussian at smoothing 1 (`SMOOTHING_SIGMA_MAX_S`). */
+export const CURSOR_SMOOTHING_SIGMA_MAX_MS = 30;
 
 interface SmoothedRun {
 	start: number;
 	end: number;
-	times: Float32Array;
-	xs: Float32Array;
-	ys: Float32Array;
+	times: number[];
+	xs: number[];
+	ys: number[];
 }
 
-function binarySearchAtOrBefore(
-	times: Float32Array | number[],
-	timeMs: number,
-	hi: number,
-): number {
+function binarySearchAtOrBefore(times: ArrayLike<number>, timeMs: number, hi: number): number {
 	let low = 0;
 	let high = hi;
 	let result = -1;
@@ -52,46 +52,56 @@ function binarySearchAtOrBefore(
 	return result;
 }
 
-/** Linear interpolation of a sample run's position at an arbitrary time. */
-function interpolateRun(samples: CursorRecordingSample[], timeMs: number): SmoothedCursorPosition {
-	const last = samples.length - 1;
-	if (timeMs <= samples[0].timeMs) return { cx: samples[0].cx, cy: samples[0].cy };
-	if (timeMs >= samples[last].timeMs) return { cx: samples[last].cx, cy: samples[last].cy };
-	const i = binarySearchAtOrBefore(
-		samples.map((s) => s.timeMs),
-		timeMs,
-		last,
-	);
-	const a = samples[i];
-	const b = samples[i + 1] ?? a;
-	const span = b.timeMs - a.timeMs;
-	if (span <= 0) return { cx: a.cx, cy: a.cy };
-	const t = (timeMs - a.timeMs) / span;
-	return { cx: a.cx + (b.cx - a.cx) * t, cy: a.cy + (b.cy - a.cy) * t };
+/** Linear interpolation of a series' position at an arbitrary time; held past both ends. */
+function interpolate(
+	times: ArrayLike<number>,
+	xs: ArrayLike<number>,
+	ys: ArrayLike<number>,
+	timeMs: number,
+): SmoothedCursorPosition {
+	const last = times.length - 1;
+	if (timeMs <= times[0]) return { cx: xs[0], cy: ys[0] };
+	if (timeMs >= times[last]) return { cx: xs[last], cy: ys[last] };
+	const i = binarySearchAtOrBefore(times, timeMs, last);
+	const span = times[i + 1] - times[i];
+	if (span <= 0) return { cx: xs[i], cy: ys[i] };
+	const t = (timeMs - times[i]) / span;
+	return { cx: xs[i] + (xs[i + 1] - xs[i]) * t, cy: ys[i] + (ys[i + 1] - ys[i]) * t };
 }
 
-/**
- * Drive a spring across `targets`, returning the smoothed series. Semi-implicit
- * (symplectic) Euler, stable for these stiffness values at the 240Hz grid.
- */
-function springSmooth(
-	targets: Float32Array,
-	stiffness: number,
-	damping: number,
-	mass: number,
-): Float32Array {
-	const out = new Float32Array(targets.length);
-	if (targets.length === 0) return out;
-	let x = targets[0];
-	let v = 0;
-	out[0] = x;
-	for (let i = 1; i < targets.length; i++) {
-		const accel = (-stiffness * (x - targets[i]) - damping * v) / mass;
-		v += accel * STEP_S;
-		x += v * STEP_S;
-		out[i] = x;
+function interpolateRun(samples: CursorRecordingSample[], timeMs: number): SmoothedCursorPosition {
+	return interpolate(
+		samples.map((s) => s.timeMs),
+		samples.map((s) => s.cx),
+		samples.map((s) => s.cy),
+		timeMs,
+	);
+}
+
+/** Centred convolution with a Gaussian of `sigmaMs`, each end held: zero phase. */
+function gaussianSmooth(values: Float64Array, sigmaMs: number): number[] {
+	const radius = Math.max(1, Math.ceil((3 * sigmaMs) / STEP_MS));
+	const kernel: number[] = [];
+	for (let j = -radius; j <= radius; j++) {
+		const d = (j * STEP_MS) / sigmaMs;
+		kernel.push(Math.exp(-0.5 * d * d));
+	}
+	const total = kernel.reduce((sum, w) => sum + w, 0);
+	const last = values.length - 1;
+	const out: number[] = new Array(values.length);
+	for (let i = 0; i < values.length; i++) {
+		let sum = 0;
+		for (let j = 0; j < kernel.length; j++) {
+			sum += values[clamp(i + j - radius, 0, last)] * kernel[j];
+		}
+		out[i] = sum / total;
 	}
 	return out;
+}
+
+function smoothstep01(x: number): number {
+	const u = clamp(x, 0, 1);
+	return u * u * (3 - 2 * u);
 }
 
 /** Maximal runs of visible samples, so we never smooth across a hidden gap. */
@@ -110,50 +120,61 @@ function splitVisibleRuns(samples: CursorRecordingSample[]): CursorRecordingSamp
 	return runs;
 }
 
-function buildSmoothedRun(
-	samples: CursorRecordingSample[],
-	stiffness: number,
-	damping: number,
-	mass: number,
-): SmoothedRun {
+/**
+ * Each click's offset from its raw point, applied in full at its instant and faded out over the
+ * kernel's reach on both sides; the instant becomes a point of the run (`pin_clicks` in Rust).
+ */
+function pinClicks(run: SmoothedRun, samples: CursorRecordingSample[], reachMs: number) {
+	const reach = Math.max(reachMs, STEP_MS);
+	const instants: Array<[number, number, number]> = [];
+	for (const click of samples) {
+		if (click.interactionType !== "click") continue;
+		const at = interpolate(run.times, run.xs, run.ys, click.timeMs);
+		const dx = click.cx - at.cx;
+		const dy = click.cy - at.cy;
+		for (let i = 0; i < run.times.length; i++) {
+			const d = Math.abs(run.times[i] - click.timeMs);
+			if (d > reach) continue;
+			const w = 1 - smoothstep01(d / reach);
+			run.xs[i] += dx * w;
+			run.ys[i] += dy * w;
+		}
+		instants.push([click.timeMs, click.cx, click.cy]);
+	}
+	if (instants.length === 0) return;
+	const merged = run.times.map((t, i): [number, number, number] => [t, run.xs[i], run.ys[i]]);
+	merged.push(...instants);
+	// Stable: a click on a grid instant comes after it, and the lookup reads the click.
+	merged.sort((a, b) => a[0] - b[0]);
+	run.times = merged.map((p) => p[0]);
+	run.xs = merged.map((p) => p[1]);
+	run.ys = merged.map((p) => p[2]);
+}
+
+function buildSmoothedRun(samples: CursorRecordingSample[], sigmaMs: number): SmoothedRun {
 	const start = samples[0].timeMs;
 	const end = samples[samples.length - 1].timeMs;
 	const stepCount = Math.max(1, Math.round((end - start) / STEP_MS));
 	const n = stepCount + 1;
-	const times = new Float32Array(n);
-	const rawX = new Float32Array(n);
-	const rawY = new Float32Array(n);
+	const grid: number[] = new Array(n);
+	const rawX = new Float64Array(n);
+	const rawY = new Float64Array(n);
 	for (let i = 0; i < n; i++) {
 		const t = i === n - 1 ? end : start + i * STEP_MS;
-		times[i] = t;
+		grid[i] = t;
 		const p = interpolateRun(samples, t);
 		rawX[i] = p.cx;
 		rawY[i] = p.cy;
 	}
-	// The spring is itself a strong low-pass (~3Hz cutoff), so it removes capture tremor without a
-	// separate denoise pass. Chasing the raw target keeps the cursor accurate near sharp stops (no
-	// acausal pull toward neighbouring samples that would offset clicks/dwells).
-	return {
+	const run: SmoothedRun = {
 		start,
 		end,
-		times,
-		xs: springSmooth(rawX, stiffness, damping, mass),
-		ys: springSmooth(rawY, stiffness, damping, mass),
+		times: grid,
+		xs: gaussianSmooth(rawX, sigmaMs),
+		ys: gaussianSmooth(rawY, sigmaMs),
 	};
-}
-
-function sampleRun(run: SmoothedRun, timeMs: number): SmoothedCursorPosition {
-	const last = run.times.length - 1;
-	if (timeMs <= run.times[0]) return { cx: run.xs[0], cy: run.ys[0] };
-	if (timeMs >= run.times[last]) return { cx: run.xs[last], cy: run.ys[last] };
-	const i = binarySearchAtOrBefore(run.times, timeMs, last);
-	const span = run.times[i + 1] - run.times[i];
-	if (span <= 0) return { cx: run.xs[i], cy: run.ys[i] };
-	const t = (timeMs - run.times[i]) / span;
-	return {
-		cx: run.xs[i] + (run.xs[i + 1] - run.xs[i]) * t,
-		cy: run.ys[i] + (run.ys[i + 1] - run.ys[i]) * t,
-	};
+	pinClicks(run, samples, 3 * sigmaMs);
+	return run;
 }
 
 /** Passthrough path (smoothing 0): raw linear interpolation, still respecting visibility gaps. */
@@ -178,30 +199,29 @@ function buildSmoothedPath(
 	if (runs.length === 0) {
 		return { sampleAt: () => null };
 	}
-	if (smoothing01 <= 0) {
+	const sigmaMs = clamp(smoothing01, 0, 1) * CURSOR_SMOOTHING_SIGMA_MAX_MS;
+	if (sigmaMs <= 0) {
 		return buildRawPath(runs);
 	}
 
-	// Use the slider value directly to match the live overlay's spring strength so both cursor
-	// systems lag identically (an extra multiplier here over-smoothed, causing a visible offset).
-	const config = getCursorSpringConfig(clamp(smoothing01, 0, 1));
-
-	const smoothedRuns = runs.map((run) =>
+	const smoothedRuns: SmoothedRun[] = runs.map((run) =>
 		run.length < 2
 			? {
 					start: run[0].timeMs,
 					end: run[0].timeMs,
-					times: new Float32Array([run[0].timeMs]),
-					xs: new Float32Array([run[0].cx]),
-					ys: new Float32Array([run[0].cy]),
+					times: [run[0].timeMs],
+					xs: [run[0].cx],
+					ys: [run[0].cy],
 				}
-			: buildSmoothedRun(run, config.stiffness, config.damping, config.mass),
+			: buildSmoothedRun(run, sigmaMs),
 	);
 
 	return {
 		sampleAt(timeMs) {
 			for (const run of smoothedRuns) {
-				if (timeMs >= run.start && timeMs <= run.end) return sampleRun(run, timeMs);
+				if (timeMs >= run.start && timeMs <= run.end) {
+					return interpolate(run.times, run.xs, run.ys, timeMs);
+				}
 			}
 			return null;
 		},
@@ -212,7 +232,7 @@ const pathCache = new WeakMap<CursorRecordingData, Map<string, SmoothedCursorPat
 
 /**
  * Returns the smoothed cursor path for a recording at a given strength, memoized per
- * (recordingData, strength) so it's built once and shared by preview and export.
+ * (recordingData, strength) so it's built once.
  */
 export function getSmoothedCursorPath(
 	recordingData: CursorRecordingData | null | undefined,

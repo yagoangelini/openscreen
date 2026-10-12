@@ -1,6 +1,10 @@
 import { constants as fsConstants } from "node:fs";
 import fs from "node:fs/promises";
-import type { CursorRecordingData, NativeCursorAsset } from "../../src/native/contracts";
+import type {
+	CursorPathPoint,
+	CursorRecordingData,
+	NativeCursorAsset,
+} from "../../src/native/contracts";
 
 /**
  * A crash-safe copy of the cursor telemetry, written while the take runs.
@@ -17,6 +21,7 @@ import type { CursorRecordingData, NativeCursorAsset } from "../../src/native/co
  *   {"type":"meta","cursorOffsetMs":412}       once the first frame is known
  *   {"type":"asset","asset":{...}}             each cursor image, once
  *   {"type":"sample","sample":{...}}           each sample, in arrival order
+ *   {"type":"path","points":[[t,cx,cy],...]}   the fine path since the last flush
  *   {"type":"pause","startMs":..,"endMs":..}   each completed pause
  */
 
@@ -56,7 +61,23 @@ export function compactCursorPauseRanges(
 		}
 		return [{ ...sample, timeMs: Math.max(0, sample.timeMs - pausedBeforeSampleMs) }];
 	});
-	return { ...data, samples: samples.sort((a, b) => a.timeMs - b.timeMs) };
+	const path = data.path?.flatMap(([timeMs, cx, cy]): CursorPathPoint[] => {
+		let pausedBeforePointMs = 0;
+		for (const range of normalizedRanges) {
+			if (timeMs >= range.startMs && timeMs <= range.endMs) {
+				return [];
+			}
+			if (timeMs > range.endMs) {
+				pausedBeforePointMs += range.endMs - range.startMs;
+			}
+		}
+		return [[Math.max(0, timeMs - pausedBeforePointMs), cx, cy]];
+	});
+	return {
+		...data,
+		samples: samples.sort((a, b) => a.timeMs - b.timeMs),
+		...(path ? { path: path.sort((a, b) => a[0] - b[0]) } : {}),
+	};
 }
 
 /**
@@ -82,12 +103,17 @@ export function shiftCursorTelemetry(
 		const { interactionType: _click, input: _input, ...position } = last;
 		samples.unshift({ ...position, timeMs: 0 });
 	}
-	return { ...data, samples };
+	// The path before the first frame goes too: the sample at 0 holds where the pointer was.
+	const path = data.path
+		?.filter(([timeMs]) => timeMs >= offsetMs)
+		.map(([timeMs, cx, cy]): CursorPathPoint => [timeMs - offsetMs, cx, cy]);
+	return { ...data, samples, ...(path ? { path } : {}) };
 }
 
 /** Appends what is new since the last flush; reads the session's live arrays. */
 export class CursorCheckpointWriter {
 	private writtenSamples = 0;
+	private writtenPathPoints = 0;
 	private writtenAssets = new Set<string>();
 	private pending: string[] = [];
 	private chain: Promise<void> = Promise.resolve();
@@ -108,6 +134,7 @@ export class CursorCheckpointWriter {
 	flush(data: {
 		samples: readonly CursorRecordingData["samples"][number][];
 		assets: readonly NativeCursorAsset[];
+		path?: readonly CursorPathPoint[];
 	}) {
 		for (const asset of data.assets) {
 			if (!this.writtenAssets.has(asset.id)) {
@@ -119,6 +146,13 @@ export class CursorCheckpointWriter {
 			this.pending.push(JSON.stringify({ type: "sample", sample: data.samples[index] }));
 		}
 		this.writtenSamples = data.samples.length;
+		const path = data.path ?? [];
+		if (path.length > this.writtenPathPoints) {
+			this.pending.push(
+				JSON.stringify({ type: "path", points: path.slice(this.writtenPathPoints) }),
+			);
+			this.writtenPathPoints = path.length;
+		}
 		if (this.discarded || this.pending.length === 0) {
 			this.pending = [];
 			return this.chain;
@@ -146,6 +180,7 @@ export class CursorCheckpointWriter {
 export function rebuildCursorTelemetry(text: string): CursorRecordingData | null {
 	const assets = new Map<string, NativeCursorAsset>();
 	const samples: CursorRecordingData["samples"] = [];
+	const path: CursorPathPoint[] = [];
 	const pauses: PauseRange[] = [];
 	let offsetMs = 0;
 	for (const line of text.split(/\r?\n/)) {
@@ -157,6 +192,7 @@ export function rebuildCursorTelemetry(text: string): CursorRecordingData | null
 			cursorOffsetMs?: number;
 			asset?: NativeCursorAsset;
 			sample?: CursorRecordingData["samples"][number];
+			points?: unknown;
 			startMs?: number;
 			endMs?: number;
 		};
@@ -172,6 +208,16 @@ export function rebuildCursorTelemetry(text: string): CursorRecordingData | null
 			assets.set(entry.asset.id, entry.asset);
 		} else if (entry.type === "sample" && entry.sample && typeof entry.sample.timeMs === "number") {
 			samples.push(entry.sample);
+		} else if (entry.type === "path" && Array.isArray(entry.points)) {
+			for (const point of entry.points) {
+				if (
+					Array.isArray(point) &&
+					point.length === 3 &&
+					point.every((value) => typeof value === "number" && Number.isFinite(value))
+				) {
+					path.push(point as CursorPathPoint);
+				}
+			}
 		} else if (
 			entry.type === "pause" &&
 			typeof entry.startMs === "number" &&
@@ -189,6 +235,7 @@ export function rebuildCursorTelemetry(text: string): CursorRecordingData | null
 		provider: assets.size > 0 ? "native" : "none",
 		samples,
 		assets: [...assets.values()],
+		...(path.length > 0 ? { path: path.sort((a, b) => a[0] - b[0]) } : {}),
 	};
 	return shiftCursorTelemetry(compactCursorPauseRanges(data, pauses), offsetMs);
 }
@@ -216,7 +263,8 @@ export async function recoverCursorCheckpoint(videoPath: string): Promise<boolea
 	if (!data) {
 		return false;
 	}
-	await fs.writeFile(telemetryPath, JSON.stringify(data, null, 2), "utf-8");
+	// Unindented: an indented `path` takes a line per number.
+	await fs.writeFile(telemetryPath, JSON.stringify(data), "utf-8");
 	await fs.rm(checkpointPath, { force: true }).catch(() => undefined);
 	return true;
 }

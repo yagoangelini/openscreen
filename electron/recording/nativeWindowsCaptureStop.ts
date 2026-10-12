@@ -207,6 +207,39 @@ export function readSecondaryWindowsApplied(output: string) {
 }
 
 /**
+ * The wall-clock time (ms since the epoch) of the take's first frame, which is the video's 0 s,
+ * as the helper measured it from the frame's own timestamp. Null from a helper that predates it.
+ */
+export function readFirstFrameEpochMs(output: string): number | null {
+	const match = /"event":"recording-started"[^\n]*?"firstFrameEpochMs":([0-9.]+)/.exec(output);
+	const value = match ? Number(match[1]) : Number.NaN;
+	return Number.isFinite(value) && value > 0 ? value : null;
+}
+
+/**
+ * How far into the cursor sampler's clock the video's 0 s falls: what the cursor telemetry is
+ * shifted by (`shiftCursorTelemetry`). Both clocks are the wall clock, so it is the first frame's
+ * time minus the sampler's start. The time the app READ `recording-started` is only the fallback,
+ * for an older helper or a reading that cannot be right: it comes 10 to 30 ms after the frame (the
+ * helper polls for it, then a pipe and this process's event loop), more under load, and every ms
+ * of it drew the cursor that much ahead of the picture.
+ */
+export function cursorOffsetToFirstFrameMs(
+	cursorStartTimeMs: number,
+	firstFrameEpochMs: number | null,
+	startReadAtMs: number,
+): number {
+	// The frame comes before the line announcing it, and not by seconds.
+	const plausible =
+		firstFrameEpochMs !== null &&
+		firstFrameEpochMs <= startReadAtMs + 5 &&
+		startReadAtMs - firstFrameEpochMs < 2_000;
+	const firstFrameAtMs = plausible ? firstFrameEpochMs : startReadAtMs;
+	// Whole ms, like the sampler's timestamps: the sidecar keeps integer times.
+	return Math.max(0, Math.round(firstFrameAtMs - cursorStartTimeMs));
+}
+
+/**
  * Did the macOS helper record without the microphone it was asked for?
  *
  * It captures the mic through ScreenCaptureKit's `captureMicrophone`, macOS 15
