@@ -31,7 +31,7 @@ As decisões e o porquê de cada fase estão em [`PLANO-FORK.md`](PLANO-FORK.md)
 
 ## Estado atual
 
-`main` do fork = **v2.5.0**, publicada e marcada como Latest. Desde a 2.1.0 o fork contém o **OpenScreen 2.0** do upstream (veja "Sincronizar com o upstream" abaixo). O histórico do fork, em ordem:
+`main` do fork = **v2.6.0**, publicada e marcada como Latest. Desde a 2.1.0 o fork contém o **OpenScreen 2.0** do upstream (veja "Sincronizar com o upstream" abaixo). O histórico do fork, em ordem:
 
 | Versão | Como entrou | Conteúdo |
 |---|---|---|
@@ -48,6 +48,7 @@ As decisões e o porquê de cada fase estão em [`PLANO-FORK.md`](PLANO-FORK.md)
 | 2.3.0 | PRs yagoangelini/openscreen#13, #14 e #15 | aparência própria por pedaço da câmera (fase 3) e as correções do E2E da 2.2.0: contagem fora do take, export H.264 High/BT.709, câmera escura, formato da C920, colar estilo, sair durante a gravação |
 | 2.4.0 | PRs yagoangelini/openscreen#17 a #21 | Rosto / Tela + câmera no HUD (fase 4, Ctrl+Shift+F7), take salvo ao sair oferecido de novo, desfoque na prévia dentro de um corte, foco dos botões do HUD, entradas OpenScreen Studio e OpenScreen Recorder, pt-BR como idioma nativo |
 | 2.5.0 | PRs yagoangelini/openscreen#23 a #31 | identidade do fork (Yago Angelini) e assinatura autoassinada, parada instantânea e início na hora, transcrição turbo pt-BR com vocabulário M365/IA, correções do E2E da 2.4.0, Limpar fala, quem fala, palavras sensíveis próprias, aprovar e desfazer respostas da IA, desenhar na tela, janela da câmera, aviso de mic mudo, destaque e passos, Melhorar a voz, câmera 3D |
+| 2.6.0 | PRs yagoangelini/openscreen#35 a #37 | auto-zoom diretor (lê a tela: menus por hover, diálogos, trocas de página; pan entre áreas, seguir o ponteiro) e cursor sem atraso (suavização de fase zero, relógio pelo primeiro quadro, leitura 4× mais rápida) |
 
 **O que a 1.16.0 trouxe:**
 
