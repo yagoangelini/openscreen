@@ -285,3 +285,71 @@ describe("the transcript the automatic zooms were planned with", () => {
 		expect(autoZoomsBehindTranscript(corrected)).toBe(true);
 	});
 });
+
+describe("auto-zoom context beyond the pointer", () => {
+	it("reads each recording's screen activity from its own path", async () => {
+		const document = documentWithClip();
+		const paths: string[] = [];
+		await collectAutoZoomSuggestionsForDocument(
+			document,
+			async () => clickAt(4000, 0.4, 0.6),
+			undefined,
+			async (videoPath) => {
+				paths.push(videoPath);
+				return null;
+			},
+		);
+		expect(paths).toEqual(["C:\\recordings\\rec.mp4"]);
+	});
+
+	it("plans the same without the activity when its scan fails", async () => {
+		const document = documentWithClip();
+		const failing = await collectAutoZoomSuggestionsForDocument(
+			document,
+			async () => clickAt(4000, 0.4, 0.6),
+			undefined,
+			async () => {
+				throw new Error("no ffmpeg");
+			},
+		);
+		const without = await collectAutoZoomSuggestionsForDocument(document, async () =>
+			clickAt(4000, 0.4, 0.6),
+		);
+		expect(failing).toEqual(without);
+	});
+
+	it("keeps clear of the take's camera-only span even when its pieces never reached the document", async () => {
+		const base = documentWithClip();
+		const document: AxcutDocument = {
+			...base,
+			assets: base.assets.map((asset) => ({
+				...asset,
+				cameraLayout: {
+					initial: "screen" as const,
+					switches: [
+						{ atSec: 3, layout: "face" as const },
+						{ atSec: 8, layout: "screen" as const },
+					],
+				},
+			})),
+		};
+		expect(document.cameraSegments ?? []).toEqual([]);
+		const suggestions = await collectAutoZoomSuggestionsForDocument(document, async () =>
+			clickAt(5000, 0.4, 0.6),
+		);
+		expect(suggestions).toEqual([]);
+	});
+
+	it("writes a shot the planner made to follow the pointer as a following zoom", () => {
+		const next = appendAutoZoomSuggestions(
+			documentWithClip(),
+			[
+				{ span: { start: 1000, end: 5000 }, focus: { cx: 0.3, cy: 0.3 }, depth: 1, follow: true },
+				{ span: { start: 7000, end: 9000 }, focus: { cx: 0.6, cy: 0.6 }, depth: 2 },
+			],
+			(prefix) => `${prefix}_x`,
+		);
+		expect(next.zoomRanges.map((zoom) => zoom.focusMode)).toEqual(["auto", undefined]);
+		expect(next.zoomRanges.every((zoom) => zoom.source === "auto")).toBe(true);
+	});
+});

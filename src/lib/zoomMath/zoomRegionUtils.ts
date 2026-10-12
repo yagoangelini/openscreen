@@ -288,21 +288,21 @@ function getConnectedRegionTransition(
 		const currentScale = getZoomScale(currentRegion);
 		const nextScale = getZoomScale(nextRegion);
 		const transitionScale = scaleLerp(currentScale, nextScale, transitionProgress);
-		// Both regions share the same timeMs, so interpolate cursor once and reuse.
-		const sharedCursorFocus =
-			cursorTelemetry && cursorTelemetry.length > 0
-				? interpolateCursorAt(cursorTelemetry, timeMs)
-				: null;
-		const currentFocus = clampFocusToScale(
-			currentRegion.focusMode === "auto" && sharedCursorFocus
-				? sharedCursorFocus
-				: currentRegion.focus,
+		// Each side where it would be on its own at this instant: a following automatic zoom
+		// pans from (or to) its follow view, not from the raw pointer, as `resolve_focus` does
+		// for the pair in Rust. Anything else resolves as it always did.
+		const currentFocus = getResolvedFocus(
+			currentRegion,
 			currentScale,
+			timeMs,
+			cursorTelemetry,
 			viewportRatio,
 		);
-		const nextFocus = clampFocusToScale(
-			nextRegion.focusMode === "auto" && sharedCursorFocus ? sharedCursorFocus : nextRegion.focus,
+		const nextFocus = getResolvedFocus(
+			nextRegion,
 			nextScale,
+			timeMs,
+			cursorTelemetry,
 			viewportRatio,
 		);
 		const transitionFocus = getLinearFocus(currentFocus, nextFocus, transitionProgress);

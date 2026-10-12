@@ -139,8 +139,10 @@ export function autoZoomFocusMode(cameraMode: AutoZoomCameraMode): "manual" | "a
 /**
  * How one stored zoom renders: every zoom takes the project's camera mode and motion (the
  * fork's choice, 2026-10-10: one control moves them all, the ones drawn by hand included);
- * a zoom whose own focus mode was set in its inspector keeps that one. The global Auto-Focus
- * toggle still forces every zoom to follow the pointer.
+ * a zoom whose own focus mode was set in its inspector keeps that one. An automatic zoom the
+ * planner made to follow the pointer (`focusMode: "auto"`, a run no one framing holds) follows
+ * under every camera mode, with the mode's own law. The global Auto-Focus toggle still forces
+ * every zoom to follow the pointer.
  * The one rule both renderers apply (`sceneDescription.ts`, `zoom-preview.ts`).
  */
 export function resolveZoomRendering(
@@ -157,7 +159,8 @@ export function resolveZoomRendering(
 		};
 	}
 	return {
-		focusMode: autoFocusAll ? "auto" : autoZoomFocusMode(autoZoom.cameraMode),
+		focusMode:
+			autoFocusAll || region.focusMode === "auto" ? "auto" : autoZoomFocusMode(autoZoom.cameraMode),
 		motion: autoZoomMotion(autoZoom),
 	};
 }

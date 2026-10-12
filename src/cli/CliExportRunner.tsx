@@ -30,6 +30,7 @@ import {
 } from "@/lib/ai-edition/timeline/apply-auto-zooms";
 import { assetCameraSource } from "@/lib/ai-edition/timeline/camera";
 import { resolveClipSourceEndSec } from "@/lib/ai-edition/timeline/clipDuration";
+import { getScreenActivityForZooms } from "@/lib/ai-edition/timeline/framePopups";
 import type { CliDoneResult, CliExportRequest } from "@/lib/cliContracts";
 import { GIF_SIZE_PRESETS, type GifSizePreset } from "@/lib/exporter";
 import { calculateMp4ExportSettings } from "@/lib/exporter/mp4ExportSettings";
@@ -254,8 +255,11 @@ async function runExport(request: CliExportRequest): Promise<CliDoneResult> {
 	// Use the same per-clip auto-zoom suggestions as the editor, including its default span and
 	// anchoring behavior.
 	if (request.autoZoom) {
-		const suggestions = await collectAutoZoomSuggestionsForDocument(axcutDocument, (videoPath) =>
-			nativeBridgeClient.cursor.getTelemetry(videoPath).catch(() => []),
+		const suggestions = await collectAutoZoomSuggestionsForDocument(
+			axcutDocument,
+			(videoPath) => nativeBridgeClient.cursor.getTelemetry(videoPath).catch(() => []),
+			undefined,
+			getScreenActivityForZooms,
 		);
 		axcutDocument = appendAutoZoomSuggestions(axcutDocument, suggestions);
 		window.electronAPI.cliLog(
