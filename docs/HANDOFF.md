@@ -31,7 +31,7 @@ As decisões e o porquê de cada fase estão em [`PLANO-FORK.md`](PLANO-FORK.md)
 
 ## Estado atual
 
-`main` do fork = **v2.3.0**, publicada e marcada como Latest. Desde a 2.1.0 o fork contém o **OpenScreen 2.0** do upstream (veja "Sincronizar com o upstream" abaixo). O histórico do fork, em ordem:
+`main` do fork = **v2.4.0**, publicada e marcada como Latest. Desde a 2.1.0 o fork contém o **OpenScreen 2.0** do upstream (veja "Sincronizar com o upstream" abaixo). O histórico do fork, em ordem:
 
 | Versão | Como entrou | Conteúdo |
 |---|---|---|
@@ -46,6 +46,7 @@ As decisões e o porquê de cada fase estão em [`PLANO-FORK.md`](PLANO-FORK.md)
 | 2.1.1 | PR yagoangelini/openscreen#9 | pedidos de 11/10: gravador na barra de tarefas, cursor menor e com px, início instantâneo, auto-zoom corrigido num take real |
 | 2.2.0 | PRs yagoangelini/openscreen#10 e #11 | auto-zoom guiado pela transcrição (pergunta depois de gravar, janela de progresso, refazer depois de corrigir) e trilha da câmera na timeline (schema v9: pedaços PiP / tela cheia / sem câmera, tecla B) |
 | 2.3.0 | PRs yagoangelini/openscreen#13, #14 e #15 | aparência própria por pedaço da câmera (fase 3) e as correções do E2E da 2.2.0: contagem fora do take, export H.264 High/BT.709, câmera escura, formato da C920, colar estilo, sair durante a gravação |
+| 2.4.0 | PRs yagoangelini/openscreen#17 a #21 | Rosto / Tela + câmera no HUD (fase 4, Ctrl+Shift+F7), take salvo ao sair oferecido de novo, desfoque na prévia dentro de um corte, foco dos botões do HUD, entradas OpenScreen Studio e OpenScreen Recorder, pt-BR como idioma nativo |
 
 **O que a 1.16.0 trouxe:**
 
