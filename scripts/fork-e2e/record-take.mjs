@@ -3,7 +3,7 @@
 //   node scripts/fork-e2e/record-take.mjs --port 9233 [--screen 1] [--seconds 6] [--keys]
 //
 // Start the instance first, with a profile of its own (never the user's installed app):
-//   node_modules/electron/dist/electron.exe . --user-data-dir=<temp dir> --remote-debugging-port=9233
+//   node_modules/electron/dist/electron.exe . --recorder --user-data-dir=<temp dir> --remote-debugging-port=9233
 // and point its takes away from Videos\OpenScreen with a `recording-settings.json` in that
 // profile: { "micEnabled": true, "systemAudioEnabled": true, "countdownSeconds": 0,
 //            "recordingsFolder": "<another temp dir>" }.

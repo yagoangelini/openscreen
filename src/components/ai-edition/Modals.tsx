@@ -1223,7 +1223,7 @@ function RangeStat({ label, value, testId }: { label: string; value: string; tes
 export type UnsavedChoice = "save" | "discard" | "cancel";
 
 interface UnsavedChangesModalProps extends BaseModalProps {
-	action: "close" | "new" | "open" | "record";
+	action: "close" | "new" | "open" | "record" | "recorder";
 	busy?: boolean;
 	onChoose: (choice: UnsavedChoice) => void;
 }
@@ -1242,6 +1242,7 @@ export function UnsavedChangesModal({
 		new: "unsavedChanges.modal.newTitle",
 		open: "unsavedChanges.modal.openTitle",
 		record: "unsavedChanges.modal.recordTitle",
+		recorder: "unsavedChanges.modal.recordTitle",
 	};
 	const copy = {
 		title: td(titleKeys[action]),

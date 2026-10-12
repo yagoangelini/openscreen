@@ -460,6 +460,12 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	loadCurrentProjectFile: () => {
 		return ipcRenderer.invoke("load-current-project-file");
 	},
+	// A second launch with --recorder while the editor is open (electron/launchMode.ts).
+	onOpenRecorderRequested: (callback: () => void) => {
+		const listener = () => callback();
+		ipcRenderer.on("open-recorder-requested", listener);
+		return () => ipcRenderer.removeListener("open-recorder-requested", listener);
+	},
 	onMenuNewProject: (callback: () => void) => {
 		const listener = () => callback();
 		ipcRenderer.on("menu-new-project", listener);
