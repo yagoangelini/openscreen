@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { STT_NATIVE_EXTRACTION_UNAVAILABLE } from "../../../../electron/stt/transcriptionContract";
 import { type AxcutDocument, axcutSchemaVersion, transcriptSchema } from "../schema";
+import { DEFAULT_VOCABULARY } from "../transcription/vocabulary";
 import { transcribeAsset } from "./transcribe";
 
 vi.mock("@/components/video-editor/projectPersistence", () => ({
@@ -228,7 +229,11 @@ describe("transcribeAsset native extraction", () => {
 			detectedLanguage: "en",
 		});
 		await transcribeAsset(doc, "asset_1");
-		const withPrompt = expect.objectContaining({ prompt: "OpenScreen, Kubernetes" });
+		// The standing Microsoft and AI terms first, the project's last, nearest the audio.
+		const withPrompt = expect.objectContaining({
+			prompt: `${DEFAULT_VOCABULARY}, OpenScreen, Kubernetes`,
+			model: "auto",
+		});
 		expect(transcribeMock).toHaveBeenCalledWith("/tmp/demo.mp4", withPrompt);
 		expect(rendererMock).toHaveBeenCalledWith(expect.anything(), withPrompt);
 	});

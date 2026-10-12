@@ -211,7 +211,15 @@
 		"glossaryHint": "Các tên được sửa trong bản ghi, mỗi dòng một tên: Thuật ngữ: nghe nhầm 1, nghe nhầm 2. Áp dụng cho bản ghi mới.",
 		"glossaryApply": "Áp dụng cho bản chép lời của dự án này",
 		"glossaryApplied": "Đã áp dụng bảng thuật ngữ: {{count}} chỗ sửa. Hoàn tác bằng Ctrl+Z.",
-		"glossaryNothingToFix": "Không có gì để sửa: bản chép lời đã theo đúng bảng thuật ngữ."
+		"glossaryNothingToFix": "Không có gì để sửa: bản chép lời đã theo đúng bảng thuật ngữ.",
+		"model": "Transcription model",
+		"modelHint": "The accurate model is downloaded on the first transcription and runs on a dedicated GPU. Automatic uses it when the GPU has room for it, and the fast one otherwise.",
+		"modelAuto": "Automatic (accurate on a dedicated GPU)",
+		"modelTurbo": "Accurate: large-v3-turbo ({{size}})",
+		"modelSmall": "Fast: small ({{size}})",
+		"standingTerms": "Standing terms (Microsoft and AI)",
+		"standingTermsHint": "Whisper is told to expect these terms in every transcription, before the project's names and terms. Separate them with commas; the first ones matter most.",
+		"standingTermsReset": "Restore the default list"
 	},
 	"exportDialog": {
 		"title": "Xuất",

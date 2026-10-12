@@ -4,8 +4,9 @@ import type { AxcutTranscript } from "../schema";
  * The glossary: product names the transcription gets wrong, put right after it.
  *
  * Whisper hears "Power Automate" as "power automeite" and writes "SharePoint" as
- * "share point". The server it runs in takes no prompt to steer it, so instead the
- * words it returns are matched against a list -- each line a term and the ways it
+ * "share point". The vocabulary prompt (vocabulary.ts) steers the decode toward the
+ * right spelling; what still comes out wrong is caught here: the words Whisper
+ * returns are matched against a list -- each line a term and the ways it
  * comes out misheard -- and a match is replaced by the term, keeping the timing of
  * the words it covers and any punctuation after them. Editable, one line per term:
  *
@@ -15,9 +16,16 @@ import type { AxcutTranscript } from "../schema";
  * the line "SharePoint" alone.
  */
 
+/**
+ * The misspellings come from real output: pt-BR tutorial lines read by the Windows
+ * voices, transcribed by small and large-v3-turbo with and without the vocabulary
+ * prompt (docs/HANDOFF.md). Words that are also Portuguese ("defender", "ordem",
+ * "cloud", "a gente") are left out on purpose: the term always matches itself, and a
+ * line for them would rewrite ordinary speech.
+ */
 export const DEFAULT_GLOSSARY = [
 	"SharePoint: share point, sherpoint, xerpoint, sharepoit, shere point",
-	"Power Automate: power automeite, pauer automate, power automat, power autometi",
+	"Power Automate: power automeite, pauer automate, power automat, power autometi, power automeit",
 	"Power Apps: powerapps, pauer apps, power aps",
 	"Power BI: power b i, pauer bi, power bi, power bí, power biai",
 	"Power Platform: pauer platform, power plataform",
@@ -26,14 +34,61 @@ export const DEFAULT_GLOSSARY = [
 	"Copilot Studio: copailot studio, copilot estudio",
 	"Microsoft 365: microsoft trezentos e sessenta e cinco",
 	"Microsoft Teams: microsoft tims",
-	"OneDrive: one drive, uandraive, wandraive, wan drive",
+	"Teams: tims, timz, timoz",
+	"OneDrive: one drive, uandraive, wandraive, wan drive, andrile, andraive",
 	"Outlook: autlook, aut luk, out look",
 	"Dataverse: data verse, deiraverse, dataversi, data versi",
 	"Entra ID: entra aidi, entra ai di",
+	"Purview: pervil, pervio, perview, purvil, pur view",
+	"Intune: in tune, intiune",
+	"Azure: ejar, eger, ajur, ásure",
+	"Azure AI Foundry: azure ai faundry, azure ai foundri",
+	"Fabric: febric, fébric, fabrik",
+	"tenant: tenet, tênet, tenent",
+	"licença E3: licença i3, licença e três",
+	"licença E5: licença i5, licença e cinco",
+	"ChatGPT: chat gpt, chat gepeto, chat gepetê",
+	"GPT: gepetê, gê pê tê",
+	"LLM: ele ele eme, éle éle eme",
+	"Claude: clóde, claudi",
+	"Model Context Protocol",
 	"Planner: planer",
 	"Loop: lupe",
 	"Viva Engage: viva engeidge",
 ].join("\n");
+
+/**
+ * Earlier defaults, as the build that shipped them stored them. A saved glossary that
+ * is still one of these was never edited, so it moves to the current default; an
+ * edited one is the user's and stays as it is.
+ */
+const LEGACY_DEFAULT_GLOSSARIES = [
+	[
+		"SharePoint: share point, sherpoint, xerpoint, sharepoit, shere point",
+		"Power Automate: power automeite, pauer automate, power automat, power autometi",
+		"Power Apps: powerapps, pauer apps, power aps",
+		"Power BI: power b i, pauer bi, power bi, power bí, power biai",
+		"Power Platform: pauer platform, power plataform",
+		"Power Pages: pauer pages",
+		"Copilot: copailot, copailote, copilote, co-pilot",
+		"Copilot Studio: copailot studio, copilot estudio",
+		"Microsoft 365: microsoft trezentos e sessenta e cinco",
+		"Microsoft Teams: microsoft tims",
+		"OneDrive: one drive, uandraive, wandraive, wan drive",
+		"Outlook: autlook, aut luk, out look",
+		"Dataverse: data verse, deiraverse, dataversi, data versi",
+		"Entra ID: entra aidi, entra ai di",
+		"Planner: planer",
+		"Loop: lupe",
+		"Viva Engage: viva engeidge",
+	].join("\n"),
+];
+
+/** A stored glossary, moved to the current default when it is an untouched older one. */
+export function upgradeStoredGlossary(stored: string): string {
+	const text = stored.replace(/\r\n/g, "\n").trim();
+	return LEGACY_DEFAULT_GLOSSARIES.includes(text) ? DEFAULT_GLOSSARY : stored;
+}
 
 interface Entry {
 	term: string;

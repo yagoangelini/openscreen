@@ -211,7 +211,15 @@
 		"glossaryHint": "Названия, которые исправляются в расшифровке, по одному в строке: Термин: ошибка 1, ошибка 2. Для новых расшифровок.",
 		"glossaryApply": "Применить к расшифровкам этого проекта",
 		"glossaryApplied": "Глоссарий применён, исправлений: {{count}}. Отменить: Ctrl+Z.",
-		"glossaryNothingToFix": "Нечего исправлять: расшифровки уже соответствуют глоссарию."
+		"glossaryNothingToFix": "Нечего исправлять: расшифровки уже соответствуют глоссарию.",
+		"model": "Transcription model",
+		"modelHint": "The accurate model is downloaded on the first transcription and runs on a dedicated GPU. Automatic uses it when the GPU has room for it, and the fast one otherwise.",
+		"modelAuto": "Automatic (accurate on a dedicated GPU)",
+		"modelTurbo": "Accurate: large-v3-turbo ({{size}})",
+		"modelSmall": "Fast: small ({{size}})",
+		"standingTerms": "Standing terms (Microsoft and AI)",
+		"standingTermsHint": "Whisper is told to expect these terms in every transcription, before the project's names and terms. Separate them with commas; the first ones matter most.",
+		"standingTermsReset": "Restore the default list"
 	},
 	"exportDialog": {
 		"title": "Экспорт",

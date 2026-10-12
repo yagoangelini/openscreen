@@ -553,6 +553,52 @@ describe("WhisperServerManager", () => {
 				expect(args).not.toContain("--cuda");
 				expect(args).not.toContain("--int8");
 				expect(args).not.toContain("--vad");
+				// small's alignment heads unless the caller names the model's own.
+				expect(args[args.indexOf("--dtw-preset") + 1]).toBe("small");
+			} finally {
+				vi.unstubAllGlobals();
+			}
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+
+	it("passes the model's DTW preset and takes the backend the probe reports", async () => {
+		const fs = await import("node:fs/promises");
+		const { spawn } = await import("node:child_process");
+		const dir = await mkdtemp(path.join(tmpdir(), "whisper-dtw-"));
+		try {
+			const modelPath = path.join(dir, "ggml-large-v3-turbo-q8_0.bin");
+			await writeFile(modelPath, "dummy-ggml");
+			const fakeBinaryPath = path.join(dir, "whisper-stt-server");
+			await fs.writeFile(fakeBinaryPath, "x", { mode: 0o755 });
+			const fakeChild = {
+				stdout: { on: vi.fn() },
+				stderr: { on: vi.fn() },
+				pid: 1234,
+				once: vi.fn(),
+				on: vi.fn(),
+				kill: vi.fn(),
+			};
+			vi.mocked(spawn).mockClear();
+			vi.mocked(spawn).mockReturnValue(fakeChild as never);
+			// The helper fell back to the CPU by itself: only the probe says so.
+			vi.stubGlobal(
+				"fetch",
+				vi.fn(async () => Response.json({ status: "ok", backend: "whispercpp-cpu" })),
+			);
+			try {
+				const mgr = new WhisperServerManager();
+				const started = await mgr.start({
+					modelPath,
+					binaryPath: fakeBinaryPath,
+					backend: "whispercpp-vulkan",
+					dtwPreset: "large-v3-turbo",
+				});
+				const args = vi.mocked(spawn).mock.calls[0]?.[1] as string[];
+				expect(args[args.indexOf("--dtw-preset") + 1]).toBe("large-v3-turbo");
+				expect(started.backend).toBe("whispercpp-cpu");
+				expect(mgr.status.backend).toBe("whispercpp-cpu");
 			} finally {
 				vi.unstubAllGlobals();
 			}
