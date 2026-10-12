@@ -7,6 +7,7 @@ import {
 	type GlobalShortcutsConfig,
 	type ShortcutBinding,
 } from "../src/lib/shortcuts";
+import { clearActiveGlobalShortcut, setActiveGlobalShortcut } from "./activeShortcuts";
 import { SHORTCUTS_FILE } from "./ipc/handlers";
 
 // Maps KeyboardEvent.key values to Electron accelerator key names
@@ -70,6 +71,7 @@ export function registerGlobalShortcuts(
 		if (takenByOther) {
 			globalShortcut.unregister(accelerator);
 			registered.delete(takenByOther[0]);
+			clearActiveGlobalShortcut(takenByOther[0]);
 		}
 		const success = globalShortcut.register(accelerator, handlers[action]);
 		if (success) {
@@ -77,6 +79,7 @@ export function registerGlobalShortcuts(
 				globalShortcut.unregister(previous);
 			}
 			registered.set(action, accelerator);
+			setActiveGlobalShortcut(action, binding);
 			console.log(`Global shortcut registered: ${accelerator} (${action})`);
 		} else {
 			console.warn(`Failed to register global shortcut: ${accelerator} (${action})`);
@@ -101,4 +104,5 @@ export async function loadAndRegisterGlobalShortcuts(
 export function unregisterAllGlobalShortcuts(): void {
 	globalShortcut.unregisterAll();
 	registered.clear();
+	clearActiveGlobalShortcut();
 }

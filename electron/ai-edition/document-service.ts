@@ -15,6 +15,7 @@ import path from "node:path";
 import { createId } from "../../src/lib/ai-edition/document/ids";
 import { removeClip } from "../../src/lib/ai-edition/document/timeline";
 import {
+	appShortcutCombos,
 	keystrokesFromCursorSamples,
 	SHOW_KEYSTROKES_KEY,
 } from "../../src/lib/ai-edition/keystrokes";
@@ -38,6 +39,7 @@ import {
 	recordingLayoutOnAsset,
 } from "../../src/lib/recordingLayout";
 import { audioStemPathsFor, RECORDING_MARKERS_SUFFIX } from "../../src/lib/recordingSession";
+import { activeGlobalShortcutBindings } from "../activeShortcuts";
 import { ensureDocumentExtensions } from "../media/extensionClip";
 import { hasMp4Index } from "../media/mp4Index";
 import { relinkProjectMedia } from "../media/projectMediaRelinker";
@@ -216,7 +218,10 @@ async function readRecordingLayout(videoPath: string): Promise<RecordingLayoutOn
 async function readRecordingKeystrokes(videoPath: string) {
 	try {
 		const raw = JSON.parse(await fs.readFile(`${videoPath}.cursor.json`, "utf8"));
-		return keystrokesFromCursorSamples(raw?.samples);
+		return keystrokesFromCursorSamples(
+			raw?.samples,
+			appShortcutCombos(activeGlobalShortcutBindings()),
+		);
 	} catch {
 		return undefined;
 	}
