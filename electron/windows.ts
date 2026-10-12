@@ -521,6 +521,14 @@ export function createHudOverlayWindow(): BrowserWindow {
 	return win;
 }
 
+const deferredEditorReveals = new WeakMap<BrowserWindow, () => void>();
+
+/** Shows an editor created with `deferShow` (once it has painted, if it has not yet). */
+export function revealEditorWindow(win: BrowserWindow) {
+	deferredEditorReveals.get(win)?.();
+	deferredEditorReveals.delete(win);
+}
+
 /**
  * Main editor window. Starts maximised with a hidden title bar on macOS; not
  * always-on-top and appears in the taskbar/dock.
@@ -530,7 +538,14 @@ export function createHudOverlayWindow(): BrowserWindow {
  * preload, same sandbox, same backgroundThrottling:false — because a bench that
  * configures its own window measures a different app than the one we ship.
  */
-export function createEditorWindow(query: Record<string, string> = {}): BrowserWindow {
+export function createEditorWindow(
+	query: Record<string, string> = {},
+	/**
+	 * Load it but keep it hidden until `revealEditorWindow`: the editor opened at
+	 * the stop click, so its page loads while the take finalizes.
+	 */
+	options: { deferShow?: boolean } = {},
+): BrowserWindow {
 	const isMac = process.platform === "darwin";
 	const persist = shouldTrackEditorWindow(query);
 	const loaded = persist ? loadEditorWindowState(app.getPath("userData")) : null;
@@ -584,7 +599,8 @@ export function createEditorWindow(query: Record<string, string> = {}): BrowserW
 	// The page's empty <title> would otherwise blank the taskbar button and Alt+Tab.
 	win.on("page-title-updated", (event) => event.preventDefault());
 
-	if (creation.maximize) win.maximize();
+	// Maximizing shows a hidden window on Windows, so a deferred one waits for its reveal.
+	if (creation.maximize && !options.deferShow) win.maximize();
 	if (creation.persist) {
 		const persistState = () => {
 			if (win.isDestroyed()) return;
@@ -609,10 +625,25 @@ export function createEditorWindow(query: Record<string, string> = {}): BrowserW
 		win.setAutoHideMenuBar(true);
 	}
 
-	// Show only once painted to avoid a white flash on cold Vite start.
-	win.once("ready-to-show", () => {
+	// Show only once painted to avoid a white flash on cold Vite start. A deferred
+	// window shows on whichever comes last: that first paint or its reveal.
+	let painted = false;
+	let revealed = !options.deferShow;
+	const show = () => {
+		if (!painted || !revealed || win.isDestroyed()) return;
+		if (options.deferShow && creation.maximize) win.maximize();
 		if (!HEADLESS) win.show();
+	};
+	win.once("ready-to-show", () => {
+		painted = true;
+		show();
 	});
+	if (options.deferShow) {
+		deferredEditorReveals.set(win, () => {
+			revealed = true;
+			show();
+		});
+	}
 
 	// Inject dark background before any React paint so the sub-titlebar area never
 	// flashes white on a cold Vite load.

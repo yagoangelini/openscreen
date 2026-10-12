@@ -294,6 +294,9 @@ export interface AiEditionLlmConfig {
 	/** P2.5 — when false, the agent must ask before running write tools.
 	 * Undefined means enabled (edits allowed, protected by checkpoints). */
 	allowAgentEdits?: boolean;
+	/** When true (and when undefined: on by default), a turn that edits the project is
+	 * held in the chat as a proposal and only written when the user presses Apply. */
+	requireAgentEditApproval?: boolean;
 }
 
 export type AiEditionLlmCredentialKind = "api-key" | "codex" | "github-device" | "github-pat";

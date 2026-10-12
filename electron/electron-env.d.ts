@@ -243,6 +243,8 @@ interface Window {
 			request: import("../src/lib/nativeMacRecording").NativeMacRecordingRequest,
 		) => Promise<import("../src/lib/nativeMacRecording").NativeMacRecordingStartResult>;
 		onNativeMacSystemAudioUnavailable: (callback: () => void) => () => void;
+		/** Windows: the camera turned out dark only after the take began (see main.cpp). */
+		onNativeRecordingCameraDark?: (callback: () => void) => () => void;
 		pauseNativeMacRecording: () => Promise<{
 			success: boolean;
 			error?: string;

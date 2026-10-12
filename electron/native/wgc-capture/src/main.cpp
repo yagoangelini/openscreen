@@ -1111,6 +1111,12 @@ int wmain(int argc, wchar_t* argv[]) {
     // the pre-roll wait below runs out on a dark or covered lens -- the dark one
     // it has. From then on every frame is taken as it comes.
     bool hasWebcamFrame = false;
+    // Set when the camera gave no frame at all before the take began (a C920 can take more
+    // than a second to deliver its first one, longer than the pre-roll had left -- D-4 of
+    // the 2.4.0 E2E): the writer then judges the camera from its first second of frames in
+    // the take, and says `webcam-dark` if none of them has a picture.
+    bool webcamDarkWatch = false;
+    std::chrono::steady_clock::time_point webcamDarkWatchFirstFrame{};
 
     // Legacy-path-only state. frameMutex guards latestFrameTexture/
     // legacyLatestFrameTimestampHns between WGC's callback thread (writer)
@@ -1293,6 +1299,22 @@ int wmain(int argc, wchar_t* argv[]) {
                     // black, as it should, instead of freezing on the last bright frame.
                     WebcamFrameSnapshot candidateWebcamFrame;
                     if (webcamCapture.copyLatestFrame(candidateWebcamFrame, latestWebcamSequence)) {
+                        if (webcamDarkWatch) {
+                            const auto now = std::chrono::steady_clock::now();
+                            if (!hasWebcamFrame) {
+                                webcamDarkWatchFirstFrame = now;
+                            }
+                            if (hasVisibleWebcamContent(candidateWebcamFrame.data, webcamCapture.deliversNv12())) {
+                                webcamDarkWatch = false;
+                            } else if (now - webcamDarkWatchFirstFrame >= std::chrono::seconds(1)) {
+                                webcamDarkWatch = false;
+                                std::cerr << "WARNING: Native webcam frames are dark; recording them anyway"
+                                          << std::endl;
+                                std::cout << "{\"event\":\"warning\",\"code\":\"webcam-dark\",\"message\":"
+                                             "\"The camera delivers only dark frames\"}"
+                                          << std::endl;
+                            }
+                        }
                         latestWebcamFrame = std::move(candidateWebcamFrame.data);
                         latestWebcamWidth = candidateWebcamFrame.width;
                         latestWebcamHeight = candidateWebcamFrame.height;
@@ -1632,6 +1654,7 @@ int wmain(int argc, wchar_t* argv[]) {
         } else if (!hasWebcamFrame) {
             std::cerr << "WARNING: Native webcam started but no frame was available before screen capture"
                       << std::endl;
+            webcamDarkWatch = true;
         }
     }
 
@@ -1926,14 +1949,24 @@ int wmain(int argc, wchar_t* argv[]) {
     // means wgcDrained was true above: the branch that was not is a
     // TerminateProcess call, not a fallthrough.
     beginStopStep("encoder-finalize", shutdownBudgetMs);
-    const bool screenFinalized = encoder.finalize();
-    logStopStep("encoder-finalize");
     // After the mixer has stopped, so no chunk is still on its way to them. Both are closed
     // whatever the other's outcome; only two whole stems are announced, and the app deletes
     // stems the stop line does not name, so a stem that dropped out mid-take never replaces
     // the mixed track.
-    const bool voiceStemDone = voiceStem.isOpen() && voiceStem.finalize();
-    const bool systemStemDone = systemStem.isOpen() && systemStem.finalize();
+    //
+    // On their own thread, beside the screen's Finalize: the stems are separate sink writers
+    // with their own MFStartup (MFShutdown only counts down), no D3D device and no lock
+    // shared with the screen encoder, so the user no longer waits for one after the other.
+    bool voiceStemDone = false;
+    bool systemStemDone = false;
+    std::thread stemFinalizer([&] {
+        voiceStemDone = voiceStem.isOpen() && voiceStem.finalize();
+        systemStemDone = systemStem.isOpen() && systemStem.finalize();
+    });
+    const bool screenFinalized = encoder.finalize();
+    logStopStep("encoder-finalize");
+    stemFinalizer.join();
+    logStopStep("stems-finalize");
     const bool stemsFinalized = voiceStemDone && systemStemDone;
     if (!screenFinalized) {
         std::cerr << "ERROR: Failed to finalize the recording" << std::endl;
@@ -1987,6 +2020,14 @@ int wmain(int argc, wchar_t* argv[]) {
         if (!webcamFinalized) {
             std::cerr << "ERROR: Failed to finalize the webcam recording" << std::endl;
         }
+    }
+    // Every file of the take is closed from here on: the app hands the take to the editor on
+    // this line instead of waiting for the teardown below and the process exit, which cost the
+    // user 100-450 ms after each stop for nothing the take needs. Printed whether the webcam
+    // finalized or not -- a camera file that failed is told apart by its size, as before.
+    if (screenFinalized) {
+        std::cout << "{\"event\":\"outputs-closed\",\"schemaVersion\":2,\"webcamFinalized\":"
+                  << (webcamFinalized ? "true" : "false") << "}" << std::endl;
     }
 
     // Releasing the device goes last, after every encoder that might still

@@ -344,6 +344,11 @@ contextBridge.exposeInMainWorld("electronAPI", {
 		ipcRenderer.on("native-mac-system-audio-unavailable", listener);
 		return () => ipcRenderer.removeListener("native-mac-system-audio-unavailable", listener);
 	},
+	onNativeRecordingCameraDark: (callback: () => void) => {
+		const listener = () => callback();
+		ipcRenderer.on("native-recording-camera-dark", listener);
+		return () => ipcRenderer.removeListener("native-recording-camera-dark", listener);
+	},
 	pauseNativeMacRecording: () => {
 		return ipcRenderer.invoke("pause-native-mac-recording");
 	},

@@ -93,6 +93,47 @@ describe("useScreenRecorder: a Windows take starts with its countdown", () => {
 		await waitFor(() => expect(view.result.current.recording).toBe(true));
 	});
 
+	/**
+	 * D-2 of the 2.4.0 E2E: the source was read (and its sources enumerated, ~0.4 s) a
+	 * second time after the countdown had begun, and the checks ran one after another,
+	 * leaving the helper 0.9-2.1 s of a 3 s countdown to open everything in.
+	 */
+	it("reads the source once and has the checks done by the time the countdown begins", async () => {
+		const { api } = stub(async () => ({ success: true, recordingId: 7 }));
+		const view = renderHook(() => useScreenRecorder());
+		await waitFor(() => expect(view.result.current.recordingPrefsLoaded).toBe(true));
+
+		act(() => view.result.current.toggleRecording());
+		await waitFor(() => expect(api.startNativeWindowsRecording).toHaveBeenCalled());
+
+		expect(api.getSelectedSource).toHaveBeenCalledTimes(1);
+		expect(api.checkRecordingStorage).toHaveBeenCalledTimes(1);
+		expect(api.isNativeWindowsCaptureAvailable).toHaveBeenCalledTimes(1);
+		await waitFor(() => expect(view.result.current.recording).toBe(true));
+	});
+
+	/**
+	 * A helper still opening its encoder when the countdown runs out starts late; the
+	 * countdown stays up until it has, so the user does not start talking into nothing.
+	 */
+	it("keeps the countdown up until a late start has begun", async () => {
+		let begin: (value: unknown) => void = () => undefined;
+		const { api } = stub(() => new Promise((resolve) => (begin = resolve)));
+		const view = renderHook(() => useScreenRecorder());
+		await waitFor(() => expect(view.result.current.recordingPrefsLoaded).toBe(true));
+
+		act(() => view.result.current.toggleRecording());
+		await waitFor(() => expect(api.startNativeWindowsRecording).toHaveBeenCalled());
+		// Past the one-second countdown.
+		await new Promise((resolve) => setTimeout(resolve, 1300));
+		expect(api.hideCountdownOverlay).not.toHaveBeenCalled();
+		expect(view.result.current.recording).toBe(false);
+
+		await act(async () => begin({ success: true, recordingId: 7 }));
+		await waitFor(() => expect(api.hideCountdownOverlay).toHaveBeenCalled());
+		await waitFor(() => expect(view.result.current.recording).toBe(true));
+	});
+
 	it("ends the helper when the countdown is cancelled, and records nothing", async () => {
 		const { api } = stub(
 			() =>

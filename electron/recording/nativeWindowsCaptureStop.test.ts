@@ -10,12 +10,14 @@ import {
 	readMicrophoneDefaulted,
 	readMicrophoneNotFound,
 	readMicrophoneUnavailable,
+	readOutputsClosed,
 	readSecondaryWindowsApplied,
 	readStemsFinalized,
 	readStoppedPath,
 	readWebcamDark,
 	readWebcamFormat,
 	readWebcamUnavailable,
+	reapNativeWindowsCapture,
 	terminateNativeWindowsCapture,
 	waitForNativeWindowsCaptureStop,
 } from "./nativeWindowsCaptureStop";
@@ -594,6 +596,88 @@ describe("waitForNativeWindowsCaptureStop", () => {
 			reason: "stop-timeout",
 			exited: false,
 		});
+	});
+});
+
+describe("waitForNativeWindowsCaptureStop, outputs-closed", () => {
+	const stopped = "Recording stopped. Output path: C:\\rec\\a.mp4\n";
+	const closed = '{"event":"outputs-closed","schemaVersion":2,"webcamFinalized":true}\n';
+
+	/**
+	 * The take is whole once the helper has closed its files. Waiting on for its
+	 * exit (closing WGC, the process teardown) cost 100-450 ms after every click.
+	 */
+	it("settles when the helper has closed every file, before it exits", async () => {
+		let output = "Recording started\n";
+		const pending = waitForNativeWindowsCaptureStop({
+			proc: asProc(helper),
+			targetPath: "C:\\rec\\a.mp4",
+			readOutput: () => output,
+		});
+
+		output += stopped + closed;
+		helper.stdout.emit("data", Buffer.from(stopped + closed));
+		await vi.advanceTimersByTimeAsync(1);
+
+		await expect(pending).resolves.toEqual({
+			ok: true,
+			screenVideoPath: "C:\\rec\\a.mp4",
+			helperRunning: true,
+		});
+		expect(helper.listenerCount("close")).toBe(0);
+		expect(helper.stdout.listenerCount("data")).toBe(0);
+	});
+
+	it("does not settle on the screen alone: the camera may still be finalizing", async () => {
+		let output = "Recording started\n";
+		let settled = false;
+		const pending = waitForNativeWindowsCaptureStop({
+			proc: asProc(helper),
+			targetPath: "C:\\rec\\a.mp4",
+			readOutput: () => output,
+		}).then((result) => {
+			settled = true;
+			return result;
+		});
+
+		output += stopped;
+		helper.stdout.emit("data", Buffer.from(stopped));
+		// Half a line: the chunk ended inside the event.
+		output += closed.slice(0, 30);
+		helper.stdout.emit("data", Buffer.from(closed.slice(0, 30)));
+		await vi.advanceTimersByTimeAsync(1);
+		expect(settled).toBe(false);
+
+		helper.exit(0);
+		await expect(pending).resolves.toEqual({ ok: true, screenVideoPath: "C:\\rec\\a.mp4" });
+	});
+});
+
+describe("readOutputsClosed", () => {
+	it("needs the whole line", () => {
+		const line = '{"event":"outputs-closed","schemaVersion":2,"webcamFinalized":false}';
+		expect(readOutputsClosed(`x\n${line}\n`)).toBe(true);
+		expect(readOutputsClosed(`x\n${line}\r\n`)).toBe(true);
+		expect(readOutputsClosed(`x\n${line}`)).toBe(false);
+		expect(readOutputsClosed("Recording stopped. Output path: C:\\a.mp4\n")).toBe(false);
+	});
+});
+
+describe("reapNativeWindowsCapture", () => {
+	it("leaves a helper that exits on its own alone", async () => {
+		const pending = reapNativeWindowsCapture(asProc(helper), { timeoutMs: 1_000 });
+		helper.exit(0);
+
+		await expect(pending).resolves.toBe(true);
+		expect(helper.killCalls).toBe(0);
+	});
+
+	it("kills a helper that outlives its shutdown", async () => {
+		const pending = reapNativeWindowsCapture(asProc(helper), { timeoutMs: 1_000 });
+		await vi.advanceTimersByTimeAsync(1_000);
+
+		await expect(pending).resolves.toBe(true);
+		expect(helper.killCalls).toBe(1);
 	});
 });
 
