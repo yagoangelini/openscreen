@@ -89,6 +89,12 @@ interface TranscriptionState {
 	 * leave that button unable to transcribe the talking clip next to it.
 	 */
 	requestTimelineTranscripts: () => Promise<void>;
+	/**
+	 * Stop transcribing one asset: its run, all the way into the main process (which stops
+	 * the helper mid-chunk), or its place in the queue. Nothing is written and no toast says
+	 * it failed: the user asked for it.
+	 */
+	cancel: (assetId: string) => void;
 	reset: () => void;
 }
 
@@ -193,6 +199,15 @@ export const useTranscriptionStore = create<TranscriptionState>((set, get) => ({
 				return get().request(assetId);
 			}),
 		).then(() => undefined);
+	},
+
+	cancel(assetId) {
+		if (activeRun?.assetId === assetId) {
+			// The run drops its own job once the main process has stopped (`runJob`).
+			abortActiveRun();
+			return;
+		}
+		if (get().jobs[assetId]?.status === "queued") dropJob(assetId);
 	},
 
 	reset() {

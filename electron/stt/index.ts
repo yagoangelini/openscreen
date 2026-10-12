@@ -68,6 +68,31 @@ export function isGuardrailRejection(error: unknown): boolean {
  * `AbortError` by name so the renderer's `isAbortError` recognizes it as "the
  * user asked for this" rather than an engine failure worth a toast.
  */
+/** How often the model download may report its progress to the renderer. */
+const MODEL_PROGRESS_INTERVAL_MS = 250;
+
+/**
+ * A gate for download progress: true for the first report of each file, its last (all
+ * bytes in), and otherwise at most once per `intervalMs`. `now` is injectable for tests.
+ */
+export function throttledProgress(
+	intervalMs: number,
+	now: () => number = Date.now,
+): (file: string, downloadedBytes: number, totalBytes: number) => boolean {
+	let lastFile: string | null = null;
+	let lastAt = Number.NEGATIVE_INFINITY;
+	return (file, downloadedBytes, totalBytes) => {
+		const at = now();
+		const done = totalBytes > 0 && downloadedBytes >= totalBytes;
+		if (file !== lastFile || done || at - lastAt >= intervalMs) {
+			lastFile = file;
+			lastAt = at;
+			return true;
+		}
+		return false;
+	};
+}
+
 function cancelledError(): Error {
 	const error = new Error("Transcription cancelled");
 	error.name = "AbortError";
@@ -115,6 +140,10 @@ export class SttManager {
 	 * kill that new run.
 	 */
 	private cancelEpoch = 0;
+	/** Chunks the helper is computing right now (one at a time; a counter to stay honest). */
+	private chunksInFlight = 0;
+	/** Set when Cancel stopped the helper mid-chunk: the next run starts it again first. */
+	private helperStoppedByCancel = false;
 
 	/**
 	 * The word aligner per language (ctcAlign.ts). A chunk never waits for a
@@ -210,6 +239,17 @@ export class SttManager {
 		this.cancelEpoch++;
 		this.extraction?.abort();
 		for (const download of this.alignerDownloads.values()) download.abort(cancelledError());
+		// The epoch only stops the loop BETWEEN chunks, and a chunk is up to ~90 s of audio:
+		// the helper went on computing the one in flight, on the GPU, long after Cancel (E2E
+		// 2.4.0, "STT keeps running after cancelling"). Stopping the helper is the only way to
+		// end a request it is running; the next run starts it again (a few seconds of loading).
+		if (this.chunksInFlight > 0 && !this.shuttingDown) {
+			console.info("[stt] cancel: stopping the helper mid-chunk");
+			this.helperStoppedByCancel = true;
+			void this.server.stop().catch((error: unknown) => {
+				console.warn("[stt] could not stop the helper on cancel:", error);
+			});
+		}
 	}
 
 	/**
@@ -246,9 +286,14 @@ export class SttManager {
 	private async prepare(): Promise<void> {
 		const modelsDir = this.getModelsDir();
 		this.emit({ phase: "model", model: "whisper", downloadedBytes: 0, totalBytes: 0 });
+		// The download reports every network chunk (tens of thousands for the model). Each
+		// became a status message and a store update in the editor, which spent the whole
+		// first download, minutes, re-rendering and stopped answering (E2E 2.4.0, D-5).
+		const progress = throttledProgress(MODEL_PROGRESS_INTERVAL_MS);
 		await ensureModels({
 			baseDir: modelsDir,
 			onProgress: (event) => {
+				if (!progress(event.id, event.downloadedBytes, event.totalBytes)) return;
 				this.emit({
 					phase: "model",
 					model: event.id,
@@ -297,10 +342,14 @@ export class SttManager {
 		samples: Float32Array,
 		language: string | undefined,
 		prompt: string | undefined,
+		epoch: number,
 	): Promise<Awaited<ReturnType<WhisperServerManager["transcribe"]>>> {
 		let lastError: unknown;
+		// A cancelled run must not retry: the failure it sees is the helper Cancel stopped.
+		const cancelled = () => this.shuttingDown || this.cancelEpoch !== epoch;
 		for (let attempt = 1; attempt <= CHUNK_ATTEMPTS; attempt++) {
-			if (this.shuttingDown) throw cancelledError();
+			if (cancelled()) throw cancelledError();
+			this.chunksInFlight++;
 			try {
 				return await this.server.transcribe({
 					samples,
@@ -310,7 +359,7 @@ export class SttManager {
 				});
 			} catch (error) {
 				lastError = error;
-				if (this.shuttingDown) throw cancelledError();
+				if (cancelled()) throw cancelledError();
 				if (attempt === CHUNK_ATTEMPTS) break;
 				// The helper answered, and rejected the result: its DTW guardrail
 				// judged this audio's word timings unusable. The same audio gives the
@@ -322,8 +371,10 @@ export class SttManager {
 						.start({ modelPath: this.modelPath, vadModelPath: this.vadModelPath })
 						.catch(() => undefined);
 				}
-				if (this.shuttingDown) throw cancelledError();
+				if (cancelled()) throw cancelledError();
 				await new Promise((resolve) => setTimeout(resolve, 500 * attempt));
+			} finally {
+				this.chunksInFlight--;
 			}
 		}
 		throw lastError instanceof Error ? lastError : new Error(String(lastError));
@@ -350,6 +401,10 @@ export class SttManager {
 		await this.init();
 
 		const epoch = this.cancelEpoch;
+		if (this.helperStoppedByCancel && this.modelPath) {
+			this.helperStoppedByCancel = false;
+			await this.server.start({ modelPath: this.modelPath, vadModelPath: this.vadModelPath });
+		}
 		this.alignersFailed.clear();
 		// Extraction is part of the run, and on a long file it is the part the user used
 		// to watch the editor freeze through. Doing it here means the renderer hands over
@@ -404,6 +459,7 @@ export class SttManager {
 				samples.subarray(chunk.startSample, chunk.endSample),
 				language,
 				req.prompt,
+				epoch,
 			).catch((error) => {
 				if (error instanceof Error && error.name === "AbortError") throw error;
 				// Say where it died. Without this the user gets "Transcription
