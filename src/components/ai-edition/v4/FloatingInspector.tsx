@@ -48,6 +48,8 @@ import {
 	type ZoomDepth,
 } from "@/components/video-editor/types";
 import { useScopedT } from "@/contexts/I18nContext";
+import { formatDecimal } from "@/i18n/format";
+import { currentLocale } from "@/i18n/toastText";
 import { setTextPlate, type TextPlate, textPlateOf } from "@/lib/ai-edition/annotations/background";
 import {
 	convertAnnotationKind,
@@ -61,7 +63,7 @@ import {
 import {
 	type CameraMode,
 	type CameraPiece,
-	findCameraPiece,
+	findSelectedCameraPiece,
 	mergeCameraLook,
 } from "@/lib/ai-edition/document/cameraSegments";
 import { resolveAspectRatioValue } from "@/lib/ai-edition/document/outputFormat";
@@ -773,6 +775,9 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 	const { settings } = useEditorSettings();
 	const autoFocusAll = settings.autoFocusAll;
 	const focusHintId = useId();
+	// The camera piece on screen, for the render where a write has re-keyed it ahead of the
+	// selection (`findSelectedCameraPiece`).
+	const shownCameraPiece = useRef<CameraPiece | null>(null);
 	const doc = useProjectStore((s) => s.document);
 	const zoomId = tl.selection?.kind === "zoom" ? tl.selection.id : null;
 	const zoomMaxScale = useMemo(
@@ -1304,7 +1309,8 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 	// here; its timing stays locked to the screen clip, so the inspector offers no span.
 	if (selection.kind === "camera") {
 		const pieces = tl.cameraPieces;
-		const piece = findCameraPiece(pieces, selection.id);
+		const piece = findSelectedCameraPiece(pieces, selection.id, shownCameraPiece.current);
+		shownCameraPiece.current = piece ?? null;
 		if (!piece) return null;
 		const index = pieces.indexOf(piece);
 		const hasNext = index >= 0 && index < pieces.length - 1;
@@ -1387,7 +1393,9 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 			{paneHeader(<Scissors size={16} />, tt("labels.trim"), onClose, tc("actions.close"))}
 			<div style={bodyStyle}>
 				<p className={shell.hint}>
-					{te("inspector.trimHiddenDuration", { duration: durationSec.toFixed(1) })}
+					{te("inspector.trimHiddenDuration", {
+						duration: formatDecimal(durationSec, 1, currentLocale()),
+					})}
 				</p>
 				{/* Deleting the trim restores the footage, so it reads as an undo, not a delete. */}
 				<button type="button" onClick={deleteTrimGroup} className={PANE_BUTTON}>

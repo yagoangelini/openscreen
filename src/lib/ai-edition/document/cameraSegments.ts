@@ -180,6 +180,22 @@ export function findCameraPiece(
 	return pieces.find((piece) => piece.key === keyOrId || piece.ids.includes(keyOrId));
 }
 
+/**
+ * The selected piece, or -- for the one render between the save that stored an implicit
+ * piece (a new key) and the selection catching up with it -- the piece that now starts where
+ * the shown one started. Without it the inspector rendered nothing for that render, came
+ * back as a new pane, and lost its scroll position on the first look change (E2E 2.4.0, D-8).
+ */
+export function findSelectedCameraPiece(
+	pieces: readonly CameraPiece[],
+	keyOrId: string,
+	shown: CameraPiece | null,
+): CameraPiece | undefined {
+	const found = findCameraPiece(pieces, keyOrId);
+	if (found || !shown) return found;
+	return pieces.find((piece) => piece.startMs === shown.startMs);
+}
+
 /** The piece under a ruler moment; at a boundary, the one that starts there. */
 export function cameraPieceAt(
 	pieces: readonly CameraPiece[],
