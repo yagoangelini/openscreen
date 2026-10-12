@@ -28,7 +28,12 @@ import {
 	placementRawSec,
 	type TranscriptPlacement,
 } from "../timeline/aggregated-transcript";
-import { removedRawSpans } from "../timeline/programme-time";
+import {
+	type RemovedRawSpan,
+	removalAt,
+	removedRawSpans,
+	subtractRemoved,
+} from "../timeline/programme-time";
 import { type Speaker, transcriptHasTwoSpeakers } from "../transcription/speakers";
 import {
 	type CaptionAnchorV,
@@ -52,9 +57,71 @@ export interface CaptionCue {
  *  the subtitle. Well clear of the annotation z-range, which counts up from 1. */
 export const CAPTION_Z_INDEX_BASE = 100_000;
 
-function toCaptionSegments(transcript: AxcutTranscript): CaptionSegment[] {
+/**
+ * What the edit kept of one asset's SOURCE time, as the captions need it. Captions drop the
+ * words the film no longer has BEFORE grouping them into lines, and measure the pauses that
+ * break a line as they play, so a cut in the middle of a line (what "Limpar fala" writes: a
+ * "né?" between two words) takes the word out of the caption and the `.srt`, and the line
+ * closes up around the hole, re-timed on what is left (E-2 of the 2.5.0 E2E).
+ */
+export interface CaptionFilm {
+	/** Whether a word spoken over `[startSec, endSec]` is in the film. */
+	has(startSec: number, endSec: number): boolean;
+	/** The pause from `fromSec` to `toSec` as it plays, the cuts inside it taken out. */
+	pauseSec(fromSec: number, toSec: number): number;
+}
+
+/** No edit: every word, every pause as spoken. */
+const UNCUT: CaptionFilm = { has: () => true, pauseSec: (fromSec, toSec) => toSec - fromSec };
+
+function placementWindowEnd(placement: TranscriptPlacement): number {
+	return placement.sourceEndSec ?? Number.POSITIVE_INFINITY;
+}
+
+/**
+ * `has` is the transcript pane's own rule (`buildClipSection`), so a word the pane shows
+ * struck out is never on screen: a word is in the film when some placement of its asset
+ * overlaps it and the RAW moment of its centre, through that placement, is not removed — by
+ * any trim or a gap between clips (`removedRawSpans`). A word no placement plays is not in
+ * the film. A duplicated clip that keeps a word another copy cuts keeps it in the captions:
+ * line text is per asset, and the copy that plays it needs it.
+ *
+ * `pauseSec` goes through the first placement holding both ends; a pause no single placement
+ * holds (it spans two clips) stays as spoken.
+ */
+export function captionFilm(
+	placements: TranscriptPlacement[],
+	removed: RemovedRawSpan[],
+): CaptionFilm {
+	return {
+		has: (startSec, endSec) =>
+			placements.some((placement) => {
+				const windowEnd = placementWindowEnd(placement);
+				const overlaps =
+					endSec > startSec
+						? endSec > placement.sourceStartSec && startSec < windowEnd
+						: startSec >= placement.sourceStartSec && startSec < windowEnd;
+				const centre = placementRawSec(placement, (startSec + endSec) / 2);
+				return overlaps && removalAt(removed, centre) === null;
+			}),
+		pauseSec: (fromSec, toSec) => {
+			const placement = placements.find(
+				(p) => p.sourceStartSec <= fromSec && toSec <= placementWindowEnd(p),
+			);
+			if (!placement || toSec <= fromSec) return toSec - fromSec;
+			const kept = subtractRemoved(
+				placementRawSec(placement, fromSec),
+				placementRawSec(placement, toSec),
+				removed,
+			);
+			return kept.reduce((sum, span) => sum + (span.endSec - span.startSec), 0);
+		},
+	};
+}
+
+function toCaptionSegments(transcript: AxcutTranscript, film: CaptionFilm): CaptionSegment[] {
 	return transcript.words
-		.filter((word) => word.text.trim().length > 0)
+		.filter((word) => word.text.trim().length > 0 && film.has(word.startSec, word.endSec))
 		.map((word) => ({ startSec: word.startSec, endSec: word.endSec, text: word.text }));
 }
 
@@ -99,11 +166,16 @@ function textAsPseudoWords(startSec: number, endSec: number, text: string): Capt
  * Grouping into units before translating also matters upstream: a Whisper
  * transcript stores one segment per word, so translating per segment would have
  * translated word by word.
+ *
+ * `film` drops the original words the edit cut (see {@link captionFilm}) before the
+ * grouping, and measures the pauses that break a line as they play. A translated unit keeps its whole translation: its words have no timing of
+ * their own to test, and the unit's span still maps through the cut.
  */
 export function captionLinesForAsset(
 	transcript: AxcutTranscript,
 	settings: CaptionSettings,
 	translations: CaptionTranslations,
+	film: CaptionFilm = UNCUT,
 ): CaptionSegment[] {
 	const minWords = settings.minWordsPerLine;
 	const maxWords = settings.maxWordsPerLine;
@@ -121,16 +193,16 @@ export function captionLinesForAsset(
 		transcript.words.length > 0 &&
 		transcriptHasTwoSpeakers(transcript)
 	) {
-		return polish(speakerLabelledLines(transcript, settings));
+		return polish(speakerLabelledLines(transcript, settings, film));
 	}
 
 	const stream =
 		settings.language === null
-			? originalWordStream(transcript)
-			: translatedWordStream(transcript, translations, settings.language);
+			? originalWordStream(transcript, film)
+			: translatedWordStream(transcript, translations, settings.language, film);
 
 	if (stream.length === 0) return [];
-	return polish(groupTimedCaptionWordsIntoLines(stream, minWords, maxWords));
+	return polish(groupTimedCaptionWordsIntoLines(stream, minWords, maxWords, film.pauseSec));
 }
 
 /**
@@ -141,6 +213,7 @@ export function captionLinesForAsset(
 function speakerLabelledLines(
 	transcript: AxcutTranscript,
 	settings: CaptionSettings,
+	film: CaptionFilm,
 ): CaptionSegment[] {
 	const names: Record<Speaker, string> = {
 		mic: settings.speakerNameMic.trim() || DEFAULT_SPEAKER_NAMES.mic,
@@ -151,35 +224,44 @@ function speakerLabelledLines(
 	for (const word of transcript.words) {
 		if (!word.text.trim()) continue;
 		const speaker = word.speaker ?? current ?? "mic";
+		// A cut word still says who was speaking, for an unlabelled word after it.
+		current = speaker;
+		if (!film.has(word.startSec, word.endSec)) continue;
 		const segment = { startSec: word.startSec, endSec: word.endSec, text: word.text };
 		const run = runs[runs.length - 1];
 		if (run && run.speaker === speaker) run.words.push(segment);
 		else runs.push({ speaker, words: [segment] });
-		current = speaker;
 	}
 	return runs.flatMap((run) =>
 		groupTimedCaptionWordsIntoLines(
 			run.words,
 			settings.minWordsPerLine,
 			settings.maxWordsPerLine,
+			film.pauseSec,
 		).map((line, index) =>
 			index === 0 ? { ...line, text: `[${names[run.speaker]}] ${line.text.trim()}` } : line,
 		),
 	);
 }
 
-function originalWordStream(transcript: AxcutTranscript): CaptionSegment[] {
-	const words = toCaptionSegments(transcript);
-	if (words.length > 0) return words;
+function originalWordStream(transcript: AxcutTranscript, film: CaptionFilm): CaptionSegment[] {
+	// Asked of the transcript, not of what survives the cut: a take whose every word was cut
+	// has no captions, it does not fall back to its segments' text.
+	if (transcript.words.some((word) => word.text.trim().length > 0)) {
+		return toCaptionSegments(transcript, film);
+	}
 	// A transcript with segments but no words (hand-authored / imported) still
 	// deserves captions — spread each segment's own text across its span.
-	return transcript.segments.flatMap((s) => textAsPseudoWords(s.startSec, s.endSec, s.text));
+	return transcript.segments
+		.flatMap((s) => textAsPseudoWords(s.startSec, s.endSec, s.text))
+		.filter((word) => film.has(word.startSec, word.endSec));
 }
 
 function translatedWordStream(
 	transcript: AxcutTranscript,
 	translations: CaptionTranslations,
 	language: string,
+	film: CaptionFilm,
 ): CaptionSegment[] {
 	const translated = translations[language]?.byAsset[transcript.assetId] ?? {};
 	return captionTranslationUnits(transcript).flatMap((unit) => {
@@ -192,7 +274,7 @@ function translatedWordStream(
 			segmentWordsAsCaptionSegments(transcript, id),
 		);
 		return originals.length > 0
-			? originals
+			? originals.filter((word) => film.has(word.startSec, word.endSec))
 			: textAsPseudoWords(unit.startSec, unit.endSec, unit.text);
 	});
 }
@@ -243,6 +325,7 @@ export function deriveCaptionCues(
 	translations: CaptionTranslations,
 ): CaptionCue[] {
 	if (!document || !settings.enabled) return [];
+	const removed = removedRawSpans(document.timeline.clips, document.timeline.trimRanges);
 	// The lane the captions are read FROM — resolved, so a stored "voiceover" whose last
 	// pill has been deleted falls back here rather than exporting nothing (issue #560).
 	const placements = lanePlacements(
@@ -251,7 +334,7 @@ export function deriveCaptionCues(
 		// `?? []` because the key is additive: a document written before it — or hand-built,
 		// never through the schema — simply has none.
 		document.audioTracks ?? [],
-		removedRawSpans(document.timeline.clips, document.timeline.trimRanges),
+		removed,
 	);
 	if (placements.length === 0) return [];
 
@@ -268,7 +351,11 @@ export function deriveCaptionCues(
 	for (const assetId of new Set(placements.map((c) => c.assetId))) {
 		const transcript = transcripts.get(assetId);
 		if (!transcript) continue;
-		linesByAsset.set(assetId, captionLinesForAsset(transcript, settings, translations));
+		const own = placements.filter((placement) => placement.assetId === assetId);
+		linesByAsset.set(
+			assetId,
+			captionLinesForAsset(transcript, settings, translations, captionFilm(own, removed)),
+		);
 	}
 
 	for (const [assetId, lines] of linesByAsset) {
@@ -288,10 +375,10 @@ export function deriveCaptionCues(
 		}
 	}
 
-	// No removed-word filter. A cue inside a cut maps to source time inside frames
-	// `resolvePlaybackSegments` never emits, so it is already invisible in the preview and
-	// the export; dropping the words instead would re-flow every line boundary on any
-	// project with a trim — a visible change to output, bought for nothing.
+	// The cut words are already gone from the lines (`captionFilm`). A whole line inside a cut
+	// would have been invisible anyway, but a cut in the MIDDLE of a line — "Limpar fala"
+	// taking a "né?" out between two words — left the word in the line's text, on screen and
+	// in the `.srt` (E-2 of the 2.5.0 E2E). Lines re-flow around a trim: that is the point.
 	cues.sort((a, b) => a.startMs - b.startMs || a.endMs - b.endMs);
 	// Lines from one asset can't overlap, but two clips playing overlapping
 	// source ranges can put two cues on the same instant. Keep the ruler honest
