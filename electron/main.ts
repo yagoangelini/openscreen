@@ -248,8 +248,10 @@ function isTakeRunning(): boolean {
 
 const askBeforeQuittingMidTake = createQuitWhileRecordingPrompt({
 	isRecording: isTakeRunning,
-	ask: () =>
+	ask: (signal) =>
 		showMessageBox({
+			// Closes the dialog when the take ends some other way (`dismiss`, below).
+			signal,
 			type: "question",
 			buttons: [
 				mainT("dialogs", "quitWhileRecording.stopAndOpen"),
@@ -1774,6 +1776,8 @@ appReady?.then(async () => {
 			// built once at startup — without this they keep offering the check during a take.
 			setupApplicationMenu();
 			if (!recording) {
+				// A quit-while-recording question still on screen has nothing left to ask about.
+				askBeforeQuittingMidTake.dismiss();
 				showMainWindow();
 			}
 		},
