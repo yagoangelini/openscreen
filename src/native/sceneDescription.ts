@@ -23,6 +23,7 @@ import type {
 } from "@/components/video-editor/types";
 import { DEFAULT_CROP_REGION, getZoomScale } from "@/components/video-editor/types";
 import { annotationFontSizeFraction } from "@/lib/ai-edition/annotationScale";
+import { tutorialSceneEntries } from "@/lib/ai-edition/annotations/tutorialMarks";
 import {
 	captionBoxRect,
 	captionCuesToTextRegions,
@@ -223,7 +224,7 @@ export interface SceneAnnotation {
 	/** See `SceneZoomRegion.underTrim`. Annotations need no extra gate — they are already
 	 *  drawn only while `startSec <= t < endSec` — so this only carries the intent. */
 	underTrim?: boolean;
-	kind: "text" | "image" | "figure" | "blur";
+	kind: "text" | "image" | "figure" | "blur" | "shape";
 	/** Which box `x`/`y`/`w`/`h` — and `text.fontSizeRel` — are fractions of. Absent means
 	 *  `"screen"`: a blur, or an annotation saved before frame placement. */
 	space?: "frame";
@@ -285,6 +286,22 @@ export interface SceneAnnotation {
 		blockSize: number;
 		freehandPoints?: Array<{ x: number; y: number }>;
 	};
+	/** Present for `kind: "shape"`: what the tutorial annotations are drawn with (a highlight's
+	 *  dimmed frame, a step marker's disc — `annotations/tutorialMarks.ts`). Lengths are fractions
+	 *  of the height of the box named by `space`, like `text.fontSizeRel`. */
+	shape?: SceneAnnotationShape;
+}
+
+/** `SceneAnnotationShape` in `crates/compositor/src/scene.rs`. */
+export interface SceneAnnotationShape {
+	fill: string;
+	radiusRel: number;
+	featherRel: number;
+	borderColor?: string;
+	borderRel: number;
+	/** The fill covers the whole output frame except the box: a highlight. */
+	invert: boolean;
+	animation: string | null;
 }
 
 /** Normalized rect in 0..1 of the output frame (x, y top-left; width, height). */
@@ -471,6 +488,10 @@ export interface SceneEffects {
 	 * the native side only reads it where it draws a tilted plane.
 	 */
 	depthOfField: boolean;
+	/** "Dolly" (`SceneEffects::dolly`): 0..1, omitted at 0. */
+	dolly?: number;
+	/** "Inclinar para o clique" (`SceneEffects::lean_to_clicks`): omitted when off. */
+	leanToClicks?: boolean;
 }
 
 /** Cursor rendering, from the editor settings. */
@@ -577,6 +598,13 @@ export interface SceneDescription {
 	 * screen file, the same path every clip of that take carries as `screenPath`.
 	 */
 	audioStems: Array<{ screenPath: string; voicePath: string; systemPath: string }>;
+	/**
+	 * "Melhorar a voz" (`voice_enhance.rs`): each take's voice stem, or its own track without
+	 * stems, denoised and lightly equalised. Not a field of `audio`, which stays linear gains: the
+	 * preview cannot apply this one itself, it plays the copy the compositor renders
+	 * (`prepare-enhanced-voice`). Omitted when off.
+	 */
+	voiceEnhance?: { strength: number };
 	/**
 	 * Timeline audio tracks (issue #350), mixed over the assembled programme by
 	 * `audio::mix_external_tracks`. One entry per contiguous stretch: a track split by a
@@ -800,10 +828,29 @@ export function zoomScaleLimit(document: AxcutDocument, regionId: string): numbe
  * when the annotation is on no clip (its own clip trimmed away, say): another clip's layout may
  * differ, and converting through it would move the annotation.
  */
+/**
+ * The strength the scene carries and the preview's copy is rendered at: tenths, so a slider
+ * drag renders a handful of copies, and the export enhances at exactly the strength heard.
+ */
+export function roundedVoiceEnhanceStrength(strength: number): number {
+	return Math.round(Math.min(1, Math.max(0, strength)) * 10) / 10;
+}
+
 export function annotationFootageRect(
 	document: AxcutDocument,
 	annotationId: string,
 ): SceneRect | null {
+	return annotationFootage(document, annotationId)?.rect ?? null;
+}
+
+/**
+ * `annotationFootageRect`, with the crop of that clip (fractions of its recording, `null` for
+ * none): what maps a point of the recording, the recorded pointer say, into the frame.
+ */
+export function annotationFootage(
+	document: AxcutDocument,
+	annotationId: string,
+): { rect: SceneRect; crop: SceneDescription["cropByClip"][number] } | null {
 	const region = (document.annotations ?? []).find((a) => a.id === annotationId);
 	if (!region) return null;
 	const [piece] = projectRegionsToSource(
@@ -814,9 +861,9 @@ export function annotationFootageRect(
 	);
 	if (piece?.clipIndex === undefined) return null;
 	const scene = buildSceneDescription(document);
-	return (
-		scene.layout.layoutByClip?.[piece.clipIndex]?.screenRect ?? scene.layout.screenRect ?? null
-	);
+	const rect =
+		scene.layout.layoutByClip?.[piece.clipIndex]?.screenRect ?? scene.layout.screenRect ?? null;
+	return rect ? { rect, crop: scene.cropByClip[piece.clipIndex] ?? null } : null;
 }
 
 type Size = { width: number; height: number };
@@ -1505,6 +1552,8 @@ export function buildSceneDescription(
 				? { frameTheme: settings.frameTheme }
 				: {}),
 			depthOfField: settings.depthOfField,
+			...(settings.dollyAmount > 0 ? { dolly: settings.dollyAmount } : {}),
+			...(settings.leanToClicks ? { leanToClicks: true } : {}),
 		},
 		cursor: {
 			show: settings.cursorShow,
@@ -1528,6 +1577,9 @@ export function buildSceneDescription(
 			voiceGainDb: settings.voiceGainDb,
 			systemGainDb: settings.systemGainDb,
 		},
+		...(settings.voiceEnhance
+			? { voiceEnhance: { strength: roundedVoiceEnhanceStrength(settings.voiceEnhanceStrength) } }
+			: {}),
 		audioStems: document.assets.flatMap((asset) =>
 			asset.audioStems && asset.originalPath
 				? [{ screenPath: asset.originalPath, ...asset.audioStems }]
@@ -1582,7 +1634,27 @@ export function buildSceneDescription(
 			};
 		}),
 		annotations: projectedAnnotations
-			.map((region) => {
+			.flatMap((region): SceneAnnotation | SceneAnnotation[] => {
+				// The tutorial annotations (highlight, numbered step) are drawn with the generic
+				// shape and the text the compositor already has: several entries for one region.
+				if (region.type === "highlight" || region.type === "step") {
+					return tutorialSceneEntries(
+						region,
+						{
+							id: region.id,
+							startSec: region.startMs / 1000,
+							endSec: region.endMs / 1000,
+							clipIndex: region.clipIndex,
+							...(region.underTrim ? { underTrim: true as const } : {}),
+							x: region.position.x / 100,
+							y: region.position.y / 100,
+							w: region.size.width / 100,
+							h: region.size.height / 100,
+							zIndex: region.zIndex,
+						},
+						captionAspect,
+					);
+				}
 				const style = region.style;
 				// Omitted rather than sent as null/undefined when absent: an annotation still on the
 				// footage keeps emitting the exact keys it always has.

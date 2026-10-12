@@ -13,7 +13,9 @@ import {
 	ChevronRight,
 	EyeOff,
 	FileText,
+	Focus,
 	ImageIcon,
+	ListOrdered,
 	type LucideIcon,
 	Maximize2,
 	Merge,
@@ -50,6 +52,7 @@ import {
 import { useScopedT } from "@/contexts/I18nContext";
 import { formatDecimal } from "@/i18n/format";
 import { currentLocale } from "@/i18n/toastText";
+import { ANNOTATION_REFERENCE_HEIGHT } from "@/lib/ai-edition/annotationScale";
 import { setTextPlate, type TextPlate, textPlateOf } from "@/lib/ai-edition/annotations/background";
 import {
 	convertAnnotationKind,
@@ -60,6 +63,13 @@ import {
 	type AnnotationTextAnimation,
 	TEXT_ANIMATION_VALUES,
 } from "@/lib/ai-edition/annotations/textAnimation";
+import {
+	HIGHLIGHT_DEFAULTS,
+	nextStepNumber,
+	STEP_DEFAULTS,
+	STEP_DIAMETER_PX,
+	stepBoxAround,
+} from "@/lib/ai-edition/annotations/tutorialMarks";
 import {
 	type CameraMode,
 	type CameraPiece,
@@ -1022,6 +1032,8 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 							label={ts("annotation.type")}
 							display="both"
 							tiles
+							// Six types: two rows of three, every label whole.
+							columns={3}
 							options={[
 								{ value: "text", label: ts("annotation.typeText"), icon: <Type size={16} /> },
 								{
@@ -1035,16 +1047,38 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 									icon: <ArrowUpRight size={16} />,
 								},
 								{ value: "blur", label: ts("annotation.typeBlur"), icon: <EyeOff size={16} /> },
+								{
+									value: "highlight",
+									label: ts("annotation.typeHighlight"),
+									icon: <Focus size={16} />,
+								},
+								{
+									value: "step",
+									label: ts("annotation.typeStep"),
+									icon: <ListOrdered size={16} />,
+								},
 							]}
 							value={region.type}
 							onChange={(kind) => {
-								tl.updateAnnotationLive(
-									region.id,
-									convertAnnotationKind(region, kind, {
+								tl.updateAnnotationLive(region.id, {
+									...convertAnnotationKind(region, kind, {
 										footage: footageOf(region.id),
 										frameAspect,
 									}),
-								);
+									// A tutorial annotation arrives with its own settings: a step takes the
+									// next number in creation order.
+									...(kind === "highlight" && !region.highlightData
+										? { highlightData: { ...HIGHLIGHT_DEFAULTS } }
+										: {}),
+									...(kind === "step" && !region.stepData
+										? {
+												stepData: {
+													...STEP_DEFAULTS,
+													number: nextStepNumber(tl.annotationRegions),
+												},
+											}
+										: {}),
+								});
 								void tl.commitAnnotationChange();
 							}}
 						/>,
@@ -1211,6 +1245,21 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 								<p className={shell.hint}>{te("inspector.freehandRendersAsBox")}</p>
 							) : null}
 						</>
+					) : null}
+					{region.type === "highlight" ? (
+						<HighlightControls
+							region={region}
+							onLive={(patch) => liveUpdate(region.id, patch)}
+							onCommit={commitAnnotation}
+						/>
+					) : null}
+					{region.type === "step" ? (
+						<StepControls
+							region={region}
+							frameAspect={frameAspect}
+							onLive={(patch) => liveUpdate(region.id, patch)}
+							onCommit={commitAnnotation}
+						/>
 					) : null}
 					{region.type === "text" ? (
 						// Le nombre vaut « pixels à 1080 » (cf. annotationScale.ts) : aperçu et rendu le
@@ -1566,5 +1615,155 @@ function wrap(collapse: React.ReactNode, body: React.ReactNode) {
 			{collapse}
 			{body}
 		</div>
+	);
+}
+
+type AnnotationPatch = Partial<AxcutAnnotationRegion>;
+
+/** "Destaque": how dark the frame gets around the lit rectangle, its soft edge, corners, border. */
+function HighlightControls({
+	region,
+	onLive,
+	onCommit,
+}: {
+	region: AxcutAnnotationRegion;
+	onLive: (patch: AnnotationPatch) => void;
+	onCommit: () => void;
+}) {
+	const ts = useScopedT("settings");
+	const data = { ...HIGHLIGHT_DEFAULTS, ...region.highlightData };
+	const set = (patch: Partial<typeof data>) => onLive({ highlightData: { ...data, ...patch } });
+	return (
+		<>
+			<p className={shell.hint}>{ts("annotation.highlightHint")}</p>
+			<SliderCell
+				label={ts("annotation.highlightDim")}
+				value={Math.round(data.dim * 100)}
+				min={0}
+				max={95}
+				suffix="%"
+				defaultValue={HIGHLIGHT_DEFAULTS.dim * 100}
+				onChange={(next) => set({ dim: next / 100 })}
+				onCommit={onCommit}
+			/>
+			<SliderCell
+				label={ts("annotation.highlightFeather")}
+				value={data.feather}
+				min={0}
+				max={80}
+				suffix="px"
+				defaultValue={HIGHLIGHT_DEFAULTS.feather}
+				onChange={(feather) => set({ feather })}
+				onCommit={onCommit}
+			/>
+			<SliderCell
+				label={ts("annotation.highlightRadius")}
+				value={data.radius}
+				min={0}
+				max={120}
+				suffix="px"
+				defaultValue={HIGHLIGHT_DEFAULTS.radius}
+				onChange={(radius) => set({ radius })}
+				onCommit={onCommit}
+			/>
+			<SliderCell
+				label={ts("annotation.highlightBorder")}
+				value={data.borderWidth}
+				min={0}
+				max={12}
+				suffix="px"
+				defaultValue={HIGHLIGHT_DEFAULTS.borderWidth}
+				onChange={(borderWidth) => set({ borderWidth })}
+				onCommit={onCommit}
+			/>
+			{data.borderWidth > 0
+				? paneRow(
+						ts("annotation.highlightBorderColor"),
+						<ColorField
+							label={ts("annotation.highlightBorderColor")}
+							value={data.borderColor}
+							onChange={(borderColor) => set({ borderColor })}
+							onCommit={onCommit}
+						/>,
+					)
+				: null}
+		</>
+	);
+}
+
+/** "Passo numerado": its number, colour, size (the badge's diameter) and optional label. */
+function StepControls({
+	region,
+	frameAspect,
+	onLive,
+	onCommit,
+}: {
+	region: AxcutAnnotationRegion;
+	frameAspect: number;
+	onLive: (patch: AnnotationPatch) => void;
+	onCommit: () => void;
+}) {
+	const ts = useScopedT("settings");
+	const data = { ...STEP_DEFAULTS, ...region.stepData };
+	const set = (patch: Partial<typeof data>) => onLive({ stepData: { ...data, ...patch } });
+	const diameterPx = Math.round((region.size.height / 100) * ANNOTATION_REFERENCE_HEIGHT);
+	const center = {
+		x: region.position.x + region.size.width / 2,
+		y: region.position.y + region.size.height / 2,
+	};
+	return (
+		<>
+			{paneRow(
+				ts("annotation.stepNumber"),
+				<input
+					type="number"
+					min={0}
+					max={999}
+					step={1}
+					value={data.number}
+					aria-label={ts("annotation.stepNumber")}
+					onChange={(e) => {
+						const next = Math.round(Number(e.target.value));
+						if (Number.isFinite(next)) set({ number: Math.min(999, Math.max(0, next)) });
+					}}
+					onBlur={onCommit}
+					className={shell.control}
+					style={{ width: 72 }}
+				/>,
+			)}
+			{paneRow(
+				ts("annotation.stepColor"),
+				<ColorField
+					label={ts("annotation.stepColor")}
+					value={data.color}
+					onChange={(color) => set({ color })}
+					onCommit={onCommit}
+				/>,
+			)}
+			<SliderCell
+				label={ts("annotation.stepSize")}
+				value={diameterPx}
+				min={24}
+				max={200}
+				suffix="px"
+				defaultValue={STEP_DIAMETER_PX}
+				onChange={(px) => onLive(stepBoxAround(center, px, frameAspect))}
+				onCommit={onCommit}
+			/>
+			<div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+				<span style={{ fontSize: 13, color: "var(--fg-2)", fontWeight: 500 }}>
+					{ts("annotation.stepLabel")}
+				</span>
+				<input
+					type="text"
+					maxLength={80}
+					value={data.label}
+					placeholder={ts("annotation.stepLabelPlaceholder")}
+					onChange={(e) => set({ label: e.target.value })}
+					onBlur={onCommit}
+					className={shell.control}
+				/>
+			</div>
+		</>
 	);
 }

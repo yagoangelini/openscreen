@@ -155,6 +155,16 @@ what `shaders.hlsl` actually implements:
    text (DirectWrite → D3D11 SRV, then `mode = 0`), image (cached per
    annotation id).
 
+   The tutorial annotations (highlight rectangle, numbered step) have no kind of their
+   own: the app expands each into `kind: "shape"` entries and text
+   (`src/lib/ai-edition/annotations/tutorialMarks.ts`). A shape is one layer, `mode = 21`,
+   built by `frame_geometry::shape_annotation_cb` for all three backends: a rounded box
+   filled, or, inverted, the whole output dimmed around it (a highlight), with a soft edge,
+   an optional border and the text animations' fade/pop (`text_anim.rs`). It dims what is
+   under it at that point of the draw order, the webcam included.
+   `crates/compositor/tests/tutorial_marks_render.rs` renders it on D3D11 at export and
+   preview size and compares the two.
+
    Text, figures and images are anchored on the screen box *without* the zoom
    (`s_ann`); captions (`space: "frame"`) are anchored on the output frame.
    Neither follows the zoom, so they hold still while the content zooms

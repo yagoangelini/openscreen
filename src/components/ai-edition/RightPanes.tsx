@@ -2759,6 +2759,33 @@ export function VideoEffectsPane() {
 					onCommit={() => void commit()}
 				/>
 			</div>
+			{/* The 3D camera moves, both off by default: a push-in with each zoom (the motion blur
+			    above blurs it like the zoom), and a lean toward each click on a flat screen. */}
+			<div className={styles.sliderGrid}>
+				<SliderCell
+					label={ts("effects.dolly")}
+					hint={ts("effects.dollyTip")}
+					value={Math.round(settings.dollyAmount * 100)}
+					min={0}
+					max={100}
+					step={5}
+					suffix="%"
+					defaultValue={0}
+					disabled={!hasDocument}
+					onChange={(v) => setLive({ dollyAmount: v / 100 })}
+					onCommit={() => void commit()}
+				/>
+			</div>
+			<div className={styles.paneRow}>
+				<span className={styles.label}>{ts("effects.leanToClicks")}</span>
+				<Toggle
+					checked={settings.leanToClicks}
+					ariaLabel={ts("effects.leanToClicks")}
+					tooltip={ts("effects.leanToClicksTip")}
+					disabled={!hasDocument}
+					onChange={(v) => void set({ leanToClicks: v })}
+				/>
+			</div>
 			{/* Next to motion blur because it is the other blur of the RECORDING. It only ever
 			    acts on a 3D-tilted zoom, so with none in the project it is not offered. */}
 			{hasTiltedZoom ? (
@@ -3661,6 +3688,34 @@ export function AudioPane() {
 					</>
 				) : null}
 			</div>
+			{/* On-device noise reduction and gentle EQ on the voice (the voice stem, or the take's
+			    own track without one), the same in the preview and the export. */}
+			<div className={styles.paneRow}>
+				<span className={styles.label}>{ts("audio.voiceEnhance")}</span>
+				<Toggle
+					checked={settings.voiceEnhance}
+					ariaLabel={ts("audio.voiceEnhance")}
+					tooltip={hasStems ? ts("audio.voiceEnhanceTip") : ts("audio.voiceEnhanceTipNoStems")}
+					disabled={!hasDocument}
+					onChange={(voiceEnhance) => void set({ voiceEnhance })}
+				/>
+			</div>
+			{settings.voiceEnhance ? (
+				<div className={styles.sliderGrid}>
+					<SliderCell
+						label={ts("audio.voiceEnhanceStrength")}
+						value={Math.round(settings.voiceEnhanceStrength * 100)}
+						min={0}
+						max={100}
+						step={10}
+						suffix="%"
+						defaultValue={80}
+						disabled={!hasDocument}
+						onChange={(value) => setLive({ voiceEnhanceStrength: value / 100 })}
+						onCommit={() => void commit()}
+					/>
+				</div>
+			) : null}
 			<button
 				type="button"
 				className={styles.secondaryBtn}

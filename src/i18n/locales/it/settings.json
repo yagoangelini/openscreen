@@ -96,7 +96,20 @@
 		"blurShapeOval": "Ovale",
 		"blurColorWhite": "Bianco",
 		"tipMovePlayhead": "Sposta la testina di riproduzione sulla sezione di annotazione sovrapposta e seleziona un elemento.",
-		"typeImage": "Immagine"
+		"typeImage": "Immagine",
+		"typeHighlight": "Highlight",
+		"typeStep": "Step",
+		"highlightHint": "Everything outside the rectangle is dimmed. Drag it over what the viewer should look at.",
+		"highlightDim": "Dim outside",
+		"highlightFeather": "Soft edge",
+		"highlightRadius": "Corner radius",
+		"highlightBorder": "Border",
+		"highlightBorderColor": "Border color",
+		"stepNumber": "Number",
+		"stepColor": "Color",
+		"stepSize": "Size",
+		"stepLabel": "Label (optional)",
+		"stepLabelPlaceholder": "e.g. Open Settings"
 	},
 	"effects": {
 		"fitClipFew": "{{count}} clip",
@@ -135,7 +148,11 @@
 		"shadowNone": "Nessuna",
 		"shadowLight": "Leggera",
 		"shadowMedium": "Media",
-		"shadowStrong": "Forte"
+		"shadowStrong": "Forte",
+		"dolly": "Dolly on zooms",
+		"dollyTip": "The whole composition (screen, frame and camera) moves slightly toward the viewer as each zoom comes in, and back as it ends; the background stays. Motion blur blurs it like the zoom.",
+		"leanToClicks": "Lean toward clicks",
+		"leanToClicksTip": "The screen tilts slightly toward each click in 3D, then eases back. Only on a flat screen, with the pointer shown."
 	},
 	"stylePresets": {
 		"button": "Preset",
@@ -441,7 +458,11 @@
 		"reset": "Reimposta audio",
 		"title": "Audio",
 		"voiceGain": "Voce",
-		"systemGain": "Audio del computer"
+		"systemGain": "Audio del computer",
+		"voiceEnhance": "Enhance voice",
+		"voiceEnhanceTip": "Removes background noise from the voice and adds a little clarity, on this computer. Applied to the voice track only; the computer sound is left as recorded.",
+		"voiceEnhanceTipNoStems": "Removes background noise from the recording's audio and adds a little clarity, on this computer. Without a separate voice track, sounds that are not speech are reduced too.",
+		"voiceEnhanceStrength": "Strength"
 	},
 	"language": {
 		"title": "Lingua"

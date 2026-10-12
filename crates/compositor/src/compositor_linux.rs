@@ -2622,6 +2622,20 @@ impl Compositor {
                     continue;
                 }
                 match a.kind.as_str() {
+                    // A highlight rectangle or a step marker's disc (`shape_annotation_cb`,
+                    // shared by the three backends).
+                    "shape" => {
+                        if let Some(cb) = crate::frame_geometry::shape_annotation_cb(
+                            a,
+                            anchor,
+                            dst,
+                            [rw, rh],
+                            (g.source_t - a.start_sec as f32) * 1000.0,
+                            ((a.end_sec - a.start_sec) * 1000.0) as f32,
+                        ) {
+                            ann_draws.push(AnnDraw::plain(self.make_bind(&cb, None, &dummy)));
+                        }
+                    }
                     "figure" => {
                         let Some(figure) = a.figure.as_ref() else { continue };
                         let (segments, half_stroke) = crate::regions::arrow_local_geometry(

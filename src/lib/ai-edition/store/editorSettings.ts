@@ -110,6 +110,10 @@ export interface EditorSettingsSnapshot {
 	backgroundBlur: number;
 	motionBlurAmount: number;
 	depthOfField: boolean;
+	/** "Dolly": 0..1, the composition pushes in with each zoom (`frame_geometry::DOLLY_MAX`). */
+	dollyAmount: number;
+	/** "Inclinar para o clique": a flat screen leans toward each click (`regions::click_lean`). */
+	leanToClicks: boolean;
 	borderRadius: number;
 	padding: number;
 	cropRegion: CropRegion;
@@ -131,6 +135,10 @@ export interface EditorSettingsSnapshot {
 	/** The Voice and Computer volumes (dB), for a take recorded with its audio stems. */
 	voiceGainDb: number;
 	systemGainDb: number;
+	/** "Melhorar a voz": noise reduction and gentle EQ on the voice (`voice_enhance.rs`). */
+	voiceEnhance: boolean;
+	/** 0..1. */
+	voiceEnhanceStrength: number;
 	webcamBackgroundMode: WebcamBackgroundMode;
 	webcamWallpaper: string;
 	webcamBlurIntensity: number;
@@ -157,6 +165,10 @@ export const DEFAULT_EDITOR_SETTINGS: EditorSettingsSnapshot = {
 	audioGainDb: 0,
 	voiceGainDb: 0,
 	systemGainDb: 0,
+	voiceEnhance: false,
+	voiceEnhanceStrength: 0.8,
+	dollyAmount: 0,
+	leanToClicks: false,
 	formatFollowCursor: null,
 	autoZoom: DEFAULT_AUTO_ZOOM_SETTINGS,
 };
@@ -175,6 +187,8 @@ interface LegacyShape {
 	showBlur?: boolean;
 	motionBlurAmount?: number;
 	depthOfField?: boolean;
+	dollyAmount?: number;
+	leanToClicks?: boolean;
 	borderRadius?: number;
 	padding?: number;
 	cropRegion?: CropRegion;
@@ -192,6 +206,8 @@ interface LegacyShape {
 	audioGainDb?: number;
 	voiceGainDb?: number;
 	systemGainDb?: number;
+	voiceEnhance?: boolean;
+	voiceEnhanceStrength?: number;
 	webcamBackgroundMode?: WebcamBackgroundMode;
 	webcamWallpaper?: string;
 	webcamBlurIntensity?: number;
@@ -321,6 +337,8 @@ export function getEditorSettings(doc: AxcutDocument | null | undefined): Editor
 			defaults.motionBlurAmount,
 		),
 		depthOfField: bool(legacy?.depthOfField, DEFAULT_EDITOR_SETTINGS.depthOfField),
+		dollyAmount: Math.min(1, Math.max(0, num(legacy?.dollyAmount, 0))),
+		leanToClicks: bool(legacy?.leanToClicks, false),
 		borderRadius: readBounded(legacy?.borderRadius, "borderRadius", defaults.borderRadius),
 		padding: readBounded(legacy?.padding, "padding", defaults.padding),
 		cropRegion: legacy?.cropRegion ?? DEFAULT_EDITOR_SETTINGS.cropRegion,
@@ -356,6 +374,11 @@ export function getEditorSettings(doc: AxcutDocument | null | undefined): Editor
 			AUDIO_GAIN_DB_LIMIT,
 			Math.max(-AUDIO_GAIN_DB_LIMIT, num(legacy?.systemGainDb, 0)),
 		),
+		voiceEnhance: bool(legacy?.voiceEnhance, DEFAULT_EDITOR_SETTINGS.voiceEnhance),
+		voiceEnhanceStrength: Math.min(
+			1,
+			Math.max(0, num(legacy?.voiceEnhanceStrength, DEFAULT_EDITOR_SETTINGS.voiceEnhanceStrength)),
+		),
 		webcamBackgroundMode: isWebcamBackgroundMode(legacy?.webcamBackgroundMode)
 			? legacy.webcamBackgroundMode
 			: DEFAULT_EDITOR_SETTINGS.webcamBackgroundMode,
@@ -389,6 +412,8 @@ export interface EditorSettingsPatch {
 	backgroundBlur?: number;
 	motionBlurAmount?: number;
 	depthOfField?: boolean;
+	dollyAmount?: number;
+	leanToClicks?: boolean;
 	borderRadius?: number;
 	padding?: number;
 	cropRegion?: CropRegion;
@@ -404,6 +429,8 @@ export interface EditorSettingsPatch {
 	audioGainDb?: number;
 	voiceGainDb?: number;
 	systemGainDb?: number;
+	voiceEnhance?: boolean;
+	voiceEnhanceStrength?: number;
 	webcamBackgroundMode?: WebcamBackgroundMode;
 	webcamWallpaper?: string;
 	webcamBlurIntensity?: number;

@@ -453,6 +453,30 @@ const figureDataSchema = z
 	})
 	.optional();
 
+// "Destaque": the frame dimmed around a lit rounded rectangle (`annotations/tutorialMarks.ts`).
+// Lengths are px at 1080, like `style.fontSize`.
+const highlightDataSchema = z
+	.object({
+		/** How dark everything outside the rectangle gets, 0..0.95 (the fill's opacity). */
+		dim: z.number().min(0).max(0.95).default(0.6),
+		feather: z.number().min(0).max(200).default(12),
+		radius: z.number().min(0).max(540).default(16),
+		borderColor: z.string().default("#34B27B"),
+		/** 0: no border. */
+		borderWidth: z.number().min(0).max(40).default(0),
+	})
+	.optional();
+
+// "Passo numerado": a numbered badge, its diameter the box height (`annotations/tutorialMarks.ts`).
+const stepDataSchema = z
+	.object({
+		number: z.number().int().min(0).max(999).default(1),
+		color: z.string().default("#2563EB"),
+		/** Short text beside the badge; empty: the badge alone. */
+		label: z.string().max(80).default(""),
+	})
+	.optional();
+
 const annotationStyleSchema = z.object({
 	color: z.string().default("#ffffff"),
 	backgroundColor: z.string().default("transparent"),
@@ -496,7 +520,7 @@ export const annotationRegionSchema = endGteStart(
 		startMs: z.number().nonnegative(),
 		endMs: z.number().nonnegative(),
 		...clipAnchorShape,
-		type: z.enum(["text", "image", "figure", "blur"]),
+		type: z.enum(["text", "image", "figure", "blur", "highlight", "step"]),
 		content: z.string().default(""),
 		textContent: z.string().optional(),
 		imageContent: z.string().optional(),
@@ -521,6 +545,8 @@ export const annotationRegionSchema = endGteStart(
 		annotationSource: z.enum(["auto-caption", "auto-redact"]).optional(),
 		figureData: figureDataSchema,
 		blurData: blurDataSchema,
+		highlightData: highlightDataSchema,
+		stepData: stepDataSchema,
 	}),
 	"endMs",
 	"startMs",

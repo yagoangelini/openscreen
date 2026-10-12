@@ -3421,6 +3421,24 @@ static float4 device_frame(float2 local, constant Layer &layer)
     return float4(rgb * a, a); // prémultiplié
 }
 
+// mode 21 : the SHAPE of a tutorial annotation, port 1:1 of `shape_layer` in the HLSL (slots in
+// `frame_geometry::shape_annotation_cb`). Premultiplied.
+float4 shape_layer(float2 local, constant Layer &layer)
+{
+    float d = sd_round_rect(local - layer.src.xy, layer.src.zw, layer.fx.x);
+    float soft = max(layer.fx.y, 1.0);
+    float inside = 1.0 - smoothstep(-0.5 * soft, 0.5 * soft, d);
+    float fill_cov = (layer.fx.w > 0.5) ? 1.0 - inside : inside;
+    float fa = layer.color.a * fill_cov;
+    float bw = 0.5 * layer.fx.z;
+    float ba = (layer.fx.z > 0.0)
+        ? layer.dst_prev.a * (1.0 - smoothstep(bw - 0.75, bw + 0.75, abs(d)))
+        : 0.0;
+    float3 rgb = layer.dst_prev.rgb * ba + layer.color.rgb * fa * (1.0 - ba);
+    float a = ba + fa * (1.0 - ba);
+    return float4(rgb, a) * clamp(layer.mb.x, 0.0, 1.0);
+}
+
 fragment float4 ps_main(VSOut i [[stage_in]],
                         constant Layer &layer [[buffer(0)]],
                         texture2d<float, access::sample> texY [[texture(0)]],
@@ -3438,6 +3456,12 @@ fragment float4 ps_main(VSOut i [[stage_in]],
                         // par le repli du mode 18, qui garde texture(2) pour son rendu isolé.
                         texture2d<float, access::sample> texDof [[texture(5)]])
 {
+    // mode 21 : the shape of a tutorial annotation. Tested first: the branches below have no
+    // upper bound. (Mode 20, the spotlight, is D3D11-only and never reaches this shader.)
+    if (layer.mode > 20.5)
+    {
+        return shape_layer(i.local, layer);
+    }
     // mode 19 : VERRE À PLAT de Glass Lens (`cursor_glass`). Testé avant le mode 18, dont la
     // branche n'a pas de borne haute. C'est un modèle, compilé avec les modes 15 à 17.
     if (layer.mode > 18.5)

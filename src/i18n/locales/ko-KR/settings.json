@@ -96,7 +96,20 @@
 		"blurShapeOval": "타원",
 		"blurColorWhite": "흰색",
 		"tipMovePlayhead": "재생 헤드를 주석 구간으로 옮겨 항목을 선택하세요.",
-		"typeImage": "이미지"
+		"typeImage": "이미지",
+		"typeHighlight": "Highlight",
+		"typeStep": "Step",
+		"highlightHint": "Everything outside the rectangle is dimmed. Drag it over what the viewer should look at.",
+		"highlightDim": "Dim outside",
+		"highlightFeather": "Soft edge",
+		"highlightRadius": "Corner radius",
+		"highlightBorder": "Border",
+		"highlightBorderColor": "Border color",
+		"stepNumber": "Number",
+		"stepColor": "Color",
+		"stepSize": "Size",
+		"stepLabel": "Label (optional)",
+		"stepLabelPlaceholder": "e.g. Open Settings"
 	},
 	"effects": {
 		"fitClipFew": "{{count}}개 클립",
@@ -135,7 +148,11 @@
 		"shadowNone": "없음",
 		"shadowLight": "약하게",
 		"shadowMedium": "보통",
-		"shadowStrong": "강하게"
+		"shadowStrong": "강하게",
+		"dolly": "Dolly on zooms",
+		"dollyTip": "The whole composition (screen, frame and camera) moves slightly toward the viewer as each zoom comes in, and back as it ends; the background stays. Motion blur blurs it like the zoom.",
+		"leanToClicks": "Lean toward clicks",
+		"leanToClicksTip": "The screen tilts slightly toward each click in 3D, then eases back. Only on a flat screen, with the pointer shown."
 	},
 	"stylePresets": {
 		"button": "프리셋",
@@ -441,7 +458,11 @@
 		"reset": "오디오 재설정",
 		"title": "오디오",
 		"voiceGain": "음성",
-		"systemGain": "컴퓨터 소리"
+		"systemGain": "컴퓨터 소리",
+		"voiceEnhance": "Enhance voice",
+		"voiceEnhanceTip": "Removes background noise from the voice and adds a little clarity, on this computer. Applied to the voice track only; the computer sound is left as recorded.",
+		"voiceEnhanceTipNoStems": "Removes background noise from the recording's audio and adds a little clarity, on this computer. Without a separate voice track, sounds that are not speech are reduced too.",
+		"voiceEnhanceStrength": "Strength"
 	},
 	"language": {
 		"title": "언어"

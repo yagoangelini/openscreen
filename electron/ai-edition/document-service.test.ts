@@ -876,7 +876,9 @@ describe("DocumentService", () => {
 			}
 		}, 30_000);
 
-		it("applies racing saves in call order, last one winning", async () => {
+		// Real disk round trips like the storm below: under a loaded full run they took longer
+		// than the default 5 s.
+		it("applies racing saves in call order, last one winning", { timeout: 20_000 }, async () => {
 			const doc = await service.createProject("Order");
 			await Promise.all([
 				service.saveProject(withBulk(doc, 300)),

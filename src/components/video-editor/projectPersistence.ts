@@ -389,7 +389,11 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 						startMs,
 						endMs,
 						type:
-							region.type === "image" || region.type === "figure" || region.type === "blur"
+							region.type === "image" ||
+							region.type === "figure" ||
+							region.type === "blur" ||
+							region.type === "highlight" ||
+							region.type === "step"
 								? region.type
 								: "text",
 						content: typeof region.content === "string" ? region.content : "",
@@ -477,6 +481,12 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 											: DEFAULT_BLUR_FREEHAND_POINTS,
 									}
 								: undefined,
+						...(region.highlightData && typeof region.highlightData === "object"
+							? { highlightData: region.highlightData }
+							: {}),
+						...(region.stepData && typeof region.stepData === "object"
+							? { stepData: region.stepData }
+							: {}),
 					};
 				})
 		: [];

@@ -2006,6 +2006,7 @@ unsafe fn run_multi_inner(
                     source_end_sec,
                     speed_segments,
                     out_fps as f64,
+                    scene.as_ref().and_then(|s| s.voice_enhance).map(|v| v.strength),
                 )
             } else {
                 None

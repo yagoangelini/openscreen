@@ -221,6 +221,15 @@ pub struct SceneEffects {
     /// ne s'applique qu'aux zooms inclinés, où il suit l'angle réel.
     #[serde(default = "default_true")]
     pub depth_of_field: bool,
+    /// "Dolly": 0..1, how far the whole composition (screen, frame, camera) pushes in with each
+    /// zoom, on the zoom's own envelope, and pulls back out with it — up to
+    /// `frame_geometry::DOLLY_MAX`. The wallpaper stays: it is the far plane. 0 / absent: off.
+    #[serde(default)]
+    pub dolly: f32,
+    /// "Inclinar para o clique": a flat screen leans slightly toward each click, then eases
+    /// back (`regions::click_lean`). `#[serde(default)]`: off, every scene written before it.
+    #[serde(default)]
+    pub lean_to_clicks: bool,
 }
 
 fn default_true() -> bool {
@@ -386,6 +395,40 @@ pub struct SceneAnnotation {
     pub figure: Option<SceneAnnotationFigure>,
     #[serde(default)]
     pub blur: Option<SceneAnnotationBlur>,
+    /// `kind: "shape"`: a filled rounded rectangle, or everything around it (`invert`). The app
+    /// builds the tutorial annotations out of it: a highlight rectangle (inverted, the frame
+    /// dimmed around the lit area) and the disc of a numbered step marker.
+    #[serde(default)]
+    pub shape: Option<SceneAnnotationShape>,
+}
+
+/// The geometry and paint of a `kind: "shape"` annotation. Lengths are fractions of the HEIGHT of
+/// the anchor box, like `SceneAnnotationText::font_size_rel`, so the preview (rendered small) and
+/// the export agree at any resolution.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SceneAnnotationShape {
+    /// CSS colour of the fill; its alpha is the dim amount of a highlight.
+    pub fill: String,
+    /// Corner radius, fraction of the anchor height. Clamped to half the box's short side, so a
+    /// large value draws a disc (a square box) or a pill.
+    #[serde(default)]
+    pub radius_rel: f32,
+    /// Width of the soft edge between lit and dimmed, fraction of the anchor height.
+    #[serde(default)]
+    pub feather_rel: f32,
+    /// Border drawn on the edge, `None` or a width of 0: no border.
+    #[serde(default)]
+    pub border_color: Option<String>,
+    #[serde(default)]
+    pub border_rel: f32,
+    /// `true`: the fill covers the whole output frame EXCEPT the box (a highlight).
+    #[serde(default)]
+    pub invert: bool,
+    /// Appearance animation, the vocabulary of `SceneAnnotationText::animation` (`text_anim.rs`):
+    /// a step's disc pops with its number, a highlight fades. Absent: shown as is.
+    #[serde(default)]
+    pub animation: Option<String>,
 }
 
 impl SceneAnnotation {
@@ -832,6 +875,15 @@ pub struct SceneClickSound {
     pub hits: Vec<SceneClickHit>,
 }
 
+/// See `Scene::voice_enhance`. A separate field rather than one of `SceneAudio`, which stays
+/// linear gains only (the preview applies those itself; this one it plays from a rendered copy).
+#[derive(Debug, Clone, Copy, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SceneVoiceEnhance {
+    /// 0..1: how much of the denoised voice replaces the original, and the presence boost.
+    pub strength: f32,
+}
+
 fn default_one() -> f32 {
     1.0
 }
@@ -925,6 +977,10 @@ pub struct Scene {
     /// same as the field being absent, which is every scene written before this.
     #[serde(default)]
     pub click_sound: SceneClickSound,
+    /// "Melhorar a voz" (`voice_enhance.rs`): applied to each take's voice stem, or to its own
+    /// track when it has none. Absent: off, every scene written before it.
+    #[serde(default)]
+    pub voice_enhance: Option<SceneVoiceEnhance>,
     /// Crop écran par clip, dans le même ordre que `clips` (`cropByClip` côté TS).
     #[serde(default)]
     pub crop_by_clip: Vec<Option<SceneCrop>>,

@@ -8,7 +8,9 @@
 		"addAnnotation": "現在の再生位置にテキスト、矢印、画像、ぼかしを追加",
 		"addSpeed": "現在の再生位置に再生速度の変更を追加",
 		"addCameraFullscreen": "フルスクリーンカメラを追加：現在の再生位置でカメラを全画面表示します",
-		"splitCamera": "現在の位置でカメラを分割：各部分を個別に編集できます"
+		"splitCamera": "現在の位置でカメラを分割：各部分を個別に編集できます",
+		"addHighlight": "Highlight an area at the current time: everything around it is dimmed",
+		"addStep": "Add a numbered step at the current time, where the pointer was"
 	},
 	"hints": {
 		"pressZoom": "{{key}}キーを押してズームを追加",
@@ -109,7 +111,9 @@
 		"waitLength": "{{seconds}} 秒",
 		"speedUpPicked": "選んだ区間を早送り ({{speed}}×)",
 		"noWaits": "この録画に長い待ち時間はありません",
-		"waitsSpedUp": "早送りにした待ち時間: {{count}}"
+		"waitsSpedUp": "早送りにした待ち時間: {{count}}",
+		"highlightPill": "Highlight",
+		"stepPill": "Step {{number}}"
 	},
 	"audio": {
 		"addVoiceover": "ナレーションを追加",

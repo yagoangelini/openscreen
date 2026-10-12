@@ -33,7 +33,9 @@
 		"deleteSelected": "Удалить выбранное",
 		"playPause": "Воспроизведение / Пауза",
 		"copySelected": "Копировать выбранное",
-		"paste": "Вставить"
+		"paste": "Вставить",
+		"addHighlight": "Add Highlight",
+		"addStep": "Add Numbered Step"
 	},
 	"fixedActions": {
 		"undo": "Отменить",

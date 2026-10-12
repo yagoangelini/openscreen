@@ -96,7 +96,20 @@
 		"blurShapeOval": "Oval",
 		"blurColorWhite": "Branco",
 		"tipMovePlayhead": "Mova o cursor de reprodução para a seção de anotação sobreposta e selecione um item.",
-		"typeImage": "Imagem"
+		"typeImage": "Imagem",
+		"typeHighlight": "Destaque",
+		"typeStep": "Passo",
+		"highlightHint": "Tudo fora do retângulo fica escurecido. Arraste-o para cima do que o espectador deve olhar.",
+		"highlightDim": "Escurecer fora",
+		"highlightFeather": "Borda suave",
+		"highlightRadius": "Arredondamento",
+		"highlightBorder": "Contorno",
+		"highlightBorderColor": "Cor do contorno",
+		"stepNumber": "Número",
+		"stepColor": "Cor",
+		"stepSize": "Tamanho",
+		"stepLabel": "Rótulo (opcional)",
+		"stepLabelPlaceholder": "ex.: Abra as Configurações"
 	},
 	"effects": {
 		"fitClipFew": "{{count}} clipes",
@@ -135,7 +148,11 @@
 		"shadowNone": "Nenhuma",
 		"shadowLight": "Leve",
 		"shadowMedium": "Média",
-		"shadowStrong": "Forte"
+		"shadowStrong": "Forte",
+		"dolly": "Aproximação nos zooms",
+		"dollyTip": "A composição inteira (tela, moldura e câmera) chega um pouco mais perto a cada zoom e volta quando ele termina; o fundo fica parado. O desfoque de movimento age nela como no zoom.",
+		"leanToClicks": "Inclinar para o clique",
+		"leanToClicksTip": "A tela se inclina um pouco em 3D na direção de cada clique e depois volta. Só com a tela reta e o ponteiro visível."
 	},
 	"stylePresets": {
 		"button": "Predefinições",
@@ -441,7 +458,11 @@
 		"reset": "Redefinir áudio",
 		"title": "Áudio",
 		"voiceGain": "Voz",
-		"systemGain": "Som do computador"
+		"systemGain": "Som do computador",
+		"voiceEnhance": "Melhorar a voz",
+		"voiceEnhanceTip": "Tira o ruído de fundo da voz e dá um pouco de clareza, neste computador. Vale só para a faixa da voz; o som do computador fica como foi gravado.",
+		"voiceEnhanceTipNoStems": "Tira o ruído de fundo do áudio da gravação e dá um pouco de clareza, neste computador. Sem uma faixa de voz separada, sons que não são fala também diminuem.",
+		"voiceEnhanceStrength": "Intensidade"
 	},
 	"language": {
 		"title": "Idioma"

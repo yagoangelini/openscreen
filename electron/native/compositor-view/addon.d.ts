@@ -291,6 +291,9 @@ export interface CompositorViewAddon {
 	 *
 	 *  Optional for the same reason as `remuxSeekable`: a stale `.node` predates it. */
 	loudnessGainDb?(path: string): Promise<number>;
+	/** "Melhorar a voz" for the preview: `input` enhanced as the export does, to a 16-bit WAV.
+	 *  Resolves to the samples per channel written. */
+	enhanceVoiceFile?(input: string, output: string, strength: number): Promise<number>;
 }
 
 /**

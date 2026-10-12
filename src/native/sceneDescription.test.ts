@@ -111,6 +111,38 @@ function makeDoc(
 	};
 }
 
+// --- voice enhancement -----------------------------------------------------
+
+describe("buildSceneDescription 3D camera moves", () => {
+	it("omits dolly and lean while off, the default, and carries them when set", () => {
+		const off = buildSceneDescription(makeDoc()).effects;
+		expect(off.dolly).toBeUndefined();
+		expect(off.leanToClicks).toBeUndefined();
+		const on = buildSceneDescription(
+			makeDoc({ legacyEditor: { dollyAmount: 0.6, leanToClicks: true } }),
+		).effects;
+		expect(on.dolly).toBe(0.6);
+		expect(on.leanToClicks).toBe(true);
+	});
+});
+
+describe("buildSceneDescription.voiceEnhance", () => {
+	it("is absent while off, the default", () => {
+		expect(buildSceneDescription(makeDoc()).voiceEnhance).toBeUndefined();
+		expect(
+			buildSceneDescription(makeDoc({ legacyEditor: { voiceEnhanceStrength: 0.5 } })).voiceEnhance,
+		).toBeUndefined();
+	});
+
+	it("carries the strength in tenths, outside the linear-gain `audio` block", () => {
+		const scene = buildSceneDescription(
+			makeDoc({ legacyEditor: { voiceEnhance: true, voiceEnhanceStrength: 0.73 } }),
+		);
+		expect(scene.voiceEnhance).toEqual({ strength: 0.7 });
+		expect(Object.keys(scene.audio).sort()).toEqual(["gainDb", "systemGainDb", "voiceGainDb"]);
+	});
+});
+
 // --- background ------------------------------------------------------------
 
 describe("buildSceneDescription.background", () => {
@@ -2614,6 +2646,47 @@ describe("buildSceneDescription.annotations", () => {
 			strokeWidth: 4,
 		});
 		expect(scene.annotations[0].text).toBeUndefined();
+	});
+
+	it("expands a numbered step into its disc, number and label, painted in that order", () => {
+		const scene = buildSceneDescription(
+			docWithAnnotations([
+				{
+					id: "under",
+					startMs: 0,
+					endMs: 1000,
+					type: "highlight",
+					content: "",
+					space: "frame",
+					position: { x: 10, y: 10 },
+					size: { width: 40, height: 30 },
+					style,
+					zIndex: 1,
+				},
+				{
+					id: "step",
+					startMs: 0,
+					endMs: 1000,
+					type: "step",
+					content: "",
+					space: "frame",
+					position: { x: 50, y: 50 },
+					size: { width: 3.6, height: 6.4 },
+					style,
+					zIndex: 2,
+					stepData: { number: 7, color: "#2563EB", label: "Clique aqui" },
+				},
+			]),
+		);
+		expect(scene.annotations.map((a) => [a.id, a.kind])).toEqual([
+			["under", "shape"],
+			["step", "shape"],
+			["step:number", "text"],
+			["step:label", "text"],
+		]);
+		expect(scene.annotations[0].shape?.invert).toBe(true);
+		expect(scene.annotations[2].text?.content).toBe("7");
+		expect(scene.annotations.every((a) => a.space === "frame")).toBe(true);
 	});
 
 	it("normalises freehand blur points into the same space as the rect", () => {

@@ -6,14 +6,27 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { toFileUrl } from "@/components/video-editor/projectPersistence";
-import type {
-	AnnotationRegion,
-	AnnotationType,
-	Rotation3DPreset,
+import {
+	type AnnotationRegion,
+	type AnnotationType,
+	DEFAULT_ANNOTATION_STYLE,
+	type Rotation3DPreset,
 } from "@/components/video-editor/types";
 import { useScopedT } from "@/contexts/I18nContext";
+import { nativeBridgeClient } from "@/native";
 import { DEFAULT_TEXT_PLATE } from "../annotations/background";
 import { fitTextBox } from "../annotations/placement";
+import { recordedPointerInFrame } from "../annotations/pointerPlacement";
+import {
+	HIGHLIGHT_BOX,
+	HIGHLIGHT_DEFAULTS,
+	nextStepNumber,
+	STEP_DEFAULTS,
+	STEP_DIAMETER_PX,
+	stepBoxAround,
+	TUTORIAL_LEAD_MS,
+	TUTORIAL_MIN_SEC,
+} from "../annotations/tutorialMarks";
 import {
 	collapseTracksToPills,
 	patchAudioTrack,
@@ -534,6 +547,78 @@ export function useTimeline() {
 			// churn the callback identity between renders.
 		},
 		[document, saveDocument, ts],
+	);
+
+	// The tutorial annotations: a highlight rectangle (H) and a numbered step (N), at the playhead,
+	// centred where the recorded pointer was there (`recordedPointerInFrame`), or on the frame's
+	// centre without a pointer track. A step takes the next number in creation order.
+	const addTutorialMark = useCallback(
+		async (kind: "highlight" | "step", durationSec = DEFAULT_NEW_REGION_SEC) => {
+			if (!document) return;
+			const playhead = playheadSec();
+			const timeMs = Math.round(playhead * 1000);
+			const pointer = await recordedPointerInFrame(document, playhead, (path) =>
+				nativeBridgeClient.cursor.getTelemetry(path),
+			).catch(() => null);
+			const frameAspect = resolveAspectRatioValue(
+				document,
+				getEditorSettings(document).aspectRatio,
+			);
+			const center = pointer ?? { x: 50, y: 50 };
+			const geometry =
+				kind === "step"
+					? stepBoxAround(center, STEP_DIAMETER_PX, frameAspect)
+					: {
+							position: {
+								x: Math.min(
+									Math.max(center.x - HIGHLIGHT_BOX.width / 2, 0),
+									100 - HIGHLIGHT_BOX.width,
+								),
+								y: Math.min(
+									Math.max(center.y - HIGHLIGHT_BOX.height / 2, 0),
+									100 - HIGHLIGHT_BOX.height,
+								),
+							},
+							size: { width: HIGHLIGHT_BOX.width, height: HIGHLIGHT_BOX.height },
+						};
+			// It enters a little before the playhead, so it has popped (or faded) in at the frame
+			// the user is looking at, a click say, instead of being invisible there; and it stays a
+			// few seconds, the time to read it, whatever the timeline's zoom.
+			const ann: AnnotationRegion = {
+				id: createId("ann"),
+				startMs: Math.max(0, timeMs - TUTORIAL_LEAD_MS),
+				endMs: timeMs + Math.round(Math.max(durationSec, TUTORIAL_MIN_SEC) * 1000),
+				type: kind,
+				content: "",
+				space: "frame",
+				...geometry,
+				style: { ...DEFAULT_ANNOTATION_STYLE },
+				zIndex: document.annotations.length + 1,
+				...(kind === "step"
+					? {
+							stepData: {
+								...STEP_DEFAULTS,
+								number: nextStepNumber(document.annotations),
+							},
+						}
+					: { highlightData: { ...HIGHLIGHT_DEFAULTS } }),
+			};
+			const created = anchorRegionsWithDerivedMs([ann], document.timeline.clips, () =>
+				createId("ann"),
+			);
+			const next: AxcutDocument = {
+				...document,
+				annotations: [
+					...document.annotations,
+					...created,
+				] as unknown as AxcutDocument["annotations"],
+			};
+			if (!(await saveDocument(next, { history: true }))) return;
+			const newId = created[0]?.id ?? ann.id;
+			setMultiSelection([{ kind: "annotation", id: newId }]);
+			setSelection({ kind: "annotation", id: newId });
+		},
+		[document, saveDocument],
 	);
 
 	const addSpeed = useCallback(
@@ -1857,6 +1942,7 @@ export function useTimeline() {
 		addZoomsBulk,
 		addTrim,
 		addAnnotation,
+		addTutorialMark,
 		addSpeed,
 		addCameraFullscreen,
 		splitCamera,
