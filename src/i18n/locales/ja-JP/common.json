@@ -80,5 +80,9 @@
 	"notifications": "Notifications",
 	"windowTitles": {
 		"notes": "Notes"
+	},
+	"about": {
+		"credit": "{{product}}（{{owner}}）",
+		"basedOn": "{{upstream}} による {{product}} がベースです"
 	}
 }

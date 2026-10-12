@@ -8,8 +8,14 @@
 ; The Recorder's ID must match RECORDER_APP_USER_MODEL_ID in electron/launchMode.ts: the
 ; HUD sets it on its window, and the taskbar only groups (and pins) the HUD under this
 ; shortcut when the two agree. electron/launchMode.test.ts checks they do.
+;
+; Identity migration (2.5.0): up to 2.4.0 both IDs were upstream's
+; (com.etiennelescot.openscreen[.recorder]). Every shortcut that still carries an old ID
+; would stop grouping with the app's windows: the pinned icon and the running window would
+; show as two taskbar buttons. So every install retags them all (openscreenRetagShortcuts):
+; idempotent, and a no-op on a machine that never had the old IDs.
 
-!define RECORDER_APP_ID "com.etiennelescot.openscreen.recorder"
+!define RECORDER_APP_ID "com.yagoangelini.openscreen.recorder"
 !define RECORDER_SHORTCUT_NAME "OpenScreen Recorder"
 
 !ifdef MENU_FILENAME
@@ -18,6 +24,114 @@
   !define RECORDER_START_MENU_LINK "$SMPROGRAMS\${RECORDER_SHORTCUT_NAME}.lnk"
 !endif
 !define RECORDER_DESKTOP_LINK "$DESKTOP\${RECORDER_SHORTCUT_NAME}.lnk"
+
+; Where Explorer keeps the user's taskbar pins, under %APPDATA%. Read from the environment
+; rather than $APPDATA, which an all-users install points at ProgramData.
+!define OPENSCREEN_TASKBAR_PINS "Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar"
+
+; Retags the .lnk files in DIR that launch EXE: the ones whose arguments are exactly
+; "--recorder" get RECORDER_ID, every other one STUDIO_ID. A pin is recognised by its target,
+; not by its old ID, so only this app's pins are touched and any ID they carried is fixed.
+; Reads target and arguments through IShellLinkW (WinShell has no getter).
+!macro openscreenRetagPinnedLinks DIR EXE STUDIO_ID RECORDER_ID
+  Push $0
+  Push $1
+  Push $2
+  Push $3
+  Push $4
+  Push $5
+  Push $6
+  Push $7
+  Push $8
+
+  ; Copied first: DIR may name one of the registers this macro is about to reuse.
+  StrCpy $7 "${DIR}"
+  FindFirst $0 $1 "$7\*.lnk"
+  ${DoWhile} $1 != ""
+    StrCpy $8 "$7\$1"
+    StrCpy $5 ""
+    StrCpy $6 ""
+    ; String compares on the HRESULTs: a call System could not make leaves "error", which
+    ; an integer compare would read as 0 (S_OK).
+    StrCpy $4 "1"
+    ; CLSID_ShellLink, CLSCTX_INPROC_SERVER, IID_IShellLinkW
+    System::Call "ole32::CoCreateInstance(g '{00021401-0000-0000-C000-000000000046}', p 0, i 1, g '{000214F9-0000-0000-C000-000000000046}', *p .r2) i .r4"
+    ${If} $4 == "0"
+      StrCpy $4 "1"
+      ; QueryInterface(IID_IPersistFile)
+      System::Call "$2->0(g '{0000010b-0000-0000-C000-000000000046}', *p .r3) i .r4"
+      ${If} $4 == "0"
+        StrCpy $4 "1"
+        ; IPersistFile::Load(path, STGM_READ). The path goes in by register, not inlined,
+        ; so a quote in the user's profile name cannot break the call string.
+        System::Call "$3->5(w r8, i 0) i .r4"
+        ${If} $4 == "0"
+          ; IShellLinkW::GetPath(buf, cch, NULL, 0) and ::GetArguments(buf, cch)
+          System::Call "$2->3(w .r5, i ${NSIS_MAX_STRLEN}, p 0, i 0)"
+          System::Call "$2->10(w .r6, i ${NSIS_MAX_STRLEN})"
+        ${EndIf}
+        System::Call "$3->2()"
+      ${EndIf}
+      System::Call "$2->2()"
+    ${EndIf}
+
+    ; StrCmp is case-insensitive, as Windows paths are.
+    ${If} $5 == "${EXE}"
+      ${If} $6 == "--recorder"
+        WinShell::SetLnkAUMI "$8" "${RECORDER_ID}"
+      ${Else}
+        WinShell::SetLnkAUMI "$8" "${STUDIO_ID}"
+      ${EndIf}
+      ClearErrors
+    ${EndIf}
+
+    FindNext $0 $1
+  ${Loop}
+  FindClose $0
+  ClearErrors
+
+  Pop $8
+  Pop $7
+  Pop $6
+  Pop $5
+  Pop $4
+  Pop $3
+  Pop $2
+  Pop $1
+  Pop $0
+!macroend
+
+!macro openscreenRetagShortcuts
+  ; An update run by the app (--updated) KEEPS the existing Studio shortcuts rather than
+  ; recreating them, so the template never restamps them: they would keep the old ID.
+  !ifndef DO_NOT_CREATE_START_MENU_SHORTCUT
+    ${if} ${FileExists} "$newStartMenuLink"
+      WinShell::SetLnkAUMI "$newStartMenuLink" "${APP_ID}"
+      ClearErrors
+    ${endIf}
+  !endif
+  !ifndef DO_NOT_CREATE_DESKTOP_SHORTCUT
+    ${if} ${FileExists} "$newDesktopLink"
+      WinShell::SetLnkAUMI "$newDesktopLink" "${APP_ID}"
+      ClearErrors
+    ${endIf}
+    ; A Recorder desktop shortcut whose Studio twin the user deleted is not recreated
+    ; below, but may still carry the old ID.
+    ${if} ${FileExists} "${RECORDER_DESKTOP_LINK}"
+      WinShell::SetLnkAUMI "${RECORDER_DESKTOP_LINK}" "${RECORDER_APP_ID}"
+      ClearErrors
+    ${endIf}
+  !endif
+
+  ; Taskbar pins: the shortcut Explorer made when the user pinned the Studio (or the running
+  ; HUD, which pins "Openscreen.exe --recorder" from its relaunch command).
+  Push $0
+  ReadEnvStr $0 APPDATA
+  ${if} $0 != ""
+    !insertmacro openscreenRetagPinnedLinks "$0\${OPENSCREEN_TASKBAR_PINS}" "$appExe" "${APP_ID}" "${RECORDER_APP_ID}"
+  ${endIf}
+  Pop $0
+!macroend
 
 !macro customInstall
   ; Always (re)created, updates included: it is how the user finds the Recorder to pin it.
@@ -36,6 +150,8 @@
       WinShell::SetLnkAUMI "${RECORDER_DESKTOP_LINK}" "${RECORDER_APP_ID}"
     ${endIf}
   !endif
+
+  !insertmacro openscreenRetagShortcuts
 
   System::Call 'Shell32::SHChangeNotify(i 0x8000000, i 0, i 0, i 0)'
 !macroend

@@ -146,7 +146,7 @@ describe("HUD taskbar identity (Windows)", () => {
 		const win = openHud();
 		expect(win.setAppDetails).toHaveBeenCalledWith(
 			expect.objectContaining({
-				appId: "com.etiennelescot.openscreen.recorder",
+				appId: "com.yagoangelini.openscreen.recorder",
 				appIconIndex: 0,
 				relaunchDisplayName: "OpenScreen Recorder",
 				relaunchCommand: expect.stringMatching(/ "\/repo" --recorder$/),

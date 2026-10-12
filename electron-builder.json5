@@ -1,8 +1,17 @@
 // @see - https://www.electron.build/configuration/configuration
 {
   "$schema": "https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/scheme.json",
-  "appId": "com.etiennelescot.openscreen",
+  // The fork's own identity (yagoangelini/openscreen). It is also the Windows AppUserModelID
+  // (STUDIO_APP_USER_MODEL_ID in electron/launchMode.ts, checked by launchMode.test.ts) and
+  // the macOS bundle id. Up to 2.4.0 it was upstream's `com.etiennelescot.openscreen`: what
+  // keeps an upgrade from 2.4.0 in place is `nsis.guid` below, and build/installer.nsh moves
+  // the shortcuts and taskbar pins over to the new ID.
+  "appId": "com.yagoangelini.openscreen",
   "asar": true,
+  // Deliberately unchanged, spelling included: it names the userData folder
+  // (%APPDATA%\Openscreen: projects, settings, the single-instance lock), the install folder
+  // (%LOCALAPPDATA%\Programs\Openscreen) and Openscreen.exe. Renaming it would strand all
+  // three. The brand spelling users read is PRODUCT_NAME in electron/about.ts.
   "productName": "Openscreen",
   // There is deliberately no `electronVersion` here. electron-builder needs an EXACT
   // version because it downloads the binaries for one release, and it takes that from
@@ -16,11 +25,13 @@
   // electron-builder looks only at the project's. The fix is `npm ci` in the worktree, not
   // a second declaration of the version.
   // Declared rather than left to default BECAUSE the default is package.json's `author` — one
-  // name, where LICENSE has two holders. Feeds Info.plist's NSHumanReadableCopyright and the
+  // name, where LICENSE has several holders. Feeds Info.plist's NSHumanReadableCopyright and the
   // Windows LegalCopyright, so leaving it implicit put an attribution on the binary that the
   // LICENSE it ships alongside does not make. Any other surface that renders this line must
   // repeat it byte-for-byte.
-  "copyright": "© 2025-2026 OpenScreen contributors — MIT License",
+  //
+  // The fork's holder first, then upstream's collective notice, which MIT obliges us to keep.
+  "copyright": "© 2026 Yago Angelini · © 2025-2026 OpenScreen contributors — MIT License",
   // Declared explicitly, NOT to start publishing from CI — every build still passes
   // `--publish never`, which suppresses uploading only. What this turns on is the update
   // METADATA: `latest.yml` / `latest-mac.yml` / `latest-linux.yml`, the `.blockmap` used for
@@ -236,7 +247,8 @@
     ],
     "icon": "icons/icons/png",
     "artifactName": "${productName}-Linux-${version}.${ext}",
-    "maintainer": "Etienne Lescot <etiennelescot@gmail.com>",
+    // No `maintainer`: electron-builder takes it from package.json's `author` (name and
+    // email), so the deb/rpm metadata names the fork's owner from the one place that holds it.
     "category": "AudioVideo",
     "extraResources": [
       {
@@ -413,6 +425,18 @@
     ],
     "icon": "icons/icons/win/icon.ico",
     "artifactName": "${productName}.Setup.${version}-${arch}.${ext}",
+    // Signed with the owner's self-signed certificate "CN=Yago Angelini" in the build
+    // machine's CurrentUser\My store (created once; see docs/HANDOFF.md, "Assinatura"). Trusted
+    // only where that certificate is imported as a root: the owner's PC. A machine without
+    // the certificate cannot build the fork's installer until it creates its own.
+    "signtoolOptions": {
+      "certificateSubjectName": "Yago Angelini",
+      "signingHashAlgorithms": ["sha256"],
+      "rfc3161TimeStampServer": "http://timestamp.digicert.com"
+    },
+    // Every executable and addon of the app, the capture helpers in resources included. Not
+    // the DLLs: third-party ones (onnxruntime) carry their vendor's signature.
+    "signExts": [".exe", ".node"],
     "extraResources": [
       {
         "from": "electron/native/bin",
@@ -457,10 +481,22 @@
     // shortcut (Openscreen.exe, the app's AppUserModelID), and build/installer.nsh adds
     // "OpenScreen Recorder" (Openscreen.exe --recorder, its own ID and icon) beside it.
     "shortcutName": "OpenScreen Studio",
-    "include": "build/installer.nsh"
+    "include": "build/installer.nsh",
+    // PINNED to the GUID electron-builder derived from upstream's appId (UUID v5 of
+    // "com.etiennelescot.openscreen" in its namespace 50e065bc-3134-11e6-9bab-38c9862bdaf3).
+    // It names the uninstall key (HKCU\...\Uninstall\<guid>), the install key
+    // (HKCU\Software\<guid>: install folder, KeepShortcuts) and the one-installer mutex. Left
+    // to derive from the new appId it would be 6bb1cae6-d841-5a66-915d-d667ab94d0c2, a
+    // DIFFERENT product to Windows: the next installer would not find 2.4.0, would install
+    // beside it and leave the old entry in Apps & features. Pinned, it finds and replaces the
+    // existing install as every update does. Never change it: it is the install's identity
+    // now, whatever `appId` says. electron/launchMode.test.ts holds it in place.
+    "guid": "5b412b41-8d8b-5faf-b557-de4fe681e5fc"
   },
-  // Microsoft Store packaging identity, from Partner Center's "Product identity" page
-  // (Applications et jeux > OpenScreen > Product identity).
+  // UPSTREAM ONLY. The fork neither builds nor submits the Store package (`build:win:store`
+  // is never run here). This is upstream's Microsoft Store identity, from its Partner Center
+  // "Product identity" page, kept verbatim so merges from upstream stay clean; it belongs to
+  // upstream's publisher account, which is why it still names Etienne Lescot.
   "appx": {
     "identityName": "EtienneLescot.OpenScreen",
     "publisher": "CN=03B0FC8C-2067-45D9-BE82-9F15CE264B4A",

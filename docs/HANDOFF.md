@@ -118,11 +118,19 @@ As decisões e o porquê de cada fase estão em [`PLANO-FORK.md`](PLANO-FORK.md)
 
 - **`Openscreen.exe` sem argumento abre o Studio** (o editor, no último projeto). É o que o ícone já fixado na barra de tarefas do usuário roda. **`Openscreen.exe --recorder` abre o HUD.** `--studio` força o Studio. Fora do Windows o padrão continua sendo o HUD. Lógica pura em `electron/launchMode.ts` (`requestedLaunchTarget`, `routeSecondInstance`), testada em `launchMode.test.ts`; ligada em `main.ts` (`openLaunchTarget`, `handleSecondInstance`).
 - **Segunda abertura com o app rodando** (`second-instance`): Recorder com o editor aberto pede ao editor (`open-recorder-requested` → `NewEditorShell`) que pergunte das alterações não salvas e chame `switchToHud`; com export rodando, só traz o editor para frente. Studio com o HUD parado troca para o editor; durante uma gravação ou contagem, só mostra o HUD.
-- **Identidades na barra de tarefas.** O processo usa `app.setAppUserModelId("com.etiennelescot.openscreen")` (igual ao `appId` e ao AUMI do atalho fixado do usuário, conferido no `.lnk`). HUD, seletor de fonte e Notas usam `setAppDetails` (`applyRecorderTaskbarIdentity` em `electron/windows.ts`) com o ID `com.etiennelescot.openscreen.recorder`, o ícone `resources/recorder.ico`, `relaunchCommand` `"…Openscreen.exe" --recorder` e o nome "OpenScreen Recorder". Por isso ganham um botão próprio, e fixar o HUD rodando fixa `Openscreen.exe --recorder`. Títulos: "OpenScreen Studio" no editor, "OpenScreen Recorder" no HUD.
+- **Identidades na barra de tarefas.** O processo usa `app.setAppUserModelId("com.yagoangelini.openscreen")` (igual ao `appId`; até a 2.4.0 era `com.etiennelescot.openscreen`, veja "Identidade do fork" abaixo). HUD, seletor de fonte e Notas usam `setAppDetails` (`applyRecorderTaskbarIdentity` em `electron/windows.ts`) com o ID `com.yagoangelini.openscreen.recorder`, o ícone `resources/recorder.ico`, `relaunchCommand` `"…Openscreen.exe" --recorder` e o nome "OpenScreen Recorder". Por isso ganham um botão próprio, e fixar o HUD rodando fixa `Openscreen.exe --recorder`. Títulos: "OpenScreen Studio" no editor, "OpenScreen Recorder" no HUD.
 - **Ícone do Recorder:** o logo com uma bolinha vermelha de REC (anel branco) no canto inferior direito. Gerado por `node scripts/generate-recorder-icon.mjs` a partir de cada PNG do logo (16 a 256): `icons/icons/win/recorder.ico`, prévias em `icons/icons/recorder-png/`, e `public/openscreen-recorder.png` (ícone das janelas). O codec PNG feito à mão foi para `scripts/png-codec.mjs`, compartilhado com `generate-appx-assets.mjs`.
 - **Instalador:** `nsis.shortcutName` "OpenScreen Studio" (Openscreen.exe, AUMI principal) e `build/installer.nsh` (`customInstall` / `customUnInstall`) cria "OpenScreen Recorder" no Menu Iniciar (sempre, inclusive em atualização) e na área de trabalho (só se o Studio tiver atalho lá), com `--recorder`, o `recorder.ico` e `WinShell::SetLnkAUMI` com o ID do Recorder. O desinstalador remove os dois, menos numa atualização (`--keep-shortcuts`).
 - **Testes que abrem o app:** o Playwright (`gif-export`, `windows-native-checklist`) e `scripts/fork-e2e/` passam `--recorder`, porque começam no HUD.
 - **O que o usuário faz depois de atualizar:** o ícone já fixado continua, e passa a abrir o Studio. Para o segundo ícone, abra o Menu Iniciar, procure "OpenScreen Recorder", clique com o botão direito → "Fixar na barra de tarefas" (o app não consegue se fixar sozinho). Ou abra o Recorder e fixe o botão dele na barra. Se o ícone antigo aparecer como "Openscreen", pode desafixar e fixar o "OpenScreen Studio" do Menu Iniciar no lugar, só pelo nome.
+
+**Identidade do fork** (pedido de 11/10, branch `feat/identity`, entra na próxima versão depois da 2.4.0):
+
+- **O que mudou.** `appId` / AUMID `com.yagoangelini.openscreen` (Studio) e `com.yagoangelini.openscreen.recorder` (Recorder); `package.json` com `author` e `maintainers` Yago Angelini (o e-mail só aí; o `maintainer` do deb/rpm sai dele), `homepage` no repo do fork, Etienne Lescot e Siddharth Vaddem em `contributors`; `copyright` "© 2026 Yago Angelini · © 2025-2026 OpenScreen contributors — MIT License" (igual em `electron/about.ts`, testado); `LICENSE` ganhou a linha "Copyright (c) 2026 Yago Angelini" sem tirar as do upstream. O Sobre mostra "OpenScreen por Yago Angelini" / "Baseado no OpenScreen de Etienne Lescot / getopenscreen" (chaves `common.about.*` nos 15 idiomas), o link do fork e o do upstream. "Star on GitHub" aponta para o fork.
+- **O que ficou de propósito.** `productName` "Openscreen": ele dá o nome da pasta de dados (`%APPDATA%\Openscreen`, onde ficam projetos, configurações e a trava de instância única), da pasta de instalação e do `Openscreen.exe`. O `appId` **não** muda a pasta de dados (o Electron usa o `app.name`), então nada é migrado. O bloco `appx` é a identidade do upstream na Microsoft Store e está marcado como só do upstream: o fork não gera o pacote da Store.
+- **Migração do instalador.** O electron-builder deriva o GUID do NSIS do `appId` (UUID v5 no namespace `50e065bc-…`). O do appId antigo é `5b412b41-8d8b-5faf-b557-de4fe681e5fc` (conferido: é a chave de desinstalação da 2.4.0 instalada); o do novo seria `6bb1cae6-…`, outro produto, que instalaria ao lado. Por isso `nsis.guid` está **fixado** no antigo: o instalador acha a 2.4.0, roda o desinstalador dela e instala por cima, na mesma pasta. Nunca troque esse GUID.
+- **Atalhos e fixados.** Num atalho com o AUMID antigo, o ícone fixado e a janela viram dois botões. A cada instalação, `openscreenRetagShortcuts` (`build/installer.nsh`) regrava o AUMID: dos atalhos Studio do Menu Iniciar e da área de trabalho (numa atualização pelo app, com `--updated`, o modelo do electron-builder **mantém** esses atalhos sem regravar), do Recorder na área de trabalho, e de cada `.lnk` em `%APPDATA%\Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar` cujo alvo é o `Openscreen.exe` instalado (argumento exatamente `--recorder` → ID do Recorder; o resto → ID do Studio). O alvo é lido por `IShellLinkW` via `System::Call`; atalhos de outros apps não são tocados. Testado num instalador NSIS de teste contra `.lnk` falsos (com aspas e espaços no caminho).
+- **Riscos que ficam.** O Explorer guarda em cache os fixados: se depois de instalar o fixado e a janela aparecerem separados, reiniciar o Explorer ou sair e entrar na sessão resolve; em último caso, desafixe e fixe de novo pelo Menu Iniciar. Um fixado no **Menu Iniciar** (não na barra) pode sumir, porque o Windows 11 o guarda pelo AUMID: fixe de novo. As notificações do Windows passam a ser de um app "novo" (a permissão volta ao padrão). No macOS o bundle id muda (permissões de tela, câmera e microfone pediriam de novo), mas o fork não gera build de Mac.
 
 **Itens abertos do E2E da 2.2.0** (relatório B-7 e B-10):
 
@@ -399,7 +407,26 @@ O fork acompanha `getopenscreen/openscreen`. O último merge (2.1.0) foi até `1
 - **Shader:** o modo 19 é o Glass Lens do upstream e o **spotlight é o modo 20**.
 - **HUD:** fica o layout do upstream, com a confirmação de Reiniciar/Cancelar, o canal do microfone e a dica do NVIDIA Broadcast do fork.
 - **Padrões do fork que o upstream não tem:** 16:9 para projetos novos, NVENC/DXGI na RTX, transcrição automática desligada e anel de clique ligado.
+- **Identidade:** num merge do upstream, ficam os valores do fork em `appId`, `nsis.guid`, `copyright`, `package.json` (`author`, `maintainers`, `homepage`), `electron/about.ts`, `REPO_URL` (`star-prompt.ts`) e os IDs de `launchMode.ts` / `installer.nsh`. O `launchMode.test.ts` e o `about.test.ts` falham se um deles voltar ao do upstream.
 - **Dependências:** `@noble/hashes` está declarado em `devDependencies`. O npm 11 não instala dependências peer opcionais, e o teste do AppImage precisa dele.
+
+## Assinatura
+
+O fork assina tudo com um certificado **autoassinado**, decisão do usuário em 12/10: nada de assinatura externa.
+
+- **O certificado:** `CN=Yago Angelini, O=Yago Angelini, C=BR`, de assinatura de código, RSA 3072, válido até 10/2031.
+  - Thumbprint: `54D7FCA1B3EA8B6CFA1FC379302E61EC0F253690`.
+  - Fica em `Cert:\CurrentUser\My` com a chave **não exportável**.
+  - A parte pública está em `%USERPROFILE%\.openscreen-signing\openscreen-yago-angelini.cer`.
+- **O que é assinado:** `electron-builder.json5` (`win.signtoolOptions` com `certificateSubjectName` e o carimbo de tempo da DigiCert, e `signExts` [.exe, .node]) assina:
+  - o instalador e o `Openscreen.exe`;
+  - os helpers (`wgc-capture`, `cursor-sampler`, `ocr-scan`, `whisper-stt-server`, `ffmpeg-shared`) e o addon do compositor.
+  - As DLLs ficam de fora: a `onnxruntime.dll` mantém a assinatura da Microsoft.
+- **Onde vale:** o Windows só confia no certificado onde ele foi importado como raiz, ou seja, o PC do usuário. Para outras pessoas continua "editor desconhecido".
+- **Para o usuário confiar:** importar o `.cer` em `Cert:\CurrentUser\Root` e em `Cert:\CurrentUser\TrustedPublisher`. É ele que faz isso, porque mexe em configuração de segurança.
+- **Para o agente:** sem esse certificado na máquina, o `build:win` falha ao assinar. Numa máquina nova, crie outro com `New-SelfSignedCertificate -Type CodeSigningCert` e o mesmo Subject.
+- **Ao extrair o `winCodeSign`,** o 7-Zip reclama de links simbólicos de arquivos do macOS ("A required privilege is not held"). É inofensivo no Windows: o `signtool` é extraído e assina.
+- **Conferir a assinatura:** `Get-AuthenticodeSignature` em cada `.exe`. Antes de o usuário confiar no certificado, o status sai `UnknownError`; depois, `Valid`.
 
 ## Armadilhas já encontradas
 
@@ -484,8 +511,8 @@ Valide com `record-take.mjs`, com um take que comece no rosto e passe para a tel
 6. Sincronia de áudio pelo relógio do sistema. Hoje há um `(void)qpcPosition` em `wasapi_loopback_capture.cpp`.
 7. Avisar no app quando o leitor do cursor desiste. Hoje é só `logDiagnostic("restart-gave-up")`.
 8. Mostrar o projeto danificado na lista. Hoje só existe a restauração pelo `.bak`.
-9. `appId` próprio do fork: ainda é `com.etiennelescot.openscreen`. **Cuidado:** trocar muda a pasta de dados e a identidade do instalador, então planeje uma migração antes.
-10. ~~Whisper large-v3-turbo como padrão.~~ **Feito** no branch `feat/stt` (Automático numa GPU dedicada; veja "Transcrição pt-BR para Microsoft e IA"). Falta pôr o helper novo na pasta de binários antes da release.
+9. `appId` próprio do fork. **Feito** (`com.yagoangelini.openscreen`, com `nsis.guid` fixado e os atalhos regravados; veja "Identidade do fork"). A pasta de dados não mudou: ela vem do `productName`, não do `appId`.
+10. ~~Whisper large-v3-turbo como padrão.~~ **Feito** (Automático numa GPU dedicada; veja "Transcrição pt-BR para Microsoft e IA"). Falta pôr o helper novo na pasta de binários antes da release.
 11. Spotlight no Metal e no wgpu (mac/Linux), se um dia importar.
 12. Poll do HUD ainda a cada 32 ms (item 3.5 não revisto).
 13. Fila do mixer de áudio sem limite e sem compensar a diferença de relógio (`AudioMixer::append` em `audio_sample_utils.cpp`). Vai junto com o item 6. O colchão de 100 ms do 2.0 resolveu a oscilação (as microfalhas), não a deriva de relógio.

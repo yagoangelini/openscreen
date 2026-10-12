@@ -3,7 +3,7 @@
 	"private": true,
 	"version": "2.4.0",
 	"description": "Record your screen and polish the demo",
-	"homepage": "https://getopenscreen.com/",
+	"homepage": "https://github.com/yagoangelini/openscreen",
 	"license": "MIT",
 	"type": "module",
 	"packageManager": "npm@11.12.1",
@@ -12,8 +12,9 @@
 		"npm": "11.12.1"
 	},
 	"author": {
-		"name": "Etienne Lescot",
-		"url": "https://github.com/EtienneLescot"
+		"name": "Yago Angelini",
+		"email": "yagoangelinicandido@gmail.com",
+		"url": "https://github.com/yagoangelini"
 	},
 	"repository": {
 		"type": "git",
@@ -23,12 +24,17 @@
 		{
 			"name": "Siddharth Vaddem",
 			"url": "https://github.com/siddharthvaddem"
+		},
+		{
+			"name": "Etienne Lescot",
+			"url": "https://github.com/EtienneLescot"
 		}
 	],
 	"maintainers": [
 		{
-			"name": "Etienne Lescot",
-			"url": "https://github.com/EtienneLescot"
+			"name": "Yago Angelini",
+			"email": "yagoangelinicandido@gmail.com",
+			"url": "https://github.com/yagoangelini"
 		}
 	],
 	"scripts": {

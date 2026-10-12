@@ -1,9 +1,13 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import en from "../src/i18n/locales/en/common.json";
+import ptBR from "../src/i18n/locales/pt-BR/common.json";
 import {
 	type AboutFacts,
 	COPYRIGHT,
+	formatAboutCredits,
 	formatAboutDetail,
+	UPSTREAM_URL,
 	usesNativeAboutPanel,
 	WEBSITE_URL,
 } from "./about";
@@ -28,8 +32,14 @@ describe("formatAboutDetail", () => {
 				"Electron 41.2.1 · Chromium 138.0.7204.100 · Node 22.22.1",
 				"darwin arm64 · dmg",
 				WEBSITE_URL,
+				UPSTREAM_URL,
 			].join("\n"),
 		);
+	});
+
+	it("links the fork first, then the project it is based on", () => {
+		expect(WEBSITE_URL).toBe("https://github.com/yagoangelini/openscreen");
+		expect(UPSTREAM_URL).toBe("https://github.com/getopenscreen/openscreen");
 	});
 
 	// The macOS About panel prints the copyright in a field of its own, so a detail block that
@@ -47,6 +57,21 @@ describe("formatAboutDetail", () => {
 		expect(
 			formatAboutDetail(facts({ platform: "linux", arch: "x64", channel: "appimage" })),
 		).toContain("linux x64 · appimage");
+	});
+});
+
+describe("formatAboutCredits", () => {
+	const fill =
+		(messages: { about: Record<string, string> }) => (key: string, vars: Record<string, string>) =>
+			messages.about[key].replace(/\{\{(\w+)\}\}/g, (_, name: string) => vars[name]);
+
+	it("names the fork's owner and credits upstream", () => {
+		expect(formatAboutCredits(fill(en))).toBe(
+			"OpenScreen by Yago Angelini\nBased on OpenScreen by Etienne Lescot / getopenscreen",
+		);
+		expect(formatAboutCredits(fill(ptBR))).toBe(
+			"OpenScreen por Yago Angelini\nBaseado no OpenScreen de Etienne Lescot / getopenscreen",
+		);
 	});
 });
 
