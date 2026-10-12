@@ -378,6 +378,24 @@ O fork acompanha `getopenscreen/openscreen`. O último merge (2.1.0) foi até `1
 - **Identidade:** num merge do upstream, ficam os valores do fork em `appId`, `nsis.guid`, `copyright`, `package.json` (`author`, `maintainers`, `homepage`), `electron/about.ts`, `REPO_URL` (`star-prompt.ts`) e os IDs de `launchMode.ts` / `installer.nsh`. O `launchMode.test.ts` e o `about.test.ts` falham se um deles voltar ao do upstream.
 - **Dependências:** `@noble/hashes` está declarado em `devDependencies`. O npm 11 não instala dependências peer opcionais, e o teste do AppImage precisa dele.
 
+## Assinatura
+
+O fork assina tudo com um certificado **autoassinado**, decisão do usuário em 12/10: nada de assinatura externa.
+
+- **O certificado:** `CN=Yago Angelini, O=Yago Angelini, C=BR`, de assinatura de código, RSA 3072, válido até 10/2031.
+  - Thumbprint: `54D7FCA1B3EA8B6CFA1FC379302E61EC0F253690`.
+  - Fica em `Cert:\CurrentUser\My` com a chave **não exportável**.
+  - A parte pública está em `%USERPROFILE%\.openscreen-signing\openscreen-yago-angelini.cer`.
+- **O que é assinado:** `electron-builder.json5` (`win.signtoolOptions` com `certificateSubjectName` e o carimbo de tempo da DigiCert, e `signExts` [.exe, .node]) assina:
+  - o instalador e o `Openscreen.exe`;
+  - os helpers (`wgc-capture`, `cursor-sampler`, `ocr-scan`, `whisper-stt-server`, `ffmpeg-shared`) e o addon do compositor.
+  - As DLLs ficam de fora: a `onnxruntime.dll` mantém a assinatura da Microsoft.
+- **Onde vale:** o Windows só confia no certificado onde ele foi importado como raiz, ou seja, o PC do usuário. Para outras pessoas continua "editor desconhecido".
+- **Para o usuário confiar:** importar o `.cer` em `Cert:\CurrentUser\Root` e em `Cert:\CurrentUser\TrustedPublisher`. É ele que faz isso, porque mexe em configuração de segurança.
+- **Para o agente:** sem esse certificado na máquina, o `build:win` falha ao assinar. Numa máquina nova, crie outro com `New-SelfSignedCertificate -Type CodeSigningCert` e o mesmo Subject.
+- **Ao extrair o `winCodeSign`,** o 7-Zip reclama de links simbólicos de arquivos do macOS ("A required privilege is not held"). É inofensivo no Windows: o `signtool` é extraído e assina.
+- **Conferir a assinatura:** `Get-AuthenticodeSignature` em cada `.exe`. Antes de o usuário confiar no certificado, o status sai `UnknownError`; depois, `Valid`.
+
 ## Armadilhas já encontradas
 
 - **Imports `@/` no main.** Módulos que o processo main importa precisam de imports relativos: `keystrokes.ts`, que o `document-service` usa, e `zoomMath/constants.ts`, que o agente e o MCP leem. Só o `build-vite` pega isso.
