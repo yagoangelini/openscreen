@@ -87,6 +87,10 @@ export const wordSchema = z
 		// future TTS pass will read to know which words it has to speak.
 		originalText: z.string().optional(),
 		source: z.enum(["asr", "user", "synth"]).optional(),
+		// Who said it, from the take's voice and computer stems (`transcription/speakers.ts`):
+		// "mic" is the person recording, "system" the computer's sound (a call's guest). Additive
+		// like `source`: absent on every older document and on a take without stems.
+		speaker: z.enum(["mic", "system"]).optional(),
 	})
 	.refine((data) => data.endSec >= data.startSec, {
 		message: "endSec must be greater than or equal to startSec",
@@ -101,6 +105,8 @@ export const transcriptSegmentSchema = z
 		endSec: z.number().nonnegative(),
 		text: z.string(),
 		wordIds: z.array(z.string().min(1)).default([]),
+		// The speaker holding most of the segment's time; see `wordSchema.speaker`.
+		speaker: z.enum(["mic", "system"]).optional(),
 	})
 	.refine((data) => data.endSec >= data.startSec, {
 		message: "endSec must be greater than or equal to startSec",

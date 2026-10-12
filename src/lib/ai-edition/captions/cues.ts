@@ -29,11 +29,13 @@ import {
 	type TranscriptPlacement,
 } from "../timeline/aggregated-transcript";
 import { removedRawSpans } from "../timeline/programme-time";
+import { type Speaker, transcriptHasTwoSpeakers } from "../transcription/speakers";
 import {
 	type CaptionAnchorV,
 	type CaptionSettings,
 	captionBackgroundCss,
 	captionBoxRect,
+	DEFAULT_SPEAKER_NAMES,
 	resolveCaptionLane,
 } from "./settings";
 import { type CaptionTranslations, captionTranslationUnits } from "./translations";
@@ -113,6 +115,15 @@ export function captionLinesForAsset(
 	const polish = (lines: CaptionSegment[]) =>
 		finalizeCaptionSegmentsForPlayback(dedupeAdjacentCaptionRepeats(lines));
 
+	if (
+		settings.language === null &&
+		settings.speakerLabels &&
+		transcript.words.length > 0 &&
+		transcriptHasTwoSpeakers(transcript)
+	) {
+		return polish(speakerLabelledLines(transcript, settings));
+	}
+
 	const stream =
 		settings.language === null
 			? originalWordStream(transcript)
@@ -120,6 +131,41 @@ export function captionLinesForAsset(
 
 	if (stream.length === 0) return [];
 	return polish(groupTimedCaptionWordsIntoLines(stream, minWords, maxWords));
+}
+
+/**
+ * The original words grouped into lines one speaker at a time -- a line never holds two
+ * people -- with the first line after each change prefixed "[Name] ". A word with no speaker
+ * belongs to whoever spoke before it.
+ */
+function speakerLabelledLines(
+	transcript: AxcutTranscript,
+	settings: CaptionSettings,
+): CaptionSegment[] {
+	const names: Record<Speaker, string> = {
+		mic: settings.speakerNameMic.trim() || DEFAULT_SPEAKER_NAMES.mic,
+		system: settings.speakerNameSystem.trim() || DEFAULT_SPEAKER_NAMES.system,
+	};
+	const runs: Array<{ speaker: Speaker; words: CaptionSegment[] }> = [];
+	let current: Speaker | undefined;
+	for (const word of transcript.words) {
+		if (!word.text.trim()) continue;
+		const speaker = word.speaker ?? current ?? "mic";
+		const segment = { startSec: word.startSec, endSec: word.endSec, text: word.text };
+		const run = runs[runs.length - 1];
+		if (run && run.speaker === speaker) run.words.push(segment);
+		else runs.push({ speaker, words: [segment] });
+		current = speaker;
+	}
+	return runs.flatMap((run) =>
+		groupTimedCaptionWordsIntoLines(
+			run.words,
+			settings.minWordsPerLine,
+			settings.maxWordsPerLine,
+		).map((line, index) =>
+			index === 0 ? { ...line, text: `[${names[run.speaker]}] ${line.text.trim()}` } : line,
+		),
+	);
 }
 
 function originalWordStream(transcript: AxcutTranscript): CaptionSegment[] {

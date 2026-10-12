@@ -118,7 +118,11 @@ export async function transcribeAsset(
 	// Same clock as the video, so the timings need nothing. A stem that has gone missing or
 	// will not decode is no reason to fail the transcript: the take's own track holds the
 	// same voice, with the computer under it.
-	const voicePath = asset.audioStems?.voicePath;
+	//
+	// Unless the user asked for the guest too ("transcribe the computer's sound"): then the
+	// mixed track, which holds both sides of a call, and the stems only say who spoke
+	// (`transcription/speakers.ts`, run by the transcription store).
+	const voicePath = prefs.transcribeGuestAudio ? undefined : asset.audioStems?.voicePath;
 	const fromFile = voicePath
 		? transcribeFile(voicePath).catch((error: unknown) => {
 				const message = error instanceof Error ? error.message : String(error);
