@@ -114,6 +114,7 @@ function ProviderSettings({ open, onClose }: ProviderSettingsProps) {
 				baseUrl: existing?.baseUrl ?? def.baseUrl,
 				reasoningEffort: existing?.reasoningEffort,
 				allowAgentEdits: existing?.allowAgentEdits,
+				requireAgentEditApproval: existing?.requireAgentEditApproval,
 			};
 		});
 		setMode("form");
@@ -524,6 +525,33 @@ function ProviderForm({
 						}
 					/>
 					{te("providerSettings.allowAgentEdits")}
+				</label>
+				{/* On by default: a turn that edits the project is shown as a proposal in the chat
+				    and written only on "Apply". Meaningless while edits are off, hence disabled. */}
+				<label
+					style={{
+						display: "flex",
+						alignItems: "center",
+						gap: 10,
+						marginTop: 8,
+						font: "500 13px var(--font-body)",
+						color: "var(--fg-2)",
+						cursor: "pointer",
+					}}
+				>
+					<button
+						type="button"
+						className={`${styles.toggle} ${config?.requireAgentEditApproval !== false ? styles.isOn : ""}`}
+						aria-pressed={config?.requireAgentEditApproval !== false}
+						disabled={busy || config?.allowAgentEdits === false}
+						onClick={() =>
+							setConfig({
+								...(config ?? { provider: def.id, model: def.defaultModel }),
+								requireAgentEditApproval: config?.requireAgentEditApproval === false,
+							})
+						}
+					/>
+					{te("providerSettings.requireAgentEditApproval")}
 				</label>
 			</Field>
 

@@ -219,6 +219,11 @@ const DECLARED: WritePath[] = [
 		"state",
 		"unrecorded",
 	),
+	// The persist that follows "Desfazer esta resposta" on an agent reply: the same
+	// undo as Ctrl+Z, so the same rule as `NewEditorShell`'s persist above. Recording
+	// it would undo the undo. The turn's own write is the `applyAgentDocumentIfCurrent`
+	// save above -- one entry per reply, however many tool calls it made.
+	w("src/lib/ai-edition/store/agentTurnUndo.ts", "undoAgentTurn", "save", "automatic"),
 
 	// Linking the camera track found next to a newly added asset. Part of the
 	// import, not an edit of its own.

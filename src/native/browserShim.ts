@@ -293,6 +293,7 @@ function createShimBridgeClient() {
 		baseUrl?: string;
 		reasoningEffort?: string;
 		allowAgentEdits?: boolean;
+		requireAgentEditApproval?: boolean;
 	};
 	const credentialsByProvider = new Map<string, { apiKey: string }>();
 	let activeConfig: ShimLlmConfig | null = null;
