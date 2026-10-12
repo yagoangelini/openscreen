@@ -221,6 +221,15 @@ pub struct SceneEffects {
     /// ne s'applique qu'aux zooms inclinés, où il suit l'angle réel.
     #[serde(default = "default_true")]
     pub depth_of_field: bool,
+    /// "Dolly": 0..1, how far the whole composition (screen, frame, camera) pushes in with each
+    /// zoom, on the zoom's own envelope, and pulls back out with it — up to
+    /// `frame_geometry::DOLLY_MAX`. The wallpaper stays: it is the far plane. 0 / absent: off.
+    #[serde(default)]
+    pub dolly: f32,
+    /// "Inclinar para o clique": a flat screen leans slightly toward each click, then eases
+    /// back (`regions::click_lean`). `#[serde(default)]`: off, every scene written before it.
+    #[serde(default)]
+    pub lean_to_clicks: bool,
 }
 
 fn default_true() -> bool {

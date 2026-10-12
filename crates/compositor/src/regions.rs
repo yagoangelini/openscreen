@@ -1688,6 +1688,51 @@ pub fn click_press(
         .clamp(-1.0, 1.0)
 }
 
+/// "Inclinar para o clique": how far a flat screen leans toward a click, in degrees X/Y, for a
+/// click at the edge of the visible cut. Under `DYNAMIC_TILT_BUDGET`, the angles a tilt preset
+/// moves by: a lean, not a turn.
+pub const CLICK_LEAN_DEG: [f32; 2] = [1.6, 2.6];
+/// The lean's span after a click: in over 0.35 s, held, back by 1.8 s.
+pub const CLICK_LEAN_WINDOW_S: f32 = 1.8;
+
+/// The lean's envelope, `tau` seconds after the click: smooth in, smooth out, 0 outside.
+pub fn click_lean_envelope(tau: f32) -> f32 {
+    if !(0.0..CLICK_LEAN_WINDOW_S).contains(&tau) {
+        return 0.0;
+    }
+    smoothstep(0.0, 0.35, tau) * (1.0 - smoothstep(0.9, CLICK_LEAN_WINDOW_S, tau))
+}
+
+/// The lean toward the recent clicks at `t`, degrees X/Y/Z, to ADD to a flat screen's rotation
+/// (`FrameGeometry::zoom_rotation_dyn`). The opposite sense of `click_impact`: the clicked side
+/// comes toward the viewer — the camera leans in. Same gates for the clicks (`window`, `aim`),
+/// each axis bounded to one lean. A pure function of `t`: no state between frames.
+pub fn click_lean(
+    t: f32,
+    track: &CursorTrack,
+    window: [f32; 2],
+    aim: impl Fn((f32, f32)) -> Option<[f32; 2]>,
+) -> [f32; 3] {
+    let mut sum = [0.0f32; 2];
+    for &tc in track.clicks_between(t - CLICK_LEAN_WINDOW_S, t) {
+        if tc < window[0] || tc >= window[1] {
+            continue;
+        }
+        let Some([fx, fy]) = track.at(tc).and_then(&aim) else {
+            continue;
+        };
+        let (dx, dy) = ((2.0 * fx - 1.0).clamp(-1.0, 1.0), (2.0 * fy - 1.0).clamp(-1.0, 1.0));
+        let e = click_lean_envelope(t - tc);
+        sum[0] += e * dy;
+        sum[1] -= e * dx;
+    }
+    [
+        CLICK_LEAN_DEG[0] * sum[0].clamp(-1.0, 1.0),
+        CLICK_LEAN_DEG[1] * sum[1].clamp(-1.0, 1.0),
+        0.0,
+    ]
+}
+
 /// Le point `(u, v)` du carré unité par l'homographie qui l'envoie sur `c` (TL, TR, BR, BL) :
 /// la forme de Heckbert, coordonnées relatives à TL. Miroir de `quad_inverse_projective` des
 /// shaders, qui la résout à l'envers. En `f64` : l'appelant la prolonge hors du carré.
@@ -2991,6 +3036,25 @@ mod tilt_tests {
     }
 
     const WHOLE: [f32; 2] = [0.0, 100.0];
+
+    #[test]
+    fn the_screen_leans_toward_a_click_and_back() {
+        // A click at the right edge, half way down: the right side comes toward the viewer
+        // (-Y, the opposite of the impact's +Y), nothing on X.
+        let track = still(1.0, 0.5, vec![1.0]);
+        assert_eq!(click_lean(0.99, &track, WHOLE, full_aim), [0.0; 3], "before the click");
+        let held = click_lean(1.6, &track, WHOLE, full_aim);
+        assert!((held[1] + CLICK_LEAN_DEG[1]).abs() < 1e-3, "{held:?}");
+        assert!(held[0].abs() < 1e-3, "{held:?}");
+        let rising = click_lean(1.1, &track, WHOLE, full_aim)[1];
+        assert!(rising < 0.0 && rising > held[1], "{rising}");
+        assert_eq!(click_lean(1.0 + CLICK_LEAN_WINDOW_S, &track, WHOLE, full_aim), [0.0; 3], "back");
+        // Under the tilt budget, so a lean never reads as a preset's turn.
+        assert!(CLICK_LEAN_DEG[0] <= DYNAMIC_TILT_BUDGET[0] && CLICK_LEAN_DEG[1] <= DYNAMIC_TILT_BUDGET[1]);
+        // Two clicks on the same side never lean further than one.
+        let double = still(1.0, 0.5, vec![1.0, 1.2]);
+        assert!(click_lean(1.6, &double, WHOLE, full_aim)[1] >= -CLICK_LEAN_DEG[1] - 1e-4);
+    }
 
     /// Clic à droite → +Y ; en bas → −X ; au contact, le côté cliqué recule (z diminue).
     #[test]

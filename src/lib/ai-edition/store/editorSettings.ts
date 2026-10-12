@@ -110,6 +110,10 @@ export interface EditorSettingsSnapshot {
 	backgroundBlur: number;
 	motionBlurAmount: number;
 	depthOfField: boolean;
+	/** "Dolly": 0..1, the composition pushes in with each zoom (`frame_geometry::DOLLY_MAX`). */
+	dollyAmount: number;
+	/** "Inclinar para o clique": a flat screen leans toward each click (`regions::click_lean`). */
+	leanToClicks: boolean;
 	borderRadius: number;
 	padding: number;
 	cropRegion: CropRegion;
@@ -163,6 +167,8 @@ export const DEFAULT_EDITOR_SETTINGS: EditorSettingsSnapshot = {
 	systemGainDb: 0,
 	voiceEnhance: false,
 	voiceEnhanceStrength: 0.8,
+	dollyAmount: 0,
+	leanToClicks: false,
 	formatFollowCursor: null,
 	autoZoom: DEFAULT_AUTO_ZOOM_SETTINGS,
 };
@@ -181,6 +187,8 @@ interface LegacyShape {
 	showBlur?: boolean;
 	motionBlurAmount?: number;
 	depthOfField?: boolean;
+	dollyAmount?: number;
+	leanToClicks?: boolean;
 	borderRadius?: number;
 	padding?: number;
 	cropRegion?: CropRegion;
@@ -329,6 +337,8 @@ export function getEditorSettings(doc: AxcutDocument | null | undefined): Editor
 			defaults.motionBlurAmount,
 		),
 		depthOfField: bool(legacy?.depthOfField, DEFAULT_EDITOR_SETTINGS.depthOfField),
+		dollyAmount: Math.min(1, Math.max(0, num(legacy?.dollyAmount, 0))),
+		leanToClicks: bool(legacy?.leanToClicks, false),
 		borderRadius: readBounded(legacy?.borderRadius, "borderRadius", defaults.borderRadius),
 		padding: readBounded(legacy?.padding, "padding", defaults.padding),
 		cropRegion: legacy?.cropRegion ?? DEFAULT_EDITOR_SETTINGS.cropRegion,
@@ -402,6 +412,8 @@ export interface EditorSettingsPatch {
 	backgroundBlur?: number;
 	motionBlurAmount?: number;
 	depthOfField?: boolean;
+	dollyAmount?: number;
+	leanToClicks?: boolean;
 	borderRadius?: number;
 	padding?: number;
 	cropRegion?: CropRegion;

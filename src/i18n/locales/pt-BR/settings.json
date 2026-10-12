@@ -148,7 +148,11 @@
 		"shadowNone": "Nenhuma",
 		"shadowLight": "Leve",
 		"shadowMedium": "Média",
-		"shadowStrong": "Forte"
+		"shadowStrong": "Forte",
+		"dolly": "Aproximação nos zooms",
+		"dollyTip": "A composição inteira (tela, moldura e câmera) chega um pouco mais perto a cada zoom e volta quando ele termina; o fundo fica parado. O desfoque de movimento age nela como no zoom.",
+		"leanToClicks": "Inclinar para o clique",
+		"leanToClicksTip": "A tela se inclina um pouco em 3D na direção de cada clique e depois volta. Só com a tela reta e o ponteiro visível."
 	},
 	"stylePresets": {
 		"button": "Predefinições",

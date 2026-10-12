@@ -148,7 +148,11 @@
 		"shadowNone": "无",
 		"shadowLight": "轻",
 		"shadowMedium": "中",
-		"shadowStrong": "强"
+		"shadowStrong": "强",
+		"dolly": "Dolly on zooms",
+		"dollyTip": "The whole composition (screen, frame and camera) moves slightly toward the viewer as each zoom comes in, and back as it ends; the background stays. Motion blur blurs it like the zoom.",
+		"leanToClicks": "Lean toward clicks",
+		"leanToClicksTip": "The screen tilts slightly toward each click in 3D, then eases back. Only on a flat screen, with the pointer shown."
 	},
 	"stylePresets": {
 		"button": "预设",

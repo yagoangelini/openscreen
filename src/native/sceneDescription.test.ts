@@ -113,6 +113,19 @@ function makeDoc(
 
 // --- voice enhancement -----------------------------------------------------
 
+describe("buildSceneDescription 3D camera moves", () => {
+	it("omits dolly and lean while off, the default, and carries them when set", () => {
+		const off = buildSceneDescription(makeDoc()).effects;
+		expect(off.dolly).toBeUndefined();
+		expect(off.leanToClicks).toBeUndefined();
+		const on = buildSceneDescription(
+			makeDoc({ legacyEditor: { dollyAmount: 0.6, leanToClicks: true } }),
+		).effects;
+		expect(on.dolly).toBe(0.6);
+		expect(on.leanToClicks).toBe(true);
+	});
+});
+
 describe("buildSceneDescription.voiceEnhance", () => {
 	it("is absent while off, the default", () => {
 		expect(buildSceneDescription(makeDoc()).voiceEnhance).toBeUndefined();

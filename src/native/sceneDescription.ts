@@ -488,6 +488,10 @@ export interface SceneEffects {
 	 * the native side only reads it where it draws a tilted plane.
 	 */
 	depthOfField: boolean;
+	/** "Dolly" (`SceneEffects::dolly`): 0..1, omitted at 0. */
+	dolly?: number;
+	/** "Inclinar para o clique" (`SceneEffects::lean_to_clicks`): omitted when off. */
+	leanToClicks?: boolean;
 }
 
 /** Cursor rendering, from the editor settings. */
@@ -1548,6 +1552,8 @@ export function buildSceneDescription(
 				? { frameTheme: settings.frameTheme }
 				: {}),
 			depthOfField: settings.depthOfField,
+			...(settings.dollyAmount > 0 ? { dolly: settings.dollyAmount } : {}),
+			...(settings.leanToClicks ? { leanToClicks: true } : {}),
 		},
 		cursor: {
 			show: settings.cursorShow,
