@@ -1,5 +1,6 @@
 import type { AxcutDocument } from "../schema";
 import { ensureDocument } from "../schema";
+import { type AgentTurnUndoHandle, captureAgentTurnUndo } from "./agentTurnUndo";
 import { useProjectStore } from "./projectStore";
 
 export type AgentDocumentApplyResult = "applied" | "conflict" | "save-failed" | "no-live-document";
@@ -72,6 +73,12 @@ export interface AgentTurn<T> {
 	 * was actually given. `ignoreConflict` is the user answering the conflict toast.
 	 */
 	applyDocument: (options?: { ignoreConflict?: boolean }) => Promise<AgentDocumentApplyResult>;
+	/**
+	 * The undo entry this turn's apply pushed, once `applyDocument` answered "applied";
+	 * null before that. Captured inside `applyDocument`, right after the save resolves,
+	 * so no other write can record in between -- see `agentTurnUndo.ts`.
+	 */
+	undoHandle: () => AgentTurnUndoHandle | null;
 }
 
 /**
@@ -91,6 +98,7 @@ export async function runAgentTurn<T extends { document?: unknown }>(
 	const { document, revision } = useProjectStore.getState();
 	const snapshot = document ?? undefined;
 	const result = await run(snapshot);
+	let undoHandle: AgentTurnUndoHandle | null = null;
 	return {
 		result,
 		applyDocument: async ({ ignoreConflict = false } = {}) => {
@@ -98,7 +106,20 @@ export async function runAgentTurn<T extends { document?: unknown }>(
 			// still carries the real project id. If it edited that and the revision happened
 			// to match, applying would write a near-empty document over a real project.
 			if (!snapshot) return "no-live-document";
-			return applyAgentDocumentIfCurrent(result.document, ignoreConflict ? undefined : revision);
+			// A turn held for approval can outlive the project it was made for. Revisions
+			// restart on every load, so the revision guard alone could match by accident --
+			// and "apply anyway" skips it entirely. Another project open means this document
+			// is not live, whatever the user answers.
+			if (useProjectStore.getState().projectId !== snapshot.project.id) {
+				return "no-live-document";
+			}
+			const applied = await applyAgentDocumentIfCurrent(
+				result.document,
+				ignoreConflict ? undefined : revision,
+			);
+			if (applied === "applied") undoHandle = captureAgentTurnUndo();
+			return applied;
 		},
+		undoHandle: () => undoHandle,
 	};
 }
