@@ -249,6 +249,66 @@ As decisões e o porquê de cada fase estão em [`PLANO-FORK.md`](PLANO-FORK.md)
 - **E-3, Cancelar durante o download do modelo para o download.** O `ensureModels` do `load()` não recebia sinal, e o `transcribe()` lia o `cancelEpoch` **depois** do `init()`, então um cancelamento durante o download ou a carga já estava contado e a execução seguia. Agora `ensureModels` aceita `signal` (aborta o arquivo em andamento, cujo `.partial` o `ensureFile` já apaga, e não começa o próximo), o `SttManager` guarda o download (`modelDownload`) e o `cancel()` aborta; um download abortado não cai para o small (que baixaria o outro modelo), não sobe o helper, e o `init` rejeitado não fica em cache. O `transcribe()` lê o epoch antes do `init()` e confere depois. Um modelo que terminou de baixar fica no disco; um helper que terminou de carregar fica quente para a próxima. **O download não é retomável:** o `.partial` some no cancelamento e a próxima tentativa começa do zero. Testes em `electron/stt/index.test.ts` ("cancel during setup") e `modelManager.test.ts`.
 - **E-5, a pergunta "Gravação em andamento" fecha quando o take acaba por outro caminho.** `createQuitWhileRecordingPrompt` ganhou `dismiss()`: o `ask` recebe um `AbortSignal` que vai no `showMessageBox` (o Electron fecha o diálogo como se fosse cancelado), e o `main.ts` chama `dismiss()` quando o renderer diz que a gravação parou. Um "Parar e abrir" que corre com o dismiss não para nada. No macOS o `signal` não fecha um diálogo sem janela dona (limite do Electron). Testes em `quitWhileRecording.test.ts`. **Não medido** numa instância real.
 
+**Auto-zoom diretor** (pedido de 12/10, branch `feat/autozoom-director`). O motivo: num take real de 51 s, o auto-zoom deu 2 zooms. O usuário abria os menus do Edge passando o mouse, sem clicar, e o algoritmo perdeu tudo isso. Um dos zooms ainda caiu no botão do HUD, que é invisível no vídeo.
+
+- **Por que o planner antigo errava:**
+  - o menu alto do Edge (72 % da altura) não cabia num zoom, e o plano inteiro era descartado;
+  - um ponteiro parado não contava, nem com um submenu abrindo embaixo dele;
+  - o clique em "Exibir aplicativos" fechava o menu, contava como navegação e era descartado;
+  - o clique no HUD (Rosto) virava zoom;
+  - os pedaços "Tela cheia" não chegaram ao documento, então o trecho só de câmera não estava reservado.
+- **O pipeline novo** (`timeline/zoom-director.ts`, sinais em `zoom-signals.ts`, a fachada continua em `zoom-suggestions.ts`). São quatro passos.
+  1. **Beats.** Cada momento em que o espectador deve olhar para um lugar vira um beat, com a caixa que precisa aparecer e a escala que ele merece.
+     - Um clique vira dois beats: o que foi apertado, e o que ele abriu (popup do UIA ou mudança nos quadros). Assim a câmera pode ir do item clicado ao diálogo que abriu no meio da tela.
+     - Um ponteiro parado (`rests`, separado nos cliques) só vale com evidência: um menu abrindo por hover, estar dentro de um menu aberto, a tela respondendo perto do ponteiro (destaque, tooltip, menu web), a mãozinha, ou uma palavra de apontar.
+     - Também viram beats as varreduras lentas (as longas, em trechos) e a digitação.
+  2. **Planos.** Programação dinâmica sobre os beats.
+     - Cada plano é o enquadramento que mostra todos os seus beats.
+     - O custo é o que cada beat perde por aparecer menor do que merece, mais `MOVE_COST` por movimento de câmera.
+     - Um plano curto paga um custo de ritmo (`CALM_SHOT_MS`, `PACE_FACTOR`).
+     - Uma sequência que nenhum enquadramento segura pode virar um plano que **segue o ponteiro** (`FOLLOW_SCALE`, `FOLLOW_COST`).
+     - Alvo pequeno de tamanho conhecido chega mais perto (×4/3 do máximo, teto 2,2). Clique sem alvo conhecido fica no máximo das configurações.
+  3. **Tempo.**
+     - O zoom chega antes da ação: na aproximação da mão, ou na palavra que a anuncia.
+     - Ele segura enquanto o usuário age e fala.
+     - Ele sai depois de uma cauda, quando o ponteiro sai do quadro, quando o item do menu é escolhido, ou logo depois de uma navegação.
+  4. **Câmera.** Entre planos próximos, a câmera faz pan com zoom: a escala muda no caminho, e não há zoom out e zoom in. Ela só volta à tela inteira num plano aberto de verdade (`minWideSec`). Depois de uma troca de página, mostra a página nova inteira (`OVERVIEW_MS`) antes do próximo zoom.
+- **Quadros** (`electron/media/screenActivity.ts`, diff em `timeline/screenActivity.ts`):
+  - O ffmpeg decodifica o take uma vez em 160×90 cinza a 8 fps, e o main guarda só as caixas que mudaram.
+  - O resultado fica em cache em `userData/screen-activity`.
+  - IPC `get-screen-activity`; o renderer usa `getScreenActivityForZooms` (`framePopups.ts`).
+  - O import já começa o scan junto com a telemetria.
+  - A troca de página é detectada por `isPageChange`: muda muito, ou muda o suficiente espalhado pela tela. A tela escurecida de um diálogo não conta, porque um popup abre junto.
+  - **Medido:** 2,6–3,0 s para os 51 s (cerca de 33 s por take de 10 min), num processo filho em prioridade abaixo do normal. O planejamento leva cerca de 10 ms.
+- **Seguir o ponteiro por zoom:**
+  - O plano que segue sai com `follow: true` e é gravado como `focusMode: "auto"` num zoom `source: "auto"`.
+  - `resolveZoomRendering` agora respeita esse modo também na câmera fixa, com a lei calma do modo.
+  - Nada mudou no compositor; a paridade vem do caminho único.
+  - No preview TS, o pan encadeado sai da vista de seguir, e não do ponteiro cru. Isso igualou ao `resolve_focus` do Rust (teste em `calmMotion.parity.test.ts`).
+- **Respeito à timeline:**
+  - Os trechos "Rosto" são lidos do `asset.cameraLayout` do take, mesmo sem os pedaços no documento. Nenhum beat entra neles, e o clique logo antes de uma troca de layout (o botão do HUD) é ignorado.
+  - Os pedaços "Tela cheia" do documento continuam reservados, agora com 1 s de tela aberta em volta (`CAMERA_SPAN_WIDE_MS`), e não um plano aberto inteiro.
+  - O clique de parar fica de fora até 1,5 s antes do fim (antes 1 s; o sampler segue 1,2 s depois do clique).
+  - Zooms manuais nunca mudam.
+- **Entradas:**
+  - auto-zoom depois de gravar (`recordingImport.ts`);
+  - replanejamento pela transcrição (`autoZoomReplan.ts`);
+  - varinha da timeline (`V4Timeline.tsx`);
+  - `openscreen export --auto-zoom` (`CliExportRunner.tsx`).
+  Todas passam o leitor de quadros. Sem ele (macOS, Linux, falha), o plano sai só do cursor e dos popups.
+- **Medido no take de 12/10** (corte do diretor e pontuador fora do repo):
+  - O antigo cobriu 3 de 8 momentos, com nota de enquadramento 34/100, 9,8 s de zoom no trecho Rosto, e metade do tempo com zoom mostrando nada.
+  - O novo cobriu 8 de 8, com nota 99/100, 0,5 s de zoom fora do lugar (rampa) e 7 movimentos de câmera, os mesmos 7 do corte manual.
+  - Sem os quadros, cobre 8 de 8, com 2,3 s fora do lugar.
+  - Fixture destilada: `timeline/__fixtures__/edge-menus-take.json`, testada em `zoom-director.fixture.test.ts`.
+- **Botões de ajuste:** todos estão no topo de `zoom-director.ts`, com comentário. Os principais:
+  - escala: `FRAME_MARGIN`, `CLOSE_UP_FACTOR`, `SMALL_TARGET_SIDE`;
+  - custos: `MOVE_COST`, `CALM_SHOT_MS`, `PACE_FACTOR`, `FOLLOW_COST`;
+  - ponteiro parado: `DWELL_MIN_MS`, `DWELL_EVIDENCE`, `DWELL_QUIET_HOLD_MS`;
+  - popups: `POPUP_REACH`, `WHOLE_POPUP_MIN_SCALE`;
+  - troca de página: `NAVIGATION_SHARE`, `NAVIGATION_SPREAD_*`;
+  - tempo: `OVERVIEW_MS`, `MAX_IDLE_HOLD_MS` e `MAX_TALKING_HOLD_MS`.
+
 Os PRs do fork são abertos e mesclados com `gh pr merge N --merge`, sem CI. Antes do merge, rode todo o portão de validação abaixo.
 
 ## Onde mora cada recurso do fork
@@ -274,9 +334,9 @@ Os PRs do fork são abertos e mesclados com `gh pr merge N --merge`, sem CI. Ant
 | Palavras sensíveis próprias | `parseSensitiveTerms` / `foldForMatch` / `replaceAutoRedactions` em `redaction.ts`; `rescanAutoRedactions` em `recordingImport.ts`; UI no `MediaStage.tsx`; pref `autoRedactTerms` | lista vazia |
 | Limpar fala | `src/lib/ai-edition/timeline/speechCleanup.ts` (`planSpeechCleanup`, `applySpeechCleanupPicks`); `SpeechCleanupPanel.tsx`; botão no `TranscriptPane` (`RightPanes.tsx`); escrita `handleApplySpeechCleanup` (`NewEditorShell.tsx`); prefs `speechFillers`, `speechContextualFillers`, `speechCleanupAggressive`, `speechSilenceMinSec`, `speechSilenceKeepSec` (`speechCleanupOptions` em `userPreferences.ts`) | conservador, só pela revisão |
 | Quem está falando | `src/lib/ai-edition/transcription/speakers.ts` (`labelSpeakers`) e `speakerStems.ts`; `speaker` em `wordSchema` / `transcriptSegmentSchema`; rótulos `SpeakerLabel` (`RightPanes.tsx`); legendas `speakerLabels` / `speakerNameMic` / `speakerNameSystem` (`captions/settings.ts`, `speakerLabelledLines` em `cues.ts`); pref `transcribeGuestAudio` (`transcribe.ts`) | rótulos automáticos; legenda e trilha mista desligadas |
-| Menus de sites no auto-zoom | `ocr-scan.exe --popups`; `src/lib/ai-edition/timeline/framePopups.ts` | ligado |
-| Auto-zoom calmo | `timeline/zoom-suggestions.ts` (planner), `zoom-motion.ts` (`resolveZoomRendering`, `MIN_WIDE_SEC_OPTIONS`), `AutoZoomSettings` | calmo, 2,5 s |
-| Auto-zoom guiado pela fala | `timeline/speechCues.ts` (palavras de apontar, frases, rolagem); `zoom-suggestions.ts` (`words` / `wordsByAssetId`, `speechAwareEnd`); `apply-auto-zooms.ts` (`transcriptWordsByAssetId`, `transcriptSignature`, `legacyEditor.autoZoomTranscript`); `autoZoomReplan.ts`; janela pós-gravação `TranscriptAutoZoomDialog.tsx`; aviso `TranscriptAutoZoomBar.tsx` no painel da transcrição; pref `autoZoomAfterRecording` | pergunta depois de gravar |
+| Menus de sites no auto-zoom | `ocr-scan.exe --popups`; `src/lib/ai-edition/timeline/framePopups.ts`; e o scan de quadros do take inteiro, `electron/media/screenActivity.ts` + `timeline/screenActivity.ts` | ligado |
+| Auto-zoom diretor | `timeline/zoom-director.ts` (beats → planos por programação dinâmica → tempo → câmera; botões no topo), `zoom-signals.ts`, `zoom-suggestions.ts` (fachada, clipes, reservas), `zoom-motion.ts` (`resolveZoomRendering`, `MIN_WIDE_SEC_OPTIONS`), `AutoZoomSettings` | calmo, 2,5 s |
+| Auto-zoom guiado pela fala | `timeline/speechCues.ts` (palavras de apontar, frases, rolagem); `zoom-suggestions.ts` (`words` / `wordsByAssetId`); `zoom-director.ts` (`speechAwareEnd`, `talkingUntil`); `apply-auto-zooms.ts` (`transcriptWordsByAssetId`, `transcriptSignature`, `legacyEditor.autoZoomTranscript`); `autoZoomReplan.ts`; janela pós-gravação `TranscriptAutoZoomDialog.tsx`; aviso `TranscriptAutoZoomBar.tsx` no painel da transcrição; pref `autoZoomAfterRecording` | pergunta depois de gravar |
 | Acelerar esperas | `timeline/waits.ts` (`WAIT_SPEED = 4`); Auto-enhance no `V4Timeline` | só sugere |
 | Glossário | `src/lib/ai-edition/transcription/glossary.ts` (`upgradeStoredGlossary` troca um padrão antigo não editado); aplicado em `transcriptionStore.ts`; pref `glossary` | lista padrão M365 e IA |
 | Modelo de transcrição | `WHISPER_MODELS` em `electron/stt/modelManager.ts`; escolha em `electron/stt/whisperDevices.ts` (`resolveWhisperModel`, `--list-devices`); `prepare`/`load` em `electron/stt/index.ts`; `--dtw-preset` no helper (`electron/native/whisper-stt/src/main.cpp`); pref `transcriptionModel`; seletor no `MediaStage.tsx` | Automático: large-v3-turbo q8 numa GPU dedicada, small no resto |

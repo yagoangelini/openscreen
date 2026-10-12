@@ -98,6 +98,10 @@ interface Window {
 			videoPath: string,
 			timesMs: number[],
 		) => Promise<import("./recording/ocrScan").FrameChangesResult>;
+		/** Where the screen changed through a take, for the automatic zooms. */
+		getScreenActivity?: (
+			videoPath: string,
+		) => Promise<import("./media/screenActivity").ScreenActivityResult>;
 		/** OCR over a take, for the privacy blur: `ocr-scan.exe`'s NDJSON. Windows only. */
 		scanRecordingText?: (videoPath: string) => Promise<import("./recording/ocrScan").OcrScanResult>;
 		chooseRecordingsFolder: () => Promise<{ canceled: true } | { canceled: false; folder: string }>;

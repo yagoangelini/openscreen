@@ -184,25 +184,61 @@ cut. The plans are then settled over the whole timeline, every recording at once
 zooms must leave a wide shot between them, even across a cut, and the edit's first and
 last seconds stay wide.
 
-Within a clip the planner thinks in actions, not clicks: a click with the element it hit
-and the popup it opened (Windows input signals, see `cursor.md`), typing that follows it,
-and slow exploration without a click (a light zoom on the whole explored area). Actions
-close in time share one held shot; two shots too close for a real wide shot are joined,
-either by holding the framing (the next target is near the middle of the view) or by a
-pan, which `regions.rs` plays as a connected pan between the two regions. The zooms it
-writes carry `source: "auto"` and no focus mode of their own: how they move (camera mode,
-ramp length and easing, pan) is the project's auto-zoom settings, resolved at render time
-by `resolveZoomRendering` (`zoom-motion.ts`) into each region's `motion` and focus mode, so
-one setting switches them all. Zooms drawn by hand take the same motion, and the project's
-camera mode unless the region sets a focus mode of its own. How long the camera must stay
-wide before it may zoom in again is the `minWideSec` setting (2.5 s calm, or 1.5 s;
-`MIN_WIDE_SEC_OPTIONS`), carried into the planner as `PlanContext.minWideMs`. The sliders
-only act through *Replan*. On Windows the planner also sees the menus a web page draws, which
-no window event reports: `framePopups.ts` asks `ocr-scan.exe --popups` to compare the frame
-150 ms before each click with the frame 600 ms after it, and treats a changed box as a popup.
-That scan can take most of a minute on a long take, so it starts at import
-(`prefetchFreshRecordingTelemetry`) and is waited for off the editor's write queue; only
-the write that places the zooms queues behind the user's edits.
+Within a clip the planner is a director
+([`zoom-director.ts`](../../src/lib/ai-edition/timeline/zoom-director.ts), signals in
+`zoom-signals.ts`). It runs in four passes.
+
+1. **Beats.** It turns what the take recorded into beats: moments the viewer should look at
+   one place. Each beat has the box that must be seen and the scale it deserves.
+   - A click is two beats: what was pressed (the element it hit, the menu it was picked
+     from), and what it opened (a popup, or a change in the frames).
+   - A resting pointer is a beat only when something answers it: a menu opening on hover,
+     the pointer resting inside an open menu, a highlight or tooltip next to it in the
+     frames, a hand cursor, or a pointing word in the transcript.
+   - Slow sweeps and typing are beats too.
+2. **Shots.** The beats are cut into shots by dynamic programming. Each shot is the one
+   framing that shows all its beats. The cost is what each beat loses by being shown
+   smaller than it deserves, plus a cost per camera move, plus a pace cost for a shot shown
+   too briefly.
+   - A small target of known size goes closer than the settings' maximum.
+   - A run that no single framing holds, moving faster than a calm cut allows, may be one
+     shot that follows the pointer.
+3. **Timing.** A shot is fully in before its first action, and holds while the user acts and
+   speaks. It ends after a tail, when the pointer leaves the view, when a menu item is
+   picked, or right after the page is replaced.
+4. **Camera.** Shots too close for a real wide shot are joined: by holding, or by a pan that
+   `regions.rs` plays as a connected pan, its scale easing on the way. After a navigation,
+   the new page is shown whole (`OVERVIEW_MS`) before the next zoom.
+
+The zooms it writes carry `source: "auto"`, and no focus mode of their own except
+`"auto"` on a shot it made to follow the pointer. How they move is the project's auto-zoom
+settings: camera mode, ramp length and easing, and pan. `resolveZoomRendering`
+(`zoom-motion.ts`) resolves these at render time into each region's `motion` and focus
+mode, so one setting switches them all; a planner-made follow shot follows under every
+camera mode. Zooms drawn by hand take the same motion, and the project's camera mode unless
+the region sets a focus mode of its own.
+
+How long the camera must stay wide before it may zoom in again is the `minWideSec` setting
+(2.5 s calm, or 1.5 s; `MIN_WIDE_SEC_OPTIONS`). Around a camera-only span (the HUD's
+"face" layout, read from `asset.cameraLayout` even when its pieces never reached the
+document) the screen stays wide for `CAMERA_SPAN_WIDE_MS`, and the HUD click that switched
+the layout is not a click on screen. The sliders only act through *Replan*.
+
+On Windows the planner also sees what the frames show:
+
+- **Screen activity.** `electron/media/screenActivity.ts` decodes the take once with
+  ffmpeg, as a 160×90 grey grid at 8 fps. `timeline/screenActivity.ts` keeps only the boxes
+  that changed between frames. The result is cached per recording under
+  `userData/screen-activity`; it costs about 5 % of the take's length, below normal
+  priority.
+- **Web-page popups.** `framePopups.ts` asks `ocr-scan.exe --popups` to compare the frame
+  150 ms before each click with the frame 600 ms after it, and treats a changed box as a
+  popup.
+
+Both scans start at import (`prefetchFreshRecordingTelemetry`) and are waited for off the
+editor's write queue; only the write that places the zooms queues behind the user's edits.
+Without them (macOS, Linux, a failed scan), the plan comes from the pointer and the input
+signals alone.
 
 ### The same ambiguity in the transcript pane
 

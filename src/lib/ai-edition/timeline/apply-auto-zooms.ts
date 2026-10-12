@@ -8,11 +8,22 @@ import { createId } from "../document/ids";
 import type { AxcutAsset, AxcutDocument } from "../schema";
 import { getEditorSettings } from "../store/editorSettings";
 import { findAssetTranscript } from "../transcription/status";
+import type { ScreenActivity } from "./screenActivity";
 import type { SpokenWord } from "./speechCues";
 import { anchorRegionsWithDerivedMs } from "./timelineMap";
 import { autoZoomMotion, motionTransitionSec } from "./zoom-motion";
 import { effectiveZoomScale } from "./zoom-scale";
-import { type AutoZoomSuggestion, buildAutoZoomSuggestionsForClips } from "./zoom-suggestions";
+import {
+	type AssetZoomContext,
+	type AutoZoomSuggestion,
+	buildAutoZoomSuggestionsForClips,
+	CAMERA_SPAN_WIDE_MS,
+} from "./zoom-suggestions";
+
+/** Reads where a recording's screen changed (`getScreenActivity`); null when it cannot. */
+export type AutoZoomActivityReader = (
+	videoPath: string,
+) => Promise<ScreenActivity | null | undefined>;
 
 /** Which assets to read telemetry for. The wand takes every video on the document;
  *  the fresh-recording import narrows it to the take it is pending on, so a project
@@ -89,6 +100,7 @@ export async function collectAutoZoomSuggestionsForDocument(
 	document: AxcutDocument,
 	getTelemetry: (videoPath: string) => Promise<CursorTelemetryPoint[] | null | undefined>,
 	includeAsset: AutoZoomAssetFilter = () => true,
+	getActivity?: AutoZoomActivityReader,
 ): Promise<AutoZoomSuggestion[]> {
 	const assetsWithClips = document.assets.filter(
 		(asset) =>
@@ -105,12 +117,29 @@ export async function collectAutoZoomSuggestionsForDocument(
 			),
 		),
 	);
+	// The frames and the camera layout, beside the telemetry: what the screen did, and when it
+	// was not on screen at all. A scan that fails plans without it.
+	const contextByAssetId = new Map<string, AssetZoomContext>(
+		await Promise.all(
+			assetsWithClips.map(async (asset) => {
+				const activity = getActivity
+					? await getActivity(asset.originalPath).catch(() => null)
+					: undefined;
+				const context: AssetZoomContext = {
+					...(activity ? { activity } : {}),
+					...(asset.cameraLayout ? { cameraLayout: asset.cameraLayout } : {}),
+				};
+				return [asset.id, context] as const;
+			}),
+		),
+	);
 	const settings = getEditorSettings(document).autoZoom;
 	const motion = autoZoomMotion(settings);
 	return buildAutoZoomSuggestionsForClips({
 		telemetryByAssetId,
 		// What was said guides the zooms too, whenever the project has a transcript.
 		wordsByAssetId: transcriptWordsByAssetId(document),
+		contextByAssetId,
 		clips: document.timeline.clips,
 		settings,
 		existingRegions: [
@@ -135,13 +164,16 @@ export async function collectAutoZoomSuggestionsForDocument(
  * The Full Camera spans ("Rosto" in the HUD) as spans the planner keeps clear of: they show no
  * screen, so a zoom there zooms into nothing. Planned like a zoom already on the timeline with
  * no ramp of its own, so the screen also comes back wide for a moment before the first zoom
- * after one.
+ * after one: `CAMERA_SPAN_WIDE_MS`, not a whole wide shot, since the cut back to the screen is
+ * already a change of scene. (The take's recorded layout is read too, per recording, in case
+ * its pieces never made it onto the document.)
  */
 function cameraFullscreenReservations(document: AxcutDocument) {
 	return readCameraFullscreenRegions(document).map((run) => ({
 		startMs: run.startMs,
 		endMs: run.endMs,
 		rampMs: 0,
+		wideMs: CAMERA_SPAN_WIDE_MS,
 	}));
 }
 
@@ -183,6 +215,7 @@ export async function collectAutoZoomSuggestionsForLatestDocument(
 	readDocument: () => AxcutDocument | null,
 	getTelemetry: (videoPath: string) => Promise<CursorTelemetryPoint[] | null | undefined>,
 	includeAsset?: AutoZoomAssetFilter,
+	getActivity?: AutoZoomActivityReader,
 ): Promise<{ document: AxcutDocument; suggestions: AutoZoomSuggestion[] } | null> {
 	const start = readDocument();
 	if (!start) return null;
@@ -191,6 +224,7 @@ export async function collectAutoZoomSuggestionsForLatestDocument(
 		start,
 		getTelemetry,
 		includeAsset,
+		getActivity,
 	);
 	const latest = readDocument();
 	if (!latest) return null;
@@ -199,7 +233,12 @@ export async function collectAutoZoomSuggestionsForLatestDocument(
 	}
 	return {
 		document: latest,
-		suggestions: await collectAutoZoomSuggestionsForDocument(latest, getTelemetry, includeAsset),
+		suggestions: await collectAutoZoomSuggestionsForDocument(
+			latest,
+			getTelemetry,
+			includeAsset,
+			getActivity,
+		),
 	};
 }
 
@@ -221,7 +260,9 @@ export function appendAutoZoomSuggestions(
 					focus: { cx: suggestion.focus.cx, cy: suggestion.focus.cy },
 					// Automatic: how it moves (fixed, hybrid, following) is the project's auto-zoom
 					// camera, read at render time (`resolveZoomRendering`), so one control switches
-					// them all. Its own focus mode is left unset.
+					// them all. Its own focus mode is left unset, except on a shot the planner made
+					// to follow the pointer: that one follows under every camera mode.
+					...(suggestion.follow ? { focusMode: "auto" as const } : {}),
 					source: "auto" as const,
 				},
 			],

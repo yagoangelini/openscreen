@@ -44,7 +44,11 @@ import {
 	appendAutoZoomSuggestions,
 	collectAutoZoomSuggestionsForLatestDocument,
 } from "@/lib/ai-edition/timeline/apply-auto-zooms";
-import { getTelemetryWithFramePopups } from "@/lib/ai-edition/timeline/framePopups";
+import {
+	getScreenActivityForZooms,
+	getTelemetryWithFramePopups,
+} from "@/lib/ai-edition/timeline/framePopups";
+import type { ScreenActivity } from "@/lib/ai-edition/timeline/screenActivity";
 import { loadUserPreferences } from "@/lib/userPreferences";
 import { nativeBridgeClient } from "@/native/client";
 
@@ -137,6 +141,7 @@ export function consumeFreshRecordingAutoZoomPending(): boolean {
 	appliedFreshRecordingAutoZoomProjectId = null;
 	freshRecordingAutoZoomSaveChain = Promise.resolve();
 	freshTelemetryPrefetch = null;
+	freshActivityPrefetch = null;
 	return was;
 }
 
@@ -164,13 +169,35 @@ function freshRecordingTelemetry(videoPath: string): Promise<CursorTelemetryPoin
 }
 
 /**
- * Starts reading the pending take's telemetry, frame scan and all, and settles once it
+ * The fresh take's screen activity (where its frames changed), read once and started at
+ * import like the telemetry: a decode of the whole take, about 5 % of its length.
+ */
+let freshActivityPrefetch: { path: string; promise: Promise<ScreenActivity | null> } | null = null;
+
+function freshRecordingActivity(videoPath: string): Promise<ScreenActivity | null> {
+	if (freshActivityPrefetch?.path === videoPath) return freshActivityPrefetch.promise;
+	const promise = getScreenActivityForZooms(videoPath);
+	freshActivityPrefetch = { path: videoPath, promise };
+	// No answer is not one to keep: the next pass for this take tries again.
+	promise.then(
+		(activity) => {
+			if (!activity && freshActivityPrefetch?.promise === promise) freshActivityPrefetch = null;
+		},
+		() => {
+			if (freshActivityPrefetch?.promise === promise) freshActivityPrefetch = null;
+		},
+	);
+	return promise;
+}
+
+/**
+ * Starts reading the pending take's telemetry, frame scans and all, and settles once it
  * is in -- never rejecting: the pass that uses it sees a failure for itself.
  */
 export function prefetchFreshRecordingTelemetry(): Promise<void> {
 	const path = pendingFreshRecordingAutoZoomPath;
 	if (!pendingFreshRecordingAutoZoom || !path) return Promise.resolve();
-	return freshRecordingTelemetry(path).then(
+	return Promise.all([freshRecordingTelemetry(path), freshRecordingActivity(path)]).then(
 		() => undefined,
 		() => undefined,
 	);
@@ -179,6 +206,8 @@ export function prefetchFreshRecordingTelemetry(): Promise<void> {
 export type ApplyFreshRecordingAutoZoomsDeps = {
 	enabled?: boolean;
 	getTelemetry?: (videoPath: string) => Promise<CursorTelemetryPoint[] | null | undefined>;
+	/** Where the take's screen changed. Tests stub it. */
+	getActivity?: (videoPath: string) => Promise<ScreenActivity | null | undefined>;
 	createId?: (prefix: string) => string;
 	/** Deadline for this path's own write. Tests use a short one. */
 	saveTimeoutMs?: number;
@@ -332,6 +361,7 @@ export async function applyPendingFreshRecordingAutoZooms(
 		},
 		getTelemetry,
 		isPendingFreshRecordingAsset,
+		deps.getActivity ?? freshRecordingActivity,
 	);
 	if (!collected) return liveDocument(start);
 	if (collected.suggestions.length === 0) {

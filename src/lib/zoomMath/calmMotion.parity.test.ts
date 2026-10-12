@@ -112,3 +112,24 @@ describe("calm zoom motion: TS mirror against the renderer's golden table", () =
 		}
 	});
 });
+
+describe("a following automatic zoom chained to the next one", () => {
+	it("pans from where its following view is, not from the raw pointer", () => {
+		const following: ZoomRegion = {
+			...region("f", 1, 3, 1.5, [0.4, 0.5], CALM),
+			focusMode: "auto",
+		};
+		const next = region("n", 4.1, 6, 1.5, [0.7, 0.3], CALM);
+		const regions = [following, next];
+		const before = findDominantRegion(regions, 2999, {
+			connectZooms: true,
+			cursorTelemetry: TRACK,
+		});
+		const after = findDominantRegion(regions, 3001, { connectZooms: true, cursorTelemetry: TRACK });
+		const pointer = TRACK[Math.round(3 * 30)];
+		// The pan starts on the view the hold showed: no jump onto the pointer at its first frame.
+		expect(after.region?.focus.cx).toBeCloseTo(before.region?.focus.cx as number, 2);
+		expect(after.region?.focus.cy).toBeCloseTo(before.region?.focus.cy as number, 2);
+		expect(Math.abs((before.region?.focus.cx as number) - pointer.cx)).toBeGreaterThan(0.02);
+	});
+});

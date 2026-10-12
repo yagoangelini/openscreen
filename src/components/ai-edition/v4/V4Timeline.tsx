@@ -64,7 +64,10 @@ import type { useTimeline } from "@/lib/ai-edition/store/useTimeline";
 import { collectAutoZoomSuggestionsForLatestDocument } from "@/lib/ai-edition/timeline/apply-auto-zooms";
 import { hasAnyClipWithCamera } from "@/lib/ai-edition/timeline/camera";
 import { formatSec } from "@/lib/ai-edition/timeline/format";
-import { getTelemetryWithFramePopups } from "@/lib/ai-edition/timeline/framePopups";
+import {
+	getScreenActivityForZooms,
+	getTelemetryWithFramePopups,
+} from "@/lib/ai-edition/timeline/framePopups";
 import {
 	newRegionDurationSec,
 	setTimelineScale,
@@ -1641,6 +1644,8 @@ export function V4Timeline({
 					getTelemetryWithFramePopups(videoPath, (path) =>
 						nativeBridgeClient.cursor.getTelemetry(path),
 					),
+				undefined,
+				getScreenActivityForZooms,
 			);
 			const suggestions = collected?.suggestions ?? [];
 			if (suggestions.length === 0) {

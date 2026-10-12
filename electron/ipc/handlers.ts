@@ -95,6 +95,7 @@ import {
 } from "../media/cursorSidecar";
 import { findMediaLinksByFingerprint, registerMediaLinks } from "../media/mediaLinksRegistry";
 import { relinkProjectMedia } from "../media/projectMediaRelinker";
+import { getScreenActivity } from "../media/screenActivity";
 import { showOpenDialogOver, showSaveDialogOver } from "../messageBox";
 import {
 	type LinuxCaptureSourceKind,
@@ -5131,6 +5132,14 @@ export function registerIpcHandlers(
 			videoPath,
 			timesMs.filter((t): t is number => typeof t === "number").slice(0, 400),
 		);
+	});
+
+	// Where the screen changed through a take, for the automatic zooms. Recordings only.
+	ipcMain.handle("get-screen-activity", async (_, videoPath: unknown) => {
+		if (typeof videoPath !== "string" || !isInRecordingDirs(videoPath)) {
+			return { success: false, error: "Not a recording." };
+		}
+		return getScreenActivity(videoPath);
 	});
 
 	ipcMain.handle("open-notification-settings", async () => {

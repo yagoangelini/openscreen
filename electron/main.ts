@@ -71,6 +71,7 @@ import {
 } from "./launchMode";
 import { isOnlyLingeringOverlay } from "./lingeringOverlay";
 import { installMainProcessErrorGuards } from "./main-process-errors";
+import { killRunningActivityScans } from "./media/screenActivity";
 import { showMessageBoxOver } from "./messageBox";
 import {
 	registerPermissionsIpc,
@@ -1518,6 +1519,7 @@ app.on("before-quit", (event) => {
 app.on("will-quit", () => {
 	unregisterAllGlobalShortcuts();
 	killRunningScans();
+	killRunningActivityScans();
 });
 
 const appReady = !cliCommand && hasSingleInstanceLock ? app.whenReady() : null;

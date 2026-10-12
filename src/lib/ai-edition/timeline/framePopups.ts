@@ -1,4 +1,5 @@
 import type { CursorTelemetryPoint } from "@/components/video-editor/types";
+import { readScreenActivity, type ScreenActivity } from "./screenActivity";
 
 /**
  * Menus drawn inside a web page, for the automatic zooms.
@@ -102,4 +103,20 @@ export async function getTelemetryWithFramePopups(
 	const deadline = new Promise<null>((resolve) => setTimeout(() => resolve(null), timeoutMs));
 	const result = await Promise.race([scan(videoPath, times).catch(() => null), deadline]);
 	return result?.success ? withFramePopups(telemetry, result.changes ?? []) : telemetry;
+}
+
+/**
+ * Where the take's screen changed, for the automatic zooms (`getScreenActivity` in the main
+ * process: one small grey decode, cached). Null on any failure, a host without it, or after
+ * `timeoutMs`: the zooms are then planned from the pointer alone.
+ */
+export async function getScreenActivityForZooms(
+	videoPath: string,
+	timeoutMs = 180_000,
+): Promise<ScreenActivity | null> {
+	const scan = typeof window !== "undefined" ? window.electronAPI?.getScreenActivity : undefined;
+	if (!scan) return null;
+	const deadline = new Promise<null>((resolve) => setTimeout(() => resolve(null), timeoutMs));
+	const result = await Promise.race([scan(videoPath).catch(() => null), deadline]);
+	return result?.success ? readScreenActivity(result.activity) : null;
 }

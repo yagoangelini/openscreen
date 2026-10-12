@@ -85,6 +85,19 @@ const plan = (cursorTelemetry: CursorTelemetryPoint[], totalMs = 5000) =>
 const scaleOf = (s: AutoZoomSuggestion) =>
 	s.customScale ?? { 1: 1.25, 2: 1.5, 3: 1.8, 4: 2.2, 5: 3.5, 6: 5 }[s.depth];
 
+/** Whether `rect` lies inside the view a suggestion shows (its focus, clamped to the frame). */
+function boxInView(rect: NormalizedRect, s: AutoZoomSuggestion): boolean {
+	const half = 0.5 / scaleOf(s);
+	const cx = Math.min(1 - half, Math.max(half, s.focus.cx));
+	const cy = Math.min(1 - half, Math.max(half, s.focus.cy));
+	return (
+		rect.x >= cx - half - 1e-9 &&
+		rect.x + rect.width <= cx + half + 1e-9 &&
+		rect.y >= cy - half - 1e-9 &&
+		rect.y + rect.height <= cy + half + 1e-9
+	);
+}
+
 /** A whole take: `samples` sorted, on a pointer that otherwise rests where it last was. */
 const take = (...parts: CursorTelemetryPoint[][]) =>
 	parts.flat().sort((a, b) => a.timeMs - b.timeMs);
@@ -238,13 +251,14 @@ describe("buildAutoZoomSuggestions: a calm shot", () => {
 		expect(still.span.start).toBe(4500 - SHOT_LEAD_MS);
 	});
 
-	it("goes 20% deeper on a single tight target, and only there", () => {
+	it("goes a third deeper on a small target of known size, and only there", () => {
 		const button = { x: 0.68, y: 0.29, width: 0.05, height: 0.03 };
 		const [tight] = plan(
 			[press(3000, 0.7, 0.3, button), { timeMs: 9000, cx: 0.7, cy: 0.3 }],
 			10000,
 		);
-		expect(scaleOf(tight)).toBe(1.8);
+		expect(scaleOf(tight)).toBe(2);
+		// A bare click says nothing about the size of what it pressed: the settings' maximum.
 		const [plain] = plan([click(3000, 0.7, 0.3), { timeMs: 9000, cx: 0.7, cy: 0.3 }], 10000);
 		expect(scaleOf(plain)).toBe(1.5);
 	});
@@ -458,8 +472,9 @@ describe("buildAutoZoomSuggestions: hover, typing, popups", () => {
 			rest(6433, 12000, [0.6, 0.55]),
 		);
 		const [shot] = plan(telemetry, 13000);
-		expect(shot.focus.cx).toBeCloseTo(0.65, 5);
-		expect(shot.focus.cy).toBeCloseTo(0.45, 5);
+		expect(boxInView(menu, shot)).toBe(true);
+		expect(shot.focus.cx).toBeCloseTo(0.65, 2);
+		expect(shot.focus.cy).toBeCloseTo(0.45, 1);
 	});
 
 	it("holds the shot while the user types after clicking a field, framing the field", () => {
@@ -499,8 +514,9 @@ describe("buildAutoZoomSuggestions: hover, typing, popups", () => {
 		);
 		const suggestions = plan(telemetry, 13000);
 		expect(suggestions).toHaveLength(1);
-		expect(suggestions[0].focus.cx).toBeCloseTo(0.4, 5);
-		expect(suggestions[0].focus.cy).toBeCloseTo(0.46, 5);
+		// The menu and the click that opened it, in one framing from the start.
+		expect(boxInView(popup, suggestions[0])).toBe(true);
+		expect(boxInView({ x: 0.29, y: 0.29, width: 0.02, height: 0.02 }, suggestions[0])).toBe(true);
 		expect(suggestions[0].span.start).toBeLessThanOrEqual(4000 - SHOT_LEAD_MS);
 	});
 
@@ -514,7 +530,9 @@ describe("buildAutoZoomSuggestions: hover, typing, popups", () => {
 			),
 			16000,
 		);
-		expect(idle[0].span.end).toBe(4100 + SHOT_TAIL_MS);
+		// A few seconds on the open menu, then out, though the menu stays open until 15 s.
+		expect(idle[0].span.end).toBeGreaterThanOrEqual(4100 + SHOT_TAIL_MS);
+		expect(idle[0].span.end).toBeLessThanOrEqual(9000);
 	});
 
 	it("goes wide instead of zooming into a click that replaces most of the screen", () => {

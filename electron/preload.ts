@@ -389,6 +389,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	scanFrameChanges: (videoPath: string, timesMs: number[]) => {
 		return ipcRenderer.invoke("scan-frame-changes", videoPath, timesMs);
 	},
+	getScreenActivity: (videoPath: string) => {
+		return ipcRenderer.invoke("get-screen-activity", videoPath);
+	},
 	scanRecordingText: (videoPath: string) => {
 		return ipcRenderer.invoke("scan-recording-text", videoPath);
 	},

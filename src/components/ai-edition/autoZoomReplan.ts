@@ -9,7 +9,10 @@ import {
 	withoutAutoZooms,
 	withPlannedTranscript,
 } from "@/lib/ai-edition/timeline/apply-auto-zooms";
-import { getTelemetryWithFramePopups } from "@/lib/ai-edition/timeline/framePopups";
+import {
+	getScreenActivityForZooms,
+	getTelemetryWithFramePopups,
+} from "@/lib/ai-edition/timeline/framePopups";
 import { nativeBridgeClient } from "@/native/client";
 
 /**
@@ -29,6 +32,8 @@ export async function replanAutoZooms(): Promise<number | null> {
 			getTelemetryWithFramePopups(videoPath, (path) =>
 				nativeBridgeClient.cursor.getTelemetry(path),
 			),
+		undefined,
+		getScreenActivityForZooms,
 	);
 	const store = useProjectStore.getState();
 	if (!collected || store.projectId !== projectId) return null;
