@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useScopedT } from "@/contexts/I18nContext";
+import { sourceDisplayName } from "@/lib/sourceDisplayName";
 import { Button } from "../ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import styles from "./SourceSelector.module.css";
@@ -120,7 +121,7 @@ export function SourceSelector() {
 				<div className={styles.thumb}>
 					<img
 						src={source.thumbnail || ""}
-						alt={source.name}
+						alt={sourceDisplayName(source.name, tc)}
 						className="w-full h-full object-cover"
 					/>
 				</div>
@@ -134,7 +135,7 @@ export function SourceSelector() {
 							</svg>
 						</span>
 					)}
-					<div className={`${styles.name} truncate`}>{source.name}</div>
+					<div className={`${styles.name} truncate`}>{sourceDisplayName(source.name, tc)}</div>
 				</div>
 			</button>
 		);

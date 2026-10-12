@@ -73,6 +73,12 @@
 		"window": "Janela",
 		"screen": "Tela",
 		"virtual": "Tela virtual",
-		"unknown": "Gravação de tela"
+		"unknown": "Gravação de tela",
+		"screenNumber": "Tela {{number}}",
+		"entireScreen": "Tela inteira"
+	},
+	"notifications": "Notificações",
+	"windowTitles": {
+		"notes": "Notas"
 	}
 }

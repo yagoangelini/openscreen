@@ -36,7 +36,8 @@
 		"marker": "Repère à {{time}}",
 		"cameraTrack": "Caméra",
 		"cameraPip": "PiP",
-		"cameraHidden": "Sans caméra"
+		"cameraHidden": "Sans caméra",
+		"scrollKey": "Scroll"
 	},
 	"trails": {
 		"zoomIn": "Zoom avant : l'image se resserre jusqu'au début du zoom",

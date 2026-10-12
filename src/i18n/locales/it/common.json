@@ -73,6 +73,12 @@
 		"window": "Finestra",
 		"screen": "Schermo",
 		"virtual": "Schermo virtuale",
-		"unknown": "Registrazione schermo"
+		"unknown": "Registrazione schermo",
+		"screenNumber": "Screen {{number}}",
+		"entireScreen": "Entire Screen"
+	},
+	"notifications": "Notifications",
+	"windowTitles": {
+		"notes": "Notes"
 	}
 }

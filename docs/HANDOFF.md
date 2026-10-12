@@ -119,6 +119,7 @@ Os PRs do fork são abertos e mesclados com `gh pr merge N --merge`, sem CI. Ant
 
 | Recurso | Arquivos principais | Padrão |
 |---|---|---|
+| Idioma nativo pt-BR | `DEFAULT_LOCALE` e `FALLBACK_LOCALE` em `src/i18n/config.ts`; `currentLocale` inicial em `electron/i18n.ts` (menus, bandeja e diálogos antes do renderer falar); `systemSpeaksNativeLocale` no `I18nContext.tsx` não oferece trocar de idioma se o pt aparece em `navigator.languages`; nomes de tela do Chromium em `src/lib/sourceDisplayName.ts`. O `en` continua sendo a referência do `i18n:check`, e os testes rodam em inglês por `src/test-setup/pinEnglishLocale.ts` | pt-BR sem escolha salva; chave faltando cai no `en`; os 15 idiomas continuam no seletor, pt-BR primeiro |
 | Pasta de gravações | `defaultCaptureOutputDir()` em `electron/ipc/handlers.ts`; setting `recording.recordingsFolder`; UI no modo Record (`RecStage.tsx`) | `Vídeos\OpenScreen` |
 | Atalhos globais | `DEFAULT_SHORTCUTS` em `src/lib/shortcuts.ts`; `electron/globalShortcut.ts` | Ctrl+Shift+F9 grava/para; F10 pausa; F8 marcador; F12 mostra o app |
 | Marcadores | `<take>.mp4.markers.json` (handlers.ts, `RECORDING_MARKERS_SUFFIX`) | — |
@@ -348,6 +349,8 @@ O fork acompanha `getopenscreen/openscreen`. O último merge (2.1.0) foi até `1
   - `documentWriteAudit.test.ts` exige uma linha para cada novo `saveDocument`.
   - O teste de paridade da scene exige que `audio` só tenha ganhos lineares.
   - O teste do CursorPane exige que o impacto de clique fique logo abaixo dos níveis de bounce.
+- **Testes e o idioma nativo.** O setup `src/test-setup/pinEnglishLocale.ts` grava `en` no `localStorage` e no `setMainLocale` antes de cada teste. Um teste que faz `localStorage.clear()` no `beforeEach` apaga isso: grave `LOCALE_STORAGE_KEY = "en"` logo depois, ou o texto sai em pt-BR.
+- **Texto novo na UI.** Toda string visível passa pelo i18n, com pt-BR de verdade e a chave nos 15 idiomas (os outros recebem o inglês). Erro técnico em toast vai como `description`, com um título traduzido.
 - **`recordingImport.test`.** Um teste trava saves de propósito; describes novos entram **antes** dele.
 - **Disco cheio.** O C: tem cerca de 9,7 GB livres e já encheu uma vez. As pastas `release/1.13.0` a `1.19.0` são builds antigos que podem ir embora, mas só arquivo por arquivo ou pedindo ao usuário. `crates/target` também cresce (cerca de 3 GB).
 - **Kaspersky.** Ele colocou em quarentena um gravador que ficava parado esperando no stdin (o "início armado" de `0d9dc984`, revertido em `c956ea4e`). Desde a 2.1.1 o início durante a contagem usa `startAtEpochMs` e um `sleep_until`, sem ler o stdin antes de gravar. Se o `wgc-capture.exe` sumir depois de um build, esse é o primeiro suspeito.

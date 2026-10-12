@@ -36,7 +36,8 @@
 		"marker": "علامة عند {{time}}",
 		"cameraTrack": "الكاميرا",
 		"cameraPip": "PiP",
-		"cameraHidden": "بلا كاميرا"
+		"cameraHidden": "بلا كاميرا",
+		"scrollKey": "Scroll"
 	},
 	"trails": {
 		"zoomIn": "التكبير التدريجي: تقترب الصورة حتى بداية التكبير",

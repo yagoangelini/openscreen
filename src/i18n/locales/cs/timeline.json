@@ -36,7 +36,8 @@
 		"marker": "Značka v {{time}}",
 		"cameraTrack": "Kamera",
 		"cameraPip": "PiP",
-		"cameraHidden": "Bez kamery"
+		"cameraHidden": "Bez kamery",
+		"scrollKey": "Scroll"
 	},
 	"trails": {
 		"zoomIn": "Najetí: pohled se přibližuje až do začátku přiblížení",

@@ -73,6 +73,12 @@
 		"window": "Okno",
 		"screen": "Obrazovka",
 		"virtual": "Virtuální displej",
-		"unknown": "Záznam obrazovky"
+		"unknown": "Záznam obrazovky",
+		"screenNumber": "Screen {{number}}",
+		"entireScreen": "Entire Screen"
+	},
+	"notifications": "Notifications",
+	"windowTitles": {
+		"notes": "Notes"
 	}
 }

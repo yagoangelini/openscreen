@@ -2603,10 +2603,12 @@ export function V4Timeline({
 						</TooltipProvider>
 						<div className={styles.tlHints}>
 							<span className={styles.tlHint}>
-								<span className={styles.tlKbd}>Shift+Scroll</span> {t("labels.pan")}
+								<span className={styles.tlKbd}>Shift+{t("labels.scrollKey")}</span>{" "}
+								{t("labels.pan")}
 							</span>
 							<span className={styles.tlHint}>
-								<span className={styles.tlKbd}>Ctrl+Scroll</span> {t("labels.zoom")}
+								<span className={styles.tlKbd}>Ctrl+{t("labels.scrollKey")}</span>{" "}
+								{t("labels.zoom")}
 							</span>
 						</div>
 					</>

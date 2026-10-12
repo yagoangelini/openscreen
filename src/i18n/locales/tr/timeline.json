@@ -36,7 +36,8 @@
 		"marker": "{{time}} konumunda işaret",
 		"cameraTrack": "Kamera",
 		"cameraPip": "PiP",
-		"cameraHidden": "Kamera yok"
+		"cameraHidden": "Kamera yok",
+		"scrollKey": "Scroll"
 	},
 	"trails": {
 		"zoomIn": "Yakınlaşma: görüntü, yakınlaştırma başlayana kadar yaklaşır",

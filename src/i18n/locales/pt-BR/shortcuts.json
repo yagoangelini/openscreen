@@ -27,7 +27,7 @@
 		"addVoiceover": "Gravar narração",
 		"addKeyframe": "Adicionar quadro-chave",
 		"addCameraFullscreen": "Adicionar câmera em tela cheia",
-		"splitCamera": "Dividir a câmera no cursor",
+		"splitCamera": "Dividir a câmera no momento atual",
 		"deleteSelected": "Excluir selecionado",
 		"playPause": "Reproduzir / pausar",
 		"copySelected": "Copiar seleção",
@@ -43,5 +43,6 @@
 		"zoomTimeline": "Zoom na linha do tempo",
 		"frameBack": "Quadro anterior",
 		"frameForward": "Próximo quadro"
-	}
+	},
+	"scrollKey": "Roda do mouse"
 }

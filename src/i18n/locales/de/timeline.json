@@ -36,7 +36,8 @@
 		"marker": "Markierung bei {{time}}",
 		"cameraTrack": "Kamera",
 		"cameraPip": "PiP",
-		"cameraHidden": "Keine Kamera"
+		"cameraHidden": "Keine Kamera",
+		"scrollKey": "Scroll"
 	},
 	"trails": {
 		"zoomIn": "Hineinzoomen: Die Ansicht zoomt bis zum Beginn des Zooms hinein",

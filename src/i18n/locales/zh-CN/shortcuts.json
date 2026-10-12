@@ -43,5 +43,6 @@
 		"zoomTimeline": "缩放时间轴",
 		"frameBack": "上一帧",
 		"frameForward": "下一帧"
-	}
+	},
+	"scrollKey": "Scroll"
 }

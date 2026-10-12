@@ -73,6 +73,12 @@
 		"window": "창",
 		"screen": "화면",
 		"virtual": "가상 디스플레이",
-		"unknown": "화면 녹화"
+		"unknown": "화면 녹화",
+		"screenNumber": "Screen {{number}}",
+		"entireScreen": "Entire Screen"
+	},
+	"notifications": "Notifications",
+	"windowTitles": {
+		"notes": "Notes"
 	}
 }

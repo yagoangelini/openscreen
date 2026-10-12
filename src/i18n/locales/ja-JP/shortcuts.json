@@ -43,5 +43,6 @@
 		"zoomTimeline": "タイムラインをズーム",
 		"frameBack": "フレームを戻す",
 		"frameForward": "フレームを進める"
-	}
+	},
+	"scrollKey": "Scroll"
 }

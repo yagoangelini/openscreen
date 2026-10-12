@@ -73,6 +73,12 @@
 		"window": "窗口",
 		"screen": "屏幕",
 		"virtual": "虚拟显示器",
-		"unknown": "屏幕录制"
+		"unknown": "屏幕录制",
+		"screenNumber": "Screen {{number}}",
+		"entireScreen": "Entire Screen"
+	},
+	"notifications": "Notifications",
+	"windowTitles": {
+		"notes": "Notes"
 	}
 }

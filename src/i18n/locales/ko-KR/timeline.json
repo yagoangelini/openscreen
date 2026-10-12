@@ -36,7 +36,8 @@
 		"marker": "{{time}} 마커",
 		"cameraTrack": "카메라",
 		"cameraPip": "PiP",
-		"cameraHidden": "카메라 없음"
+		"cameraHidden": "카메라 없음",
+		"scrollKey": "Scroll"
 	},
 	"trails": {
 		"zoomIn": "줌 인: 줌이 시작될 때까지 화면이 확대됩니다",
