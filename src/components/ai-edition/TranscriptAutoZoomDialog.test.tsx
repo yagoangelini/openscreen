@@ -80,7 +80,8 @@ describe("TranscriptAutoZoomDialog", () => {
 		});
 		await waitFor(() => expect(onClose).toHaveBeenCalled());
 		expect(handOff).toHaveBeenCalled();
-		expect(request).toHaveBeenCalledWith("a1", "auto");
+		// No language: the store's default (Portuguese while the app speaks it).
+		expect(request).toHaveBeenCalledWith("a1");
 		expect(replanAutoZooms).toHaveBeenCalled();
 	});
 

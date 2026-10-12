@@ -35,6 +35,8 @@ vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), info: vi.f
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { assetSchema, createEmptyDocument } from "@/lib/ai-edition/schema";
 import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
+import { DEFAULT_VOCABULARY } from "@/lib/ai-edition/transcription/vocabulary";
+import { loadUserPreferences } from "@/lib/userPreferences";
 import { MediaStage } from "./MediaStage";
 
 class StubResizeObserver {
@@ -59,6 +61,8 @@ beforeEach(() => {
 
 afterEach(() => {
 	cleanup();
+	localStorage.removeItem("openscreen_user_preferences");
+	localStorage.setItem("openscreen-locale", "en");
 	vi.unstubAllGlobals();
 	useProjectStore.setState({ document: null });
 });
@@ -103,5 +107,42 @@ describe("MediaStage Regenerate button", () => {
 
 		fireEvent.click(regenerate);
 		expect(transcription.request).not.toHaveBeenCalled();
+	});
+});
+
+describe("MediaStage transcription settings", () => {
+	it("starts on the default language and remembers a new pick for later runs", async () => {
+		// The app speaks pt-BR: transcriptions default to Portuguese.
+		localStorage.setItem("openscreen-locale", "pt-BR");
+		const regenerate = await openDetail();
+		const language = screen.getByDisplayValue(/Portuguese|português/i) as HTMLSelectElement;
+		expect(language.value).toBe("pt");
+		fireEvent.change(language, { target: { value: "en" } });
+		expect(loadUserPreferences().transcriptionLanguage).toBe("en");
+		fireEvent.click(regenerate);
+		await vi.waitFor(() => expect(transcription.request).toHaveBeenCalledWith("asset-1", "en"));
+	});
+
+	it("saves the model choice, offering the sizes it will download", async () => {
+		await openDetail();
+		const model = screen.getByTestId("media-stage-model") as HTMLSelectElement;
+		expect(model.value).toBe("auto");
+		expect([...model.options].map((o) => o.value)).toEqual(["auto", "large-v3-turbo", "small"]);
+		fireEvent.change(model, { target: { value: "small" } });
+		expect(loadUserPreferences().transcriptionModel).toBe("small");
+	});
+
+	it("edits the standing terms and restores the default list", async () => {
+		await openDetail();
+		const terms = screen.getByTestId("media-stage-standing-terms") as HTMLTextAreaElement;
+		const reset = screen.getByTestId("media-stage-standing-terms-reset");
+		expect(terms.value).toBe(DEFAULT_VOCABULARY);
+		expect(reset).toBeDisabled();
+		fireEvent.change(terms, { target: { value: "Contoso, Fabrikam" } });
+		fireEvent.blur(terms);
+		expect(loadUserPreferences().transcriptionVocabulary).toBe("Contoso, Fabrikam");
+		fireEvent.click(reset);
+		expect(terms.value).toBe(DEFAULT_VOCABULARY);
+		expect(loadUserPreferences().transcriptionVocabulary).toBe(DEFAULT_VOCABULARY);
 	});
 });

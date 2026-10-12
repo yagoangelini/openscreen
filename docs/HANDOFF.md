@@ -118,11 +118,19 @@ As decisões e o porquê de cada fase estão em [`PLANO-FORK.md`](PLANO-FORK.md)
 
 - **`Openscreen.exe` sem argumento abre o Studio** (o editor, no último projeto). É o que o ícone já fixado na barra de tarefas do usuário roda. **`Openscreen.exe --recorder` abre o HUD.** `--studio` força o Studio. Fora do Windows o padrão continua sendo o HUD. Lógica pura em `electron/launchMode.ts` (`requestedLaunchTarget`, `routeSecondInstance`), testada em `launchMode.test.ts`; ligada em `main.ts` (`openLaunchTarget`, `handleSecondInstance`).
 - **Segunda abertura com o app rodando** (`second-instance`): Recorder com o editor aberto pede ao editor (`open-recorder-requested` → `NewEditorShell`) que pergunte das alterações não salvas e chame `switchToHud`; com export rodando, só traz o editor para frente. Studio com o HUD parado troca para o editor; durante uma gravação ou contagem, só mostra o HUD.
-- **Identidades na barra de tarefas.** O processo usa `app.setAppUserModelId("com.etiennelescot.openscreen")` (igual ao `appId` e ao AUMI do atalho fixado do usuário, conferido no `.lnk`). HUD, seletor de fonte e Notas usam `setAppDetails` (`applyRecorderTaskbarIdentity` em `electron/windows.ts`) com o ID `com.etiennelescot.openscreen.recorder`, o ícone `resources/recorder.ico`, `relaunchCommand` `"…Openscreen.exe" --recorder` e o nome "OpenScreen Recorder". Por isso ganham um botão próprio, e fixar o HUD rodando fixa `Openscreen.exe --recorder`. Títulos: "OpenScreen Studio" no editor, "OpenScreen Recorder" no HUD.
+- **Identidades na barra de tarefas.** O processo usa `app.setAppUserModelId("com.yagoangelini.openscreen")` (igual ao `appId`; até a 2.4.0 era `com.etiennelescot.openscreen`, veja "Identidade do fork" abaixo). HUD, seletor de fonte e Notas usam `setAppDetails` (`applyRecorderTaskbarIdentity` em `electron/windows.ts`) com o ID `com.yagoangelini.openscreen.recorder`, o ícone `resources/recorder.ico`, `relaunchCommand` `"…Openscreen.exe" --recorder` e o nome "OpenScreen Recorder". Por isso ganham um botão próprio, e fixar o HUD rodando fixa `Openscreen.exe --recorder`. Títulos: "OpenScreen Studio" no editor, "OpenScreen Recorder" no HUD.
 - **Ícone do Recorder:** o logo com uma bolinha vermelha de REC (anel branco) no canto inferior direito. Gerado por `node scripts/generate-recorder-icon.mjs` a partir de cada PNG do logo (16 a 256): `icons/icons/win/recorder.ico`, prévias em `icons/icons/recorder-png/`, e `public/openscreen-recorder.png` (ícone das janelas). O codec PNG feito à mão foi para `scripts/png-codec.mjs`, compartilhado com `generate-appx-assets.mjs`.
 - **Instalador:** `nsis.shortcutName` "OpenScreen Studio" (Openscreen.exe, AUMI principal) e `build/installer.nsh` (`customInstall` / `customUnInstall`) cria "OpenScreen Recorder" no Menu Iniciar (sempre, inclusive em atualização) e na área de trabalho (só se o Studio tiver atalho lá), com `--recorder`, o `recorder.ico` e `WinShell::SetLnkAUMI` com o ID do Recorder. O desinstalador remove os dois, menos numa atualização (`--keep-shortcuts`).
 - **Testes que abrem o app:** o Playwright (`gif-export`, `windows-native-checklist`) e `scripts/fork-e2e/` passam `--recorder`, porque começam no HUD.
 - **O que o usuário faz depois de atualizar:** o ícone já fixado continua, e passa a abrir o Studio. Para o segundo ícone, abra o Menu Iniciar, procure "OpenScreen Recorder", clique com o botão direito → "Fixar na barra de tarefas" (o app não consegue se fixar sozinho). Ou abra o Recorder e fixe o botão dele na barra. Se o ícone antigo aparecer como "Openscreen", pode desafixar e fixar o "OpenScreen Studio" do Menu Iniciar no lugar, só pelo nome.
+
+**Identidade do fork** (pedido de 11/10, branch `feat/identity`, entra na próxima versão depois da 2.4.0):
+
+- **O que mudou.** `appId` / AUMID `com.yagoangelini.openscreen` (Studio) e `com.yagoangelini.openscreen.recorder` (Recorder); `package.json` com `author` e `maintainers` Yago Angelini (o e-mail só aí; o `maintainer` do deb/rpm sai dele), `homepage` no repo do fork, Etienne Lescot e Siddharth Vaddem em `contributors`; `copyright` "© 2026 Yago Angelini · © 2025-2026 OpenScreen contributors — MIT License" (igual em `electron/about.ts`, testado); `LICENSE` ganhou a linha "Copyright (c) 2026 Yago Angelini" sem tirar as do upstream. O Sobre mostra "OpenScreen por Yago Angelini" / "Baseado no OpenScreen de Etienne Lescot / getopenscreen" (chaves `common.about.*` nos 15 idiomas), o link do fork e o do upstream. "Star on GitHub" aponta para o fork.
+- **O que ficou de propósito.** `productName` "Openscreen": ele dá o nome da pasta de dados (`%APPDATA%\Openscreen`, onde ficam projetos, configurações e a trava de instância única), da pasta de instalação e do `Openscreen.exe`. O `appId` **não** muda a pasta de dados (o Electron usa o `app.name`), então nada é migrado. O bloco `appx` é a identidade do upstream na Microsoft Store e está marcado como só do upstream: o fork não gera o pacote da Store.
+- **Migração do instalador.** O electron-builder deriva o GUID do NSIS do `appId` (UUID v5 no namespace `50e065bc-…`). O do appId antigo é `5b412b41-8d8b-5faf-b557-de4fe681e5fc` (conferido: é a chave de desinstalação da 2.4.0 instalada); o do novo seria `6bb1cae6-…`, outro produto, que instalaria ao lado. Por isso `nsis.guid` está **fixado** no antigo: o instalador acha a 2.4.0, roda o desinstalador dela e instala por cima, na mesma pasta. Nunca troque esse GUID.
+- **Atalhos e fixados.** Num atalho com o AUMID antigo, o ícone fixado e a janela viram dois botões. A cada instalação, `openscreenRetagShortcuts` (`build/installer.nsh`) regrava o AUMID: dos atalhos Studio do Menu Iniciar e da área de trabalho (numa atualização pelo app, com `--updated`, o modelo do electron-builder **mantém** esses atalhos sem regravar), do Recorder na área de trabalho, e de cada `.lnk` em `%APPDATA%\Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar` cujo alvo é o `Openscreen.exe` instalado (argumento exatamente `--recorder` → ID do Recorder; o resto → ID do Studio). O alvo é lido por `IShellLinkW` via `System::Call`; atalhos de outros apps não são tocados. Testado num instalador NSIS de teste contra `.lnk` falsos (com aspas e espaços no caminho).
+- **Riscos que ficam.** O Explorer guarda em cache os fixados: se depois de instalar o fixado e a janela aparecerem separados, reiniciar o Explorer ou sair e entrar na sessão resolve; em último caso, desafixe e fixe de novo pelo Menu Iniciar. Um fixado no **Menu Iniciar** (não na barra) pode sumir, porque o Windows 11 o guarda pelo AUMID: fixe de novo. As notificações do Windows passam a ser de um app "novo" (a permissão volta ao padrão). No macOS o bundle id muda (permissões de tela, câmera e microfone pediriam de novo), mas o fork não gera build de Mac.
 
 **Itens abertos do E2E da 2.2.0** (relatório B-7 e B-10):
 
@@ -144,7 +152,7 @@ As decisões e o porquê de cada fase estão em [`PLANO-FORK.md`](PLANO-FORK.md)
 - **Take salvo ao sair ou num crash é oferecido de novo.** O diário `.pending-takes.json` era apagado quando o editor *pedia* o take; se o app morresse antes de o projeto ser salvo (por exemplo o editor aberto pelo stop que o main faz quando o HUD morre, e o resto do app morto em seguida), o take ficava salvo e nunca mais era oferecido. Agora ele sai do diário só quando o take está num projeto salvo (`settlePendingTakeHandOff`, no `set-current-recording-session(null)` da importação) ou quando o `record` da CLI termina. Um take reaberto pela oferta sem `.session.json` (crash) ganha o manifesto antes de abrir, e o editor liga a câmera dele (antes voltava só a tela).
   - **Verificado:** sair pelo `app.quit` (o Sair da bandeja) no meio do take → ao abrir de novo, a janela "Recover recording" → "Open in editor" abre o take com câmera e o pedaço de rosto. Matar o processo main no meio do take → idem, com a câmera e o cursor do checkpoint. O log do main agora diz `[recovery] offering a take` e `[recovery] answer`.
 
-**Parada instantânea e início no fim da contagem** (branch `perf/instant-stop`, pedido de 12/10 e D-2/D-4 do E2E da 2.4.0):
+**Parada instantânea e início no fim da contagem** (pedido de 12/10 e D-2/D-4 do E2E da 2.4.0):
 
 - **O que já era instantâneo, medido:** o take termina no clique (o último quadro do arquivo fica de −59 a +3 ms do clique, medido com o quadrado de `record-take.mjs --marker`; o áudio passa do vídeo 10–40 ms) e o HUD mostra "Salvando…" em 4–18 ms. O que demorava era o editor.
 - **Parada (Windows):**
@@ -155,6 +163,35 @@ As decisões e o porquê de cada fase estão em [`PLANO-FORK.md`](PLANO-FORK.md)
 - **Início (D-2):** o renderer começa as checagens (disco, microfone, helper disponível) no clique, lê a fonte uma vez só (cada `getSelectedSource` enumera as fontes, ~0,4 s) e pede o take no instante em que a contagem começa. Pedido do take: 0,9–2,1 s → 0,5–0,9 s depois do clique, ou seja 3,0 s antes do fim da contagem em vez de 1,8–2,5 s. Se mesmo assim o helper não abrir tudo a tempo (encoder NVENC levou 4–9 s com a CPU a 100 %), **a contagem fica no último número até o take começar**, para ninguém falar antes do primeiro quadro (a janela da contagem tem proteção de conteúdo). Log: `rendererStartTiming` e `requestedBeforeCountdownEndMs` no `[native-wgc] capture started`; `afterCountdownMs` passou a ser medido contra o fim pedido.
   - **Medido** (contagem 3 s, sem câmera): `afterCountdownMs` 47, 145, 154, 382 com carga normal; 1498–6896 com a CPU a 100 % (outras compilações na máquina), agora com a contagem segurada. **Com câmera não foi medido** (a câmera estava em uso por outro teste).
 - **Câmera escura (D-4):** quando a câmera não entregou nenhum quadro antes do take (a C920 pode levar mais de 1 s), o helper julga o primeiro segundo de quadros do take e emite `webcam-dark` se nenhum tiver imagem. O main repassa ao HUD (`native-recording-camera-dark` → `onNativeRecordingCameraDark` → toast `recording.cameraDark`). **Não verificado com a lente tampada** pelo mesmo motivo.
+
+**Transcrição pt-BR para Microsoft e IA** (pedido de 11/10: "melhore o modelo de transcrição para português, principalmente para o universo Microsoft e IA"):
+
+- **Modelo.** Configuração "Modelo de transcrição" no painel de mídia: **Automático** (padrão), **Preciso** (`ggml-large-v3-turbo-q8_0.bin`, 874 MB) ou **Rápido** (`ggml-small-q8_0.bin`, 264 MB). O Automático pergunta ao helper as GPUs que ele vê (`whisper-stt-server --list-devices`, `electron/stt/whisperDevices.ts`) **antes** de baixar qualquer coisa: GPU dedicada com 3,5 GiB ou mais (e 1,5 GiB livres, quando o driver informa) → turbo; senão, small. O download é o de antes (SHA-256, `.partial`, revisão fixa), com progresso na janela pós-gravação, agora limitado a 5 eventos/s (eram ~4.400 mensagens IPC para o small e ~14.000 para o turbo).
+- **Volta ao small sozinho** quando o turbo não roda: download falhou (offline, disco cheio), o helper não carregou (um helper antigo **morre** com o turbo: 0xC0000005, "aheads_masks_init: tried to set alignment head on text layer 6, but model only has 4"), ou, no Automático, o helper caiu na CPU (o probe `GET /` agora diz o `backend`). A escolha explícita do Preciso fica no turbo mesmo na CPU.
+- **Helper (C++).** `main.cpp` ganhou `--dtw-preset` (o turbo precisa de `WHISPER_AHEADS_LARGE_V3_TURBO`; o SMALL fixo impedia de carregar), `--list-devices` e `backend`/`dtw_preset` no `GET /`. Com o small, o helper novo dá **as mesmas palavras e tempos, byte a byte**, que o antigo (conferido em dois áudios).
+- **Termos de sempre** (prompt do Whisper). Preferência `transcriptionVocabulary`, editável no painel de mídia ("Termos de sempre (Microsoft e IA)", com "Restaurar a lista padrão"). O padrão está em `src/lib/ai-edition/transcription/vocabulary.ts` (`DEFAULT_VOCABULARY`: Microsoft 365, Copilot Studio, Power Automate, SharePoint, Dataverse, Entra ID, Purview, Azure OpenAI, ChatGPT, IA generativa, RAG, MCP, tenant, licença E3...). `buildTranscriptionPrompt` junta com os "nomes e termos" do projeto (os do projeto por último, mais perto do áudio), sem repetir, e corta pelo fim da lista padrão em 640 caracteres, para o "Glossary:" não sair do limite de 224 tokens do Whisper.
+- **Idioma.** Com o app em português, a transcrição sai **em português** (`pt`) em vez de detectar: `effectiveTranscriptionLanguage` em `userPreferences.ts`, usado pela fila de fundo, pela janela pós-gravação e pelo seletor do painel de mídia, que agora começa em Português e grava a escolha ("Detectar" continua lá).
+- **Glossário.** `DEFAULT_GLOSSARY` ganhou as grafias erradas que os dois modelos escreveram de verdade (Timoz/tims → Teams, Tenet/tênet → tenant, Andrile → OneDrive, Pervil/pervio → Purview, EJAR/Eger → Azure, Febric → Fabric, chat GPT → ChatGPT, licença e três → licença E3...). Ficaram de fora de propósito palavras que também são português: defender, ordem, cloud, a gente. Um glossário salvo que ainda é o padrão antigo (não editado) passa para o novo ao carregar (`upgradeStoredGlossary`); um editado fica como está.
+- **Medido** (roteiro de tutorial M365/IA de 19 frases lido pela Maria (SAPI, 159 s) e pelo Daniel (OneCore, 121 s), mais o Daniel acelerado 1,12× com eco, filtro de banda e ruído rosa (108 s). Cada configuração passou pelo helper como o app faz, em pedaços de 90 s. WER sobre palavras minúsculas sem pontuação; "termos certos" = ocorrências dos 40 termos com a grafia exata):
+
+  | Configuração | WER Maria | WER Daniel | WER ruidoso | Termos certos |
+  |---|---|---|---|---|
+  | **Antes** (small, detectar, sem termos, glossário antigo) | 8,9% | 8,6% | 10,2% | 61–63% |
+  | small, pt, sem termos | 8,9% | 8,6% | 10,5% | 57–61% |
+  | small, pt, termos de sempre | 3,8% | 3,5% | 6,7% | 78–90% |
+  | **small, pt, termos + glossário novo** | 3,2% | 3,5% | 5,1% | 90–94% |
+  | turbo q8, pt, sem termos | 5,1% | 3,8% | 4,8% | 73–80% |
+  | turbo q8, pt, termos de sempre | 4,1% | 3,2% | 3,8% | 82–84% |
+  | **turbo q8, pt, termos + glossário novo** (novo padrão na RTX) | 3,5% | 2,9% | 3,2% | 86–88% |
+  | turbo q5, pt, termos + glossário novo | 3,5% | 2,2% | 2,9% | 86–90% |
+
+  - O "Glossary:" em inglês ganhou do "Glossário:" (small ruidoso 6,7% contra 7,3%; turbo Daniel 2,5% contra 2,9%) e ficou como está.
+  - Os erros que sobram são quase todos da voz sintética: "Azure AI Foundry" lido como "Azure iPhone 3", "IA" como "aí a", "Claude" como "Cloud", "E3" como "I3" (turbo).
+  - **Take real** (`recording-1791731439127.voice.m4a`, 34 s, só lido): o small escreve "eu posso **volar** essa tela" e "arquivo, ar-seção e inativas"; o turbo q5, "**acumular**"; o **turbo q8 escreve "rolar" e "arquivar seções inativas"**, com e sem termos. Os termos não inseriram nenhuma palavra que não foi dita. Por isso o padrão é o q8, não o q5 (300 MB menor).
+  - **Tempo das palavras** (DTW, contra as marcas de palavra do SAPI na voz da Maria): small com mediana de 16–17 ms e p90 ~150 ms; turbo com mediana de 26–28 ms e p90 190–260 ms. Um pouco pior, e ainda bem abaixo do que o auto-zoom pela fala (`speechCues.ts`) precisa.
+  - **Velocidade na RTX 3060 (Vulkan)**, rtf = tempo/áudio: no banco de teste, small 0,03–0,05 e turbo 0,035–0,06; no app (prévia aberta na mesma GPU), turbo 0,04–0,08 (13–25× o tempo real) e small 0,04. Carregar: small 3 s, turbo ~11 s na primeira vez. VRAM: small ~0,7 GB, turbo ~1,4 GB. Na CPU (i7-11800H, 8 threads, take de 34 s): small rtf 3,8 e turbo 1,3, os dois lentos; sem GPU o Automático fica no small pelo download menor.
+  - **No app** (instância isolada, porta 9252): um vídeo com o áudio TTS entregue como take → "Usar a transcrição" → `[stt] model "auto" -> large-v3-turbo (NVIDIA GeForce RTX 3060 Laptop GPU, 5.9 GB)`, `dtw_preset=large-v3-turbo`, Vulkan, 107,6 s em 8,5 s, transcrição em `pt` com tenant e Purview já corrigidos. Trocar para o Rápido baixou o small (264 MB) com progresso e recarregou o helper.
+- **Helper novo:** o `whisper-stt-server.exe` com `--list-devices` e `--dtw-preset` já está no `electron/native/bin/win32-x64` da checkout principal (copiado em 12/10; o antigo não carrega o turbo). Confira com `findstr /M /C:"list-devices"` (controle: `/C:"guardrail"`). Ele foi compilado sem o SDK do Vulkan e usa as DLLs Vulkan da pasta; o build completo é `npm run build:whisper-binaries` numa máquina com o SDK.
 
 Os PRs do fork são abertos e mesclados com `gh pr merge N --merge`, sem CI. Antes do merge, rode todo o portão de validação abaixo.
 
@@ -182,7 +219,10 @@ Os PRs do fork são abertos e mesclados com `gh pr merge N --merge`, sem CI. Ant
 | Auto-zoom calmo | `timeline/zoom-suggestions.ts` (planner), `zoom-motion.ts` (`resolveZoomRendering`, `MIN_WIDE_SEC_OPTIONS`), `AutoZoomSettings` | calmo, 2,5 s |
 | Auto-zoom guiado pela fala | `timeline/speechCues.ts` (palavras de apontar, frases, rolagem); `zoom-suggestions.ts` (`words` / `wordsByAssetId`, `speechAwareEnd`); `apply-auto-zooms.ts` (`transcriptWordsByAssetId`, `transcriptSignature`, `legacyEditor.autoZoomTranscript`); `autoZoomReplan.ts`; janela pós-gravação `TranscriptAutoZoomDialog.tsx`; aviso `TranscriptAutoZoomBar.tsx` no painel da transcrição; pref `autoZoomAfterRecording` | pergunta depois de gravar |
 | Acelerar esperas | `timeline/waits.ts` (`WAIT_SPEED = 4`); Auto-enhance no `V4Timeline` | só sugere |
-| Glossário | `src/lib/ai-edition/transcription/glossary.ts`; aplicado em `transcriptionStore.ts`; pref `glossary` | lista padrão M365 |
+| Glossário | `src/lib/ai-edition/transcription/glossary.ts` (`upgradeStoredGlossary` troca um padrão antigo não editado); aplicado em `transcriptionStore.ts`; pref `glossary` | lista padrão M365 e IA |
+| Modelo de transcrição | `WHISPER_MODELS` em `electron/stt/modelManager.ts`; escolha em `electron/stt/whisperDevices.ts` (`resolveWhisperModel`, `--list-devices`); `prepare`/`load` em `electron/stt/index.ts`; `--dtw-preset` no helper (`electron/native/whisper-stt/src/main.cpp`); pref `transcriptionModel`; seletor no `MediaStage.tsx` | Automático: large-v3-turbo q8 numa GPU dedicada, small no resto |
+| Termos de sempre (prompt) | `src/lib/ai-edition/transcription/vocabulary.ts` (`DEFAULT_VOCABULARY`, `buildTranscriptionPrompt`); usado em `document/transcribe.ts`; pref `transcriptionVocabulary` | lista M365 e IA |
+| Idioma da transcrição | `effectiveTranscriptionLanguage` em `src/lib/userPreferences.ts`; pref `transcriptionLanguage` | `pt` com o app em português |
 | Transcrição automática | pref `autoTranscribe` (Media stage) | **desligada** |
 | Capítulos e `.srt` | `chapters.ts`, `captions/srt.ts`, `YouTubeChapters.tsx`, IPC `write-subtitles-beside`, `electron/ai-edition/chapter-titles.ts` | no fim do export |
 | Loudness YouTube | `src/lib/ai-edition/deliveryLoudness.ts` (+2 dB, −16 → −14 LUFS); pref `youtubeLoudness` | ligado |
@@ -381,7 +421,26 @@ O fork acompanha `getopenscreen/openscreen`. O último merge (2.1.0) foi até `1
 - **Shader:** o modo 19 é o Glass Lens do upstream e o **spotlight é o modo 20**.
 - **HUD:** fica o layout do upstream, com a confirmação de Reiniciar/Cancelar, o canal do microfone e a dica do NVIDIA Broadcast do fork.
 - **Padrões do fork que o upstream não tem:** 16:9 para projetos novos, NVENC/DXGI na RTX, transcrição automática desligada e anel de clique ligado.
+- **Identidade:** num merge do upstream, ficam os valores do fork em `appId`, `nsis.guid`, `copyright`, `package.json` (`author`, `maintainers`, `homepage`), `electron/about.ts`, `REPO_URL` (`star-prompt.ts`) e os IDs de `launchMode.ts` / `installer.nsh`. O `launchMode.test.ts` e o `about.test.ts` falham se um deles voltar ao do upstream.
 - **Dependências:** `@noble/hashes` está declarado em `devDependencies`. O npm 11 não instala dependências peer opcionais, e o teste do AppImage precisa dele.
+
+## Assinatura
+
+O fork assina tudo com um certificado **autoassinado**, decisão do usuário em 12/10: nada de assinatura externa.
+
+- **O certificado:** `CN=Yago Angelini, O=Yago Angelini, C=BR`, de assinatura de código, RSA 3072, válido até 10/2031.
+  - Thumbprint: `54D7FCA1B3EA8B6CFA1FC379302E61EC0F253690`.
+  - Fica em `Cert:\CurrentUser\My` com a chave **não exportável**.
+  - A parte pública está em `%USERPROFILE%\.openscreen-signing\openscreen-yago-angelini.cer`.
+- **O que é assinado:** `electron-builder.json5` (`win.signtoolOptions` com `certificateSubjectName` e o carimbo de tempo da DigiCert, e `signExts` [.exe, .node]) assina:
+  - o instalador e o `Openscreen.exe`;
+  - os helpers (`wgc-capture`, `cursor-sampler`, `ocr-scan`, `whisper-stt-server`, `ffmpeg-shared`) e o addon do compositor.
+  - As DLLs ficam de fora: a `onnxruntime.dll` mantém a assinatura da Microsoft.
+- **Onde vale:** o Windows só confia no certificado onde ele foi importado como raiz, ou seja, o PC do usuário. Para outras pessoas continua "editor desconhecido".
+- **Para o usuário confiar:** importar o `.cer` em `Cert:\CurrentUser\Root` e em `Cert:\CurrentUser\TrustedPublisher`. É ele que faz isso, porque mexe em configuração de segurança.
+- **Para o agente:** sem esse certificado na máquina, o `build:win` falha ao assinar. Numa máquina nova, crie outro com `New-SelfSignedCertificate -Type CodeSigningCert` e o mesmo Subject.
+- **Ao extrair o `winCodeSign`,** o 7-Zip reclama de links simbólicos de arquivos do macOS ("A required privilege is not held"). É inofensivo no Windows: o `signtool` é extraído e assina.
+- **Conferir a assinatura:** `Get-AuthenticodeSignature` em cada `.exe`. Antes de o usuário confiar no certificado, o status sai `UnknownError`; depois, `Valid`.
 
 ## Armadilhas já encontradas
 
@@ -401,6 +460,11 @@ O fork acompanha `getopenscreen/openscreen`. O último merge (2.1.0) foi até `1
 - **Texto novo na UI.** Toda string visível passa pelo i18n, com pt-BR de verdade e a chave nos 15 idiomas (os outros recebem o inglês). Erro técnico em toast vai como `description`, com um título traduzido.
 - **`recordingImport.test`.** Um teste trava saves de propósito; describes novos entram **antes** dele.
 - **Disco cheio.** O C: tem cerca de 9,7 GB livres e já encheu uma vez. As pastas `release/1.13.0` a `1.19.0` são builds antigos que podem ir embora, mas só arquivo por arquivo ou pedindo ao usuário. `crates/target` também cresce (cerca de 3 GB).
+- **Helper do Whisper novo.** O large-v3-turbo precisa do `whisper-stt-server.exe` com `--dtw-preset` e `--list-devices`. O `npm run build:win` **não** compila o helper (só copia `electron/native/bin/win32-x64`). O exe novo está em `openscreen-stt/electron/native/bin/win32-x64/whisper-stt-server.exe` e em `C:\wstb-stt\whisper-stt-server.exe` (a pasta de build, ~300 MB, que pode ser apagada depois de copiar).
+  - Ele foi compilado **sem Vulkan** (não há Vulkan SDK nesta máquina): o `CMakeLists.txt` do helper com o CMake e o Ninja do VS 2022 Build Tools, numa pasta de build curta por causa do MAX_PATH. Ele usa o `whisper.dll` e o `ggml-vulkan.dll` que já estão na pasta: o exe só chama a API C do whisper e do ggml, e o Vulkan vem das DLLs.
+  - Para a release, copie **só esse exe** para a pasta de binários da checkout principal e confira com `findstr /M /C:"list-devices" whisper-stt-server.exe` (controle, presente no antigo e no novo: `/C:"guardrail"`).
+  - O jeito completo continua sendo `npm run build:whisper-binaries` numa máquina com o Vulkan SDK.
+- **Playwright `browser.close()` fecha a instância isolada.** Num script que só conecta por CDP (`connectOverCDP`), termine com `process.exit(0)`: o `close()` derrubou o app inteiro no meio de um teste de transcrição.
 - **Kaspersky.** Ele colocou em quarentena um gravador que ficava parado esperando no stdin (o "início armado" de `0d9dc984`, revertido em `c956ea4e`). Desde a 2.1.1 o início durante a contagem usa `startAtEpochMs` e um `sleep_until`, sem ler o stdin antes de gravar. Se o `wgc-capture.exe` sumir depois de um build, esse é o primeiro suspeito.
 
 ## Pendências
@@ -461,8 +525,8 @@ Valide com `record-take.mjs`, com um take que comece no rosto e passe para a tel
 6. Sincronia de áudio pelo relógio do sistema. Hoje há um `(void)qpcPosition` em `wasapi_loopback_capture.cpp`.
 7. Avisar no app quando o leitor do cursor desiste. Hoje é só `logDiagnostic("restart-gave-up")`.
 8. Mostrar o projeto danificado na lista. Hoje só existe a restauração pelo `.bak`.
-9. `appId` próprio do fork: ainda é `com.etiennelescot.openscreen`. **Cuidado:** trocar muda a pasta de dados e a identidade do instalador, então planeje uma migração antes.
-10. Whisper large-v3-turbo como padrão. Ainda é `ggml-small-q8_0.bin` (`electron/stt/modelManager.ts`) e precisa de espaço em disco.
+9. `appId` próprio do fork. **Feito** (`com.yagoangelini.openscreen`, com `nsis.guid` fixado e os atalhos regravados; veja "Identidade do fork"). A pasta de dados não mudou: ela vem do `productName`, não do `appId`.
+10. ~~Whisper large-v3-turbo como padrão.~~ **Feito** (Automático numa GPU dedicada; veja "Transcrição pt-BR para Microsoft e IA"). Falta pôr o helper novo na pasta de binários antes da release.
 11. Spotlight no Metal e no wgpu (mac/Linux), se um dia importar.
 12. Poll do HUD ainda a cada 32 ms (item 3.5 não revisto).
 13. Fila do mixer de áudio sem limite e sem compensar a diferença de relógio (`AudioMixer::append` em `audio_sample_utils.cpp`). Vai junto com o item 6. O colchão de 100 ms do 2.0 resolveu a oscilação (as microfalhas), não a deriva de relógio.

@@ -1,5 +1,8 @@
 import type { TrimRegion } from "@/components/video-editor/types";
-import type { SttWordSegment } from "../../../electron/stt/transcriptionContract";
+import type {
+	SttWhisperModelPreference,
+	SttWordSegment,
+} from "../../../electron/stt/transcriptionContract";
 
 export interface CaptionSegment {
 	startSec: number;
@@ -52,7 +55,12 @@ export interface SttRendererStatus {
 }
 
 interface RendererSttApi {
-	transcribe: (request: { samples: Float32Array; language?: string; prompt?: string }) => Promise<{
+	transcribe: (request: {
+		samples: Float32Array;
+		language?: string;
+		prompt?: string;
+		model?: SttWhisperModelPreference;
+	}) => Promise<{
 		segments: CaptionSegment[];
 		wordSegments: SttWordSegment[];
 		detectedLanguage: string;
@@ -105,6 +113,8 @@ export interface TranscribeOptions {
 	language?: string;
 	/** Names and terms to bias Whisper toward (the project's vocabulary). */
 	prompt?: string;
+	/** Which whisper model runs; the main process treats a missing one as "auto". */
+	model?: SttWhisperModelPreference;
 }
 
 function runTranscription(
@@ -137,7 +147,12 @@ function runTranscription(
 	// trimmed leading silence with a peak detector and got false positives on
 	// quiet music intros / room tone. VAD or nothing.
 	return api
-		.transcribe({ ...payload, language: forcedLanguage, prompt: options?.prompt })
+		.transcribe({
+			...payload,
+			language: forcedLanguage,
+			prompt: options?.prompt,
+			model: options?.model,
+		})
 		.then((result) => {
 			const words = result.wordSegments ?? [];
 			let segments: CaptionSegment[];

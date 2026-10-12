@@ -211,7 +211,15 @@
 		"glossaryHint": "Names the transcription is corrected to, one per line: Term: misheard 1, misheard 2. Applies to new transcriptions.",
 		"glossaryApply": "Apply to this project's transcripts",
 		"glossaryApplied": "Glossary applied: {{count}} correction(s). Undo with Ctrl+Z.",
-		"glossaryNothingToFix": "Nothing to fix: the transcripts already follow the glossary."
+		"glossaryNothingToFix": "Nothing to fix: the transcripts already follow the glossary.",
+		"model": "Transcription model",
+		"modelHint": "The accurate model is downloaded on the first transcription and runs on a dedicated GPU. Automatic uses it when the GPU has room for it, and the fast one otherwise.",
+		"modelAuto": "Automatic (accurate on a dedicated GPU)",
+		"modelTurbo": "Accurate: large-v3-turbo ({{size}})",
+		"modelSmall": "Fast: small ({{size}})",
+		"standingTerms": "Standing terms (Microsoft and AI)",
+		"standingTermsHint": "Whisper is told to expect these terms in every transcription, before the project's names and terms. Separate them with commas; the first ones matter most.",
+		"standingTermsReset": "Restore the default list"
 	},
 	"exportDialog": {
 		"title": "Export",

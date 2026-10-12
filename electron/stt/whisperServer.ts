@@ -71,6 +71,11 @@ export interface WhisperServerStartOptions {
 	binaryPath?: string | null;
 	/** Externally-resolved backend (logs only); null = auto. */
 	backend?: SttBackend | null;
+	/**
+	 * The DTW alignment heads for the model (`--dtw-preset`); "small" when unset.
+	 * Must match the model family, or the helper cannot load it (modelManager.ts).
+	 */
+	dtwPreset?: string;
 }
 
 export interface WhisperServerStatus {
@@ -205,12 +210,15 @@ export class WhisperServerManager {
 		});
 	}
 
-	/** Check the server's HTTP root for a 200; resolves once responsive. */
+	/**
+	 * Check the server's HTTP root for a 200; resolves once responsive, with the
+	 * backend the probe reports (null from a helper that predates the field).
+	 */
 	private static async pollUntilReady(
 		baseUrl: string,
 		timeoutMs = 30_000,
 		shouldContinue: () => boolean = () => true,
-	): Promise<void> {
+	): Promise<string | null> {
 		const deadline = Date.now() + timeoutMs;
 		while (Date.now() < deadline) {
 			if (!shouldContinue()) throw new Error("whisper-stt-server exited before readiness");
@@ -221,7 +229,13 @@ export class WhisperServerManager {
 			);
 			try {
 				const res = await fetch(baseUrl, { method: "GET", signal: controller.signal });
-				if (res.ok) return;
+				if (res.ok) {
+					// Any body problem is "no backend field", never "not ready".
+					const probe = (await Promise.resolve()
+						.then(() => res.json())
+						.catch(() => null)) as { backend?: unknown } | null;
+					return typeof probe?.backend === "string" ? probe.backend : null;
+				}
 			} catch {
 				// not up yet
 			} finally {
@@ -333,6 +347,8 @@ export class WhisperServerManager {
 				"127.0.0.1",
 				"--threads",
 				String(whisperThreadCount(forceCpu, os.cpus().length)),
+				"--dtw-preset",
+				options.dtwPreset ?? "small",
 			];
 			if (options.vadModelPath && existsSync(options.vadModelPath)) {
 				args.push("--vad-model", options.vadModelPath);
@@ -344,7 +360,7 @@ export class WhisperServerManager {
 					? { ...process.env, GGML_VK_VISIBLE_DEVICES: this.vulkanDevice }
 					: process.env;
 			const child = spawn(binaryPath, args, { stdio: ["ignore", "pipe", "pipe"], env });
-			const activeBackend: SttBackend = forceCpu ? "whispercpp-cpu" : resolved.backend;
+			let activeBackend: SttBackend = forceCpu ? "whispercpp-cpu" : resolved.backend;
 
 			this.process = child;
 			this.port = port;
@@ -402,7 +418,7 @@ export class WhisperServerManager {
 				child.once("error", reject);
 			});
 			try {
-				await Promise.race([
+				const probedBackend = await Promise.race([
 					WhisperServerManager.pollUntilReady(
 						`http://127.0.0.1:${port}`,
 						30_000,
@@ -410,6 +426,12 @@ export class WhisperServerManager {
 					),
 					exitedBeforeReady,
 				]);
+				// The helper retries on the CPU by itself when the GPU cannot take the
+				// model; only the probe says it did.
+				if (probedBackend) {
+					activeBackend = this.toBackend(probedBackend);
+					this.backend = activeBackend;
+				}
 			} catch (err) {
 				const message = err instanceof Error ? err.message : String(err);
 				// ponytail: read BEFORE `stop()`, which nulls it either way. The `exit`

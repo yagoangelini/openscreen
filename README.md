@@ -26,6 +26,9 @@
 > [!NOTE]
 > **This is OpenScreen, continued.** [Siddharth Vaddem](https://github.com/siddharthvaddem) created the project and [archived the original repository](https://github.com/siddharthvaddem/openscreen) after v1.5.0. Development moved here with his approval, under the same name and the same MIT license.
 
+> [!IMPORTANT]
+> **This repository is a fork.** [yagoangelini/openscreen](https://github.com/yagoangelini/openscreen) is maintained by [Yago Angelini](https://github.com/yagoangelini), tuned for recording pt-BR tutorials on Windows, and ships its own releases and updates. It is based on [OpenScreen](https://github.com/getopenscreen/openscreen) by Etienne Lescot and the getopenscreen contributors, under the same MIT license; the upstream copyright notices are kept in [LICENSE](LICENSE). The links and badges below describe the upstream project.
+
 A raw capture goes in and comes out ready to post — on X, Reddit, YouTube, a docs page, or a landing page. That is the category Screen Studio defined; OpenScreen is the open-source entry in it, and not a clone.
 
 **100% free** for personal and commercial use, with nothing held behind a paywall.

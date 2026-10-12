@@ -11,8 +11,10 @@ import {
 	cachedAligner,
 	ensureAligner,
 	ensureModels,
+	isWhisperModelId,
 	modelPaths,
 	STT_MODELS,
+	WHISPER_MODELS,
 } from "./modelManager";
 
 describe("modelManager", () => {
@@ -58,6 +60,55 @@ describe("modelManager", () => {
 		const paths = modelPaths(dir);
 		expect(paths.whisper).toBe(path.join(dir, "whisper-ggml", "ggml-small-q8_0.bin"));
 		expect(paths["silero-vad"]).toBe(path.join(dir, "whisper-ggml", "ggml-silero-v6.2.0.bin"));
+	});
+
+	it("offers large-v3-turbo pinned and verified like small, with its own DTW preset", () => {
+		const turbo = WHISPER_MODELS["large-v3-turbo"];
+		expect(turbo.file.name).toBe("ggml-large-v3-turbo-q8_0.bin");
+		// The same immutable revision as small, so one pin covers both.
+		expect(turbo.file.url).toBe(
+			STT_MODELS.whisper.files[0].url.replace(
+				"ggml-small-q8_0.bin",
+				"ggml-large-v3-turbo-q8_0.bin",
+			),
+		);
+		expect(turbo.file.expectedSha256).toMatch(/^[0-9a-f]{64}$/);
+		expect(turbo.file.approximateBytes).toBe(874_188_075);
+		expect(turbo.dtwPreset).toBe("large-v3-turbo");
+		// small is the very descriptor STT_MODELS has always exposed.
+		expect(WHISPER_MODELS.small.file).toBe(STT_MODELS.whisper.files[0]);
+		expect(WHISPER_MODELS.small.dtwPreset).toBe("small");
+		expect(modelPaths(dir, "large-v3-turbo").whisper).toBe(
+			path.join(dir, "whisper-ggml", "ggml-large-v3-turbo-q8_0.bin"),
+		);
+		expect(isWhisperModelId("large-v3-turbo")).toBe(true);
+		expect(isWhisperModelId("auto")).toBe(false);
+	});
+
+	it("ensureModels fetches the turbo file when asked for it, and only that", async () => {
+		const turbo = WHISPER_MODELS["large-v3-turbo"].file;
+		const originalSha = turbo.expectedSha256;
+		turbo.expectedSha256 = null;
+		const urls: string[] = [];
+		const fetcher = (async (url: string) => {
+			urls.push(url);
+			return new Response(new Uint8Array([1, 2, 3]));
+		}) as unknown as typeof fetch;
+		try {
+			await ensureModels({
+				baseDir: dir,
+				only: ["whisper"],
+				whisperModel: "large-v3-turbo",
+				fetcher,
+			});
+			expect(urls).toEqual([turbo.url]);
+			expect(existsSync(modelPaths(dir, "large-v3-turbo").whisper)).toBe(true);
+			expect(existsSync(modelPaths(dir).whisper)).toBe(false);
+			expect(await areModelsPresent(dir, ["whisper"], "large-v3-turbo")).toBe(true);
+			expect(await areModelsPresent(dir, ["whisper"])).toBe(false);
+		} finally {
+			turbo.expectedSha256 = originalSha;
+		}
 	});
 
 	it("areModelsPresent returns false when the model file is missing", async () => {

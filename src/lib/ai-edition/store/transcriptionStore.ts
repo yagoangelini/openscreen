@@ -26,7 +26,7 @@ import { useEffect, useMemo } from "react";
 import { toast } from "sonner";
 import { create } from "zustand";
 import { toastText as translateToast } from "@/i18n/toastText";
-import { loadUserPreferences } from "@/lib/userPreferences";
+import { effectiveTranscriptionLanguage, loadUserPreferences } from "@/lib/userPreferences";
 import { transcribeAsset } from "../document/transcribe";
 import { carryOverWordEdits, withTranscript } from "../document/transcript";
 import type { AxcutDocument } from "../schema";
@@ -66,7 +66,10 @@ export interface TranscriptionJob {
 	rtf?: number;
 	downloadedBytes?: number;
 	totalBytes?: number;
-	/** `"auto"` unless the user forced a language from the media card. */
+	/**
+	 * The language the run decodes in: the default (`effectiveTranscriptionLanguage`,
+	 * Portuguese while the app speaks it) unless the media card picked one; "auto" detects.
+	 */
 	language: string;
 	failure?: TranscriptionFailure;
 	/** User-triggered runs get a toast on success; the background pass stays quiet. */
@@ -143,7 +146,11 @@ export const useTranscriptionStore = create<TranscriptionState>((set, get) => ({
 				// 35s at editor open for a four-minute bed. The manual regenerate in the
 				// media stage stays available for anything this refuses.
 				if (!assetCanCarrySpeech(document, asset.id)) continue;
-				patch()[asset.id] = { status: "queued", language: "auto", manual: false };
+				patch()[asset.id] = {
+					status: "queued",
+					language: effectiveTranscriptionLanguage(),
+					manual: false,
+				};
 			}
 		}
 
@@ -153,7 +160,7 @@ export const useTranscriptionStore = create<TranscriptionState>((set, get) => ({
 		}
 	},
 
-	request(assetId, language = "auto") {
+	request(assetId, language = effectiveTranscriptionLanguage()) {
 		// A manual run can be the first thing that happens in a project (the
 		// auto pass is off without a local engine), so adopt the loaded project
 		// before queueing — `runJob` refuses to write into a document the queue

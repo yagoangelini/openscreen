@@ -80,5 +80,9 @@
 	"notifications": "Notifications",
 	"windowTitles": {
 		"notes": "Notes"
+	},
+	"about": {
+		"credit": "{{product}}，作者：{{owner}}",
+		"basedOn": "基於 {{upstream}} 的 {{product}}"
 	}
 }
