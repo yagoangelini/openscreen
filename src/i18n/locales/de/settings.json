@@ -411,7 +411,11 @@
 		"reset": "Audio zurücksetzen",
 		"title": "Audio",
 		"voiceGain": "Stimme",
-		"systemGain": "Computerton"
+		"systemGain": "Computerton",
+		"voiceEnhance": "Enhance voice",
+		"voiceEnhanceTip": "Removes background noise from the voice and adds a little clarity, on this computer. Applied to the voice track only; the computer sound is left as recorded.",
+		"voiceEnhanceTipNoStems": "Removes background noise from the recording's audio and adds a little clarity, on this computer. Without a separate voice track, sounds that are not speech are reduced too.",
+		"voiceEnhanceStrength": "Strength"
 	},
 	"language": {
 		"title": "Sprache"

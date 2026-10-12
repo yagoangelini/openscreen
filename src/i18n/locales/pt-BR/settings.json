@@ -411,7 +411,11 @@
 		"reset": "Redefinir áudio",
 		"title": "Áudio",
 		"voiceGain": "Voz",
-		"systemGain": "Som do computador"
+		"systemGain": "Som do computador",
+		"voiceEnhance": "Melhorar a voz",
+		"voiceEnhanceTip": "Tira o ruído de fundo da voz e dá um pouco de clareza, neste computador. Vale só para a faixa da voz; o som do computador fica como foi gravado.",
+		"voiceEnhanceTipNoStems": "Tira o ruído de fundo do áudio da gravação e dá um pouco de clareza, neste computador. Sem uma faixa de voz separada, sons que não são fala também diminuem.",
+		"voiceEnhanceStrength": "Intensidade"
 	},
 	"language": {
 		"title": "Idioma"

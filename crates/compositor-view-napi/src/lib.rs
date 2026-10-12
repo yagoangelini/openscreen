@@ -1237,3 +1237,43 @@ impl Task for LoudnessGainTask {
 pub fn loudness_gain_db(path: String) -> AsyncTask<LoudnessGainTask> {
     AsyncTask::new(LoudnessGainTask { path })
 }
+
+pub struct EnhanceVoiceTask {
+    input_path: String,
+    output_path: String,
+    strength: f64,
+}
+
+impl Task for EnhanceVoiceTask {
+    type Output = f64;
+    type JsValue = f64;
+
+    fn compute(&mut self) -> Result<Self::Output> {
+        guarded("enhanceVoiceFile", || {
+            openscreen_compositor::voice_enhance::enhance_file(
+                &self.input_path,
+                &self.output_path,
+                self.strength as f32,
+            )
+            .map(|samples| samples as f64)
+            .map_err(|error| Error::from_reason(format!("{error:#}")))
+        })
+    }
+
+    fn resolve(&mut self, _env: Env, out: Self::Output) -> Result<Self::JsValue> {
+        Ok(out)
+    }
+}
+
+/// "Melhorar a voz" for the editor preview: `input_path`'s audio enhanced exactly as the export
+/// enhances it (`openscreen_compositor::voice_enhance`), written to `output_path` as a 16-bit
+/// 48 kHz WAV aligned sample for sample with it. Resolves to the samples per channel written.
+/// `AsyncTask`: about 1/60 of real time, seconds on a long take.
+#[napi]
+pub fn enhance_voice_file(
+    input_path: String,
+    output_path: String,
+    strength: f64,
+) -> AsyncTask<EnhanceVoiceTask> {
+    AsyncTask::new(EnhanceVoiceTask { input_path, output_path, strength })
+}

@@ -411,7 +411,11 @@
 		"reset": "重置音频",
 		"title": "音频",
 		"voiceGain": "人声",
-		"systemGain": "电脑声音"
+		"systemGain": "电脑声音",
+		"voiceEnhance": "Enhance voice",
+		"voiceEnhanceTip": "Removes background noise from the voice and adds a little clarity, on this computer. Applied to the voice track only; the computer sound is left as recorded.",
+		"voiceEnhanceTipNoStems": "Removes background noise from the recording's audio and adds a little clarity, on this computer. Without a separate voice track, sounds that are not speech are reduced too.",
+		"voiceEnhanceStrength": "Strength"
 	},
 	"language": {
 		"title": "语言"

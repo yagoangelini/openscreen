@@ -111,6 +111,25 @@ function makeDoc(
 	};
 }
 
+// --- voice enhancement -----------------------------------------------------
+
+describe("buildSceneDescription.voiceEnhance", () => {
+	it("is absent while off, the default", () => {
+		expect(buildSceneDescription(makeDoc()).voiceEnhance).toBeUndefined();
+		expect(
+			buildSceneDescription(makeDoc({ legacyEditor: { voiceEnhanceStrength: 0.5 } })).voiceEnhance,
+		).toBeUndefined();
+	});
+
+	it("carries the strength in tenths, outside the linear-gain `audio` block", () => {
+		const scene = buildSceneDescription(
+			makeDoc({ legacyEditor: { voiceEnhance: true, voiceEnhanceStrength: 0.73 } }),
+		);
+		expect(scene.voiceEnhance).toEqual({ strength: 0.7 });
+		expect(Object.keys(scene.audio).sort()).toEqual(["gainDb", "systemGainDb", "voiceGainDb"]);
+	});
+});
+
 // --- background ------------------------------------------------------------
 
 describe("buildSceneDescription.background", () => {

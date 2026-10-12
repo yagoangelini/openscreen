@@ -51,9 +51,15 @@ pub fn decode_and_stretch_clip_audio(
     source_end_sec: f64,
     speed_segments: &[SpeedSegment],
     out_fps: f64,
+    voice_enhance: Option<f32>,
 ) -> Option<PlanarPcm> {
     match decode_clip_audio(screen_path, source_start_sec, source_end_sec) {
         Ok(Some(pcm)) => {
+            // "Melhorar a voz", on the source before the stretch, as the streamed export does.
+            let pcm = match voice_enhance {
+                Some(strength) => crate::voice_enhance::enhance_pcm(&pcm, strength),
+                None => pcm,
+            };
             let mut pcm = stretch_clip_pcm_by_speed(&pcm, speed_segments, out_fps);
             apply_gain_db(&mut pcm, loudness_gain_db(screen_path));
             Some(pcm)

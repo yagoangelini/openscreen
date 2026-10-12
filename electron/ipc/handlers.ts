@@ -5349,6 +5349,55 @@ export function registerIpcHandlers(
 		},
 	);
 
+	// "Melhorar a voz" in the preview: the voice file enhanced by the compositor exactly as the
+	// export will (`voice_enhance.rs`), cached in `preview-audio` by file, size, mtime and
+	// strength. The preview plays it in place of the voice; the export enhances on the fly and
+	// never reads this copy. One render per output at a time, shared by concurrent asks.
+	const enhancedVoiceJobs = new Map<string, Promise<string | null>>();
+	ipcMain.handle(
+		"prepare-enhanced-voice",
+		async (
+			_,
+			filePath: string,
+			strength: number,
+		): Promise<{ success: boolean; path?: string; message?: string }> => {
+			try {
+				const normalizedPath = readableApprovedPath(filePath);
+				if (!normalizedPath) return { success: false, message: "File path is not approved" };
+				const level = Math.round(Math.min(1, Math.max(0, Number(strength) || 0)) * 100);
+				const stat = await fs.stat(normalizedPath);
+				const parsed = path.parse(normalizedPath);
+				const output = path.join(
+					PREVIEW_AUDIO_DIR,
+					`${parsed.name}.voice-enhanced-${level}.${stat.size}-${Math.round(stat.mtimeMs)}.wav`,
+				);
+				let job = enhancedVoiceJobs.get(output);
+				if (!job) {
+					job = (async () => {
+						try {
+							await fs.access(output);
+							return output;
+						} catch {
+							await fs.mkdir(PREVIEW_AUDIO_DIR, { recursive: true });
+							const ok = await loudnessService.enhanceVoiceFile(
+								normalizedPath,
+								output,
+								level / 100,
+							);
+							return ok ? output : null;
+						}
+					})();
+					enhancedVoiceJobs.set(output, job);
+					void job.finally(() => enhancedVoiceJobs.delete(output)).catch(() => undefined);
+				}
+				const result = await job;
+				return result ? { success: true, path: result } : { success: false, message: "addon" };
+			} catch (error) {
+				return { success: false, message: String(error) };
+			}
+		},
+	);
+
 	// Cap renderer-requested chunk sizes so a buggy or compromised renderer
 	// cannot make the main process allocate an arbitrarily large buffer.
 	const MAX_IPC_CHUNK_BYTES = 64 * 1024 * 1024;

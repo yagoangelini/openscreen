@@ -595,6 +595,13 @@ export interface SceneDescription {
 	 */
 	audioStems: Array<{ screenPath: string; voicePath: string; systemPath: string }>;
 	/**
+	 * "Melhorar a voz" (`voice_enhance.rs`): each take's voice stem, or its own track without
+	 * stems, denoised and lightly equalised. Not a field of `audio`, which stays linear gains: the
+	 * preview cannot apply this one itself, it plays the copy the compositor renders
+	 * (`prepare-enhanced-voice`). Omitted when off.
+	 */
+	voiceEnhance?: { strength: number };
+	/**
 	 * Timeline audio tracks (issue #350), mixed over the assembled programme by
 	 * `audio::mix_external_tracks`. One entry per contiguous stretch: a track split by a
 	 * clip boundary contributes one entry per fragment (each picking the source up where
@@ -817,6 +824,14 @@ export function zoomScaleLimit(document: AxcutDocument, regionId: string): numbe
  * when the annotation is on no clip (its own clip trimmed away, say): another clip's layout may
  * differ, and converting through it would move the annotation.
  */
+/**
+ * The strength the scene carries and the preview's copy is rendered at: tenths, so a slider
+ * drag renders a handful of copies, and the export enhances at exactly the strength heard.
+ */
+export function roundedVoiceEnhanceStrength(strength: number): number {
+	return Math.round(Math.min(1, Math.max(0, strength)) * 10) / 10;
+}
+
 export function annotationFootageRect(
 	document: AxcutDocument,
 	annotationId: string,
@@ -1556,6 +1571,9 @@ export function buildSceneDescription(
 			voiceGainDb: settings.voiceGainDb,
 			systemGainDb: settings.systemGainDb,
 		},
+		...(settings.voiceEnhance
+			? { voiceEnhance: { strength: roundedVoiceEnhanceStrength(settings.voiceEnhanceStrength) } }
+			: {}),
 		audioStems: document.assets.flatMap((asset) =>
 			asset.audioStems && asset.originalPath
 				? [{ screenPath: asset.originalPath, ...asset.audioStems }]

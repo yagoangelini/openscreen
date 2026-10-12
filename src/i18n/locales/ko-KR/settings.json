@@ -411,7 +411,11 @@
 		"reset": "오디오 재설정",
 		"title": "오디오",
 		"voiceGain": "음성",
-		"systemGain": "컴퓨터 소리"
+		"systemGain": "컴퓨터 소리",
+		"voiceEnhance": "Enhance voice",
+		"voiceEnhanceTip": "Removes background noise from the voice and adds a little clarity, on this computer. Applied to the voice track only; the computer sound is left as recorded.",
+		"voiceEnhanceTipNoStems": "Removes background noise from the recording's audio and adds a little clarity, on this computer. Without a separate voice track, sounds that are not speech are reduced too.",
+		"voiceEnhanceStrength": "Strength"
 	},
 	"language": {
 		"title": "언어"

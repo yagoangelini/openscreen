@@ -131,6 +131,10 @@ export interface EditorSettingsSnapshot {
 	/** The Voice and Computer volumes (dB), for a take recorded with its audio stems. */
 	voiceGainDb: number;
 	systemGainDb: number;
+	/** "Melhorar a voz": noise reduction and gentle EQ on the voice (`voice_enhance.rs`). */
+	voiceEnhance: boolean;
+	/** 0..1. */
+	voiceEnhanceStrength: number;
 	webcamBackgroundMode: WebcamBackgroundMode;
 	webcamWallpaper: string;
 	webcamBlurIntensity: number;
@@ -157,6 +161,8 @@ export const DEFAULT_EDITOR_SETTINGS: EditorSettingsSnapshot = {
 	audioGainDb: 0,
 	voiceGainDb: 0,
 	systemGainDb: 0,
+	voiceEnhance: false,
+	voiceEnhanceStrength: 0.8,
 	formatFollowCursor: null,
 	autoZoom: DEFAULT_AUTO_ZOOM_SETTINGS,
 };
@@ -192,6 +198,8 @@ interface LegacyShape {
 	audioGainDb?: number;
 	voiceGainDb?: number;
 	systemGainDb?: number;
+	voiceEnhance?: boolean;
+	voiceEnhanceStrength?: number;
 	webcamBackgroundMode?: WebcamBackgroundMode;
 	webcamWallpaper?: string;
 	webcamBlurIntensity?: number;
@@ -356,6 +364,11 @@ export function getEditorSettings(doc: AxcutDocument | null | undefined): Editor
 			AUDIO_GAIN_DB_LIMIT,
 			Math.max(-AUDIO_GAIN_DB_LIMIT, num(legacy?.systemGainDb, 0)),
 		),
+		voiceEnhance: bool(legacy?.voiceEnhance, DEFAULT_EDITOR_SETTINGS.voiceEnhance),
+		voiceEnhanceStrength: Math.min(
+			1,
+			Math.max(0, num(legacy?.voiceEnhanceStrength, DEFAULT_EDITOR_SETTINGS.voiceEnhanceStrength)),
+		),
 		webcamBackgroundMode: isWebcamBackgroundMode(legacy?.webcamBackgroundMode)
 			? legacy.webcamBackgroundMode
 			: DEFAULT_EDITOR_SETTINGS.webcamBackgroundMode,
@@ -404,6 +417,8 @@ export interface EditorSettingsPatch {
 	audioGainDb?: number;
 	voiceGainDb?: number;
 	systemGainDb?: number;
+	voiceEnhance?: boolean;
+	voiceEnhanceStrength?: number;
 	webcamBackgroundMode?: WebcamBackgroundMode;
 	webcamWallpaper?: string;
 	webcamBlurIntensity?: number;

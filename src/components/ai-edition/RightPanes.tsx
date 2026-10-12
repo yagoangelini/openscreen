@@ -3547,6 +3547,34 @@ export function AudioPane() {
 					</>
 				) : null}
 			</div>
+			{/* On-device noise reduction and gentle EQ on the voice (the voice stem, or the take's
+			    own track without one), the same in the preview and the export. */}
+			<div className={styles.paneRow}>
+				<span className={styles.label}>{ts("audio.voiceEnhance")}</span>
+				<Toggle
+					checked={settings.voiceEnhance}
+					ariaLabel={ts("audio.voiceEnhance")}
+					tooltip={hasStems ? ts("audio.voiceEnhanceTip") : ts("audio.voiceEnhanceTipNoStems")}
+					disabled={!hasDocument}
+					onChange={(voiceEnhance) => void set({ voiceEnhance })}
+				/>
+			</div>
+			{settings.voiceEnhance ? (
+				<div className={styles.sliderGrid}>
+					<SliderCell
+						label={ts("audio.voiceEnhanceStrength")}
+						value={Math.round(settings.voiceEnhanceStrength * 100)}
+						min={0}
+						max={100}
+						step={10}
+						suffix="%"
+						defaultValue={80}
+						disabled={!hasDocument}
+						onChange={(value) => setLive({ voiceEnhanceStrength: value / 100 })}
+						onCommit={() => void commit()}
+					/>
+				</div>
+			) : null}
 			<button
 				type="button"
 				className={styles.secondaryBtn}

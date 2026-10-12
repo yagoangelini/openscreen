@@ -464,6 +464,10 @@ interface Window {
 			gainDb: number;
 			message?: string;
 		}>;
+		prepareEnhancedVoice: (
+			filePath: string,
+			strength: number,
+		) => Promise<{ success: boolean; path?: string; message?: string }>;
 		clearCurrentVideoPath: () => Promise<{ success: boolean }>;
 		saveProjectFile: (
 			projectData: unknown,

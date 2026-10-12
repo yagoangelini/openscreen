@@ -37,6 +37,10 @@ ndarray = { workspace = true, optional = true }
 serde.workspace = true
 serde_json.workspace = true
 image.workspace = true
+# "Melhorar a voz" (`voice_enhance.rs`): the RNNoise network, ported to pure Rust (BSD-3-Clause,
+# model weights included, no C, nothing fetched at run time). `default-features = false` drops
+# its command-line tool and the `dasp` resampler: the export is already 48 kHz, RNNoise's rate.
+nnnoiseless = { version = "0.5", default-features = false }
 
 # Acces Vulkan brut, UNIQUEMENT pour ouvrir le device avec les extensions de
 # memoire externe (cf. `d3d_linux::open_device_with_dmabuf_export`). Les versions

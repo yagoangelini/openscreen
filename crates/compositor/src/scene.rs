@@ -866,6 +866,15 @@ pub struct SceneClickSound {
     pub hits: Vec<SceneClickHit>,
 }
 
+/// See `Scene::voice_enhance`. A separate field rather than one of `SceneAudio`, which stays
+/// linear gains only (the preview applies those itself; this one it plays from a rendered copy).
+#[derive(Debug, Clone, Copy, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SceneVoiceEnhance {
+    /// 0..1: how much of the denoised voice replaces the original, and the presence boost.
+    pub strength: f32,
+}
+
 fn default_one() -> f32 {
     1.0
 }
@@ -959,6 +968,10 @@ pub struct Scene {
     /// same as the field being absent, which is every scene written before this.
     #[serde(default)]
     pub click_sound: SceneClickSound,
+    /// "Melhorar a voz" (`voice_enhance.rs`): applied to each take's voice stem, or to its own
+    /// track when it has none. Absent: off, every scene written before it.
+    #[serde(default)]
+    pub voice_enhance: Option<SceneVoiceEnhance>,
     /// Crop écran par clip, dans le même ordre que `clips` (`cropByClip` côté TS).
     #[serde(default)]
     pub crop_by_clip: Vec<Option<SceneCrop>>,

@@ -63,6 +63,12 @@ pub trait PcmStream {
     fn pull(&mut self, n: usize, out: &mut PlanarPcm);
 }
 
+impl PcmStream for Box<dyn PcmStream> {
+    fn pull(&mut self, n: usize, out: &mut PlanarPcm) {
+        (**self).pull(n, out)
+    }
+}
+
 fn planes(capacity: usize) -> PlanarPcm {
     (0..CHANNELS).map(|_| Vec::with_capacity(capacity)).collect()
 }
@@ -186,6 +192,34 @@ impl<S: PcmStream> PcmStream for GainStream<S> {
 extern "C" {
     fn sn_fmt_stream(s: *mut AVFormatContext, i: i32) -> *mut AVStream;
     fn sn_fmt_nb_streams(s: *mut AVFormatContext) -> u32;
+}
+
+/// The longest audio stream of `path`, in seconds, as its container states it. `None` when the
+/// file cannot be opened, has no audio, or says nothing about its length.
+pub fn audio_duration_sec(path: &str) -> Option<f64> {
+    let cpath = CString::new(path).ok()?;
+    unsafe {
+        let mut fmt: *mut AVFormatContext = ptr::null_mut();
+        if avformat_open_input(&mut fmt, cpath.as_ptr(), ptr::null_mut(), ptr::null_mut()) < 0 {
+            return None;
+        }
+        let mut longest: Option<f64> = None;
+        if avformat_find_stream_info(fmt, ptr::null_mut()) >= 0 {
+            for index in 0..sn_fmt_nb_streams(fmt) as i32 {
+                let stream = sn_fmt_stream(fmt, index);
+                if (*(*stream).codecpar).codec_type != AVMediaType::AVMEDIA_TYPE_AUDIO {
+                    continue;
+                }
+                let tb = (*stream).time_base;
+                if (*stream).duration > 0 && tb.den != 0 {
+                    let sec = (*stream).duration as f64 * tb.num as f64 / tb.den as f64;
+                    longest = Some(longest.map_or(sec, |l: f64| l.max(sec)));
+                }
+            }
+        }
+        avformat_close_input(&mut fmt);
+        longest
+    }
 }
 
 /// One audio track of the file: its decoder, its resampler, and the decoded samples nobody
@@ -1202,20 +1236,35 @@ impl ProgrammeAudio {
         source_end_sec: f64,
         speed_segments: &[SpeedSegment],
         output_fps: f64,
+        voice_enhance: Option<f32>,
     ) -> Option<Box<dyn PcmStream>> {
+        // "Melhorar a voz" works on the source, before the speed stretch: the stretch then plays
+        // the enhanced voice exactly where it played the original (`EnhanceStream` is aligned).
+        let stretch = |reader: ClipAudioReader, enhance: Option<f32>| -> Box<dyn PcmStream> {
+            let total = reader.len();
+            match enhance {
+                Some(strength) => Box::new(SpeedStretchStream::new(
+                    crate::voice_enhance::EnhanceStream::new(reader, strength),
+                    speed_segments,
+                    output_fps,
+                    total,
+                )),
+                None => Box::new(SpeedStretchStream::new(reader, speed_segments, output_fps, total)),
+            }
+        };
         if let Some(stems) = stems {
-            let open = |path: &str, gain_db: f32| -> Option<Box<dyn PcmStream>> {
+            let open = |path: &str, gain_db: f32, enhance: Option<f32>| -> Option<Box<dyn PcmStream>> {
                 match ClipAudioReader::open(path, source_start_sec, source_end_sec) {
-                    Ok(Some(reader)) => {
-                        let total = reader.len();
-                        let stretched = SpeedStretchStream::new(reader, speed_segments, output_fps, total);
-                        Some(Box::new(GainStream::new(stretched, gain_db)))
-                    }
+                    Ok(Some(reader)) => Some(Box::new(GainStream::new(stretch(reader, enhance), gain_db))),
                     _ => None,
                 }
             };
-            let voice = open(stems.voice_path, loudness_gain_db(stems.voice_path) + stems.voice_gain_db);
-            let system = open(stems.system_path, stems.system_gain_db);
+            let voice = open(
+                stems.voice_path,
+                loudness_gain_db(stems.voice_path) + stems.voice_gain_db,
+                voice_enhance,
+            );
+            let system = open(stems.system_path, stems.system_gain_db, None);
             if let (Some(voice), Some(system)) = (voice, system) {
                 return Some(Box::new(SumStream::new(vec![voice, system])));
             }
@@ -1224,11 +1273,10 @@ impl ProgrammeAudio {
             );
         }
         match ClipAudioReader::open(screen_path, source_start_sec, source_end_sec) {
-            Ok(Some(reader)) => {
-                let total = reader.len();
-                let stretched = SpeedStretchStream::new(reader, speed_segments, output_fps, total);
-                Some(Box::new(GainStream::new(stretched, loudness_gain_db(screen_path))))
-            }
+            Ok(Some(reader)) => Some(Box::new(GainStream::new(
+                stretch(reader, voice_enhance),
+                loudness_gain_db(screen_path),
+            ))),
             Ok(None) => {
                 eprintln!(
                     "[pipeline] warning: clip #{clip_index} déclaré audio mais sans flux décodable; silence conservé"
