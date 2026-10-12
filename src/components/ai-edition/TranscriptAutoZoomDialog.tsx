@@ -116,7 +116,10 @@ export function TranscriptAutoZoomDialog({
 
 	const cancel = () => {
 		stopped.current = true;
-		void window.electronAPI?.stt?.cancel?.();
+		// Through the store, not straight to the engine: it aborts the run (which cancels the
+		// main process and stops the helper mid-chunk) and drops the job, so nothing is saved
+		// or reported as a failure afterwards.
+		useTranscriptionStore.getState().cancel(assetId);
 		void finish(false);
 	};
 

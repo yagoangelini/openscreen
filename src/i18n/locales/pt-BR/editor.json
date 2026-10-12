@@ -219,7 +219,18 @@
 		"modelSmall": "Rápido: small ({{size}})",
 		"standingTerms": "Termos de sempre (Microsoft e IA)",
 		"standingTermsHint": "O Whisper recebe estes termos em toda transcrição, antes dos nomes e termos do projeto. Separe por vírgula; os primeiros pesam mais.",
-		"standingTermsReset": "Restaurar a lista padrão"
+		"standingTermsReset": "Restaurar a lista padrão",
+		"redactTerms": "Minhas palavras sensíveis",
+		"redactTermsHint": "Nomes, palavras e números para desfocar também, um por linha. Maiúsculas e acentos não importam, e um trecho dentro de uma palavra maior desfoca a palavra toda.",
+		"redactTermsPlaceholder": "Contoso\nMaria Silva\n4021-7788",
+		"redactRescan": "Procurar de novo",
+		"redactRescanHint": "Ler de novo as gravações deste projeto e trocar os desfoques automáticos. Os desfoques que você desenhou ficam.",
+		"redactRescanning": "Procurando…",
+		"redactRescanFailed": "Não deu para ler as gravações de novo.",
+		"redactRescanNothing": "Nada mudou: os desfoques automáticos já estão em dia.",
+		"redactRescanDone": "Desfoques automáticos atualizados: {{added}} novos, {{removed}} trocados. Desfaça com Ctrl+Z.",
+		"transcribeGuest": "Transcrever também o som do computador (convidado)",
+		"transcribeGuestHint": "Para um take com voz e som do computador separados: transcreve os dois e marca quem disse cada palavra. Desligado: só o seu microfone é transcrito."
 	},
 	"exportDialog": {
 		"title": "Exportar",
@@ -294,6 +305,32 @@
 		"applyEditsFailed": "Não foi possível aplicar as edições do agente",
 		"agentEditConflict": "As edições do agente não foram aplicadas porque o projeto mudou durante o processamento.",
 		"applyAnyway": "Aplicar mesmo assim",
+		"plannedPrefix": "vai aplicar:",
+		"turnPendingTitle": "Alterações propostas",
+		"turnPendingHint": "Nada foi aplicado ainda. Revise as alterações e escolha aplicar ou descartar.",
+		"turnApply": "Aplicar",
+		"turnDiscard": "Descartar",
+		"turnDiscarded": "Alterações descartadas. O projeto não foi alterado.",
+		"turnUndo": "Desfazer esta resposta",
+		"turnUndoTip": "Reverte tudo o que esta resposta mudou no projeto, em um único passo.",
+		"turnUndone": "Resposta desfeita.",
+		"turnUndoBlocked": "Só dá para desfazer esta resposta sozinha enquanto ela for a última alteração. Use Ctrl+Z para voltar pelas edições feitas depois.",
+		"turnProjectChanged": "Estas alterações são de um projeto que não está mais aberto, então não foram aplicadas.",
+		"turnChangeAdded": "{{count}} adicionado(s)",
+		"turnChangeRemoved": "{{count}} removido(s)",
+		"turnChangeEdited": "{{count}} alterado(s)",
+		"turnChange": {
+			"clips": "Clipes",
+			"cuts": "Cortes",
+			"zooms": "Zooms",
+			"speed": "Velocidade",
+			"annotations": "Anotações",
+			"audio": "Áudio",
+			"camera": "Câmera",
+			"captions": "Legendas",
+			"transcript": "Palavras da transcrição",
+			"other": "Outras configurações"
+		},
 		"chatFailed": "Falha no chat",
 		"rewindFailed": "Falha ao rebobinar",
 		"rewoundSuccess": "Rebobinado até o início dessa mensagem",
@@ -452,6 +489,7 @@
 		"projectEditsLabel": "Edições do projeto",
 		"projectEditsHint": "Quando desativado, o agente precisa perguntar antes de alterar a linha do tempo. As edições sempre podem ser desfeitas.",
 		"allowAgentEdits": "Permitir que o agente edite o projeto",
+		"requireAgentEditApproval": "Pedir aprovação antes de aplicar",
 		"disconnect": "Desconectar",
 		"cancel": "Cancelar",
 		"save": "Salvar",
@@ -590,5 +628,16 @@
 		"recording": "Gravação {{date}}",
 		"project": "Projeto {{date}}",
 		"asset": "Gravação"
+	},
+	"speechCleanup": {
+		"nothingLeft": "Nada mais para cortar: a transcrição mudou nesse meio-tempo.",
+		"applied": "{{count}} corte(s), {{seconds}} s a menos. Desfaça com Ctrl+Z."
+	},
+	"speakers": {
+		"noTranscript": "Transcreva antes um take gravado com microfone e som do computador.",
+		"stemsUnreadable": "Não deu para ler as trilhas de áudio do take.",
+		"undecided": "Não deu para separar quem fala neste take.",
+		"onlyYou": "Só a sua voz aparece na transcrição.",
+		"labelled": "Falas marcadas: {{mic}} palavra(s) suas, {{system}} do convidado."
 	}
 }

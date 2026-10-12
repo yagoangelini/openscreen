@@ -1,4 +1,4 @@
-import { ArrowLeft, Check, Loader2, X } from "lucide-react";
+import { ArrowLeft, Check, Loader2, Undo2, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
@@ -6,10 +6,20 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Tooltip } from "@/components/ui/tooltip";
 import { useEditorDialogActions, useEditorDialogSection } from "@/contexts/EditorDialogsContext";
 import { useScopedT } from "@/contexts/I18nContext";
+import { formatTime } from "@/i18n/format";
+import { currentLocale } from "@/i18n/toastText";
+import { type AxcutDocument, ensureDocument } from "@/lib/ai-edition/schema";
 import {
 	applyAgentDocumentIfCurrent,
 	runAgentTurn,
 } from "@/lib/ai-edition/store/agentDocumentApply";
+import {
+	type AgentTurnChange,
+	type AgentTurnEntry,
+	latestUndoableTurnId,
+	summarizeAgentTurnChanges,
+	useAgentTurnStore,
+} from "@/lib/ai-edition/store/agentTurns";
 import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
 import { useChatPromptBus } from "@/lib/ai-edition/store/useChatPromptBus";
 import { nativeBridgeClient } from "@/native/client";
@@ -44,6 +54,19 @@ interface ChatDisplayMessage {
 	// above the answer. Ephemeral — only present for the turn that streamed it;
 	// reloading a session won't show past traces.
 	thinking?: string;
+}
+
+/**
+ * What a turn would change, for the approval card. Empty when the agent handed back
+ * something that is not a document: the apply will say so, and a summary of a
+ * document that cannot be read would only be a guess.
+ */
+function changesOf(before: AxcutDocument, after: unknown): AgentTurnChange[] {
+	try {
+		return summarizeAgentTurnChanges(before, ensureDocument(after));
+	} catch {
+		return [];
+	}
 }
 
 // Quick-access model picker anchored to the composer's model pill — mirrors
@@ -326,6 +349,162 @@ function ModelQuickPopover({
 // (so the user sees the model is alive) and on the completed message (so the
 // trace is still there to revisit, collapsed by default).
 const THINKING_PREVIEW_TAIL_CHARS = 240;
+/**
+ * What an agent reply did, or proposes to do, to the project, under its bubble.
+ *
+ * Without a turn entry (a reply reloaded from a past session, or one that edited
+ * nothing) this is the plain "applied:" list it always was. With one it follows the
+ * turn: a proposal with Apply / Discard while staged, the list plus "Undo this reply"
+ * once applied, and a one-line verdict once discarded or undone.
+ */
+function AgentTurnFooter({
+	messageId,
+	toolCalls,
+	entry,
+	undoable,
+	onApply,
+	onDiscard,
+	onUndo,
+}: {
+	messageId: string | undefined;
+	toolCalls: AiEditionToolCallSummary[] | undefined;
+	entry: AgentTurnEntry | undefined;
+	undoable: boolean;
+	onApply: (messageId: string) => void;
+	onDiscard: (messageId: string) => void;
+	onUndo: (messageId: string) => void;
+}) {
+	const t = useScopedT("editor");
+	const calls = toolCalls ?? [];
+	const status = entry?.status;
+	const staged = status === "pending" || status === "applying";
+	const callColor = staged
+		? "var(--fg-2)"
+		: status === "discarded" || status === "undone"
+			? "var(--muted)"
+			: "var(--success)";
+	const prefix = staged ? t("chat.plannedPrefix") : t("chat.appliedPrefix");
+	const callList = calls.length ? (
+		<div style={{ marginTop: 4, display: "flex", flexDirection: "column", gap: 2 }}>
+			{calls.map((call, j) => (
+				<div
+					key={j}
+					style={{
+						font: "500 12px/1.5 var(--font-body)",
+						color: callColor,
+						textDecoration:
+							status === "discarded" || status === "undone" ? "line-through" : undefined,
+					}}
+				>
+					{prefix} {call.summary}
+				</div>
+			))}
+		</div>
+	) : null;
+
+	if (!entry || !messageId) return callList;
+
+	if (staged) {
+		const busy = status === "applying";
+		return (
+			<section
+				data-agent-turn="pending"
+				aria-label={t("chat.turnPendingTitle")}
+				style={{
+					marginTop: 6,
+					padding: "8px 10px",
+					borderRadius: "var(--r-md)",
+					border: "1px solid var(--border)",
+					background: "var(--surface-2)",
+				}}
+			>
+				<div style={{ font: "600 12px/1.4 var(--font-body)", color: "var(--fg)" }}>
+					{t("chat.turnPendingTitle")}
+				</div>
+				<div style={{ font: "400 12px/1.4 var(--font-body)", color: "var(--muted)", marginTop: 2 }}>
+					{t("chat.turnPendingHint")}
+				</div>
+				{entry.changes.length ? (
+					<ul style={{ margin: "6px 0 0", paddingLeft: 16 }}>
+						{entry.changes.map((change) => (
+							<li
+								key={change.kind}
+								style={{ font: "500 12px/1.5 var(--font-body)", color: "var(--fg-2)" }}
+							>
+								{t(`chat.turnChange.${change.kind}`)}:{" "}
+								{[
+									change.added ? t("chat.turnChangeAdded", { count: change.added }) : null,
+									change.removed ? t("chat.turnChangeRemoved", { count: change.removed }) : null,
+									change.changed ? t("chat.turnChangeEdited", { count: change.changed }) : null,
+								]
+									.filter(Boolean)
+									.join(", ")}
+							</li>
+						))}
+					</ul>
+				) : null}
+				{callList}
+				<div style={{ display: "flex", gap: 6, marginTop: 8, justifyContent: "flex-end" }}>
+					<button
+						type="button"
+						className={`${styles.btn} ${styles.btnSecondary}`}
+						style={{ height: 28 }}
+						disabled={busy}
+						onClick={() => onDiscard(messageId)}
+					>
+						{t("chat.turnDiscard")}
+					</button>
+					<button
+						type="button"
+						className={`${styles.btn} ${styles.btnPrimary}`}
+						style={{ height: 28 }}
+						disabled={busy}
+						onClick={() => onApply(messageId)}
+					>
+						{busy ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
+						{t("chat.turnApply")}
+					</button>
+				</div>
+			</section>
+		);
+	}
+
+	const verdict =
+		status === "discarded"
+			? t("chat.turnDiscarded")
+			: status === "undone"
+				? t("chat.turnUndone")
+				: null;
+	return (
+		<div data-agent-turn={status}>
+			{callList}
+			{verdict ? (
+				<div style={{ marginTop: 4, font: "500 12px/1.5 var(--font-body)", color: "var(--muted)" }}>
+					{verdict}
+				</div>
+			) : null}
+			{status === "applied" ? (
+				<div style={{ display: "flex", justifyContent: "flex-end", marginTop: 4 }}>
+					{/* Never disabled: a disabled button cannot show why. When later edits sit on top
+					    of this turn the click explains that, and points at Ctrl+Z. */}
+					<Tooltip content={undoable ? t("chat.turnUndoTip") : t("chat.turnUndoBlocked")}>
+						<button
+							type="button"
+							className={`${styles.btn} ${styles.btnSecondary}`}
+							style={{ height: 26, opacity: undoable ? 1 : 0.6 }}
+							aria-disabled={!undoable}
+							onClick={() => onUndo(messageId)}
+						>
+							<Undo2 size={12} />
+							{t("chat.turnUndo")}
+						</button>
+					</Tooltip>
+				</div>
+			) : null}
+		</div>
+	);
+}
+
 function ThinkingBlock({
 	text,
 	expanded,
@@ -469,6 +648,50 @@ export function ChatStripPanel() {
 	// unknown ≠ none; see chatAvailability.ts.
 	const canChat = canSendChat(llmConfig, connectedProviders);
 	const sendDisabled = busy || !input.trim() || !canChat;
+	// "Pedir aprovação antes de aplicar": on unless the user turned it off.
+	const approvalRequired = llmConfig?.requireAgentEditApproval !== false;
+	const turns = useAgentTurnStore((s) => s.turns);
+	// The undo stack is not reactive, but every write that moves it also moves the
+	// project store, so a selector there re-reads it at the right moments.
+	const undoableTurnId = useProjectStore(() => latestUndoableTurnId(turns));
+
+	const applyTurn = useCallback(
+		async (messageId: string, options?: { ignoreConflict?: boolean }) => {
+			const result = await useAgentTurnStore.getState().applyTurn(messageId, options);
+			if (result === "save-failed" || result === "malformed") {
+				// On a failed save the store has already said WHY, with the native error. This
+				// says what it COST, without a description so the two do not repeat each other.
+				toast.error(t("chat.applyEditsFailed"));
+			} else if (result === "no-live-document") {
+				toast.error(t("chat.turnProjectChanged"));
+			} else if (result === "conflict") {
+				// The thing that usually moves `revision` here is a background transcription
+				// finishing, not the user -- so dropping the turn and blaming "the project
+				// changed" would cost them the turn for something they never did. Let them take
+				// it. No auto-dismiss: with approval off it is the only way back to this document
+				// besides the reply's own Apply button.
+				toast.warning(t("chat.agentEditConflict"), {
+					duration: Number.POSITIVE_INFINITY,
+					action: {
+						label: t("chat.applyAnyway"),
+						onClick: () => void applyTurn(messageId, { ignoreConflict: true }),
+					},
+				});
+			}
+		},
+		[t],
+	);
+
+	const undoTurn = useCallback(
+		(messageId: string) => {
+			if (useAgentTurnStore.getState().undoTurn(messageId)) {
+				toast.success(t("chat.turnUndone"));
+			} else {
+				toast.warning(t("chat.turnUndoBlocked"));
+			}
+		},
+		[t],
+	);
 	const [modelPopoverOpen, setModelPopoverOpen] = useState(false);
 	const modelButtonRef = useRef<HTMLButtonElement | null>(null);
 	const [modelPopoverRect, setModelPopoverRect] = useState<{
@@ -601,7 +824,7 @@ export function ChatStripPanel() {
 				id: optimisticUserId,
 				role: "user",
 				content: text,
-				time: new Date().toLocaleTimeString(),
+				time: formatTime(new Date(), currentLocale()),
 				checkpointId: optimisticUserId,
 			},
 		]);
@@ -624,55 +847,36 @@ export function ChatStripPanel() {
 			// `runAgentTurn` reads the document AND the revision it is at from one snapshot
 			// before the turn starts, so a manual edit landing while the agent works is
 			// detectable when its answer comes back.
-			const { result, applyDocument } = await runAgentTurn((documentSnapshot) =>
-				nativeBridgeClient.aiEdition.chatRun(projectId, sessionId, text, documentSnapshot),
-			);
+			// An object, not a `let`: TypeScript does not see assignments made inside a callback.
+			const sent: { document?: AxcutDocument } = {};
+			const turn = await runAgentTurn((documentSnapshot) => {
+				sent.document = documentSnapshot;
+				return nativeBridgeClient.aiEdition.chatRun(projectId, sessionId, text, documentSnapshot);
+			});
+			const { result } = turn;
 			const assistant = result.assistantMessage;
 			if (result.success && assistant) {
-				if (result.document) {
-					const applyEdits = async (options?: { ignoreConflict?: boolean }) => {
-						try {
-							return await applyDocument(options);
-						} catch (err) {
-							// Only `ensureDocument` still throws here -- the agent handed back
-							// something that is not a document. A failed WRITE does not reach this:
-							// the store reports it itself and `applyDocument` answers "save-failed".
-							toast.error(t("chat.applyEditsFailed"), {
-								description: err instanceof Error ? err.message : String(err),
-							});
-							return "malformed" as const;
-						}
-					};
-					const applyResult = await applyEdits();
-					if (applyResult === "save-failed") {
-						// The store has already said WHY the write failed, with the native error.
-						// This says what it COST, without a description so the two do not repeat
-						// each other: the assistant's "done, I removed 14 silences" renders either
-						// way, so a bare save error next to it leaves the two unconnected.
-						toast.error(t("chat.applyEditsFailed"));
-					} else if (applyResult === "conflict") {
-						// The turn is not lost, it is just not automatically applied: the document
-						// is still in hand and the assistant's reply is about to be rendered as if
-						// the edits had landed. The thing that usually moves `revision` here is a
-						// background transcription finishing, not the user -- so dropping the whole
-						// turn on the floor and blaming "the project changed" costs them a minute
-						// of waiting and their tokens for something they never did. Let them take
-						// it. No auto-dismiss: it is the only way back to this document.
-						toast.warning(t("chat.agentEditConflict"), {
-							duration: Number.POSITIVE_INFINITY,
-							action: {
-								label: t("chat.applyAnyway"),
-								onClick: () => void applyEdits({ ignoreConflict: true }),
-							},
-						});
-					}
+				// Every tool call of the reply edited the main process's working copy; what came
+				// back is the turn's ONE final document, so applying it is one undo step however
+				// many cuts and zooms it holds. With approval on (the default) it is staged on the
+				// reply instead, and nothing touches the project until "Apply".
+				const turnId = assistant.id;
+				if (result.document && sent.document) {
+					useAgentTurnStore.getState().track(turnId, {
+						projectId,
+						status: "pending",
+						changes: changesOf(sent.document, result.document),
+						apply: turn.applyDocument,
+						undoHandle: turn.undoHandle,
+					});
 				}
 				setMessages((prev) => [
 					...prev,
 					{
+						id: turnId,
 						role: "assistant",
 						content: assistant.content,
-						time: new Date().toLocaleTimeString(),
+						time: formatTime(new Date(), currentLocale()),
 						toolCalls: assistant.toolCalls,
 						// ponytail: snapshot the live reasoning trace onto the
 						// finished message so it can be revisited (collapsed by
@@ -681,6 +885,9 @@ export function ChatStripPanel() {
 						thinking: thinkingText || undefined,
 					},
 				]);
+				if (result.document && sent.document && !approvalRequired) {
+					await applyTurn(turnId);
+				}
 				void refreshSessions(projectId);
 			} else {
 				toast.error(result.error ?? t("chat.chatFailed"));
@@ -1379,21 +1586,15 @@ export function ChatStripPanel() {
 										</button>
 									</Tooltip>
 								</div>
-								{m.toolCalls?.length ? (
-									<div style={{ marginTop: 4, display: "flex", flexDirection: "column", gap: 2 }}>
-										{m.toolCalls.map((call, j) => (
-											<div
-												key={j}
-												style={{
-													font: "500 12px/1.5 var(--font-body)",
-													color: "var(--success)",
-												}}
-											>
-												{t("chat.appliedPrefix")} {call.summary}
-											</div>
-										))}
-									</div>
-								) : null}
+								<AgentTurnFooter
+									messageId={m.id}
+									toolCalls={m.toolCalls}
+									entry={m.role === "assistant" && m.id ? turns[m.id] : undefined}
+									undoable={m.id !== undefined && m.id === undoableTurnId}
+									onApply={(id) => void applyTurn(id)}
+									onDiscard={(id) => useAgentTurnStore.getState().discardTurn(id)}
+									onUndo={undoTurn}
+								/>
 							</div>
 						))}
 						{busy ? (

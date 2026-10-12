@@ -26,7 +26,9 @@ import {
 	SquareDashed,
 	Trash2,
 	Undo2,
+	Users,
 	Video,
+	WandSparkles,
 	X,
 } from "lucide-react";
 
@@ -56,6 +58,8 @@ import {
 	type WebcamBackgroundMode,
 } from "@/components/video-editor/types";
 import { useI18n, useScopedT } from "@/contexts/I18nContext";
+import { formatDecimal } from "@/i18n/format";
+import { currentLocale } from "@/i18n/toastText";
 import { resolveCaptionLane } from "@/lib/ai-edition/captions/settings";
 import { collapseTracksToPills, trackGroupId } from "@/lib/ai-edition/document/audioTracks";
 import {
@@ -101,6 +105,8 @@ import { assetCameraSource, hasAnyClipWithCamera } from "@/lib/ai-edition/timeli
 import { breatheCut } from "@/lib/ai-edition/timeline/cut-breath";
 import { formatMs } from "@/lib/ai-edition/timeline/format";
 import { removedRawSpans } from "@/lib/ai-edition/timeline/programme-time";
+import type { SpeechCleanupOptions } from "@/lib/ai-edition/timeline/speechCleanup";
+import { transcriptHasTwoSpeakers } from "@/lib/ai-edition/transcription/speakers";
 import {
 	type AssetTranscriptionView,
 	type TranscriptGateReason,
@@ -156,6 +162,7 @@ import { ColorField } from "./ColorField";
 import { insertionsEnabled } from "./insertionsEnabled";
 import styles from "./NewEditorShell.module.css";
 import { useRecordedCursorTypes } from "./recordedCursorTypes";
+import { SpeechCleanupPanel } from "./SpeechCleanupPanel";
 import { TranscriptAutoZoomBar } from "./TranscriptAutoZoomBar";
 import { useTranscriptionLabel } from "./TranscriptionStatus";
 import { transcriptionBusyLabel } from "./transcriptionBusyLabel";
@@ -835,6 +842,8 @@ export function TranscriptPane({
 	canTranscribe,
 	isTranscribing,
 	blocked,
+	onApplySpeechCleanup,
+	onLabelSpeakers,
 }: {
 	clips: AxcutClip[];
 	/** Every audio track on the timeline. Only the voiceover ones can be read from;
@@ -874,6 +883,11 @@ export function TranscriptPane({
 	 *  (`resolveTranscriptGate`). Silent media disable the button; anything else
 	 *  leaves it clickable. */
 	blocked?: { reason: TranscriptGateReason; message?: string };
+	/** "Limpar fala": cut the picked hesitations and silences, planned again with `options`
+	 *  over the latest document, in one undoable write. Absent: no button. */
+	onApplySpeechCleanup?: (itemIds: string[], options: SpeechCleanupOptions) => void;
+	/** "Quem fala": label the transcripts of the takes with stems again. Absent: no button. */
+	onLabelSpeakers?: () => void;
 }) {
 	const ts = useScopedT("settings");
 	// Subscribed here, not passed down: the playhead is rewritten every animation
@@ -938,6 +952,41 @@ export function TranscriptPane({
 	const silentMedia = blocked?.reason === "no-audio";
 	const transcriptionLabel = useTranscriptionLabel();
 	const [captionsOpen, setCaptionsOpen] = useState(false);
+	const [cleanupOpen, setCleanupOpen] = useState(false);
+	// The cleanup cuts the film, so it reads the recording lane only.
+	const cleanupButton =
+		onApplySpeechCleanup && activeLane === "recording" ? (
+			// Icon-only, like the pane's help: the header also carries the captions button, and
+			// three labelled buttons pushed the pane wider than its card.
+			<Tooltip content={ts("transcript.cleanup.hint")}>
+				<button
+					type="button"
+					className={styles.iconBtn}
+					data-testid="speech-cleanup-open"
+					aria-label={ts("transcript.cleanup.open")}
+					onClick={() => setCleanupOpen(true)}
+				>
+					<WandSparkles size={16} />
+				</button>
+			</Tooltip>
+		) : null;
+	const timelineHasStems = clips.some(
+		(clip) => assets.find((a) => a.id === clip.assetId)?.audioStems !== undefined,
+	);
+	const speakersButton =
+		onLabelSpeakers && timelineHasStems ? (
+			<Tooltip content={ts("transcript.speakers.hint")}>
+				<button
+					type="button"
+					className={styles.iconBtn}
+					data-testid="label-speakers"
+					aria-label={ts("transcript.speakers.button")}
+					onClick={onLabelSpeakers}
+				>
+					<Users size={16} />
+				</button>
+			</Tooltip>
+		) : null;
 	const paneBusyLabel = transcriptionBusyLabel(
 		busyView ??
 			(isTranscribing ? { assetId: "", status: "running", phase: "loading-model" } : undefined),
@@ -952,6 +1001,23 @@ export function TranscriptPane({
 	);
 
 	if (captionsOpen) return <CaptionsPane onClose={() => setCaptionsOpen(false)} />;
+
+	if (cleanupOpen && onApplySpeechCleanup) {
+		return (
+			<Pane
+				title={ts("transcript.cleanup.title")}
+				icon={<WandSparkles size={16} />}
+				helpText={ts("transcript.cleanup.help")}
+				onClose={() => setCleanupOpen(false)}
+			>
+				<SpeechCleanupPanel
+					onApply={onApplySpeechCleanup}
+					onSeek={onSeek}
+					onClose={() => setCleanupOpen(false)}
+				/>
+			</Pane>
+		);
+	}
 
 	if (placements.length === 0 || !hasAnyTranscript) {
 		return (
@@ -1010,7 +1076,13 @@ export function TranscriptPane({
 			title={ts("transcript.title")}
 			icon={<FileText size={16} />}
 			helpText={helpText}
-			actions={<CaptionSettingsButton onOpen={() => setCaptionsOpen(true)} />}
+			actions={
+				<>
+					{cleanupButton}
+					{speakersButton}
+					<CaptionSettingsButton onOpen={() => setCaptionsOpen(true)} />
+				</>
+			}
 		>
 			{laneSwitch}
 			{/* The gestures are invisible until tried: nothing on a plain word stream says
@@ -1089,6 +1161,20 @@ const TranscriptClipBlock = memo(function TranscriptClipBlock({
 }) {
 	const ts = useScopedT("settings");
 	const { clip, asset, words } = section;
+	// Who speaks, marked where it changes -- only for a take where both sides speak, or every
+	// solo tutorial would carry a "You" label on its first word.
+	const speakerChanges = useMemo(() => {
+		const changes = new Map<string, "mic" | "system">();
+		if (!transcriptHasTwoSpeakers(section.transcript)) return changes;
+		let current: "mic" | "system" | undefined;
+		for (const cw of words) {
+			const speaker = cw.word.speaker;
+			if (!speaker || speaker === current) continue;
+			current = speaker;
+			changes.set(cw.id, speaker);
+		}
+		return changes;
+	}, [section.transcript, words]);
 	// Memoised: `TranscriptWord` renders once per word, so a fresh object literal here
 	// would break referential equality for the whole stream on every parent render.
 	// A cut is authored in RAW seconds, CLAMPED to this placement's own extent.
@@ -1543,6 +1629,9 @@ const TranscriptClipBlock = memo(function TranscriptClipBlock({
 							) : null;
 						return (
 							<Fragment key={cw.id}>
+								{speakerChanges.has(cw.id) ? (
+									<SpeakerLabel speaker={speakerChanges.get(cw.id) ?? "mic"} />
+								) : null}
 								{insertion?.side === "before" ? field : null}
 								<TranscriptWord
 									cw={cw}
@@ -1563,6 +1652,31 @@ const TranscriptClipBlock = memo(function TranscriptClipBlock({
 		</span>
 	);
 });
+
+/** "Você" / "Convidado" where the speaker changes. Not editable and not a word: no
+ *  `data-word-id`, so the caret and the cut helpers walk past it. */
+function SpeakerLabel({ speaker }: { speaker: "mic" | "system" }) {
+	const ts = useScopedT("settings");
+	return (
+		<span
+			contentEditable={false}
+			data-speaker-label={speaker}
+			style={{
+				display: "inline-block",
+				margin: "0 4px 0 2px",
+				padding: "0 6px",
+				borderRadius: 999,
+				font: "600 10.5px/1.6 var(--font-body)",
+				verticalAlign: "1px",
+				userSelect: "none",
+				color: speaker === "system" ? "var(--warning, #b45309)" : "var(--accent)",
+				background: speaker === "system" ? "rgba(245, 158, 11, 0.14)" : "var(--accent-soft)",
+			}}
+		>
+			{ts(speaker === "system" ? "transcript.speakers.system" : "transcript.speakers.mic")}
+		</span>
+	);
+}
 
 // One word inside the editable block. Kept words render plain; removed
 // words (inside a skip range) render red+strikethrough with a hover bin.
@@ -1650,7 +1764,7 @@ const TranscriptWord = memo(function TranscriptWord({
 
 	if (isSilenceWord(cw.word)) {
 		const durationSec = cw.word.endSec - cw.word.startSec;
-		const duration = durationSec.toFixed(1);
+		const duration = formatDecimal(durationSec, 1, currentLocale());
 		const label = ts("transcript.silence", { duration });
 		if (removed) {
 			return (
@@ -4396,7 +4510,7 @@ export function SliderCell({
 							format(value)
 						) : (
 							<>
-								{value.toFixed(decimals)}
+								{formatDecimal(value, decimals, currentLocale())}
 								{suffix}
 							</>
 						)}

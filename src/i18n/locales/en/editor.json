@@ -219,7 +219,18 @@
 		"modelSmall": "Fast: small ({{size}})",
 		"standingTerms": "Standing terms (Microsoft and AI)",
 		"standingTermsHint": "Whisper is told to expect these terms in every transcription, before the project's names and terms. Separate them with commas; the first ones matter most.",
-		"standingTermsReset": "Restore the default list"
+		"standingTermsReset": "Restore the default list",
+		"redactTerms": "My sensitive words",
+		"redactTermsHint": "Names, words and numbers to blur too, one per line. Case and accents do not matter, and a match inside a longer word blurs that word.",
+		"redactTermsPlaceholder": "Contoso\nMaria Silva\n4021-7788",
+		"redactRescan": "Search again",
+		"redactRescanHint": "Read this project's recordings again and replace the automatic blurs. Blurs you drew stay.",
+		"redactRescanning": "Searching…",
+		"redactRescanFailed": "The recordings could not be read again.",
+		"redactRescanNothing": "Nothing changed: the automatic blurs are already up to date.",
+		"redactRescanDone": "Automatic blurs updated: {{added}} added, {{removed}} replaced. Undo with Ctrl+Z.",
+		"transcribeGuest": "Transcribe the computer sound too (call guest)",
+		"transcribeGuestHint": "For a take with separate voice and computer tracks: transcribes both and marks who said each word. Off: only your microphone is transcribed."
 	},
 	"exportDialog": {
 		"title": "Export",
@@ -294,6 +305,32 @@
 		"applyEditsFailed": "Could not apply the agent's edits",
 		"agentEditConflict": "Agent edits were not applied because the project changed while it was working.",
 		"applyAnyway": "Apply anyway",
+		"plannedPrefix": "will apply:",
+		"turnPendingTitle": "Proposed changes",
+		"turnPendingHint": "Nothing has been applied yet. Review the changes, then apply or discard them.",
+		"turnApply": "Apply",
+		"turnDiscard": "Discard",
+		"turnDiscarded": "Changes discarded. The project was not touched.",
+		"turnUndo": "Undo this reply",
+		"turnUndoTip": "Reverts everything this reply changed in the project, in one step.",
+		"turnUndone": "Reply undone.",
+		"turnUndoBlocked": "This reply can only be undone on its own while it is the latest change. Use Ctrl+Z to step back through the later edits.",
+		"turnProjectChanged": "These changes belong to a project that is no longer open, so they were not applied.",
+		"turnChangeAdded": "{{count}} added",
+		"turnChangeRemoved": "{{count}} removed",
+		"turnChangeEdited": "{{count}} changed",
+		"turnChange": {
+			"clips": "Clips",
+			"cuts": "Cuts",
+			"zooms": "Zooms",
+			"speed": "Speed",
+			"annotations": "Annotations",
+			"audio": "Audio",
+			"camera": "Camera",
+			"captions": "Captions",
+			"transcript": "Transcript words",
+			"other": "Other settings"
+		},
 		"chatFailed": "Chat failed",
 		"rewindFailed": "Rewind failed",
 		"rewoundSuccess": "Rewound to the start of that message",
@@ -452,6 +489,7 @@
 		"projectEditsLabel": "Project edits",
 		"projectEditsHint": "When off, the agent must ask before changing the timeline. Edits are always undoable.",
 		"allowAgentEdits": "Allow the agent to edit the project",
+		"requireAgentEditApproval": "Ask for approval before applying",
 		"disconnect": "Disconnect",
 		"cancel": "Cancel",
 		"save": "Save",
@@ -590,5 +628,16 @@
 		"recording": "Recording {{date}}",
 		"project": "Project {{date}}",
 		"asset": "Recording"
+	},
+	"speechCleanup": {
+		"nothingLeft": "Nothing left to cut: the transcript changed in the meantime.",
+		"applied": "{{count}} cut(s), {{seconds}} s shorter. Undo with Ctrl+Z."
+	},
+	"speakers": {
+		"noTranscript": "Transcribe a take recorded with microphone and computer sound first.",
+		"stemsUnreadable": "The take's audio tracks could not be read.",
+		"undecided": "Could not tell the speakers apart in this take.",
+		"onlyYou": "Only your voice was found in the transcript.",
+		"labelled": "Speakers labelled: {{mic}} word(s) yours, {{system}} from the guest."
 	}
 }

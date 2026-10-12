@@ -15,6 +15,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { toFileUrl } from "@/components/video-editor/projectPersistence";
 import { useScopedT } from "@/contexts/I18nContext";
+import { formatDecimal } from "@/i18n/format";
+import { currentLocale } from "@/i18n/toastText";
 import type { AxcutAsset } from "@/lib/ai-edition/schema";
 import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
 import { probeAudioDuration } from "@/lib/ai-edition/timeline/duration";
@@ -298,7 +300,7 @@ export function AddAudioLayerDialog({
 				<>
 					<span className={styles.voiceoverBarLive} aria-live="polite">
 						<span className={`${styles.voiceoverBarDot} animate-pulse`} />
-						{t("audio.recording")} {elapsedSec.toFixed(1)}s
+						{t("audio.recording")} {formatDecimal(elapsedSec, 1, currentLocale())} s
 					</span>
 					<button
 						type="button"

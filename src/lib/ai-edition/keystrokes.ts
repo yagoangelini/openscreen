@@ -1,4 +1,5 @@
 import { normalizeInputSignal } from "../cursor/inputSignals";
+import { DEFAULT_SHORTCUTS, GLOBAL_SHORTCUT_ACTIONS, type ShortcutBinding } from "../shortcuts";
 
 /**
  * On-screen shortcuts: the chords the user pressed while recording ("Ctrl + C",
@@ -37,8 +38,64 @@ export const KEYSTROKE_DISPLAY_SEC = 1.6;
 /** A repeat of the same chord within this joins the plate already up. */
 export const REPEAT_JOIN_SEC = 0.8;
 
-/** The chords out of a take's cursor samples, in order, repeats folded together. */
-export function keystrokesFromCursorSamples(samples: unknown): RecordedKeystroke[] {
+/** KeyboardEvent.key names (as bindings store them) whose sampler name differs. */
+const SAMPLER_KEY_NAMES: Record<string, string> = {
+	" ": "Space",
+	arrowup: "Up",
+	arrowdown: "Down",
+	arrowleft: "Left",
+	arrowright: "Right",
+	escape: "Esc",
+	pageup: "PageUp",
+	pagedown: "PageDown",
+};
+
+/**
+ * A shortcut binding as the sampler names the chord ("Ctrl+Shift+F9"): modifiers in its
+ * order (Ctrl, Alt, Shift), then the key (`input_signals.cpp`, `comboName`).
+ */
+export function bindingCombo(binding: ShortcutBinding): string {
+	const lower = binding.key.toLowerCase();
+	const key =
+		SAMPLER_KEY_NAMES[lower] ??
+		(lower.length === 1 ? lower.toUpperCase() : lower.charAt(0).toUpperCase() + lower.slice(1));
+	const ctrl = binding.ctrl ? "Ctrl+" : "";
+	const alt = binding.alt ? "Alt+" : "";
+	const shift = binding.shift ? "Shift+" : "";
+	return `${ctrl}${alt}${shift}${key}`;
+}
+
+/**
+ * OpenScreen's own system-wide shortcuts (record, pause, marker, face/screen, open the
+ * app): pressed to drive the take, they are not part of the tutorial and get no plate
+ * (E2E 2.4.0, D-7). The defaults always, plus whatever the user bound them to.
+ */
+export function appShortcutCombos(bindings: Iterable<ShortcutBinding> = []): Set<string> {
+	const combos = new Set(
+		GLOBAL_SHORTCUT_ACTIONS.map((action) => bindingCombo(DEFAULT_SHORTCUTS[action])),
+	);
+	for (const binding of bindings) combos.add(bindingCombo(binding));
+	return combos;
+}
+
+const DEFAULT_APP_SHORTCUT_COMBOS = appShortcutCombos();
+
+/** Whether a recorded chord is one of the app's own shortcuts. */
+export function isAppShortcut(
+	combo: string,
+	appCombos: ReadonlySet<string> = DEFAULT_APP_SHORTCUT_COMBOS,
+): boolean {
+	return appCombos.has(combo);
+}
+
+/**
+ * The chords out of a take's cursor samples, in order, repeats folded together, without
+ * the app's own shortcuts (`appCombos`, the defaults when not given).
+ */
+export function keystrokesFromCursorSamples(
+	samples: unknown,
+	appCombos: ReadonlySet<string> = DEFAULT_APP_SHORTCUT_COMBOS,
+): RecordedKeystroke[] {
 	if (!Array.isArray(samples)) return [];
 	const out: RecordedKeystroke[] = [];
 	const presses = samples
@@ -47,7 +104,7 @@ export function keystrokesFromCursorSamples(samples: unknown): RecordedKeystroke
 			const { timeMs, input } = sample as { timeMs?: unknown; input?: unknown };
 			if (typeof timeMs !== "number" || !Number.isFinite(timeMs) || timeMs < 0) return [];
 			const signal = normalizeInputSignal(input);
-			return signal?.kind === "key" && signal.combo
+			return signal?.kind === "key" && signal.combo && !appCombos.has(signal.combo)
 				? [{ sec: timeMs / 1000, combo: signal.combo }]
 				: [];
 		})

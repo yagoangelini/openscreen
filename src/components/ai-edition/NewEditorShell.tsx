@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { toFileUrl } from "@/components/video-editor/projectPersistence";
 import { useEditorDialogActions } from "@/contexts/EditorDialogsContext";
-import { useScopedT } from "@/contexts/I18nContext";
+import { useI18n, useScopedT } from "@/contexts/I18nContext";
 import { useShortcuts } from "@/contexts/ShortcutsContext";
 import { toastText } from "@/i18n/toastText";
 import { formatChapterTime } from "@/lib/ai-edition/chapters";
@@ -20,6 +20,7 @@ import {
 	insertDocumentWord,
 	removeDocumentWords,
 	setDocumentWordText,
+	withTranscript,
 } from "@/lib/ai-edition/document/transcript";
 import { isModalOpen } from "@/lib/ai-edition/modalGuard";
 import type { AxcutAudioTrack, AxcutClip, AxcutDocument } from "@/lib/ai-edition/schema";
@@ -40,10 +41,17 @@ import { isGeneratedAssetId } from "@/lib/ai-edition/timeline/clip-parts";
 import { mergeCloseCuts } from "@/lib/ai-edition/timeline/cut-breath";
 import { newRegionDurationSec } from "@/lib/ai-edition/timeline/newRegionDuration";
 import {
+	applySpeechCleanupPicks,
+	type SpeechCleanupOptions,
+	speechCleanupSavedSec,
+} from "@/lib/ai-edition/timeline/speechCleanup";
+import {
 	dropTrimPillsByIds,
 	trimAppliesToClip,
 	ventilateTimelineSpanToTrims,
 } from "@/lib/ai-edition/timeline/trim-mapping";
+import { readStemPeaks, type StemPeaks } from "@/lib/ai-edition/transcription/speakerStems";
+import { labelSpeakers } from "@/lib/ai-edition/transcription/speakers";
 import { firstTimelineBusyView } from "@/lib/ai-edition/transcription/status";
 import { isTextEditingTarget, matchesShortcut } from "@/lib/shortcuts";
 import { loadUserPreferences } from "@/lib/userPreferences";
@@ -192,6 +200,7 @@ export async function runLoadedMetadataWrite(
 
 export function NewEditorShell() {
 	const te = useScopedT("editor");
+	const { locale } = useI18n();
 	useMcpDocumentHost();
 	const document = useProjectStore((s) => s.document);
 	const projectId = useProjectStore((s) => s.projectId);
@@ -784,6 +793,88 @@ export function NewEditorShell() {
 		},
 		[enqueueTimelineWrite, saveDocument, te],
 	);
+
+	// "Limpar fala": the picks from the review list, planned AGAIN over the document inside the
+	// chain with the options they were reviewed with, so an edit that landed in between can
+	// neither be overwritten nor cut against. Only items still planned are cut; one save, so
+	// one Ctrl+Z takes the whole cleanup back.
+	const handleApplySpeechCleanup = useCallback(
+		(itemIds: string[], options: SpeechCleanupOptions) => {
+			if (itemIds.length === 0) return;
+			void enqueueTimelineWrite(async () => {
+				const doc = useProjectStore.getState().document;
+				if (!doc) return;
+				const { document: next, items } = applySpeechCleanupPicks(doc, itemIds, options, createId);
+				if (items.length === 0) {
+					toast.info(te("speechCleanup.nothingLeft"));
+					return;
+				}
+				const saved = await saveDocument(next, { history: true });
+				if (saved) {
+					toast.success(
+						te("speechCleanup.applied", {
+							count: items.length,
+							seconds: speechCleanupSavedSec(items).toLocaleString(locale, {
+								minimumFractionDigits: 1,
+								maximumFractionDigits: 1,
+							}),
+						}),
+					);
+				}
+			});
+		},
+		[enqueueTimelineWrite, saveDocument, te, locale],
+	);
+
+	// "Quem fala": every take on the timeline that kept its voice and computer sound apart is
+	// read again and its transcript labelled. The stems are decoded first (cached by
+	// getAudioPeaks), off the chain; the labels land on the transcript the chain holds then.
+	const handleLabelSpeakers = useCallback(() => {
+		const start = useProjectStore.getState().document;
+		if (!start) return;
+		const onTimeline = new Set(start.timeline.clips.map((clip) => clip.assetId));
+		const targets = start.assets.filter(
+			(a) =>
+				a.audioStems && onTimeline.has(a.id) && start.transcripts.some((t) => t.assetId === a.id),
+		);
+		if (targets.length === 0) {
+			toast.info(te("speakers.noTranscript"));
+			return;
+		}
+		void (async () => {
+			const peaks = new Map<string, StemPeaks>();
+			for (const asset of targets) {
+				const read = await readStemPeaks(asset);
+				if (read) peaks.set(asset.id, read);
+			}
+			if (peaks.size === 0) {
+				toast.error(te("speakers.stemsUnreadable"));
+				return;
+			}
+			await enqueueTimelineWrite(async () => {
+				let doc = useProjectStore.getState().document;
+				if (!doc || doc.project.id !== start.project.id) return;
+				let mic = 0;
+				let system = 0;
+				for (const [assetId, stem] of peaks) {
+					const transcript = doc.transcripts.find((t) => t.assetId === assetId);
+					if (!transcript) continue;
+					const result = labelSpeakers(transcript, stem.voice, stem.system, stem.durationSec);
+					mic += result.mic;
+					system += result.system;
+					doc = withTranscript(doc, result.transcript);
+				}
+				if (mic === 0 && system === 0) {
+					toast.info(te("speakers.undecided"));
+					return;
+				}
+				const saved = await saveDocument(doc, { history: true });
+				if (!saved) return;
+				if (system === 0) toast.info(te("speakers.onlyYou"));
+				else toast.success(te("speakers.labelled", { mic, system }));
+			});
+		})();
+	}, [enqueueTimelineWrite, saveDocument, te]);
 
 	// Every row of the pill at once: a cut ventilated across a clip boundary is several
 	// rows and one pill, and `dropTrimPillsByIds` resolves the rest of the group from any
@@ -1614,6 +1705,8 @@ export function NewEditorShell() {
 		onSetWordText: handleSetWordText,
 		onInsertWord: handleInsertWord,
 		onRemoveWords: handleRemoveWords,
+		onApplySpeechCleanup: handleApplySpeechCleanup,
+		onLabelSpeakers: handleLabelSpeakers,
 		onTranscribe: handleTranscribe,
 		canTranscribe: hasAsset,
 		isTranscribing: transcriptGate.state === "pending",

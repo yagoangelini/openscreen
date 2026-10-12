@@ -1,5 +1,5 @@
 import { sourceSpanToTimelineSpans } from "./captions/cues";
-import { formatKeystroke, KEYSTROKE_DISPLAY_SEC, lastPressSec } from "./keystrokes";
+import { formatKeystroke, isAppShortcut, KEYSTROKE_DISPLAY_SEC, lastPressSec } from "./keystrokes";
 import type { AxcutDocument } from "./schema";
 
 /**
@@ -50,7 +50,9 @@ export function keystrokeTextRegions(
 	const clips = document.timeline.clips;
 	const spans = document.assets
 		.flatMap((asset) =>
+			// Takes imported before the app's own shortcuts were dropped at import still carry them.
 			(asset.keystrokes ?? []).flatMap((keystroke) => {
+				if (isAppShortcut(keystroke.combo)) return [];
 				const heldSec = lastPressSec(keystroke) - keystroke.sec;
 				// Anchored on the press itself, wherever a clip plays it: a chord that was cut
 				// away gets no plate, since it would announce something the viewer never sees.

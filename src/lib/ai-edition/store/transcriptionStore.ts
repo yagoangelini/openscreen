@@ -31,6 +31,7 @@ import { transcribeAsset } from "../document/transcribe";
 import { carryOverWordEdits, withTranscript } from "../document/transcript";
 import type { AxcutDocument } from "../schema";
 import { applyGlossary, parseGlossary } from "../transcription/glossary";
+import { labelTranscriptFromStems } from "../transcription/speakerStems";
 import {
 	type AssetTranscriptionView,
 	assetCanCarrySpeech,
@@ -92,6 +93,12 @@ interface TranscriptionState {
 	 * leave that button unable to transcribe the talking clip next to it.
 	 */
 	requestTimelineTranscripts: () => Promise<void>;
+	/**
+	 * Stop transcribing one asset: its run, all the way into the main process (which stops
+	 * the helper mid-chunk), or its place in the queue. Nothing is written and no toast says
+	 * it failed: the user asked for it.
+	 */
+	cancel: (assetId: string) => void;
 	reset: () => void;
 }
 
@@ -200,6 +207,15 @@ export const useTranscriptionStore = create<TranscriptionState>((set, get) => ({
 				return get().request(assetId);
 			}),
 		).then(() => undefined);
+	},
+
+	cancel(assetId) {
+		if (activeRun?.assetId === assetId) {
+			// The run drops its own job once the main process has stopped (`runJob`).
+			abortActiveRun();
+			return;
+		}
+		if (get().jobs[assetId]?.status === "queued") dropJob(assetId);
 	},
 
 	reset() {
@@ -418,6 +434,14 @@ async function runJob(assetId: string, job: TranscriptionJob): Promise<void> {
 			dropJob(assetId, runId);
 			return;
 		}
+		// Who said each word, when the take kept the voice and the computer apart. Before the
+		// document is read again below, since it waits on two (cached) stem decodes.
+		const asset = doc.assets.find((a) => a.id === assetId);
+		const labelled = asset ? await labelTranscriptFromStems(asset, transcript) : null;
+		if (controller.signal.aborted) {
+			dropJob(assetId, runId);
+			return;
+		}
 		// The user may have switched projects while whisper was working — writing
 		// the transcript now would attach it to the document that is loaded today.
 		const current = useProjectStore.getState().document;
@@ -431,7 +455,10 @@ async function runJob(assetId: string, job: TranscriptionJob): Promise<void> {
 		// carried is lost; telling the user so is the UI's job, and there is no surface
 		// for it yet.
 		// The glossary first, so a correction the user made by hand still wins over it.
-		const corrected = applyGlossary(transcript, parseGlossary(loadUserPreferences().glossary));
+		const corrected = applyGlossary(
+			labelled?.transcript ?? transcript,
+			parseGlossary(loadUserPreferences().glossary),
+		);
 		const merged = carryOverWordEdits(
 			current.transcripts.find((t) => t.assetId === assetId),
 			corrected.transcript,

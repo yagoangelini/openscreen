@@ -14,12 +14,16 @@ export function toastText(
 	key: string,
 	vars?: Record<string, string | number>,
 ): string {
-	let locale: Locale = DEFAULT_LOCALE;
+	return translate(currentLocale(), namespace, key, vars);
+}
+
+/** The locale the UI speaks, for code outside React: toasts, and dates and numbers too. */
+export function currentLocale(): Locale {
 	try {
 		const stored = localStorage.getItem(LOCALE_STORAGE_KEY);
-		if (stored && getAvailableLocales().includes(stored as Locale)) locale = stored as Locale;
+		if (stored && getAvailableLocales().includes(stored as Locale)) return stored as Locale;
 	} catch {
 		// localStorage may be unavailable -- the default locale is a fine answer.
 	}
-	return translate(locale, namespace, key, vars);
+	return DEFAULT_LOCALE;
 }

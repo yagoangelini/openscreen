@@ -10,6 +10,7 @@ import {
 	deriveCameraLookRuns,
 	deriveCameraModeRuns,
 	findCameraPiece,
+	findSelectedCameraPiece,
 	MIN_CAMERA_PIECE_MS,
 	mergeCameraLook,
 	mergeCameraPieceWithNext,
@@ -283,6 +284,20 @@ describe("a piece's own look (overrides)", () => {
 		).toEqual({
 			webcamMirrored: true,
 		});
+	});
+
+	it("keeps showing an implicit piece the first look write re-keyed, until the selection follows", () => {
+		const shown = findCameraPiece(cameraPieces([], END), "implicit:0") ?? null;
+		expect(shown?.implicit).toBe(true);
+		const set = setCameraPieceLook([], clips, "implicit:0", { webcamAnchor: "top-left" });
+		const after = cameraPieces(set?.segments ?? [], END);
+		// The selection still names the old key for one render.
+		expect(findCameraPiece(after, "implicit:0")).toBeUndefined();
+		const piece = findSelectedCameraPiece(after, "implicit:0", shown);
+		expect(piece?.key).toBe(set?.key);
+		expect(piece?.overrides).toEqual({ webcamAnchor: "top-left" });
+		// Nothing on screen before: nothing to fall back to.
+		expect(findSelectedCameraPiece(after, "gone", null)).toBeUndefined();
 	});
 
 	it("keeps the mode, and both halves of a split keep the look", () => {

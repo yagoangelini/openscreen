@@ -193,7 +193,43 @@
 		"noClipTranscript": "Sem transcrição para este clipe — abra o cartão do recurso e gere novamente.",
 		"editingHintDev": "Clique duas vezes em uma palavra para corrigi-la, Backspace a corta do vídeo, digite entre duas palavras para adicionar uma.",
 		"noAudio": "Esta mídia não tem faixa de áudio",
-		"blankedWord": "apagada"
+		"blankedWord": "apagada",
+		"cleanup": {
+			"title": "Limpar fala",
+			"help": "Encontra hesitações (\"né\", \"éé\", \"hum\"), muletas ditas sozinhas ou repetidas e silêncios longos, só pela transcrição. Nada é cortado antes de você apertar Cortar, e tudo o que foi marcado volta com um Ctrl+Z.",
+			"open": "Limpar fala",
+			"hint": "Cortar hesitações, muletas e silêncios longos (você revisa a lista antes)",
+			"intro": "Desmarque o que quiser manter. \"Tipo\" e \"então\" só entram quando ditos entre pausas ou repetidos; os silêncios são encurtados, não tirados.",
+			"settings": "Palavras e regras",
+			"fillers": "Hesitações, sempre cortadas (uma por linha)",
+			"contextual": "Muletas que também são palavras (uma por linha)",
+			"contextualHint": "Cortadas só quando ditas sozinhas entre duas pausas, ou repetidas (\"então, então\").",
+			"aggressive": "Cortar essas palavras em qualquer lugar",
+			"silenceMin": "Encurtar silêncios maiores que (s)",
+			"silenceKeep": "Deixar uma pausa de (s)",
+			"restoreDefaults": "Restaurar o padrão",
+			"nothing": "Nada para limpar nesta transcrição.",
+			"summary": "{{count}} de {{total}} marcados · {{seconds}} s a menos",
+			"all": "Todos",
+			"none": "Nenhum",
+			"silenceItem": "Silêncio de {{from}} s → {{to}} s",
+			"seek": "Ir para este ponto",
+			"cancel": "Cancelar",
+			"apply": "Cortar {{count}}",
+			"reason": {
+				"filler": "hesitação",
+				"repeated": "repetida",
+				"isolated": "entre pausas",
+				"aggressive": "muleta",
+				"silence": "silêncio"
+			}
+		},
+		"speakers": {
+			"button": "Quem fala",
+			"hint": "Marcar cada palavra como sua (microfone) ou do convidado (som do computador), pelas duas trilhas de áudio do take",
+			"mic": "Você",
+			"system": "Convidado"
+		}
 	},
 	"exportFormat": {
 		"mp4": "MP4",
@@ -244,7 +280,14 @@
 			"minimal": "Minimalista",
 			"light": "Claro"
 		},
-		"customize": "Personalizar"
+		"customize": "Personalizar",
+		"speakers": "Quem fala",
+		"speakerLabels": "Mostrar quem fala",
+		"speakerLabelsHint": "Começa uma linha nova e põe [Nome] onde quem fala muda, na prévia, no export e no .srt.",
+		"speakerMic": "Microfone",
+		"speakerSystem": "Som do computador",
+		"speakerMicDefault": "Você",
+		"speakerSystemDefault": "Convidado"
 	},
 	"panes": {
 		"help": "Ajuda"

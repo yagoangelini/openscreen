@@ -15,7 +15,8 @@
 // after this point is the CLI runner, which lives in its own process.
 
 import type { CursorTelemetryPoint } from "@/components/video-editor/types";
-import { toastText } from "@/i18n/toastText";
+import { formatDateTime } from "@/i18n/format";
+import { currentLocale, toastText } from "@/i18n/toastText";
 import {
 	cameraSegmentsFromRecordingLayout,
 	readCameraSegments,
@@ -25,7 +26,10 @@ import { clipAwaitsProbedDuration } from "@/lib/ai-edition/document/timeline";
 import {
 	AUTO_REDACT_SOURCE,
 	parseOcrScan,
+	parseSensitiveTerms,
+	type RedactionSpan,
 	redactionAnnotations,
+	replaceAutoRedactions,
 	scannedUpToSec,
 	trackDetections,
 } from "@/lib/ai-edition/redaction";
@@ -447,6 +451,8 @@ export type FreshRecordingRedactionDeps = {
 	/** Told when the scan failed or covered only the start of the take. */
 	onScanIssue?: (issue: RedactionScanIssue) => void;
 	createId?: (prefix: string) => string;
+	/** The user's own sensitive words; the preference when absent. Tests set it. */
+	terms?: string;
 	/** How long to wait for the take's real length before giving up. Tests shorten it. */
 	probeWaitMs?: number;
 	saveTimeoutMs?: number;
@@ -485,7 +491,10 @@ export async function applyFreshRecordingRedactions(
 	if (parsed.complete === false) {
 		deps.onScanIssue?.({ kind: "partial", scannedUpToSec: scannedUpToSec(parsed) });
 	}
-	const spans = trackDetections(parsed);
+	const spans = trackDetections(
+		parsed,
+		parseSensitiveTerms(deps.terms ?? loadUserPreferences().autoRedactTerms),
+	);
 	if (spans.length === 0) return 0;
 
 	const deadline = Date.now() + (deps.probeWaitMs ?? 60_000);
@@ -515,6 +524,74 @@ export async function applyFreshRecordingRedactions(
 		return saved === true ? added.length : 0;
 	}
 	return 0;
+}
+
+export interface AutoRedactionRescan {
+	/** Recordings read again; those the scanner would not read are not counted. */
+	scanned: number;
+	/** Recordings the scanner failed on, or would not read (not a recording of this app). */
+	failed: number;
+	/** Automatic blurs taken away, and put back from the new scan. */
+	removed: number;
+	added: number;
+	/** The write went through. False when nothing changed, or nothing could be scanned. */
+	saved: boolean;
+}
+
+/**
+ * "Procurar de novo": OCR over every recording on the timeline again, with the current
+ * sensitive words, and the automatic blurs replaced by what it finds -- the user's own blurs
+ * untouched -- as ONE undoable edit. A recording whose scan fails keeps its old suggestions.
+ */
+export async function rescanAutoRedactions(
+	deps: Omit<FreshRecordingRedactionDeps, "probeWaitMs"> = {},
+): Promise<AutoRedactionRescan> {
+	const scan =
+		deps.scan ?? ((videoPath: string) => window.electronAPI?.scanRecordingText?.(videoPath));
+	const terms = parseSensitiveTerms(deps.terms ?? loadUserPreferences().autoRedactTerms);
+	const outcome: AutoRedactionRescan = {
+		scanned: 0,
+		failed: 0,
+		removed: 0,
+		added: 0,
+		saved: false,
+	};
+	const start = useProjectStore.getState().document;
+	if (!start) return outcome;
+	const onTimeline = new Set(start.timeline.clips.map((clip) => clip.assetId));
+	const assets = start.assets.filter((a) => a.kind === "video" && onTimeline.has(a.id));
+	const spansByAsset = new Map<string, RedactionSpan[]>();
+	for (const asset of assets) {
+		const result = await Promise.resolve(scan(asset.originalPath)).catch(() => undefined);
+		if (!result?.success || !result.output) {
+			outcome.failed += 1;
+			if (result && !result.unsupported) {
+				deps.onScanIssue?.({ kind: "failed", reason: result.error });
+			}
+			continue;
+		}
+		const parsed = parseOcrScan(result.output);
+		if (parsed.complete === false) {
+			deps.onScanIssue?.({ kind: "partial", scannedUpToSec: scannedUpToSec(parsed) });
+		}
+		spansByAsset.set(asset.id, trackDetections(parsed, terms));
+		outcome.scanned += 1;
+	}
+	if (spansByAsset.size === 0) return outcome;
+	if ((await waitForDocumentSaves(deps.waitTimeoutMs)) === "timeout") return outcome;
+	// Read right before the write, so an edit made while the scan ran is kept.
+	const latest = useProjectStore.getState().document;
+	if (!latest || latest.project.id !== start.project.id) return outcome;
+	const replaced = replaceAutoRedactions(latest, spansByAsset, deps.createId ?? createId);
+	outcome.removed = replaced.removed;
+	outcome.added = replaced.added;
+	if (replaced.removed === 0 && replaced.added === 0) return outcome;
+	const saved = await saveWithDeadline(
+		useProjectStore.getState().saveDocument(replaced.document, { history: true }),
+		deps.saveTimeoutMs ?? DOCUMENT_SAVES_WAIT_TIMEOUT_MS,
+	);
+	outcome.saved = saved === true;
+	return outcome;
 }
 
 export type FreshRecordingCameraLayoutDeps = {
@@ -614,11 +691,11 @@ export async function importPendingRecording(
 	const warning = result.success ? result.warning : undefined;
 
 	const label = screenPath.split(/[\\/]/).pop() || toastText("editor", "projectNames.asset");
-	await useProjectStore
-		.getState()
-		.createProject(
-			toastText("editor", "projectNames.recording", { date: new Date().toLocaleString() }),
-		);
+	await useProjectStore.getState().createProject(
+		toastText("editor", "projectNames.recording", {
+			date: formatDateTime(new Date(), currentLocale()),
+		}),
+	);
 	await useProjectStore.getState().addAsset(screenPath, label);
 	// Before the zoom hand-off below, so the zooms wait for the "face" spans to be pieces.
 	void applyFreshRecordingCameraLayout(screenPath).catch((error) => {
