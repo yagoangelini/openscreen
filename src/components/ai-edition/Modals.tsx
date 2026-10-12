@@ -9,6 +9,8 @@ import {
 } from "react";
 import type { CropRegion } from "@/components/video-editor/types";
 import { useScopedT } from "@/contexts/I18nContext";
+import { formatDate } from "@/i18n/format";
+import { currentLocale } from "@/i18n/toastText";
 import type { AxcutClip } from "@/lib/ai-edition/schema";
 import { formatSeconds } from "@/lib/ai-edition/timeline/format";
 import { cropDraftFromRegion, cropDraftToPct, previewBoxStyle } from "./cropDraft";
@@ -313,7 +315,7 @@ export function OpenProjectModal({
 											whiteSpace: "nowrap",
 										}}
 									>
-										{new Date(p.updatedAt).toLocaleDateString()}
+										{formatDate(p.updatedAt, currentLocale())}
 									</span>
 								</button>
 								<button
@@ -1487,7 +1489,7 @@ export function ChatHistoryModal({
 								>
 									{t("chat.historyDialog.msgsCount", {
 										count: s.messageCount,
-										date: new Date(s.createdAt).toLocaleDateString(),
+										date: formatDate(s.createdAt, currentLocale()),
 									})}
 								</span>
 							</button>

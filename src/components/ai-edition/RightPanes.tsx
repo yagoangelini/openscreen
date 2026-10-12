@@ -56,6 +56,8 @@ import {
 	type WebcamBackgroundMode,
 } from "@/components/video-editor/types";
 import { useI18n, useScopedT } from "@/contexts/I18nContext";
+import { formatDecimal } from "@/i18n/format";
+import { currentLocale } from "@/i18n/toastText";
 import { resolveCaptionLane } from "@/lib/ai-edition/captions/settings";
 import { collapseTracksToPills, trackGroupId } from "@/lib/ai-edition/document/audioTracks";
 import {
@@ -1650,7 +1652,7 @@ const TranscriptWord = memo(function TranscriptWord({
 
 	if (isSilenceWord(cw.word)) {
 		const durationSec = cw.word.endSec - cw.word.startSec;
-		const duration = durationSec.toFixed(1);
+		const duration = formatDecimal(durationSec, 1, currentLocale());
 		const label = ts("transcript.silence", { duration });
 		if (removed) {
 			return (
@@ -4396,7 +4398,7 @@ export function SliderCell({
 							format(value)
 						) : (
 							<>
-								{value.toFixed(decimals)}
+								{formatDecimal(value, decimals, currentLocale())}
 								{suffix}
 							</>
 						)}

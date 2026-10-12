@@ -13,7 +13,8 @@
 import { AlertCircle, Circle, Film, FolderOpen, Upload, X } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { useScopedT } from "@/contexts/I18nContext";
+import { useI18n, useScopedT } from "@/contexts/I18nContext";
+import { formatDateTime } from "@/i18n/format";
 import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
 import { importProjectFile } from "./importProjectFile";
 import styles from "./NewEditorShell.module.css";
@@ -36,6 +37,7 @@ export function EditorEmptyState({
 	onRecord,
 }: EditorEmptyStateProps) {
 	const t = useScopedT("editor");
+	const { locale } = useI18n();
 	const tc = useScopedT("common");
 	const [isDraggingOver, setIsDraggingOver] = useState(false);
 	const [dropError, setDropError] = useState<DropError>(null);
@@ -53,10 +55,10 @@ export function EditorEmptyState({
 		const existing = useProjectStore.getState().projectId;
 		if (existing) return existing;
 		const doc = await createProject(
-			t("projectNames.project", { date: new Date().toLocaleString() }),
+			t("projectNames.project", { date: formatDateTime(new Date(), locale) }),
 		);
 		return doc.project.id;
-	}, [createProject, t]);
+	}, [createProject, t, locale]);
 
 	const handleImportVideo = useCallback(async () => {
 		const result = await window.electronAPI?.openVideoFilePicker?.();

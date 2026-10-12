@@ -9,6 +9,8 @@
 
 import { Loader2 } from "lucide-react";
 import { useScopedT } from "@/contexts/I18nContext";
+import { formatDecimal } from "@/i18n/format";
+import { currentLocale } from "@/i18n/toastText";
 import {
 	type AssetTranscriptionView,
 	isCpuBackend,
@@ -55,7 +57,7 @@ export function useTranscriptionLabel(): (view: AssetTranscriptionView) => strin
 				const suffix: string[] = [];
 				if (isCpuBackend(view.backend)) suffix.push("CPU");
 				const speed = realtimeSpeed(view.rtf);
-				if (speed !== null) suffix.push(`${speed.toFixed(1)}×`);
+				if (speed !== null) suffix.push(`${formatDecimal(speed, 1, currentLocale())}×`);
 				return suffix.length === 0 ? head : `${head} · ${suffix.join(" · ")}`;
 			}
 			case "empty":
