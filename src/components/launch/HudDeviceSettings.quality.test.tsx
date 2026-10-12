@@ -34,6 +34,7 @@ const labels: HudDeviceSettingsLabels = {
 	micChannelRight: "Right",
 	micChannelMix: "Mix",
 	broadcastTip: "Use NVIDIA Broadcast",
+	micSilenceWarning: "Warn if the microphone seems muted",
 	cameraQuality: "Camera quality",
 	cameraQualityOptions: {
 		"1080p": "1080p",

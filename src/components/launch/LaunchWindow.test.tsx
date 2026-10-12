@@ -2331,3 +2331,88 @@ describe("LaunchWindow camera layout ('Rosto / Tela + câmera')", () => {
 		expect(button).toHaveAttribute("data-layout", "face");
 	});
 });
+
+describe("LaunchWindow recording extras (drawing, camera self-view, muted mic)", () => {
+	let micListeners: Array<(silent: boolean) => void> = [];
+	let drawingListeners: Array<(state: { phase: string }) => void> = [];
+
+	function stubExtras() {
+		micListeners = [];
+		drawingListeners = [];
+		const api = {
+			getDrawingState: vi.fn(async () => ({ phase: "off", style: {}, windowCapture: false })),
+			toggleDrawing: vi.fn(async () => ({ phase: "drawing", style: {}, windowCapture: false })),
+			onDrawingState: vi.fn((callback) => {
+				drawingListeners.push(callback);
+				return () => undefined;
+			}),
+			getSelfViewState: vi.fn(async () => ({ requested: false })),
+			toggleSelfView: vi.fn(async () => ({ requested: true })),
+			onSelfViewState: vi.fn(() => () => undefined),
+			reportSelfViewCamera: vi.fn(),
+			onMicSilent: vi.fn((callback) => {
+				micListeners.push(callback);
+				return () => undefined;
+			}),
+		};
+		(window as unknown as { recordingExtrasAPI: unknown }).recordingExtrasAPI = api;
+		return api;
+	}
+
+	beforeEach(() => {
+		platformState.value = "win32";
+		resetLaunchMocks();
+	});
+
+	afterEach(() => {
+		cleanup();
+		delete (window as unknown as { recordingExtrasAPI?: unknown }).recordingExtrasAPI;
+	});
+
+	it("toggles drawing mode from the HUD and follows the shortcut's toggles", async () => {
+		const api = stubExtras();
+		renderLaunchWindow();
+		const button = await screen.findByTestId("launch-draw-button");
+		expect(button).toHaveAttribute("aria-pressed", "false");
+		fireEvent.click(button);
+		await waitFor(() => expect(button).toHaveAttribute("aria-pressed", "true"));
+		expect(api.toggleDrawing).toHaveBeenCalledTimes(1);
+		act(() => {
+			for (const listener of drawingListeners) listener({ phase: "off" });
+		});
+		expect(button).toHaveAttribute("aria-pressed", "false");
+	});
+
+	it("offers the self-view only with the camera on, and reports the camera to the main process", async () => {
+		const api = stubExtras();
+		recorderState.value.webcamEnabled = false;
+		const { unmount } = renderLaunchWindow();
+		await screen.findByTestId("launch-webcam-button");
+		expect(screen.queryByTestId("launch-self-view-button")).toBeNull();
+		await waitFor(() => expect(api.reportSelfViewCamera.mock.calls.at(-1)?.[0]).toBe(false));
+		unmount();
+
+		recorderState.value.webcamEnabled = true;
+		renderLaunchWindow();
+		const button = await screen.findByTestId("launch-self-view-button");
+		await waitFor(() => expect(api.reportSelfViewCamera.mock.calls.at(-1)?.[0]).toBe(true));
+		fireEvent.click(button);
+		await waitFor(() => expect(button).toHaveAttribute("aria-pressed", "true"));
+	});
+
+	it("puts a red badge on the microphone while it seems muted, and takes it off when signal returns", async () => {
+		stubExtras();
+		recorderState.value.recording = true;
+		renderLaunchWindow();
+		await waitFor(() => expect(micListeners.length).toBeGreaterThan(0));
+		expect(screen.queryByTestId("launch-microphone-silent-badge")).toBeNull();
+		act(() => {
+			for (const listener of micListeners) listener(true);
+		});
+		expect(await screen.findByTestId("launch-microphone-silent-badge")).toBeInTheDocument();
+		act(() => {
+			for (const listener of micListeners) listener(false);
+		});
+		await waitFor(() => expect(screen.queryByTestId("launch-microphone-silent-badge")).toBeNull());
+	});
+});

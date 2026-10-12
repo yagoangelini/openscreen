@@ -1948,6 +1948,62 @@ int main() {
         }
     }
 
+    // --- Microphone level meter (the "seems muted" warning) --------------------
+    {
+        const auto f32mono = makeFormat(MFAudioFormat_Float, 48000, 1, 32);
+        const auto pcm16stereo = makeFormat(MFAudioFormat_PCM, 48000, 2, 16);
+        const auto toneF32 = [&](double amplitude, size_t frames) {
+            std::vector<BYTE> bytes(frames * sizeof(float));
+            auto* s = reinterpret_cast<float*>(bytes.data());
+            for (size_t i = 0; i < frames; i += 1) {
+                s[i] = static_cast<float>(amplitude * std::sin(2.0 * kTestPi * 1000.0 * i / 48000.0));
+            }
+            return bytes;
+        };
+        {
+            // 480-frame packets (10 ms): a 250 ms window closes on the 25th.
+            MicLevelMeter meter(250);
+            MicLevel level;
+            int closedAt = -1;
+            const auto packet = toneF32(0.5, 480);
+            for (int p = 0; p < 30 && closedAt < 0; p += 1) {
+                if (meter.process(packet.data(), static_cast<DWORD>(packet.size()), f32mono, level)) {
+                    closedAt = p;
+                }
+            }
+            // A 0.5 sine: peak -6.0 dBFS, RMS -9.0 dBFS.
+            expect("mic-level-window-closes-after-250ms", closedAt == 24,
+                   "closedAt=" + std::to_string(closedAt));
+            expect("mic-level-peak-and-rms-of-a-sine",
+                   std::abs(level.peakDb - -6.02) < 0.1 && std::abs(level.rmsDb - -9.03) < 0.1,
+                   "peak=" + std::to_string(level.peakDb) + " rms=" + std::to_string(level.rmsDb));
+        }
+        {
+            // Digital silence (a muted endpoint) reads as the floor, not -infinity.
+            MicLevelMeter meter(100);
+            MicLevel level;
+            std::vector<BYTE> zeros(4800 * pcm16stereo.blockAlign, 0);
+            const bool closed =
+                meter.process(zeros.data(), static_cast<DWORD>(zeros.size()), pcm16stereo, level);
+            expect("mic-level-silence-is-the-floor",
+                   closed && level.peakDb == MicLevelMeter::kSilenceDb &&
+                       level.rmsDb == MicLevelMeter::kSilenceDb,
+                   "peak=" + std::to_string(level.peakDb));
+            const std::string line = formatMicLevelEvent(level);
+            expect("mic-level-event-line",
+                   line == "{\"event\":\"mic-level\",\"peakDb\":-120.0,\"rmsDb\":-120.0}\n", line);
+        }
+        {
+            // Room noise around -66 dBFS stays under the app's -60 dBFS "no signal" line.
+            MicLevelMeter meter(100);
+            MicLevel level;
+            const auto packet = toneF32(0.0005, 4800);
+            meter.process(packet.data(), static_cast<DWORD>(packet.size()), f32mono, level);
+            expect("mic-level-room-noise-under-60db", level.peakDb < -60.0 && level.peakDb > -70.0,
+                   "peak=" + std::to_string(level.peakDb));
+        }
+    }
+
     std::cout << "ran " << g_ran << " tests\n";
     if (g_failed != 0) {
         std::cout << g_failed << " failed\n";

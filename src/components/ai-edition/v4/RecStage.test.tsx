@@ -425,6 +425,7 @@ describe("RecStage controls", () => {
 			countdownSeconds: 3,
 			micChannelMode: "auto",
 			cameraLayout: "screen",
+			micSilenceWarningEnabled: true,
 		};
 		stubRecordingPrefs();
 		let answerReread: ((prefs: RecordingPrefs) => void) | undefined;
@@ -641,6 +642,7 @@ describe("RecStage controls", () => {
 			countdownSeconds: 3,
 			micChannelMode: "auto",
 			cameraLayout: "screen",
+			micSilenceWarningEnabled: true,
 		};
 		act(() => {
 			recordingPrefsListeners.forEach((listener) => listener(resetPrefs));

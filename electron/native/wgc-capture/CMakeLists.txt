@@ -64,6 +64,8 @@ add_executable(wgc-capture
   src/webcam_format.cpp
   src/webcam_format.h
   src/webcam_capture.h
+  src/webcam_preview.cpp
+  src/webcam_preview.h
   src/wgc_session.cpp
   src/wgc_session.h
 )
@@ -191,6 +193,20 @@ target_compile_definitions(webcam_format_test PRIVATE
 )
 
 target_compile_options(webcam_format_test PRIVATE /EHsc /W4 /utf-8)
+
+add_executable(webcam_preview_test
+  src/webcam_preview.cpp
+  src/webcam_preview.h
+  src/webcam_preview_test.cpp
+)
+
+target_compile_definitions(webcam_preview_test PRIVATE
+  NOMINMAX
+  WIN32_LEAN_AND_MEAN
+  _WIN32_WINNT=0x0A00
+)
+
+target_compile_options(webcam_preview_test PRIVATE /EHsc /W4 /utf-8)
 
 add_executable(frame_visibility_test
   src/frame_visibility.cpp

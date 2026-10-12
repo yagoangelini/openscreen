@@ -58,6 +58,7 @@ import {
 import { exportJobs } from "./ipc/exportJobs";
 import {
 	exportDiagnosticFile,
+	getRecordingDrawingTarget,
 	getSelectedDesktopSource,
 	registerIpcHandlers,
 } from "./ipc/handlers";
@@ -79,6 +80,11 @@ import {
 import { setDisplaySleepBlocked } from "./recording/displaySleepBlocker";
 import { killRunningScans } from "./recording/ocrScan";
 import { RecordingsDirManager } from "./recording/recordingsDirManager";
+import {
+	attachRecordingExtrasToHud,
+	registerRecordingExtras,
+	toggleDrawing,
+} from "./recordingExtras";
 import { offersStarPrompt, REPO_URL, storeReviewUrl } from "./star-prompt";
 import { registerSttIpc, shutdownStt } from "./stt";
 import { checkLatestRelease } from "./update-checker";
@@ -192,6 +198,8 @@ function createWindow() {
 
 	const hudWindow = createHudOverlayWindow();
 	mainWindow = hudWindow;
+	// The drawing layer and the camera self-view live alongside the HUD and close with it.
+	attachRecordingExtrasToHud(hudWindow);
 	// The countdown overlay loads the whole renderer bundle just to draw a number,
 	// and creating it on the first Record click cost seconds -- measured 8.5 s from
 	// click to the first "3" on a busy laptop, before the capture had even begun to
@@ -369,6 +377,11 @@ const globalShortcutHandlers: Record<GlobalShortcutAction, () => void> = {
 	cameraLayoutToggle: () => {
 		const layout = recordingControls?.toggleRecordingCameraLayout("shortcut") ?? null;
 		console.info("[shortcut] cameraLayoutToggle", { at: Date.now(), isRecording, layout });
+	},
+	// "Desenhar na tela": in and out of drawing mode, from inside the app being recorded.
+	drawingToggle: () => {
+		console.info("[shortcut] drawingToggle", { at: Date.now(), isRecording });
+		toggleDrawing();
 	},
 };
 
@@ -1740,6 +1753,10 @@ appReady?.then(async () => {
 		{ open: prewarmEditorWindow, discard: discardPrewarmedEditorWindow },
 	);
 	recordingControls = ipcControls;
+	registerRecordingExtras({
+		getHud: liveHudWindow,
+		getDrawingTarget: getRecordingDrawingTarget,
+	});
 
 	// Native STT (whisper.cpp + forced alignment) — single instance per app.
 	registerSttIpc(ipcMain);

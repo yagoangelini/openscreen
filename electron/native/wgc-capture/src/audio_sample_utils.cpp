@@ -8,6 +8,7 @@
 #include <cmath>
 #include <numeric>
 #include <cstddef>
+#include <cstdio>
 #include <cstring>
 #include <iostream>
 #include <limits>
@@ -623,6 +624,53 @@ void PeakLimiter::process(double* interleaved, size_t frames, UINT32 channels, U
             }
         }
     }
+}
+
+void MicLevelMeter::reset() {
+    peak_ = 0.0;
+    sumSquares_ = 0.0;
+    samples_ = 0;
+    frames_ = 0;
+}
+
+bool MicLevelMeter::process(
+    const BYTE* data,
+    DWORD byteCount,
+    const AudioInputFormat& format,
+    MicLevel& out) {
+    if (!data || format.blockAlign == 0 || format.channels == 0 || format.sampleRate == 0) {
+        return false;
+    }
+    const size_t frames = byteCount / format.blockAlign;
+    for (size_t frame = 0; frame < frames; frame += 1) {
+        for (UINT32 channel = 0; channel < format.channels; channel += 1) {
+            const double value = readSampleAsDouble(data, format, frame, channel);
+            peak_ = std::max(peak_, std::abs(value));
+            sumSquares_ += value * value;
+            samples_ += 1;
+        }
+    }
+    frames_ += frames;
+    const uint64_t windowFrames =
+        std::max<uint64_t>(1, static_cast<uint64_t>(format.sampleRate) * windowMs_ / 1000);
+    if (frames_ < windowFrames) {
+        return false;
+    }
+    const auto toDb = [](double linear) {
+        return linear > 0.0 ? std::max(kSilenceDb, 20.0 * std::log10(linear)) : kSilenceDb;
+    };
+    out.peakDb = toDb(peak_);
+    out.rmsDb = toDb(samples_ > 0 ? std::sqrt(sumSquares_ / static_cast<double>(samples_)) : 0.0);
+    reset();
+    return true;
+}
+
+std::string formatMicLevelEvent(const MicLevel& level) {
+    char line[128];
+    std::snprintf(
+        line, sizeof(line), "{\"event\":\"mic-level\",\"peakDb\":%.1f,\"rmsDb\":%.1f}\n",
+        level.peakDb, level.rmsDb);
+    return line;
 }
 
 void accumulateAudio(

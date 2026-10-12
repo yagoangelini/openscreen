@@ -11,6 +11,7 @@
 #include "wasapi_render_keepalive.h"
 #include "frame_visibility.h"
 #include "webcam_capture.h"
+#include "webcam_preview.h"
 #include "wgc_session.h"
 
 #include <winrt/Windows.Foundation.h>
@@ -69,7 +70,22 @@ struct CaptureConfig {
     int webcamWidth = 0;
     int webcamHeight = 0;
     int webcamFps = 0;
+    // The self-view: the name of the app's named pipe (\\.\pipe\<name>) that takes the camera
+    // preview frames, and whether the self-view is shown when the take starts.
+    std::string selfViewPipe;
+    bool selfViewPreview = false;
 };
+
+/**
+ * Writes a whole line straight to the stdout handle, around the CRT's buffer. Used by the
+ * threads that report while others print: the other lines sit in that buffer until their
+ * std::endl and go out in one write, so a line written here never lands inside one of them,
+ * which an ordinary `std::cout <<` from a second thread could.
+ */
+void writeStdoutLine(const std::string& line) {
+    DWORD written = 0;
+    WriteFile(GetStdHandle(STD_OUTPUT_HANDLE), line.data(), static_cast<DWORD>(line.size()), &written, nullptr);
+}
 
 struct CaptureControl {
     std::atomic<bool> stopRequested = false;
@@ -619,10 +635,15 @@ bool parseConfig(const std::string& json, CaptureConfig& config) {
     config.webcamWidth = findInt(json, "webcamWidth", 0);
     config.webcamHeight = findInt(json, "webcamHeight", 0);
     config.webcamFps = findInt(json, "webcamFps", 0);
+    config.selfViewPipe = findString(json, "selfViewPipe");
+    config.selfViewPreview = findBool(json, "selfViewPreview", false);
     return true;
 }
 
-void readCaptureCommands(CaptureControl& control, const std::function<void(bool)>& onPauseChanged) {
+void readCaptureCommands(
+    CaptureControl& control,
+    const std::function<void(bool)>& onPauseChanged,
+    const std::function<void(bool)>& onSelfViewChanged) {
     std::string line;
     while (std::getline(std::cin, line)) {
         // The comparisons below are exact, so a stray carriage return would
@@ -652,6 +673,11 @@ void readCaptureCommands(CaptureControl& control, const std::function<void(bool)
             onPauseChanged(false);
             std::cout << "{\"event\":\"recording-resumed\",\"schemaVersion\":2}" << std::endl;
             control.cv.notify_all();
+            continue;
+        }
+        // The app's floating self-view opened or closed: preview frames only while it shows.
+        if (line == "selfview on" || line == "selfview off") {
+            onSelfViewChanged(line == "selfview on");
             continue;
         }
     }
@@ -847,6 +873,29 @@ int wmain(int argc, wchar_t* argv[]) {
             }
             webcamStartedAt = std::chrono::steady_clock::now();
         }
+    }
+
+    // The self-view's frames, from the countdown on: its own thread reads the camera's latest
+    // frame, as the writer does, and nothing here waits for it. Declared after the camera, so
+    // it stops (destructor) before the camera does on every way out of main.
+    SelfViewPreviewPublisher selfViewPreview;
+    if (config.webcamEnabled && !config.selfViewPipe.empty()) {
+        selfViewPreview.start(
+            L"\\\\.\\pipe\\" + utf8ToWide(config.selfViewPipe),
+            webcamCapture.deliversNv12(),
+            config.selfViewPreview,
+            [&webcamCapture](std::vector<BYTE>& data, int& frameWidth, int& frameHeight,
+                             uint64_t lastSequence, uint64_t& sequence) {
+                WebcamFrameSnapshot snapshot;
+                if (!webcamCapture.copyLatestFrame(snapshot, lastSequence)) {
+                    return false;
+                }
+                data = std::move(snapshot.data);
+                frameWidth = snapshot.width;
+                frameHeight = snapshot.height;
+                sequence = snapshot.sequence;
+                return true;
+            });
     }
 
     WasapiLoopbackCapture loopbackCapture;
@@ -1506,6 +1555,11 @@ int wmain(int argc, wchar_t* argv[]) {
     };
 
     std::unique_ptr<AudioMixer> audioMixer;
+    MicLevelMeter micLevelMeter(250);
+    // Test-only: the microphone delivers digital silence, as a muted endpoint does, so the
+    // app's "seems muted" warning can be exercised without touching the Windows settings.
+    const bool testSilentMicrophone = readEnvInt("OPENSCREEN_WGC_TEST_SILENT_MIC", 0) == 1;
+    std::vector<BYTE> silentMicrophonePacket;
     AacStemWriter voiceStem;
     AacStemWriter systemStem;
     auto startAudioCaptures = [&]() -> bool {
@@ -1556,6 +1610,16 @@ int wmain(int argc, wchar_t* argv[]) {
                         return;
                     }
 
+                    // The level the app watches for a mic that records only silence (a muted
+                    // endpoint, a dead input), from the countdown on: four lines a second.
+                    if (testSilentMicrophone) {
+                        silentMicrophonePacket.assign(byteCount, 0);
+                        data = silentMicrophonePacket.data();
+                    }
+                    MicLevel micLevel;
+                    if (micLevelMeter.process(data, byteCount, microphoneAudioFormat, micLevel)) {
+                        writeStdoutLine(formatMicLevelEvent(micLevel));
+                    }
                     audioMixer->pushMicrophone(data, byteCount);
                 })) {
                 std::cerr << "ERROR: Failed to start WASAPI microphone capture" << std::endl;
@@ -1682,11 +1746,15 @@ int wmain(int argc, wchar_t* argv[]) {
         return 1;
     }
 
-    std::thread stdinThread(readCaptureCommands, std::ref(control), [&](bool isPaused) {
-        if (audioMixer) {
-            audioMixer->setPaused(isPaused);
-        }
-    });
+    std::thread stdinThread(
+        readCaptureCommands,
+        std::ref(control),
+        [&](bool isPaused) {
+            if (audioMixer) {
+                audioMixer->setPaused(isPaused);
+            }
+        },
+        [&](bool shown) { selfViewPreview.setEnabled(shown); });
 
     // writeVideoFrames is the only caller of session.tryGetNextFrame() now
     // (see wgc_session.h), so it has to be running before anything can wait
@@ -1734,6 +1802,8 @@ int wmain(int argc, wchar_t* argv[]) {
     std::cout << "Recording started" << std::endl;
 
     control.waitForStop();
+    // First, and off the stop's clock: its thread only ever waits on its own pipe.
+    selfViewPreview.stop();
 
     // The take ends here, for the sound as for the picture: the video writer
     // stops on this same request. The mixer is clock-driven, so left running

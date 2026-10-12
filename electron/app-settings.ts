@@ -52,6 +52,11 @@ export interface RecordingPreferences {
 	 * switches during a take belong to that take and leave this alone.
 	 */
 	cameraLayout: RecordingCameraLayout;
+	/**
+	 * Whether the HUD says "Seu microfone parece mudo" when the microphone records only
+	 * silence during a take (electron/recording/micSilence.ts). On by default.
+	 */
+	micSilenceWarningEnabled: boolean;
 }
 
 export const MIC_CHANNEL_MODES = ["auto", "left", "right", "mix"] as const;
@@ -76,6 +81,7 @@ export const DEFAULT_RECORDING_PREFERENCES: RecordingPreferences = {
 	countdownSeconds: 3,
 	micChannelMode: "auto",
 	cameraLayout: DEFAULT_RECORDING_CAMERA_LAYOUT,
+	micSilenceWarningEnabled: true,
 };
 
 export interface RecordingSourceDescriptor {
@@ -170,6 +176,10 @@ function parseRecording(raw: RawSettings): RecordingPreferences {
 		cameraLayout: isRecordingCameraLayout(raw.cameraLayout)
 			? raw.cameraLayout
 			: DEFAULT_RECORDING_PREFERENCES.cameraLayout,
+		micSilenceWarningEnabled: bool(
+			raw.micSilenceWarningEnabled,
+			DEFAULT_RECORDING_PREFERENCES.micSilenceWarningEnabled,
+		),
 	};
 }
 

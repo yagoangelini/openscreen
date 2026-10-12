@@ -10,6 +10,9 @@ import { LaunchWindow } from "./components/launch/LaunchWindow";
 import { NotesWindow } from "./components/launch/NotesWindow.tsx";
 import { SourceSelector } from "./components/launch/SourceSelector";
 import { PermissionsWindow } from "./components/permissions/PermissionsWindow";
+import { DrawingOverlay } from "./components/recording-extras/DrawingOverlay";
+import { DrawingToolbar } from "./components/recording-extras/DrawingToolbar";
+import { SelfViewWindow } from "./components/recording-extras/SelfViewWindow";
 import { Toaster } from "./components/ui/sonner";
 import { TooltipProvider } from "./components/ui/tooltip";
 import { EditorDialogsProvider } from "./contexts/EditorDialogsContext";
@@ -38,6 +41,9 @@ const ProviderSettingsDialog = lazy(() =>
 	})),
 );
 
+/** The recording extras' transparent windows (electron/recordingExtras/extrasWindows.ts). */
+const RECORDING_EXTRAS_WINDOWS = new Set(["drawing-overlay", "drawing-toolbar", "self-view"]);
+
 export default function App() {
 	const [windowType, setWindowType] = useState(
 		() => new URLSearchParams(window.location.search).get("windowType") || "",
@@ -52,7 +58,12 @@ export default function App() {
 			setWindowType(type);
 		}
 
-		if (type === "hud-overlay" || type === "source-selector" || type === "countdown-overlay") {
+		if (
+			type === "hud-overlay" ||
+			type === "source-selector" ||
+			type === "countdown-overlay" ||
+			RECORDING_EXTRAS_WINDOWS.has(type)
+		) {
 			document.body.style.background = "transparent";
 			document.documentElement.style.background = "transparent";
 			document.getElementById("root")?.style.setProperty("background", "transparent");
@@ -89,6 +100,12 @@ export default function App() {
 				return <SourceSelector />;
 			case "countdown-overlay":
 				return <CountdownOverlay />;
+			case "drawing-overlay":
+				return <DrawingOverlay />;
+			case "drawing-toolbar":
+				return <DrawingToolbar />;
+			case "self-view":
+				return <SelfViewWindow />;
 			case "permissions":
 				return <PermissionsWindow />;
 			case "cli-export":

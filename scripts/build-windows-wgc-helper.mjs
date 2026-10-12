@@ -159,6 +159,15 @@ if (!fs.existsSync(webcamFormatTestPath)) {
 await run(webcamFormatTestPath, [], { cwd: BUILD_DIR });
 console.log(`Passed ${webcamFormatTestPath}`);
 
+const webcamPreviewTestPath = path.join(BUILD_DIR, "webcam_preview_test.exe");
+if (!fs.existsSync(webcamPreviewTestPath)) {
+	throw new Error(`WGC helper build completed but ${webcamPreviewTestPath} was not found.`);
+}
+// Guards the self-view preview frames: the size, the colour conversion, the wire format
+// electron/recording/selfViewStream.ts parses and the ~15 fps throttle.
+await run(webcamPreviewTestPath, [], { cwd: BUILD_DIR });
+console.log(`Passed ${webcamPreviewTestPath}`);
+
 const frameVisibilityTestPath = path.join(BUILD_DIR, "frame_visibility_test.exe");
 if (!fs.existsSync(frameVisibilityTestPath)) {
 	throw new Error(`WGC helper build completed but ${frameVisibilityTestPath} was not found.`);
