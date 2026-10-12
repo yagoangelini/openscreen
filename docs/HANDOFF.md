@@ -501,6 +501,8 @@ O fork assina tudo com um certificado **autoassinado**, decisão do usuário em 
 - **Para o usuário confiar:** importar o `.cer` em `Cert:\CurrentUser\Root` e em `Cert:\CurrentUser\TrustedPublisher`. É ele que faz isso, porque mexe em configuração de segurança.
 - **Para o agente:** sem esse certificado na máquina, o `build:win` falha ao assinar. Numa máquina nova, crie outro com `New-SelfSignedCertificate -Type CodeSigningCert` e o mesmo Subject.
 - **Ao extrair o `winCodeSign`,** o 7-Zip reclama de links simbólicos de arquivos do macOS ("A required privilege is not held"). É inofensivo no Windows: o `signtool` é extraído e assina.
+- **O atualizador não confere o editor** (`win.verifyUpdateCodeSignature: false`, desde a 2.5.0). Com `publisherName` no `app-update.yml`, o electron-updater só aceita um instalador com assinatura `Valid`. O certificado autoassinado dá `UnknownError` onde não foi importado, então toda atualização a partir da 2.5.0 seria recusada (E2E 2.5.0, E-4). A integridade continua: HTTPS das releases do fork e o sha512 do `latest.yml`.
+- **`dist-electron` é limpo antes do build** (`scripts/clean-dist-electron.mjs` no `build:win`). Sem isso, o `app.asar` da 2.5.0 levou 145 chunks velhos, 175 MB (E-6).
 - **Conferir a assinatura:** `Get-AuthenticodeSignature` em cada `.exe`. Antes de o usuário confiar no certificado, o status sai `UnknownError`; depois, `Valid`.
 
 ## Armadilhas já encontradas

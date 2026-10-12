@@ -434,6 +434,12 @@
       "signingHashAlgorithms": ["sha256"],
       "rfc3161TimeStampServer": "http://timestamp.digicert.com"
     },
+    // The updater does NOT check the installer's publisher. The certificate is self-signed and
+    // trusted only where the owner imported it, so electron-updater would see "UnknownError"
+    // and refuse every update on any other machine (and on the owner's until the import).
+    // Integrity still holds: the update is downloaded over HTTPS from the fork's releases and
+    // checked against latest.yml's sha512.
+    "verifyUpdateCodeSignature": false,
     // Every executable and addon of the app, the capture helpers in resources included. Not
     // the DLLs: third-party ones (onnxruntime) carry their vendor's signature.
     "signExts": [".exe", ".node"],
