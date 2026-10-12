@@ -32,7 +32,9 @@
 		"deleteSelected": "Auswahl löschen",
 		"playPause": "Wiedergabe / Pause",
 		"copySelected": "Auswahl kopieren",
-		"paste": "Einfügen"
+		"paste": "Einfügen",
+		"addHighlight": "Add Highlight",
+		"addStep": "Add Numbered Step"
 	},
 	"fixedActions": {
 		"undo": "Rückgängig",

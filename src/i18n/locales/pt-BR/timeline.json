@@ -8,7 +8,9 @@
 		"addAnnotation": "Adicionar texto, seta, imagem ou desfoque no momento atual",
 		"addSpeed": "Adicionar uma mudança de velocidade no momento atual",
 		"addCameraFullscreen": "Adicionar câmera em tela cheia: mostra a câmera em tela cheia no momento atual",
-		"splitCamera": "Dividir a câmera no momento atual: cada pedaço passa a ser editado separadamente"
+		"splitCamera": "Dividir a câmera no momento atual: cada pedaço passa a ser editado separadamente",
+		"addHighlight": "Destacar uma área no tempo atual: o resto do quadro fica escurecido",
+		"addStep": "Adicionar um passo numerado no tempo atual, onde estava o ponteiro"
 	},
 	"hints": {
 		"pressZoom": "Pressione {{key}} para adicionar zoom",
@@ -109,7 +111,9 @@
 		"waitLength": "{{seconds}} s",
 		"speedUpPicked": "Acelerar as escolhidas ({{speed}}×)",
 		"noWaits": "Nenhuma espera longa nesta gravação",
-		"waitsSpedUp": "Esperas aceleradas: {{count}}"
+		"waitsSpedUp": "Esperas aceleradas: {{count}}",
+		"highlightPill": "Destaque",
+		"stepPill": "Passo {{number}}"
 	},
 	"audio": {
 		"addVoiceover": "Adicionar narração",

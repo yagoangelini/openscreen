@@ -2616,6 +2616,47 @@ describe("buildSceneDescription.annotations", () => {
 		expect(scene.annotations[0].text).toBeUndefined();
 	});
 
+	it("expands a numbered step into its disc, number and label, painted in that order", () => {
+		const scene = buildSceneDescription(
+			docWithAnnotations([
+				{
+					id: "under",
+					startMs: 0,
+					endMs: 1000,
+					type: "highlight",
+					content: "",
+					space: "frame",
+					position: { x: 10, y: 10 },
+					size: { width: 40, height: 30 },
+					style,
+					zIndex: 1,
+				},
+				{
+					id: "step",
+					startMs: 0,
+					endMs: 1000,
+					type: "step",
+					content: "",
+					space: "frame",
+					position: { x: 50, y: 50 },
+					size: { width: 3.6, height: 6.4 },
+					style,
+					zIndex: 2,
+					stepData: { number: 7, color: "#2563EB", label: "Clique aqui" },
+				},
+			]),
+		);
+		expect(scene.annotations.map((a) => [a.id, a.kind])).toEqual([
+			["under", "shape"],
+			["step", "shape"],
+			["step:number", "text"],
+			["step:label", "text"],
+		]);
+		expect(scene.annotations[0].shape?.invert).toBe(true);
+		expect(scene.annotations[2].text?.content).toBe("7");
+		expect(scene.annotations.every((a) => a.space === "frame")).toBe(true);
+	});
+
 	it("normalises freehand blur points into the same space as the rect", () => {
 		const scene = buildSceneDescription(
 			docWithAnnotations([

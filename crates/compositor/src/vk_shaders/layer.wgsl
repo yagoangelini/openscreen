@@ -2440,6 +2440,27 @@ fn device_frame(local: vec2<f32>) -> vec4<f32> {
     return vec4<f32>(rgb * a, a); // premultiplie
 }
 
+// Mode 21 -- the SHAPE of a tutorial annotation, port 1:1 of `shape_layer` in the HLSL (slots in
+// `frame_geometry::shape_annotation_cb`). Premultiplied.
+fn shape_layer(local: vec2<f32>) -> vec4<f32> {
+    let d = sd_round_rect(local - layer.src.xy, layer.src.zw, layer.fx.x);
+    let soft = max(layer.fx.y, 1.0);
+    let inside = 1.0 - smoothstep(-0.5 * soft, 0.5 * soft, d);
+    var fill_cov = inside;
+    if layer.fx.w > 0.5 {
+        fill_cov = 1.0 - inside;
+    }
+    let fa = layer.color.a * fill_cov;
+    let bw = 0.5 * layer.fx.z;
+    var ba = 0.0;
+    if layer.fx.z > 0.0 {
+        ba = layer.dst_prev.a * (1.0 - smoothstep(bw - 0.75, bw + 0.75, abs(d)));
+    }
+    let rgb = layer.dst_prev.rgb * ba + layer.color.rgb * fa * (1.0 - ba);
+    let a = ba + fa * (1.0 - ba);
+    return vec4<f32>(rgb, a) * clamp(layer.mb.x, 0.0, 1.0);
+}
+
 @fragment
 fn fs_main(i: VsOut) -> @location(0) vec4<f32> {
     var rgb: vec3<f32>;
@@ -2849,6 +2870,9 @@ fn fs_main(i: VsOut) -> @location(0) vec4<f32> {
         }
         // Mode 17 -- cadre d'appareil modelise (`device_frame`).
         return device_frame(i.local);
+    } else if layer.mode > 20.5 {
+        // Mode 21 -- the shape of a tutorial annotation (highlight, step marker). A plain layer.
+        return shape_layer(i.local);
     } else if layer.mode > 18.5 {
         // Mode 19 -- verre a plat de Glass Lens (`cursor_glass`) : un modele, que seul le
         // pipeline `LAYER_MODELS` compile, comme les modes 15 a 17.

@@ -8,7 +8,9 @@
 		"addAnnotation": "إضافة نص أو سهم أو صورة أو تمويه عند الوقت الحالي",
 		"addSpeed": "إضافة تغيير في السرعة عند الوقت الحالي",
 		"addCameraFullscreen": "إضافة كاميرا كاملة الشاشة: تعرض الكاميرا بملء الشاشة عند الوقت الحالي",
-		"splitCamera": "قسّم الكاميرا عند الوقت الحالي: يُحرَّر كل جزء بعدها على حدة"
+		"splitCamera": "قسّم الكاميرا عند الوقت الحالي: يُحرَّر كل جزء بعدها على حدة",
+		"addHighlight": "Highlight an area at the current time: everything around it is dimmed",
+		"addStep": "Add a numbered step at the current time, where the pointer was"
 	},
 	"hints": {
 		"pressZoom": "اضغط {{key}} لإضافة تكبير",
@@ -109,7 +111,9 @@
 		"waitLength": "{{seconds}} ث",
 		"speedUpPicked": "تسريع المحدد ({{speed}}×)",
 		"noWaits": "لا توجد فترات انتظار طويلة في هذا التسجيل",
-		"waitsSpedUp": "فترات الانتظار المسرَّعة: {{count}}"
+		"waitsSpedUp": "فترات الانتظار المسرَّعة: {{count}}",
+		"highlightPill": "Highlight",
+		"stepPill": "Step {{number}}"
 	},
 	"audio": {
 		"addVoiceover": "إضافة تعليق صوتي",

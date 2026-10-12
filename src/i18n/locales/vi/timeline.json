@@ -8,7 +8,9 @@
 		"addAnnotation": "Thêm văn bản, mũi tên, hình ảnh hoặc làm mờ tại thời điểm hiện tại",
 		"addSpeed": "Thêm thay đổi tốc độ tại thời điểm hiện tại",
 		"addCameraFullscreen": "Thêm Camera Toàn màn hình: hiển thị camera toàn màn hình tại thời điểm hiện tại",
-		"splitCamera": "Tách camera tại thời điểm hiện tại: mỗi đoạn sau đó được chỉnh riêng"
+		"splitCamera": "Tách camera tại thời điểm hiện tại: mỗi đoạn sau đó được chỉnh riêng",
+		"addHighlight": "Highlight an area at the current time: everything around it is dimmed",
+		"addStep": "Add a numbered step at the current time, where the pointer was"
 	},
 	"hints": {
 		"pressZoom": "Nhấn {{key}} để thêm thu phóng",
@@ -109,7 +111,9 @@
 		"waitLength": "{{seconds}} giây",
 		"speedUpPicked": "Tăng tốc đoạn đã chọn ({{speed}}×)",
 		"noWaits": "Bản ghi này không có đoạn chờ dài",
-		"waitsSpedUp": "Đoạn chờ đã tăng tốc: {{count}}"
+		"waitsSpedUp": "Đoạn chờ đã tăng tốc: {{count}}",
+		"highlightPill": "Highlight",
+		"stepPill": "Step {{number}}"
 	},
 	"audio": {
 		"addVoiceover": "Thêm thuyết minh",

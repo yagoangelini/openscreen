@@ -8,7 +8,9 @@
 		"addAnnotation": "Добавить текст, стрелку, изображение или размытие в текущий момент",
 		"addSpeed": "Добавить изменение скорости в текущий момент",
 		"addCameraFullscreen": "Добавить камеру на весь экран: показывает камеру на весь экран в текущий момент",
-		"splitCamera": "Разделить камеру в текущий момент: каждый фрагмент затем редактируется отдельно"
+		"splitCamera": "Разделить камеру в текущий момент: каждый фрагмент затем редактируется отдельно",
+		"addHighlight": "Highlight an area at the current time: everything around it is dimmed",
+		"addStep": "Add a numbered step at the current time, where the pointer was"
 	},
 	"hints": {
 		"pressZoom": "Нажмите {{key}} для добавления масштабирования",
@@ -109,7 +111,9 @@
 		"waitLength": "{{seconds}} с",
 		"speedUpPicked": "Ускорить выбранные ({{speed}}×)",
 		"noWaits": "В этой записи нет долгих ожиданий",
-		"waitsSpedUp": "Ускорено ожиданий: {{count}}"
+		"waitsSpedUp": "Ускорено ожиданий: {{count}}",
+		"highlightPill": "Highlight",
+		"stepPill": "Step {{number}}"
 	},
 	"audio": {
 		"addVoiceover": "Добавить озвучку",

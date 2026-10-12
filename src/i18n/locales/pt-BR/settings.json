@@ -96,7 +96,20 @@
 		"blurShapeOval": "Oval",
 		"blurColorWhite": "Branco",
 		"tipMovePlayhead": "Mova o cursor de reprodução para a seção de anotação sobreposta e selecione um item.",
-		"typeImage": "Imagem"
+		"typeImage": "Imagem",
+		"typeHighlight": "Destaque",
+		"typeStep": "Passo",
+		"highlightHint": "Tudo fora do retângulo fica escurecido. Arraste-o para cima do que o espectador deve olhar.",
+		"highlightDim": "Escurecer fora",
+		"highlightFeather": "Borda suave",
+		"highlightRadius": "Arredondamento",
+		"highlightBorder": "Contorno",
+		"highlightBorderColor": "Cor do contorno",
+		"stepNumber": "Número",
+		"stepColor": "Cor",
+		"stepSize": "Tamanho",
+		"stepLabel": "Rótulo (opcional)",
+		"stepLabelPlaceholder": "ex.: Abra as Configurações"
 	},
 	"effects": {
 		"fitClipFew": "{{count}} clipes",

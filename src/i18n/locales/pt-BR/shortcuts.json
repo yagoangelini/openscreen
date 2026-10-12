@@ -32,7 +32,9 @@
 		"deleteSelected": "Excluir selecionado",
 		"playPause": "Reproduzir / pausar",
 		"copySelected": "Copiar seleção",
-		"paste": "Colar"
+		"paste": "Colar",
+		"addHighlight": "Adicionar destaque",
+		"addStep": "Adicionar passo numerado"
 	},
 	"fixedActions": {
 		"undo": "Desfazer",

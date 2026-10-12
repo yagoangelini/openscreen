@@ -345,7 +345,23 @@ export interface CameraFullscreenRegion {
 	endMs: number;
 }
 
-export type AnnotationType = "text" | "image" | "figure" | "blur";
+export type AnnotationType = "text" | "image" | "figure" | "blur" | "highlight" | "step";
+
+/** "Destaque": the frame dimmed around a lit rounded rectangle. Lengths in px at 1080. */
+export interface HighlightData {
+	dim: number;
+	feather: number;
+	radius: number;
+	borderColor: string;
+	borderWidth: number;
+}
+
+/** "Passo numerado": a numbered badge (its diameter is the box height) and an optional label. */
+export interface StepData {
+	number: number;
+	color: string;
+	label: string;
+}
 
 export type ArrowDirection =
 	| "up"
@@ -433,6 +449,8 @@ export interface AnnotationRegion {
 	annotationSource?: "auto-caption" | "auto-redact";
 	figureData?: FigureData;
 	blurData?: BlurData;
+	highlightData?: HighlightData;
+	stepData?: StepData;
 }
 
 export const DEFAULT_ANNOTATION_POSITION: AnnotationPosition = {

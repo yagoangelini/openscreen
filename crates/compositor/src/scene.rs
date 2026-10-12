@@ -386,6 +386,40 @@ pub struct SceneAnnotation {
     pub figure: Option<SceneAnnotationFigure>,
     #[serde(default)]
     pub blur: Option<SceneAnnotationBlur>,
+    /// `kind: "shape"`: a filled rounded rectangle, or everything around it (`invert`). The app
+    /// builds the tutorial annotations out of it: a highlight rectangle (inverted, the frame
+    /// dimmed around the lit area) and the disc of a numbered step marker.
+    #[serde(default)]
+    pub shape: Option<SceneAnnotationShape>,
+}
+
+/// The geometry and paint of a `kind: "shape"` annotation. Lengths are fractions of the HEIGHT of
+/// the anchor box, like `SceneAnnotationText::font_size_rel`, so the preview (rendered small) and
+/// the export agree at any resolution.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SceneAnnotationShape {
+    /// CSS colour of the fill; its alpha is the dim amount of a highlight.
+    pub fill: String,
+    /// Corner radius, fraction of the anchor height. Clamped to half the box's short side, so a
+    /// large value draws a disc (a square box) or a pill.
+    #[serde(default)]
+    pub radius_rel: f32,
+    /// Width of the soft edge between lit and dimmed, fraction of the anchor height.
+    #[serde(default)]
+    pub feather_rel: f32,
+    /// Border drawn on the edge, `None` or a width of 0: no border.
+    #[serde(default)]
+    pub border_color: Option<String>,
+    #[serde(default)]
+    pub border_rel: f32,
+    /// `true`: the fill covers the whole output frame EXCEPT the box (a highlight).
+    #[serde(default)]
+    pub invert: bool,
+    /// Appearance animation, the vocabulary of `SceneAnnotationText::animation` (`text_anim.rs`):
+    /// a step's disc pops with its number, a highlight fades. Absent: shown as is.
+    #[serde(default)]
+    pub animation: Option<String>,
 }
 
 impl SceneAnnotation {

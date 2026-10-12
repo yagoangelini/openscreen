@@ -3708,8 +3708,34 @@ float4 device_frame(float2 local)
     return float4(rgb * a, a); // prémultiplié
 }
 
+// mode 21 : the SHAPE of a tutorial annotation (`frame_geometry::shape_annotation_cb`). A rounded
+// box (`src` = centre, half size in local px; `fx.x` its radius) filled with `color`, or, inverted
+// (`fx.w`), the whole quad around it: the dimmed frame of a highlight. `fx.y` softens the edge,
+// `fx.z` draws a border of `dst_prev` centred on it, `mb.x` fades the whole layer. Premultiplied.
+float4 shape_layer(float2 local)
+{
+    float d = sd_round_rect(local - src.xy, src.zw, fx.x);
+    float soft = max(fx.y, 1.0);
+    float inside = 1.0 - smoothstep(-0.5 * soft, 0.5 * soft, d);
+    float fill_cov = (fx.w > 0.5) ? 1.0 - inside : inside;
+    float fa = color.a * fill_cov;
+    float bw = 0.5 * fx.z;
+    float ba = (fx.z > 0.0)
+        ? dst_prev.a * (1.0 - smoothstep(bw - 0.75, bw + 0.75, abs(d)))
+        : 0.0;
+    float3 rgb = dst_prev.rgb * ba + color.rgb * fa * (1.0 - ba);
+    float a = ba + fa * (1.0 - ba);
+    return float4(rgb, a) * saturate(mb.x);
+}
+
 float4 ps_main(VSOut i) : SV_Target
 {
+    // mode 21 : the shape of a tutorial annotation (highlight, step marker). Tested first: the
+    // branches below have no upper bound.
+    if (mode > 20.5)
+    {
+        return shape_layer(i.local);
+    }
     // mode 20 : SPOTLIGHT. The whole output darkened (premultiplied black) outside a soft disc
     // on the pointer: `src.xy` its centre in output fractions, `src.z` its radius and `src.w`
     // the soft edge, both in px of `quad_px` (the output); `color.a` the darkness.

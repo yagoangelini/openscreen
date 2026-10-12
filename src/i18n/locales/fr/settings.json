@@ -96,7 +96,20 @@
 		"blurShapeOval": "Ovale",
 		"blurColorWhite": "Blanc",
 		"tipMovePlayhead": "Déplacez la tête de lecture sur la section d'annotation et sélectionnez un élément.",
-		"typeImage": "Image"
+		"typeImage": "Image",
+		"typeHighlight": "Highlight",
+		"typeStep": "Step",
+		"highlightHint": "Everything outside the rectangle is dimmed. Drag it over what the viewer should look at.",
+		"highlightDim": "Dim outside",
+		"highlightFeather": "Soft edge",
+		"highlightRadius": "Corner radius",
+		"highlightBorder": "Border",
+		"highlightBorderColor": "Border color",
+		"stepNumber": "Number",
+		"stepColor": "Color",
+		"stepSize": "Size",
+		"stepLabel": "Label (optional)",
+		"stepLabelPlaceholder": "e.g. Open Settings"
 	},
 	"effects": {
 		"fitClipFew": "{{count}} clips",

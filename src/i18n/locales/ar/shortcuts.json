@@ -32,7 +32,9 @@
 		"deleteSelected": "حذف المحدد",
 		"playPause": "تشغيل / إيقاف مؤقت",
 		"copySelected": "نسخ المحدد",
-		"paste": "لصق"
+		"paste": "لصق",
+		"addHighlight": "Add Highlight",
+		"addStep": "Add Numbered Step"
 	},
 	"fixedActions": {
 		"undo": "تراجع",

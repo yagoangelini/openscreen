@@ -8,7 +8,9 @@
 		"addAnnotation": "Ajouter du texte, une flèche, une image ou un flou à l'instant actuel",
 		"addSpeed": "Ajouter un changement de vitesse à l'instant actuel",
 		"addCameraFullscreen": "Ajouter Caméra plein écran : affiche la caméra en plein écran à l'instant actuel",
-		"splitCamera": "Couper la caméra à l'instant actuel : chaque morceau se modifie ensuite séparément"
+		"splitCamera": "Couper la caméra à l'instant actuel : chaque morceau se modifie ensuite séparément",
+		"addHighlight": "Highlight an area at the current time: everything around it is dimmed",
+		"addStep": "Add a numbered step at the current time, where the pointer was"
 	},
 	"hints": {
 		"pressZoom": "Appuyez sur {{key}} pour ajouter un zoom",
@@ -109,7 +111,9 @@
 		"waitLength": "{{seconds}} s",
 		"speedUpPicked": "Accélérer la sélection ({{speed}}×)",
 		"noWaits": "Aucune longue attente dans cette prise",
-		"waitsSpedUp": "Attentes accélérées : {{count}}"
+		"waitsSpedUp": "Attentes accélérées : {{count}}",
+		"highlightPill": "Highlight",
+		"stepPill": "Step {{number}}"
 	},
 	"audio": {
 		"addVoiceover": "Ajouter une voix off",

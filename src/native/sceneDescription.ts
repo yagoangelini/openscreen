@@ -23,6 +23,7 @@ import type {
 } from "@/components/video-editor/types";
 import { DEFAULT_CROP_REGION, getZoomScale } from "@/components/video-editor/types";
 import { annotationFontSizeFraction } from "@/lib/ai-edition/annotationScale";
+import { tutorialSceneEntries } from "@/lib/ai-edition/annotations/tutorialMarks";
 import {
 	captionBoxRect,
 	captionCuesToTextRegions,
@@ -223,7 +224,7 @@ export interface SceneAnnotation {
 	/** See `SceneZoomRegion.underTrim`. Annotations need no extra gate — they are already
 	 *  drawn only while `startSec <= t < endSec` — so this only carries the intent. */
 	underTrim?: boolean;
-	kind: "text" | "image" | "figure" | "blur";
+	kind: "text" | "image" | "figure" | "blur" | "shape";
 	/** Which box `x`/`y`/`w`/`h` — and `text.fontSizeRel` — are fractions of. Absent means
 	 *  `"screen"`: a blur, or an annotation saved before frame placement. */
 	space?: "frame";
@@ -285,6 +286,22 @@ export interface SceneAnnotation {
 		blockSize: number;
 		freehandPoints?: Array<{ x: number; y: number }>;
 	};
+	/** Present for `kind: "shape"`: what the tutorial annotations are drawn with (a highlight's
+	 *  dimmed frame, a step marker's disc — `annotations/tutorialMarks.ts`). Lengths are fractions
+	 *  of the height of the box named by `space`, like `text.fontSizeRel`. */
+	shape?: SceneAnnotationShape;
+}
+
+/** `SceneAnnotationShape` in `crates/compositor/src/scene.rs`. */
+export interface SceneAnnotationShape {
+	fill: string;
+	radiusRel: number;
+	featherRel: number;
+	borderColor?: string;
+	borderRel: number;
+	/** The fill covers the whole output frame except the box: a highlight. */
+	invert: boolean;
+	animation: string | null;
 }
 
 /** Normalized rect in 0..1 of the output frame (x, y top-left; width, height). */
@@ -804,6 +821,17 @@ export function annotationFootageRect(
 	document: AxcutDocument,
 	annotationId: string,
 ): SceneRect | null {
+	return annotationFootage(document, annotationId)?.rect ?? null;
+}
+
+/**
+ * `annotationFootageRect`, with the crop of that clip (fractions of its recording, `null` for
+ * none): what maps a point of the recording, the recorded pointer say, into the frame.
+ */
+export function annotationFootage(
+	document: AxcutDocument,
+	annotationId: string,
+): { rect: SceneRect; crop: SceneDescription["cropByClip"][number] } | null {
 	const region = (document.annotations ?? []).find((a) => a.id === annotationId);
 	if (!region) return null;
 	const [piece] = projectRegionsToSource(
@@ -814,9 +842,9 @@ export function annotationFootageRect(
 	);
 	if (piece?.clipIndex === undefined) return null;
 	const scene = buildSceneDescription(document);
-	return (
-		scene.layout.layoutByClip?.[piece.clipIndex]?.screenRect ?? scene.layout.screenRect ?? null
-	);
+	const rect =
+		scene.layout.layoutByClip?.[piece.clipIndex]?.screenRect ?? scene.layout.screenRect ?? null;
+	return rect ? { rect, crop: scene.cropByClip[piece.clipIndex] ?? null } : null;
 }
 
 type Size = { width: number; height: number };
@@ -1582,7 +1610,27 @@ export function buildSceneDescription(
 			};
 		}),
 		annotations: projectedAnnotations
-			.map((region) => {
+			.flatMap((region): SceneAnnotation | SceneAnnotation[] => {
+				// The tutorial annotations (highlight, numbered step) are drawn with the generic
+				// shape and the text the compositor already has: several entries for one region.
+				if (region.type === "highlight" || region.type === "step") {
+					return tutorialSceneEntries(
+						region,
+						{
+							id: region.id,
+							startSec: region.startMs / 1000,
+							endSec: region.endMs / 1000,
+							clipIndex: region.clipIndex,
+							...(region.underTrim ? { underTrim: true as const } : {}),
+							x: region.position.x / 100,
+							y: region.position.y / 100,
+							w: region.size.width / 100,
+							h: region.size.height / 100,
+							zIndex: region.zIndex,
+						},
+						captionAspect,
+					);
+				}
 				const style = region.style;
 				// Omitted rather than sent as null/undefined when absent: an annotation still on the
 				// footage keeps emitting the exact keys it always has.

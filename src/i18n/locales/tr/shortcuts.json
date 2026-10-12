@@ -32,7 +32,9 @@
 		"deleteSelected": "Seçileni Sil",
 		"playPause": "Oynat / Duraklat",
 		"copySelected": "Seçileni Kopyala",
-		"paste": "Yapıştır"
+		"paste": "Yapıştır",
+		"addHighlight": "Add Highlight",
+		"addStep": "Add Numbered Step"
 	},
 	"fixedActions": {
 		"undo": "Geri Al",

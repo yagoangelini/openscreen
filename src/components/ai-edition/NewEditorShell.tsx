@@ -1462,6 +1462,17 @@ export function NewEditorShell() {
 				void tl.addAnnotation(newRegionDurationSec());
 				return;
 			}
+			// Tutorial annotations at the playhead, placed where the recorded pointer was there.
+			const tutorialKind = matchesShortcut(e, shortcuts.addHighlight, isMac)
+				? "highlight"
+				: matchesShortcut(e, shortcuts.addStep, isMac)
+					? "step"
+					: null;
+			if (tutorialKind) {
+				e.preventDefault();
+				void tl.addTutorialMark(tutorialKind, newRegionDurationSec());
+				return;
+			}
 			// Unlike its neighbours this opens a file picker rather than dropping a region at
 			// the playhead — there is nothing to size, so it takes no duration (issue #350).
 			if (matchesShortcut(e, shortcuts.addAudio, isMac)) {

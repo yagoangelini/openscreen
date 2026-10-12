@@ -5,6 +5,8 @@ import {
 	Crosshair,
 	Eraser,
 	FastForward,
+	Focus,
+	ListOrdered,
 	Loader2,
 	Maximize2,
 	MessageSquare,
@@ -113,7 +115,7 @@ type TimelineApi = ReturnType<typeof useTimeline>;
 
 const ASSET_MIME = "application/x-axcut-asset";
 
-type ToolId = "cut" | "comment" | "speed";
+type ToolId = "cut" | "comment" | "highlight" | "step" | "speed";
 
 // "Nice" ruler steps, from a 20th of a second up to an hour. The one that gets
 // used depends on the zoom (see rulerTicks), so the ladder has to cover both a
@@ -775,7 +777,13 @@ export function V4Timeline({
 		kind: "annotation",
 		start: p.start,
 		end: p.end,
-		label: t("toolbar.newAnnotation"),
+		// The tutorial annotations say which they are: a step its number.
+		label:
+			p.member.type === "step"
+				? t("toolbar.stepPill", { number: p.member.stepData?.number ?? 1 })
+				: p.member.type === "highlight"
+					? t("toolbar.highlightPill")
+					: t("toolbar.newAnnotation"),
 		sourceIds: p.ids,
 	}));
 	const speedRuns = coalesceRegionsForRuler(tl.speedRegions);
@@ -1581,6 +1589,18 @@ export function V4Timeline({
 			label: t("buttons.addAnnotation"),
 			shortcut: formatBinding(shortcuts.addAnnotation, isMac),
 			icon: <MessageSquare size={16} />,
+		},
+		{
+			id: "highlight",
+			label: t("buttons.addHighlight"),
+			shortcut: formatBinding(shortcuts.addHighlight, isMac),
+			icon: <Focus size={16} />,
+		},
+		{
+			id: "step",
+			label: t("buttons.addStep"),
+			shortcut: formatBinding(shortcuts.addStep, isMac),
+			icon: <ListOrdered size={16} />,
 		},
 		{
 			id: "speed",
@@ -2409,6 +2429,9 @@ export function V4Timeline({
 												const dur = newRegionDurationSec();
 												if (tool.id === "speed") void tl.addSpeed(dur);
 												if (tool.id === "comment") void tl.addAnnotation(dur);
+												if (tool.id === "highlight" || tool.id === "step") {
+													void tl.addTutorialMark(tool.id, dur);
+												}
 												if (tool.id === "cut") void tl.addTrim(dur);
 											}}
 										>

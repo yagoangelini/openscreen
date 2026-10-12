@@ -96,7 +96,20 @@
 		"blurShapeOval": "타원",
 		"blurColorWhite": "흰색",
 		"tipMovePlayhead": "재생 헤드를 주석 구간으로 옮겨 항목을 선택하세요.",
-		"typeImage": "이미지"
+		"typeImage": "이미지",
+		"typeHighlight": "Highlight",
+		"typeStep": "Step",
+		"highlightHint": "Everything outside the rectangle is dimmed. Drag it over what the viewer should look at.",
+		"highlightDim": "Dim outside",
+		"highlightFeather": "Soft edge",
+		"highlightRadius": "Corner radius",
+		"highlightBorder": "Border",
+		"highlightBorderColor": "Border color",
+		"stepNumber": "Number",
+		"stepColor": "Color",
+		"stepSize": "Size",
+		"stepLabel": "Label (optional)",
+		"stepLabelPlaceholder": "e.g. Open Settings"
 	},
 	"effects": {
 		"fitClipFew": "{{count}}개 클립",

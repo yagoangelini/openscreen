@@ -8,7 +8,9 @@
 		"addAnnotation": "Text, Pfeil, Bild oder Weichzeichner zum aktuellen Zeitpunkt hinzufügen",
 		"addSpeed": "Tempowechsel zum aktuellen Zeitpunkt hinzufügen",
 		"addCameraFullscreen": "Vollbild-Kamera hinzufügen: zeigt die Kamera im Vollbild zum aktuellen Zeitpunkt",
-		"splitCamera": "Kamera an der aktuellen Zeit teilen: jedes Stück wird danach einzeln bearbeitet"
+		"splitCamera": "Kamera an der aktuellen Zeit teilen: jedes Stück wird danach einzeln bearbeitet",
+		"addHighlight": "Highlight an area at the current time: everything around it is dimmed",
+		"addStep": "Add a numbered step at the current time, where the pointer was"
 	},
 	"hints": {
 		"pressZoom": "Drücke {{key}}, um einen Zoom hinzuzufügen",
@@ -109,7 +111,9 @@
 		"waitLength": "{{seconds}} s",
 		"speedUpPicked": "Auswahl beschleunigen ({{speed}}×)",
 		"noWaits": "Keine langen Wartezeiten in dieser Aufnahme",
-		"waitsSpedUp": "Beschleunigte Wartezeiten: {{count}}"
+		"waitsSpedUp": "Beschleunigte Wartezeiten: {{count}}",
+		"highlightPill": "Highlight",
+		"stepPill": "Step {{number}}"
 	},
 	"audio": {
 		"addVoiceover": "Voiceover hinzufügen",

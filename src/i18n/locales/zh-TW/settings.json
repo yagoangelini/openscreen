@@ -96,7 +96,20 @@
 		"blurShapeOval": "橢圓",
 		"blurColorWhite": "白色",
 		"tipMovePlayhead": "將播放頭移動到重疊的標註區域並選擇一個項目。",
-		"typeImage": "圖片"
+		"typeImage": "圖片",
+		"typeHighlight": "Highlight",
+		"typeStep": "Step",
+		"highlightHint": "Everything outside the rectangle is dimmed. Drag it over what the viewer should look at.",
+		"highlightDim": "Dim outside",
+		"highlightFeather": "Soft edge",
+		"highlightRadius": "Corner radius",
+		"highlightBorder": "Border",
+		"highlightBorderColor": "Border color",
+		"stepNumber": "Number",
+		"stepColor": "Color",
+		"stepSize": "Size",
+		"stepLabel": "Label (optional)",
+		"stepLabelPlaceholder": "e.g. Open Settings"
 	},
 	"effects": {
 		"fitClipFew": "{{count}} 個片段",
