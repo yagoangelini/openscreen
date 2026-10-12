@@ -133,7 +133,104 @@
   Pop $0
 !macroend
 
+; ---------------------------------------------------------------------------------------------
+; Taskbar pins survive every install (E2E 2.4.0, D-1).
+;
+; WinShell::UninstShortcut calls IStartMenuPinnedList::RemoveFromList: it UNPINS the shortcut
+; from the taskbar, and Windows never lets an installer pin it back. electron-builder's
+; template calls it on the "old" Studio shortcut in two places:
+;   - the old version's uninstaller, which every install runs first. Only an update started
+;     by the app (--updated) passes it --keep-shortcuts; a setup.exe run by hand, silent or
+;     not, does not (allowToChangeInstallationDirectory), so it unpinned the Studio even with
+;     an unchanged name;
+;   - addStartMenuLink / addDesktopLink, when the shortcut name changed (2.1.1 -> 2.4.0:
+;     "Openscreen" -> "OpenScreen Studio"): they Rename the old link, then UninstShortcut it.
+; Both take the old shortcut's path from the registry value ShortcutName. So, right before
+; the install section runs, openscreenShieldPins records the real old name and points that
+; value at a shortcut that never exists: both calls then miss. The section reads the value
+; before it runs the old uninstaller (setLinkVars), the shortcuts it creates overwrite the
+; old ones in place, a renamed one is moved below without UninstShortcut, and
+; registryAddInstallInfo writes the real name back. The pinned copy in "User Pinned" is
+; never touched, so the pin keeps working and opens the new Openscreen.exe.
+; Uninstallers built from this file also skip the unpin themselves (customUnInstall), which
+; covers the Recorder's shortcuts too. nsis.shortcutName must still never change
+; (electron/launchMode.test.ts): a rename is handled, but only by installers carrying this.
+
+!define OPENSCREEN_PIN_SHIELD_NAME "OpenScreen pin shield - never a shortcut"
+
+!ifndef BUILD_UNINSTALLER
+  Var openscreenPreviousShortcutName
+!endif
+
+!macro openscreenShieldPins
+  Push $0
+  ReadRegStr $0 SHELL_CONTEXT "${INSTALL_REGISTRY_KEY}" ShortcutName
+  ${if} $0 == "${OPENSCREEN_PIN_SHIELD_NAME}"
+    ; An earlier install that stopped half way: its links carry the current name.
+    StrCpy $openscreenPreviousShortcutName "${SHORTCUT_NAME}"
+  ${elseif} $0 != ""
+    StrCpy $openscreenPreviousShortcutName "$0"
+  ${else}
+    ; No value: a fresh machine, or an install older than the keepShortcuts mechanism,
+    ; whose shortcut was named after the product.
+    ReadRegStr $0 SHELL_CONTEXT "${INSTALL_REGISTRY_KEY}" InstallLocation
+    ${if} $0 != ""
+      StrCpy $openscreenPreviousShortcutName "${PRODUCT_FILENAME}"
+    ${endIf}
+  ${endIf}
+  ${if} $openscreenPreviousShortcutName != ""
+    WriteRegStr SHELL_CONTEXT "${INSTALL_REGISTRY_KEY}" ShortcutName "${OPENSCREEN_PIN_SHIELD_NAME}"
+  ${endIf}
+  ClearErrors
+  Pop $0
+!macroend
+
+; Moves a shortcut left under its previous name onto the current one, without UninstShortcut.
+!macro openscreenMoveRenamedLink OLD NEW
+  ${if} ${FileExists} "${OLD}"
+    ${if} ${FileExists} "${NEW}"
+      Delete "${OLD}"
+    ${else}
+      Rename "${OLD}" "${NEW}"
+    ${endIf}
+    ClearErrors
+  ${endIf}
+!macroend
+
+!macro openscreenMoveRenamedShortcuts
+  ${if} $openscreenPreviousShortcutName != ""
+  ${andIf} $openscreenPreviousShortcutName != "${SHORTCUT_NAME}"
+    !ifndef DO_NOT_CREATE_START_MENU_SHORTCUT
+      !insertmacro openscreenMoveRenamedLink "$SMPROGRAMS\$openscreenPreviousShortcutName.lnk" "$newStartMenuLink"
+    !endif
+    !ifndef DO_NOT_CREATE_DESKTOP_SHORTCUT
+      !insertmacro openscreenMoveRenamedLink "$DESKTOP\$openscreenPreviousShortcutName.lnk" "$newDesktopLink"
+    !endif
+  ${endIf}
+!macroend
+
+; A silent install (an update by the app, or setup.exe /S) shows no pages: shield here.
+!macro customInit
+  ${if} ${Silent}
+    !insertmacro openscreenShieldPins
+  ${endIf}
+!macroend
+
+; With the wizard, only after its last choice (install mode and folder), so a wizard closed
+; before installing leaves the registry as it was.
+!macro customPageAfterChangeDir
+  Function openscreenShieldPinsPage
+    ${ifNot} ${Silent}
+      !insertmacro openscreenShieldPins
+    ${endIf}
+    Abort
+  FunctionEnd
+  Page custom openscreenShieldPinsPage
+!macroend
+
 !macro customInstall
+  !insertmacro openscreenMoveRenamedShortcuts
+
   ; Always (re)created, updates included: it is how the user finds the Recorder to pin it.
   !ifndef DO_NOT_CREATE_START_MENU_SHORTCUT
     CreateShortCut "${RECORDER_START_MENU_LINK}" "$appExe" "--recorder" "$INSTDIR\resources\recorder.ico" 0 "" "" "${RECORDER_SHORTCUT_NAME}"
@@ -157,8 +254,22 @@
 !macroend
 
 !macro customUnInstall
-  ; An update runs the old uninstaller with --keep-shortcuts; the new install refreshes them.
+  ; Run by a newer installer (it always passes --updated, and --keep-shortcuts only for an
+  ; update the app started): the install that follows overwrites every shortcut in place, so
+  ; none is removed here, and the template is pointed past the Studio's (see "Taskbar pins"
+  ; above): its WinShell::UninstShortcut would unpin them.
+  ${if} ${isUpdated}
+    StrCpy $oldStartMenuLink "$PLUGINSDIR\${OPENSCREEN_PIN_SHIELD_NAME}.lnk"
+    StrCpy $oldDesktopLink "$PLUGINSDIR\${OPENSCREEN_PIN_SHIELD_NAME}.lnk"
+  ${elseif} $oldShortcutName == "${OPENSCREEN_PIN_SHIELD_NAME}"
+    ; A real uninstall after an install that stopped half way: the links carry this name.
+    StrCpy $oldStartMenuLink "$SMPROGRAMS\${SHORTCUT_NAME}.lnk"
+    StrCpy $oldDesktopLink "$DESKTOP\${SHORTCUT_NAME}.lnk"
+  ${endIf}
+
+  ; A real uninstall only (not --keep-shortcuts, not run by an installer).
   ${ifNot} ${isKeepShortcuts}
+  ${andIfNot} ${isUpdated}
     WinShell::UninstAppUserModelId "${RECORDER_APP_ID}"
 
     WinShell::UninstShortcut "${RECORDER_START_MENU_LINK}"
