@@ -315,6 +315,44 @@ describe("modelManager", () => {
 		}
 	});
 
+	it("ensureModels stops when its signal aborts mid-body, leaves no partial, starts no other file", async () => {
+		const paths = modelPaths(dir);
+		const controller = new AbortController();
+		const urls: string[] = [];
+		let sent = 0;
+		const fetcher: typeof fetch = async (input) => {
+			urls.push(String(input));
+			return new Response(
+				new ReadableStream<Uint8Array>({
+					pull(stream) {
+						// A few bytes, then silence: the model is mid-download when Cancel lands.
+						if (sent++ < 2) stream.enqueue(new Uint8Array(1024));
+					},
+				}),
+				{ status: 200 },
+			);
+		};
+		const download = ensureModels({
+			baseDir: dir,
+			fetcher,
+			signal: controller.signal,
+			onProgress: (event) => {
+				if (event.downloadedBytes > 0) controller.abort(new Error("cancelled"));
+			},
+		});
+		await expect(download).rejects.toThrow("cancelled");
+		expect(existsSync(paths.whisper)).toBe(false);
+		expect(existsSync(`${paths.whisper}.partial`)).toBe(false);
+		// The VAD file after it is not started.
+		expect(urls).toHaveLength(1);
+
+		// Already aborted: nothing is fetched at all.
+		await expect(
+			ensureModels({ baseDir: dir, fetcher, signal: controller.signal }),
+		).rejects.toThrow("cancelled");
+		expect(urls).toHaveLength(1);
+	});
+
 	describe("CTC aligners", () => {
 		it("pins every aligner to a digest and names its upstream revision", () => {
 			for (const file of Object.values(CTC_ALIGNERS)) {

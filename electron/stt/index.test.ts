@@ -38,6 +38,10 @@ vi.mock("./whisperServer", () => {
 	return { WhisperServerManager: FakeWhisperServerManager };
 });
 
+// A run started by `transcribe()` alone (no `init({ modelsBaseDir })` first) asks Electron
+// where the models live.
+vi.mock("electron", () => ({ app: { getPath: () => "/tmp/fake-user-data" } }));
+
 vi.mock("./modelManager", () => ({
 	ensureModels: vi.fn(async () => undefined),
 	ensureAligner: vi.fn(async ({ language }: { language: string }) => `/fake/${language}.gguf`),
@@ -548,6 +552,77 @@ describe("SttManager", () => {
 
 		expect(mocked).toHaveBeenCalledTimes(2);
 		expect(fakeWhisperServer.start).toHaveBeenCalledOnce();
+	});
+
+	describe("cancel during setup (E-3 of the 2.5.0 E2E)", () => {
+		async function downloads() {
+			const { ensureModels } = await import("./modelManager");
+			const mocked = vi.mocked(ensureModels);
+			mocked.mockClear();
+			return mocked;
+		}
+
+		it("aborts the model download, loads nothing, transcribes nothing, and downloads again later", async () => {
+			const ensure = await downloads();
+			const signals: AbortSignal[] = [];
+			ensure.mockImplementationOnce(
+				({ signal }) =>
+					new Promise((_, reject) => {
+						if (signal) signals.push(signal);
+						signal?.addEventListener("abort", () => reject(signal.reason));
+					}),
+			);
+			const mgr = new SttManager();
+			const run = mgr
+				.transcribe({ samples: new Float32Array(16_000), model: "large-v3-turbo" })
+				.catch((e: unknown) => e);
+			await vi.waitFor(() => expect(signals).toHaveLength(1));
+			mgr.cancel();
+			const error = await run;
+
+			expect(signals[0].aborted).toBe(true);
+			expect((error as Error).name).toBe("AbortError");
+			// No falling back to small: that would download THAT model instead.
+			expect(ensure).toHaveBeenCalledOnce();
+			expect(fakeWhisperServer.start).not.toHaveBeenCalled();
+			expect(fakeWhisperServer.transcribe).not.toHaveBeenCalled();
+
+			// The aborted setup is not cached: the next run is a real attempt.
+			await mgr.transcribe({ samples: new Float32Array(16_000), model: "large-v3-turbo" });
+			expect(ensure).toHaveBeenCalledTimes(2);
+			expect(fakeWhisperServer.transcribe).toHaveBeenCalledOnce();
+		});
+
+		it("does not load the helper when cancelled as the download lands", async () => {
+			const ensure = await downloads();
+			const mgr = new SttManager();
+			ensure.mockImplementationOnce(async () => {
+				mgr.cancel();
+			});
+			const error = await mgr
+				.transcribe({ samples: new Float32Array(16_000) })
+				.catch((e: unknown) => e);
+			expect((error as Error).name).toBe("AbortError");
+			expect(fakeWhisperServer.start).not.toHaveBeenCalled();
+			expect(fakeWhisperServer.transcribe).not.toHaveBeenCalled();
+		});
+
+		it("does not transcribe when cancelled while the helper loads the model", async () => {
+			const mgr = new SttManager();
+			fakeWhisperServer.start.mockImplementationOnce(async () => {
+				mgr.cancel();
+				return { port: 9000, backend: "whispercpp-cpu" };
+			});
+			const error = await mgr
+				.transcribe({ samples: new Float32Array(16_000) })
+				.catch((e: unknown) => e);
+			expect((error as Error).name).toBe("AbortError");
+			expect(fakeWhisperServer.transcribe).not.toHaveBeenCalled();
+			// The loaded helper stays warm for the next run.
+			expect(fakeWhisperServer.stop).not.toHaveBeenCalled();
+			await mgr.transcribe({ samples: new Float32Array(16_000) });
+			expect(fakeWhisperServer.transcribe).toHaveBeenCalledOnce();
+		});
 	});
 
 	describe("whisper model", () => {
