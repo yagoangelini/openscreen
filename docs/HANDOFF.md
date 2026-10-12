@@ -113,6 +113,16 @@ As decisões e o porquê de cada fase estão em [`PLANO-FORK.md`](PLANO-FORK.md)
 - **Câmera escura não atrasa nem some.** No `main.cpp` a câmera começa a ler logo depois de aberta (não mais depois dos encoders), e a espera pelo quadro visível termina no fim da contagem, com no mínimo 1 s de câmera (sem contagem continua 3 s). Se só vierem quadros escuros, eles são gravados mesmo assim (arquivo válido e alinhado desde 0 s, preto até destampar) e o helper emite `{"event":"warning","code":"webcam-dark"}`. O main lê com `readWebcamDark` (`nativeWindowsCaptureStop.ts`), devolve `webcamDark` no resultado do start, e o renderer mostra o toast `recording.cameraDark`. O escritor não testa mais visibilidade durante o take: lente tampada no meio do take fica preta, em vez de congelar no último quadro claro. Um `-webcam.mp4` que ainda assim termine vazio é apagado, e o toast do fim passa a ser `recording.cameraNoFrames`.
 - **Formato da webcam.** `chooseWebcamFormat` (`webcam_format.cpp`) põe primeiro um modo que aguente o ritmo (24 fps, ou o alvo se for menor), depois o tamanho, o fps e por fim sem compressão > MJPEG > outro comprimido. Os modos comprimidos só entram no caminho NV12 (câmera em arquivo próprio); o BGRA mantém a regra antiga. A linha `INFO: Native webcam modes:` lista o que a câmera oferece. Na C920 pelo Media Foundation há NV12 1080p30 (decodificado pelo frame server do Windows): em 2160p a regra antiga escolhia YUY2 2304×1536 a 2 fps, o driver recusava e caía em 640×480; agora 1080p e 2160p dão `1920x1080@30 (uncompressed)`.
 
+**Duas entradas no Windows: OpenScreen Studio e OpenScreen Recorder** (pedido de 11/10):
+
+- **`Openscreen.exe` sem argumento abre o Studio** (o editor, no último projeto). É o que o ícone já fixado na barra de tarefas do usuário roda. **`Openscreen.exe --recorder` abre o HUD.** `--studio` força o Studio. Fora do Windows o padrão continua sendo o HUD. Lógica pura em `electron/launchMode.ts` (`requestedLaunchTarget`, `routeSecondInstance`), testada em `launchMode.test.ts`; ligada em `main.ts` (`openLaunchTarget`, `handleSecondInstance`).
+- **Segunda abertura com o app rodando** (`second-instance`): Recorder com o editor aberto pede ao editor (`open-recorder-requested` → `NewEditorShell`) que pergunte das alterações não salvas e chame `switchToHud`; com export rodando, só traz o editor para frente. Studio com o HUD parado troca para o editor; durante uma gravação ou contagem, só mostra o HUD.
+- **Identidades na barra de tarefas.** O processo usa `app.setAppUserModelId("com.etiennelescot.openscreen")` (igual ao `appId` e ao AUMI do atalho fixado do usuário, conferido no `.lnk`). HUD, seletor de fonte e Notas usam `setAppDetails` (`applyRecorderTaskbarIdentity` em `electron/windows.ts`) com o ID `com.etiennelescot.openscreen.recorder`, o ícone `resources/recorder.ico`, `relaunchCommand` `"…Openscreen.exe" --recorder` e o nome "OpenScreen Recorder". Por isso ganham um botão próprio, e fixar o HUD rodando fixa `Openscreen.exe --recorder`. Títulos: "OpenScreen Studio" no editor, "OpenScreen Recorder" no HUD.
+- **Ícone do Recorder:** o logo com uma bolinha vermelha de REC (anel branco) no canto inferior direito. Gerado por `node scripts/generate-recorder-icon.mjs` a partir de cada PNG do logo (16 a 256): `icons/icons/win/recorder.ico`, prévias em `icons/icons/recorder-png/`, e `public/openscreen-recorder.png` (ícone das janelas). O codec PNG feito à mão foi para `scripts/png-codec.mjs`, compartilhado com `generate-appx-assets.mjs`.
+- **Instalador:** `nsis.shortcutName` "OpenScreen Studio" (Openscreen.exe, AUMI principal) e `build/installer.nsh` (`customInstall` / `customUnInstall`) cria "OpenScreen Recorder" no Menu Iniciar (sempre, inclusive em atualização) e na área de trabalho (só se o Studio tiver atalho lá), com `--recorder`, o `recorder.ico` e `WinShell::SetLnkAUMI` com o ID do Recorder. O desinstalador remove os dois, menos numa atualização (`--keep-shortcuts`).
+- **Testes que abrem o app:** o Playwright (`gif-export`, `windows-native-checklist`) e `scripts/fork-e2e/` passam `--recorder`, porque começam no HUD.
+- **O que o usuário faz depois de atualizar:** o ícone já fixado continua, e passa a abrir o Studio. Para o segundo ícone, abra o Menu Iniciar, procure "OpenScreen Recorder", clique com o botão direito → "Fixar na barra de tarefas" (o app não consegue se fixar sozinho). Ou abra o Recorder e fixe o botão dele na barra. Se o ícone antigo aparecer como "Openscreen", pode desafixar e fixar o "OpenScreen Studio" do Menu Iniciar no lugar, só pelo nome.
+
 **Itens abertos do E2E da 2.2.0** (relatório B-7 e B-10):
 
 - **B-10, desfoque na prévia parada dentro de um trim.** Com o playhead num trim, a prévia mostra o quadro removido de verdade (`resolveNativePosition`), mas uma região que atravessava o trim só chegava ao nativo pelos pedaços mantidos. Agora `projectRegionsToSource` (`timelineMap.ts`) emite também cada trecho removido, `underTrim` e endereçado ao mesmo segmento do playhead, como já fazia para uma região inteira debaixo do corte. Vale para desfoque, texto, zoom e Câmera cheia; a velocidade continua fora (`speedRegions` filtra `underTrim`). O export não muda: ele nunca compõe esses quadros.
@@ -165,6 +175,7 @@ Os PRs do fork são abertos e mesclados com `gh pr merge N --merge`, sem CI. Ant
 | Esc/fechar durante um export | `ExportDialog` (`export-confirm-close`); proteção ao sair do app em `main.ts` (`exportJobs.isRunning`) | pergunta |
 | Webcam na contagem | `useScreenRecorder` (`deferWebcamToCountdown`, win32); helper: espera do quadro visível até o fim da contagem, aviso `webcam-dark` → toast `recording.cameraDark` | sempre |
 | Diagnóstico | `handlers.ts`: `gpu: {compositor, chromium}` | — |
+| Studio e Recorder (Windows) | `electron/launchMode.ts`; `openLaunchTarget` / `handleSecondInstance` em `main.ts`; `applyRecorderTaskbarIdentity` em `windows.ts`; `build/installer.nsh`; ícone por `scripts/generate-recorder-icon.mjs` | sem argumento abre o Studio; `--recorder` abre o HUD |
 | Trilha da câmera (schema v9) | `document.cameraSegments`; edições puras em `src/lib/ai-edition/document/cameraSegments.ts`; migração `upgradeV8DocumentToV9`; trilha `renderCameraTrack` em `V4Timeline.tsx`; painel do trecho em `FloatingInspector.tsx`; escritas em `useTimeline.ts` (`saveCameraEdit`); atalho `splitCamera` (B) | cada trecho PiP, Tela cheia ou Sem câmera |
 | Sem câmera | cena `cameraHiddenRegions`; Rust `camera_hidden_regions` + `webcam_hidden` (`frame_geometry.rs`, três backends); prévia em `PreviewCanvas.tsx` | — |
 | Rosto / Tela + câmera (HUD) | botão `HudCameraLayoutButton` (`HudControls.tsx`, só no Windows e com a câmera ligada) e atalho `cameraLayoutToggle`; pref `cameraLayout` (`app-settings.ts`); no main `switchRecordingCameraLayout` (`handlers.ts`) e `TakeCameraLayoutLog` / `takeMediaTimeMs` (`electron/recording/takeCameraLayout.ts`); sidecar `<take>.mp4.layout.json` (`src/lib/recordingLayout.ts`); `asset.cameraLayout` (`readRecordingLayout` no `document-service.ts`); peças em `cameraSegmentsFromRecordingLayout` (`cameraSegments.ts`), gravadas por `applyFreshRecordingCameraLayout` (`recordingImport.ts`); auto-zoom reserva os trechos de câmera cheia (`apply-auto-zooms.ts`) | Tela + câmera |
@@ -264,7 +275,7 @@ As ferramentas estão em `scripts/fork-e2e/`. O roteiro:
 3. **Abra a instância:**
 
    ```bash
-   node_modules/electron/dist/electron.exe . --user-data-dir=<perfil> --remote-debugging-port=9233
+   node_modules/electron/dist/electron.exe . --recorder --user-data-dir=<perfil> --remote-debugging-port=9233
    ```
 
    Rode em background.
@@ -300,7 +311,7 @@ Notas:
 - O HUD e o editor nunca dividem a tela. `record-take.mjs` volta ao HUD sozinho.
 - A fonte escolhida num take fica lembrada; para mudar, use `--screen`.
 - Clique injetado não prova que o HUD é alcançável por um mouse de verdade. Para isso, use computer-use (ver `AGENTS.md`).
-- **Smoke test do instalador:** abra `release/X.Y.Z/win-unpacked/Openscreen.exe --user-data-dir=<temp> --remote-debugging-port=9232` e rode `node scripts/fork-e2e/smoke-hud.mjs --port 9232`. Feche filtrando por `Name='Openscreen.exe'` **e** pelo perfil, porque o app instalado do usuário tem o mesmo nome.
+- **Smoke test do instalador:** abra `release/X.Y.Z/win-unpacked/Openscreen.exe --recorder --user-data-dir=<temp> --remote-debugging-port=9232` e rode `node scripts/fork-e2e/smoke-hud.mjs --port 9232`. Feche filtrando por `Name='Openscreen.exe'` **e** pelo perfil, porque o app instalado do usuário tem o mesmo nome.
 
 ### Release local
 
@@ -309,7 +320,7 @@ Ancorado como `release-local`. A ordem:
 1. Branch de feature → PR no fork → `gh pr merge N --merge --repo yagoangelini/openscreen` → `git pull` na `main`.
 2. `npm version X.Y.Z --no-git-tag-version`, depois `git commit -am "chore: release X.Y.Z of the fork"` e push.
 3. `npm run build:win -- --publish never`. Este passo recompila **todos** os nativos e o addon, e o resultado vai para `release/X.Y.Z/`.
-4. Smoke test: abra `release/X.Y.Z/win-unpacked/Openscreen.exe --user-data-dir=<temp>` e confira se o HUD abre.
+4. Smoke test: abra `release/X.Y.Z/win-unpacked/Openscreen.exe --user-data-dir=<temp>` e confira se o Studio abre; com `--recorder`, o HUD.
 5. Publique:
 
    ```bash

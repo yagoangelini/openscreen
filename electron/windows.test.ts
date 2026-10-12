@@ -24,6 +24,7 @@ const electron = vi.hoisted(() => {
 		pixels: Rect;
 		webContents = { on: vi.fn(), send: vi.fn() };
 		setContentProtection = vi.fn();
+		setAppDetails = vi.fn();
 		once = vi.fn();
 		on = vi.fn();
 		loadURL = vi.fn();
@@ -61,7 +62,7 @@ const electron = vi.hoisted(() => {
 });
 
 vi.mock("electron", () => ({
-	app: {},
+	app: { isPackaged: false, getAppPath: () => "/repo" },
 	BrowserWindow: electron.FakeWindow,
 	ipcMain: {
 		on: (channel: string, handler: (event: unknown, ...args: unknown[]) => void) =>
@@ -137,5 +138,20 @@ describe("HUD drag at 125 % scaling (#1004)", () => {
 		drag(4, 2, 0);
 		expect(Math.abs(win.pixels.width - width)).toBeLessThanOrEqual(1);
 		expect(Math.abs(win.pixels.height - height)).toBeLessThanOrEqual(1);
+	});
+});
+
+describe("HUD taskbar identity (Windows)", () => {
+	it("groups the HUD under the OpenScreen Recorder button, pinnable as --recorder", () => {
+		const win = openHud();
+		expect(win.setAppDetails).toHaveBeenCalledWith(
+			expect.objectContaining({
+				appId: "com.etiennelescot.openscreen.recorder",
+				appIconIndex: 0,
+				relaunchDisplayName: "OpenScreen Recorder",
+				relaunchCommand: expect.stringMatching(/ "\/repo" --recorder$/),
+				appIconPath: expect.stringMatching(/recorder\.ico$/),
+			}),
+		);
 	});
 });
