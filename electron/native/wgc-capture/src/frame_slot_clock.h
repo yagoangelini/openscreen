@@ -43,3 +43,18 @@ private:
     int64_t originHns_ = -1;
     int64_t frames_ = 0;
 };
+
+// A QueryPerformanceCounter reading in 100 ns units, without the overflow of
+// `ticks * 10'000'000` (past ~10 days of uptime at a 10 MHz counter).
+inline int64_t qpcTicksToHns(int64_t ticks, int64_t frequency) {
+    return ticks / frequency * 10'000'000 + ticks % frequency * 10'000'000 / frequency;
+}
+
+// The wall-clock time (ms since the Unix epoch) of `timestampHns`, a
+// QPC-based instant such as a WGC frame's SystemRelativeTime, given one
+// reading of both clocks taken together. The video's 0 s is its first frame's
+// timestamp, and the app times the cursor on the wall clock: this is the one
+// instant both agree on.
+inline double epochMsOfQpcHns(int64_t timestampHns, int64_t nowQpcHns, double nowEpochMs) {
+    return nowEpochMs - static_cast<double>(nowQpcHns - timestampHns) / 10'000.0;
+}

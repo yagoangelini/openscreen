@@ -268,7 +268,10 @@ export const DEFAULT_PROJECT_APPEARANCE: ProjectAppearanceDefaults = {
 		// for the cursor effects to read, without the arrow covering what it points at. The fork
 		// came down from upstream's 3.6 (98 px) after real takes. 6 reaches 164 px.
 		size: 2.2,
-		smoothing: 0.67,
+		// A Gaussian of 9 ms around each instant (`smoothed` in cursor.rs, 30 ms at 1): it rounds
+		// tremor and the 30 Hz corners off and never moves the cursor in time. Up to 2.5.0 this
+		// was a spring at 0.67, which drew the cursor ~200 ms behind the real pointer.
+		smoothing: 0.3,
 		motionBlur: 0.35,
 		// A light tap: 2.5 squashed the arrow to 40% and threw it to 140% in 260 ms on every click.
 		clickBounce: 1,

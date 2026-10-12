@@ -142,10 +142,12 @@ import {
 	waitForNativeMacCaptureStop,
 } from "../recording/nativeMacCaptureStop";
 import {
+	cursorOffsetToFirstFrameMs,
 	isSalvageableFragmentedCapture,
 	NATIVE_WINDOWS_SALVAGEABLE_OUTPUT_BYTES,
 	readAudioDeviceDrops,
 	readCaptureFailureStage,
+	readFirstFrameEpochMs,
 	readMicrophoneDefaulted,
 	readMicrophoneNotFound,
 	readMicrophoneUnavailable,
@@ -1634,7 +1636,8 @@ async function writePendingCursorTelemetry(videoPath: string) {
 		// crash halfway through a direct write left a truncated file that recovery took for
 		// the real one, deleting the complete checkpoint it should have rebuilt from.
 		const partialPath = `${telemetryPath}.partial`;
-		await fs.writeFile(partialPath, JSON.stringify(pendingCursorRecordingData, null, 2), "utf-8");
+		// Unindented: an indented `path` takes a line per number.
+		await fs.writeFile(partialPath, JSON.stringify(pendingCursorRecordingData), "utf-8");
 		await fs.rename(partialPath, telemetryPath);
 	}
 	pendingCursorRecordingData = null;
@@ -3516,9 +3519,10 @@ export function registerIpcHandlers(
 				]);
 				const captureStartedAtMs = Date.now();
 				nativeWindowsCaptureStartedAtMs = captureStartedAtMs;
+				const firstFrameEpochMs = readFirstFrameEpochMs(nativeWindowsCaptureOutput);
 				nativeWindowsCursorOffsetMs =
 					cursorCaptureMode === "editable-overlay"
-						? Math.max(0, captureStartedAtMs - cursorStartTimeMs)
+						? cursorOffsetToFirstFrameMs(cursorStartTimeMs, firstFrameEpochMs, captureStartedAtMs)
 						: 0;
 				if (cursorCaptureMode === "editable-overlay" && cursorRecordingSession) {
 					startCursorCheckpoint(outputPath, nativeWindowsCursorOffsetMs);
@@ -3531,6 +3535,12 @@ export function registerIpcHandlers(
 				console.info("[native-wgc] capture started", {
 					captureStartedAtMs,
 					cursorOffsetMs: nativeWindowsCursorOffsetMs,
+					// How long after the first frame this process heard of it: what the cursor
+					// offset used to be wrong by.
+					firstFrameReadAfterMs:
+						firstFrameEpochMs === null
+							? null
+							: Math.round((captureStartedAtMs - firstFrameEpochMs) * 10) / 10,
 					webcamFormat,
 					encoderSelection,
 					// Logged only: menus missing from a window take on Windows before 11

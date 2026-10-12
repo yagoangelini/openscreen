@@ -66,6 +66,14 @@ export interface WindowsCursorPopupEvent {
 	rect?: WindowsHelperRect;
 }
 
+/** Where the pointer is between two samples (physical screen pixels), written only when it moved. */
+export interface WindowsCursorMoveEvent {
+	type: "move";
+	timestampMs: number;
+	x: number;
+	y: number;
+}
+
 export interface WindowsCursorErrorEvent {
 	type: "error";
 	timestampMs: number;
@@ -87,6 +95,7 @@ export type WindowsCursorEvent =
 	| WindowsCursorReadyEvent
 	| WindowsCursorInputEvent
 	| WindowsCursorPopupEvent
+	| WindowsCursorMoveEvent
 	| WindowsCursorErrorEvent;
 
 export interface WindowsNativeRecordingSessionOptions {

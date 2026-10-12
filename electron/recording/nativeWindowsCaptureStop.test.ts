@@ -3,10 +3,12 @@ import { EventEmitter } from "node:events";
 import { PassThrough, Writable } from "node:stream";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+	cursorOffsetToFirstFrameMs,
 	isSalvageableFragmentedCapture,
 	NATIVE_WINDOWS_SALVAGEABLE_OUTPUT_BYTES,
 	readAudioDeviceDrops,
 	readCaptureFailureStage,
+	readFirstFrameEpochMs,
 	readMicrophoneDefaulted,
 	readMicrophoneNotFound,
 	readMicrophoneUnavailable,
@@ -139,6 +141,39 @@ describe("readWebcamUnavailable", () => {
 			'{"event":"webcam-format","schemaVersion":2,"width":1920,"height":1080,"fps":30,"deviceName":"Camera (NVIDIA Broadcast)"}\n' +
 			"Recording started\n";
 		expect(readWebcamUnavailable(output)).toBe(false);
+	});
+});
+
+describe("the cursor's offset to the first frame", () => {
+	const started = (extra: string) =>
+		"[start-timing] step=first-frame elapsed_ms=812\n" +
+		`{"event":"recording-started","schemaVersion":2${extra}}\n` +
+		"Recording started\n";
+
+	it("reads the first frame's wall-clock time from the helper", () => {
+		expect(readFirstFrameEpochMs(started(',"firstFrameEpochMs":1791836816503.125'))).toBe(
+			1791836816503.125,
+		);
+	});
+
+	it("is null from a helper that predates it", () => {
+		expect(readFirstFrameEpochMs(started(""))).toBeNull();
+		expect(readFirstFrameEpochMs(started(',"firstFrameEpochMs":0.000'))).toBeNull();
+	});
+
+	it("measures from the first frame, not from when the app read the line", () => {
+		// Sampler at 1000, frame at 3512.4, line read at 3540: the cursor is shifted by 2512 ms,
+		// not 2540 (which drew it 28 ms ahead of the picture).
+		expect(cursorOffsetToFirstFrameMs(1000, 3512.4, 3540)).toBe(2512);
+	});
+
+	it("falls back to the read time for an older helper or an impossible reading", () => {
+		expect(cursorOffsetToFirstFrameMs(1000, null, 3540)).toBe(2540);
+		// After the line that announced it, or seconds before it: not this take's frame.
+		expect(cursorOffsetToFirstFrameMs(1000, 3600, 3540)).toBe(2540);
+		expect(cursorOffsetToFirstFrameMs(1000, 500, 3540)).toBe(2540);
+		// Never negative.
+		expect(cursorOffsetToFirstFrameMs(4000, null, 3540)).toBe(0);
 	});
 });
 
