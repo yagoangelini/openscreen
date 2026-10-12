@@ -4,6 +4,7 @@ export const SHORTCUT_ACTIONS = [
 	"pauseToggle",
 	"addMarker",
 	"cameraLayoutToggle",
+	"drawingToggle",
 	"addZoom",
 	"addTrim",
 	"addSpeed",
@@ -30,6 +31,7 @@ export const GLOBAL_SHORTCUT_ACTIONS = [
 	"pauseToggle",
 	"addMarker",
 	"cameraLayoutToggle",
+	"drawingToggle",
 ] as const;
 
 export type GlobalShortcutAction = (typeof GLOBAL_SHORTCUT_ACTIONS)[number];
@@ -43,6 +45,7 @@ export function pickGlobalShortcuts(config: ShortcutsConfig): GlobalShortcutsCon
 		pauseToggle: config.pauseToggle,
 		addMarker: config.addMarker,
 		cameraLayoutToggle: config.cameraLayoutToggle,
+		drawingToggle: config.drawingToggle,
 	};
 }
 
@@ -152,6 +155,9 @@ export const DEFAULT_SHORTCUTS: ShortcutsConfig = {
 	// "Rosto / Tela + câmera" during the take. F7 is caret browsing in Chrome and Edge only
 	// without modifiers, and nothing claims Ctrl+Shift+F7 in Office, Teams or VS Code.
 	cameraLayoutToggle: { key: "f7", ctrl: true, shift: true },
+	// "Desenhar na tela". Excel and Word use Ctrl+Shift+F6 for "previous window"; nothing in
+	// Teams, VS Code, Edge or Chrome claims it, and it is configurable like the others.
+	drawingToggle: { key: "f6", ctrl: true, shift: true },
 	addZoom: { key: "z" },
 	addTrim: { key: "t" },
 	addSpeed: { key: "s" },
@@ -174,6 +180,7 @@ export const SHORTCUT_LABELS: Record<ShortcutAction, string> = {
 	pauseToggle: "Pause / Resume Recording",
 	addMarker: "Add Marker While Recording",
 	cameraLayoutToggle: "Switch Face / Screen + Camera",
+	drawingToggle: "Draw on Screen While Recording",
 	addZoom: "Add Zoom",
 	addTrim: "Add Trim",
 	addSpeed: "Add Speed",

@@ -36,6 +36,8 @@ export interface HudDeviceSettingsLabels {
 	micChannelMix: string;
 	/** Shown when an "NVIDIA Broadcast" microphone exists and is not the one picked. */
 	broadcastTip: string;
+	/** "Seu microfone parece mudo" during a take, on or off. */
+	micSilenceWarning: string;
 }
 
 type MicChannelMode = "auto" | "left" | "right" | "mix";
@@ -86,6 +88,42 @@ function MicChannelPicker({ labels }: { labels: HudDeviceSettingsLabels }) {
 				))}
 			</div>
 		</div>
+	);
+}
+
+/** The muted-microphone warning's switch, read and saved straight through the recording prefs. */
+function MicSilenceWarningToggle({ label }: { label: string }) {
+	const [enabled, setEnabled] = useState(true);
+	useEffect(() => {
+		let cancelled = false;
+		void window.electronAPI
+			?.getRecordingPrefs?.()
+			.then((prefs) => {
+				const value = (prefs as { micSilenceWarningEnabled?: boolean } | undefined)
+					?.micSilenceWarningEnabled;
+				if (!cancelled && typeof value === "boolean") setEnabled(value);
+			})
+			.catch(() => undefined);
+		return () => {
+			cancelled = true;
+		};
+	}, []);
+	return (
+		<button
+			type="button"
+			role="switch"
+			aria-checked={enabled}
+			data-testid="hud-mic-silence-warning"
+			className={`${styles.languageMenuItem} ${enabled ? styles.languageMenuItemActive : ""}`}
+			onClick={() => {
+				const next = !enabled;
+				setEnabled(next);
+				void window.electronAPI?.setRecordingPrefs?.({ micSilenceWarningEnabled: next });
+			}}
+		>
+			<span className="truncate">{label}</span>
+			{enabled ? <Check size={14} className="text-white/85" /> : null}
+		</button>
 	);
 }
 
@@ -253,6 +291,7 @@ export const HudDeviceSettings = memo(function HudDeviceSettings({
 						<LevelMeter level={level} />
 					</div>
 					<MicChannelPicker labels={labels} />
+					<MicSilenceWarningToggle label={labels.micSilenceWarning} />
 					<div className={styles.hudModalHint}>{labels.micHint}</div>
 					{micDevices.some(
 						(device) => /nvidia broadcast/i.test(device.label) && device.deviceId !== activeMicId,

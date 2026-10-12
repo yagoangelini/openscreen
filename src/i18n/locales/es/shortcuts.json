@@ -20,6 +20,7 @@
 		"pauseToggle": "Pausar / Reanudar grabación",
 		"addMarker": "Añadir marcador durante la grabación",
 		"cameraLayoutToggle": "Alternar Rostro / Pantalla + cámara",
+		"drawingToggle": "Draw on Screen While Recording",
 		"addZoom": "Agregar zoom",
 		"addTrim": "Agregar recorte",
 		"addSpeed": "Agregar velocidad",

@@ -129,6 +129,7 @@ import {
 import { scoreDeviceNameMatch } from "../recording/deviceNameMatching";
 import { assessFreeSpace, readFreeBytes, STOP_RECORDING_FREE_BYTES } from "../recording/diskSpace";
 import { recordingStorageProblem } from "../recording/diskSpaceCheck";
+import { readMicLevelEvent } from "../recording/micSilence";
 import {
 	describeSalvagedTake,
 	nativeMacSalvageTarget,
@@ -166,6 +167,7 @@ import {
 } from "../recording/pendingTakes";
 import { removeEmptyCaptureOutput } from "../recording/removeEmptyCaptureOutput";
 import { TakeCameraLayoutLog, takeMediaTimeMs } from "../recording/takeCameraLayout";
+import { TakeOwnership } from "../recording/takeOwnership";
 import { patchWebmDurationOnDisk } from "../recording/webm-duration";
 import { reindexRecordingOnDisk } from "../recording/webm-seek-index";
 import {
@@ -179,6 +181,17 @@ import {
 	shouldEnumerateRecordingSources,
 	shouldPersistSelectedSource,
 } from "../recording-source-settings";
+import type { DrawingTarget } from "../recordingExtras/drawingOverlay";
+import {
+	micSilenceLevel,
+	startMicSilenceWatch,
+	stopMicSilenceWatch,
+} from "../recordingExtras/micSilenceWatch";
+import {
+	attachSelfViewToHelper,
+	prepareSelfViewForTake,
+	releaseCameraFromHelper,
+} from "../recordingExtras/selfView";
 import { getSourcesByType, shouldEnumerateSourceTypesSeparately } from "./desktopSourceTypes";
 import { registerNativeBridgeHandlers } from "./nativeBridge";
 import { createNativeMacMidCaptureErrorWatch } from "./nativeMacMidCaptureErrorWatch";
@@ -759,6 +772,8 @@ export interface RecordingPrefs {
 	micChannelMode: "auto" | "left" | "right" | "mix";
 	/** How a take with the camera starts: the screen with the camera, or only the camera. */
 	cameraLayout: RecordingCameraLayout;
+	/** The HUD warns when the microphone records only silence during a take. */
+	micSilenceWarningEnabled: boolean;
 }
 const defaultRecordingPrefs: RecordingPrefs = {
 	micEnabled: false,
@@ -776,6 +791,7 @@ const defaultRecordingPrefs: RecordingPrefs = {
 	countdownSeconds: 3,
 	micChannelMode: "auto",
 	cameraLayout: DEFAULT_RECORDING_CAMERA_LAYOUT,
+	micSilenceWarningEnabled: true,
 };
 
 // Cached source from the user's pick. Used by setDisplayMediaRequestHandler in main.ts for cursor-free capture.
@@ -824,6 +840,8 @@ const MAX_CURSOR_SAMPLES = Number.POSITIVE_INFINITY;
 
 let cursorRecordingSession: CursorRecordingSession | null = null;
 let pendingCursorRecordingData: CursorRecordingData | null = null;
+/** Which start owns the cursor sampler now, so a late cleanup cannot stop a newer one. */
+const cursorRecordingOwnership = new TakeOwnership();
 let cursorCheckpoint: CursorCheckpointWriter | null = null;
 let cursorCheckpointTimer: NodeJS.Timeout | null = null;
 
@@ -1340,6 +1358,17 @@ function getSelectedSourceBounds() {
 	return (sourceDisplay ?? screen.getDisplayNearestPoint(cursor)).bounds;
 }
 
+/**
+ * What the drawing layer covers: the display the take records. A window source is drawn over
+ * on the display it is on, and flagged, because a window capture leaves the strokes out.
+ */
+export function getRecordingDrawingTarget(): DrawingTarget {
+	return {
+		bounds: getSelectedSourceBounds(),
+		windowCapture: selectedSource?.id?.startsWith("window:") === true,
+	};
+}
+
 function getSelectedSourceId() {
 	return typeof selectedSource?.id === "string" ? selectedSource.id : null;
 }
@@ -1540,6 +1569,7 @@ async function lookupDirectShowWebcamClsid(deviceName: string) {
 }
 
 async function startCursorRecording(recordingId?: number) {
+	cursorRecordingOwnership.claim();
 	// On Linux the native capture helper already produces cursor samples, from
 	// the SAME portal session that produces the pixels. Spawning the cursor-only
 	// helper alongside it would open a SECOND portal session — and since
@@ -1574,8 +1604,16 @@ async function startCursorRecording(recordingId?: number) {
 	}
 }
 
-async function stopCursorRecording() {
+/**
+ * Stops the cursor sampler. With `ownerToken`, only while that start still owns it: a newer
+ * take's sampler is left running (HANDOFF pending item 19).
+ */
+async function stopCursorRecording(ownerToken?: number) {
 	if (!cursorRecordingSession) {
+		return;
+	}
+	if (ownerToken !== undefined && !cursorRecordingOwnership.owns(ownerToken)) {
+		console.warn("[cursor] a newer take owns the cursor sampler; leaving it running");
 		return;
 	}
 
@@ -1782,6 +1820,10 @@ function attachNativeWindowsCaptureOutputDrain(
 				watchLiveTake(event);
 				if (event.event === "warning" && event.code === "webcam-dark") {
 					onCameraDark();
+				}
+				const micPeakDb = readMicLevelEvent(event);
+				if (micPeakDb !== null) {
+					micSilenceLevel(micPeakDb);
 				}
 			}
 		}
@@ -3207,6 +3249,9 @@ export function registerIpcHandlers(
 		async (_, request: NativeWindowsRecordingRequest) => {
 			nativeWindowsStartCancelled = false;
 			const startRequestedAtMs = Date.now();
+			// Whoever owned the cursor sampler when this start began: until this take claims it,
+			// a failure here must not stop a sampler that is not its own.
+			let startCursorToken = cursorRecordingOwnership.token;
 			// The end of the countdown, if the renderer sent one that makes sense: the helper
 			// opens everything now and starts the take then.
 			const startAtEpochMs =
@@ -3394,6 +3439,9 @@ export function registerIpcHandlers(
 				// full before the helper was even spawned. Its samples are timed
 				// against `cursorStartTimeMs`, and the offset to the first frame is
 				// measured below, so starting both at once changes no timestamp.
+				// The camera self-view lets go of the camera before the helper opens it, and
+				// gets a pipe for the helper's preview frames instead.
+				const selfViewConfig = await prepareSelfViewForTake(recordingId, request.webcam.enabled);
 				const cursorStartTimeMs = Date.now();
 				let cursorSamplerReady: Promise<void> = Promise.resolve();
 				if (cursorCaptureMode === "editable-overlay") {
@@ -3407,13 +3455,26 @@ export function registerIpcHandlers(
 				} else {
 					pendingCursorRecordingData = null;
 				}
+				// Claimed synchronously by the call above; what this take's cleanup may stop.
+				startCursorToken = cursorRecordingOwnership.token;
 
-				const proc = spawn(helperPath, [JSON.stringify(config)], {
+				const proc = spawn(helperPath, [JSON.stringify({ ...config, ...selfViewConfig })], {
 					cwd: RECORDINGS_DIR,
 					stdio: ["pipe", "pipe", "pipe"],
 					windowsHide: true,
 				});
 				nativeWindowsCaptureProcess = proc;
+				attachSelfViewToHelper(proc);
+				if (
+					request.audio.microphone.enabled &&
+					appSettings.getSnapshot().recording.micSilenceWarningEnabled
+				) {
+					startMicSilenceWatch({
+						getHud: getMainWindow,
+						isActive: () => nativeWindowsCaptureProcess === proc && !nativeWindowsStopInFlight,
+						isPaused: () => nativeWindowsIsPaused,
+					});
+				}
 				nativeWindowsCaptureDrainCleanup = attachNativeWindowsCaptureOutputDrain(
 					proc,
 					() => handleNativeWindowsTakeEndedEarly(),
@@ -3580,17 +3641,29 @@ export function registerIpcHandlers(
 				];
 				detachNativeWindowsCaptureOutputDrain();
 				resetNativeWindowsCaptureState();
+				stopMicSilenceWatch();
+				releaseCameraFromHelper();
 				// Awaited, not just killed: a helper still alive holds its mp4 open, and
-				// the empty one it created could not be removed below.
+				// the empty one it created could not be removed below. The next take waits
+				// for this too (`nativeWindowsHelperExit`): a helper that timed out at 100 %
+				// CPU can take seconds to die, and the state above is already clear.
 				if (failedProc) {
-					await terminateNativeWindowsCapture(failedProc).catch(() => false);
+					const exit = terminateNativeWindowsCapture(failedProc)
+						.catch(() => false)
+						.then(() => undefined);
+					nativeWindowsHelperExit = exit;
+					await exit;
+					if (nativeWindowsHelperExit === exit) {
+						nativeWindowsHelperExit = null;
+					}
 				}
 				for (const outputPath of failedOutputPaths) {
 					if (outputPath) {
 						await removeEmptyCaptureOutput(outputPath);
 					}
 				}
-				await stopCursorRecording();
+				// Only this take's sampler: by now another take may have its own.
+				await stopCursorRecording(startCursorToken);
 				if (cancelled) {
 					// Not a take: no frame was captured. What the helper had opened goes, with the
 					// journal line that would offer it back on the next launch.

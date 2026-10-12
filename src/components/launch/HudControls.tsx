@@ -1,4 +1,13 @@
-import { Check, Languages, NotepadText, PictureInPicture2, ScanFace, Settings } from "lucide-react";
+import {
+	Check,
+	Languages,
+	NotepadText,
+	PenLine,
+	PictureInPicture2,
+	ScanFace,
+	Settings,
+	SquareUserRound,
+} from "lucide-react";
 import {
 	createContext,
 	memo,
@@ -272,26 +281,39 @@ export const HudMicButton = memo(function HudMicButton({
 	locked,
 	name,
 	tooltip,
+	silentWarning,
 	onClick,
 }: {
 	enabled: boolean;
 	locked: boolean;
 	name: string;
 	tooltip: string;
+	/** "Seu microfone parece mudo": a red badge, and the warning as the tooltip. */
+	silentWarning?: string | null;
 	onClick: () => void;
 }) {
 	return (
-		<HudTooltip content={tooltip}>
+		<HudTooltip content={silentWarning || tooltip}>
 			<button
 				type="button"
 				data-testid="launch-microphone-button"
-				className={`${hudIconBtnClasses} ${hudLockedClasses}`}
-				aria-label={name}
+				data-mic-silent={silentWarning ? "true" : undefined}
+				className={`relative ${hudIconBtnClasses} ${hudLockedClasses}`}
+				aria-label={silentWarning ? `${name}: ${silentWarning}` : name}
 				aria-pressed={enabled}
 				aria-disabled={locked || undefined}
 				onClick={locked ? undefined : onClick}
 			>
-				<MicIcon muted={!enabled} className={enabled ? "text-[#10b981]" : ""} />
+				<MicIcon
+					muted={!enabled}
+					className={silentWarning ? "text-[#f87171]" : enabled ? "text-[#10b981]" : ""}
+				/>
+				{silentWarning ? (
+					<span
+						data-testid="launch-microphone-silent-badge"
+						className="absolute right-[3px] top-[3px] h-[9px] w-[9px] rounded-full bg-[#ef4444] ring-2 ring-[#14171c] animate-pulse"
+					/>
+				) : null}
 			</button>
 		</HudTooltip>
 	);
@@ -515,6 +537,66 @@ export const HudStudioButton = memo(function HudStudioButton({
 				onClick={onClick}
 			>
 				<OpenInEditorIcon />
+			</button>
+		</HudTooltip>
+	);
+});
+
+/** "Desenhar na tela": in and out of drawing mode (also Ctrl+Shift+F6). Never locked by a take. */
+export const HudDrawButton = memo(function HudDrawButton({
+	active,
+	label,
+	disabled,
+	onClick,
+}: {
+	active: boolean;
+	label: string;
+	disabled: boolean;
+	onClick: () => void;
+}) {
+	return (
+		<HudTooltip content={label}>
+			<button
+				type="button"
+				data-testid="launch-draw-button"
+				aria-label={label}
+				aria-pressed={active}
+				disabled={disabled}
+				className={hudIconBtnClasses}
+				onClick={onClick}
+			>
+				<PenLine size={ICON_SIZE} className={active ? "text-[#10b981]" : ""} />
+			</button>
+		</HudTooltip>
+	);
+});
+
+/** "Ver a câmera": the floating self-view, for the user's eyes only. Shown with the camera on. */
+export const HudSelfViewButton = memo(function HudSelfViewButton({
+	active,
+	name,
+	tooltip,
+	disabled,
+	onClick,
+}: {
+	active: boolean;
+	name: string;
+	tooltip: string;
+	disabled: boolean;
+	onClick: () => void;
+}) {
+	return (
+		<HudTooltip content={tooltip}>
+			<button
+				type="button"
+				data-testid="launch-self-view-button"
+				aria-label={name}
+				aria-pressed={active}
+				disabled={disabled}
+				className={hudIconBtnClasses}
+				onClick={onClick}
+			>
+				<SquareUserRound size={ICON_SIZE} className={active ? "text-[#10b981]" : ""} />
 			</button>
 		</HudTooltip>
 	);

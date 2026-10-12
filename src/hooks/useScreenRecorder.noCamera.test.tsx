@@ -39,6 +39,7 @@ function prefs(camEnabled: boolean): RecordingPrefs {
 		countdownSeconds: 3,
 		micChannelMode: "auto",
 		cameraLayout: "screen",
+		micSilenceWarningEnabled: true,
 	};
 }
 

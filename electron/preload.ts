@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer, sharedTexture, webUtils } from "electron";
 import type { NativeLinuxRecordingRequest } from "../src/lib/nativeLinuxRecording";
 import type { NativeMacRecordingRequest } from "../src/lib/nativeMacRecording";
 import type { NativeWindowsRecordingRequest } from "../src/lib/nativeWindowsRecording";
+import type { RecordingExtrasApi } from "../src/lib/recordingExtrasApi";
 import type { RecordingCameraLayout } from "../src/lib/recordingLayout";
 import type { RecordingSession, StoreRecordedSessionInput } from "../src/lib/recordingSession";
 import type { GlobalShortcutsConfig } from "../src/lib/shortcuts";
@@ -711,3 +712,39 @@ contextBridge.exposeInMainWorld("electronAPI", {
 		return () => ipcRenderer.removeListener("cli-stop-recording", listener);
 	},
 });
+
+/** Subscribes to a main-process channel; returns the unsubscribe. */
+function subscribe<T>(channel: string, callback: (payload: T) => void) {
+	const listener = (_event: unknown, payload: T) => callback(payload);
+	ipcRenderer.on(channel, listener);
+	return () => {
+		ipcRenderer.removeListener(channel, listener);
+	};
+}
+
+// The drawing layer, its toolbar and the camera self-view (electron/recordingExtras/).
+const recordingExtrasAPI: RecordingExtrasApi = {
+	getDrawingState: () => ipcRenderer.invoke("drawing:get-state"),
+	toggleDrawing: () => ipcRenderer.invoke("drawing:toggle"),
+	exitDrawing: () => ipcRenderer.send("drawing:exit"),
+	setDrawingStyle: (patch) => ipcRenderer.invoke("drawing:set-style", patch),
+	reportStrokesVisible: (visible) => ipcRenderer.send("drawing:strokes", visible),
+	sendDrawingCommand: (command) => ipcRenderer.send("drawing:command", command),
+	onDrawingState: (callback) => subscribe("drawing:state", callback),
+	onDrawingCommand: (callback) => subscribe("drawing:command", callback),
+	getSelfViewState: () => ipcRenderer.invoke("self-view:get-state"),
+	toggleSelfView: () => ipcRenderer.invoke("self-view:toggle"),
+	reportSelfViewCamera: (enabled, deviceId) =>
+		ipcRenderer.send("self-view:camera", enabled, deviceId),
+	onSelfViewState: (callback) => subscribe("self-view:state", callback),
+	onSelfViewFrame: (callback) => subscribe("self-view:frame", callback),
+	ackSelfViewFrame: () => ipcRenderer.send("self-view:frame-ack"),
+	selfViewCameraReleased: () => ipcRenderer.send("self-view:camera-released"),
+	setSelfViewShape: (shape) => ipcRenderer.send("self-view:set-shape", shape),
+	selfViewDragStart: () => ipcRenderer.send("self-view:drag-start"),
+	selfViewDragTo: (deltaX, deltaY) => ipcRenderer.send("self-view:drag-to", deltaX, deltaY),
+	selfViewDragEnd: () => ipcRenderer.send("self-view:drag-end"),
+	selfViewResize: (size) => ipcRenderer.send("self-view:resize", size),
+	onMicSilent: (callback) => subscribe("native-recording-mic-silent", callback),
+};
+contextBridge.exposeInMainWorld("recordingExtrasAPI", recordingExtrasAPI);

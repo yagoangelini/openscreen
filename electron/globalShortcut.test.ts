@@ -36,6 +36,7 @@ const handlers = {
 	pauseToggle: vi.fn(),
 	addMarker: vi.fn(),
 	cameraLayoutToggle: vi.fn(),
+	drawingToggle: vi.fn(),
 };
 
 describe("bindingToAccelerator", () => {
@@ -56,13 +57,14 @@ describe("registerGlobalShortcuts", () => {
 		vi.clearAllMocks();
 	});
 
-	it("registers all five system-wide actions from the defaults", () => {
+	it("registers all six system-wide actions from the defaults", () => {
 		const results = registerGlobalShortcuts({}, handlers);
 		expect(Object.values(results).every(Boolean)).toBe(true);
 		expect([...mocks.owned].sort()).toEqual(
 			[
 				"CommandOrControl+Shift+F10",
 				"CommandOrControl+Shift+F12",
+				"CommandOrControl+Shift+F6",
 				"CommandOrControl+Shift+F7",
 				"CommandOrControl+Shift+F8",
 				"CommandOrControl+Shift+F9",
@@ -72,9 +74,9 @@ describe("registerGlobalShortcuts", () => {
 
 	it("keeps the old binding when the new one belongs to another app", () => {
 		registerGlobalShortcuts({}, handlers);
-		mocks.takenElsewhere.add("CommandOrControl+Shift+F6");
+		mocks.takenElsewhere.add("CommandOrControl+Shift+F5");
 		const results = registerGlobalShortcuts(
-			{ addMarker: { key: "f6", ctrl: true, shift: true } },
+			{ addMarker: { key: "f5", ctrl: true, shift: true } },
 			handlers,
 		);
 		expect(results.addMarker).toBe(false);

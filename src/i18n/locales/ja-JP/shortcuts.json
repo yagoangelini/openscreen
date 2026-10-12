@@ -20,6 +20,7 @@
 		"pauseToggle": "録画の一時停止 / 再開",
 		"addMarker": "録画中にマーカーを追加",
 		"cameraLayoutToggle": "顔 / 画面＋カメラを切り替え",
+		"drawingToggle": "Draw on Screen While Recording",
 		"addZoom": "ズームを追加",
 		"addTrim": "トリムを追加",
 		"addSpeed": "速度を追加",

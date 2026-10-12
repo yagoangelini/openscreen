@@ -28,6 +28,7 @@ const defaults: RecordingPrefs = {
 	countdownSeconds: 3,
 	micChannelMode: "auto",
 	cameraLayout: "screen",
+	micSilenceWarningEnabled: true,
 };
 let dir: string;
 beforeEach(() => {

@@ -85,6 +85,38 @@
 		"screen": "Tela + câmera",
 		"switched": "Agora: {{layout}}"
 	},
+	"drawing": {
+		"startTip": "Desenhar na tela: caneta, seta, formas e marca-texto. Os traços entram no vídeo. Esc sai.",
+		"stopTip": "Parar de desenhar (Esc). O que você desenhou some sozinho.",
+		"move": "Arraste para mover a barra",
+		"tools": {
+			"pen": "Caneta",
+			"arrow": "Seta",
+			"rectangle": "Retângulo",
+			"ellipse": "Elipse",
+			"highlighter": "Marca-texto"
+		},
+		"color": "Cor {{color}}",
+		"width": "Espessura {{width}} px",
+		"fadeAfter": "Os traços somem depois de {{seconds}} s. Clique para mudar.",
+		"fadeNever": "Os traços ficam até você limpar. Clique para mudar.",
+		"undo": "Desfazer o último traço (Ctrl+Z)",
+		"clear": "Limpar tudo (Delete)",
+		"exit": "Parar de desenhar (Esc)",
+		"windowCaptureNote": "Você está gravando uma janela: o Windows grava só os pixels dela, então estes traços NÃO entram no vídeo. Para que entrem, grave a tela."
+	},
+	"selfView": {
+		"name": "Ver a câmera",
+		"showTip": "Ver a câmera: uma janelinha flutuante com a sua câmera, só para você. Ela nunca entra no vídeo.",
+		"hideTip": "Esconder a câmera",
+		"windowTip": "Só você vê isto: não é gravado. Arraste para mover, use a rolagem para mudar o tamanho.",
+		"makeRounded": "Quadrado arredondado",
+		"makeCircle": "Círculo"
+	},
+	"micSilent": {
+		"title": "Seu microfone parece mudo",
+		"description": "Nenhum som do microfone há alguns segundos. Confira se ele não está no mudo (no aparelho ou no Windows) e se a entrada certa está escolhida."
+	},
 	"language": "Idioma",
 	"languageWithName": "Idioma: {{language}}",
 	"systemLanguagePrompt": {
@@ -115,7 +147,8 @@
 		"micChannelLeft": "Esq.",
 		"micChannelRight": "Dir.",
 		"micChannelMix": "Mixar",
-		"broadcastTip": "Dica: escolha o microfone \"NVIDIA Broadcast\" para remover o ruído de fundo."
+		"broadcastTip": "Dica: escolha o microfone \"NVIDIA Broadcast\" para remover o ruído de fundo.",
+		"micSilenceWarning": "Avisar se o microfone parecer mudo"
 	},
 	"permissions": {
 		"title": "O OpenScreen precisa de algumas permissões",

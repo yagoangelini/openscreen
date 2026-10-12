@@ -21,7 +21,10 @@ if (
 	showNotes ||
 	windowType === "hud-overlay" ||
 	windowType === "source-selector" ||
-	windowType === "countdown-overlay"
+	windowType === "countdown-overlay" ||
+	windowType === "drawing-overlay" ||
+	windowType === "drawing-toolbar" ||
+	windowType === "self-view"
 ) {
 	document.body.style.background = "transparent";
 	document.documentElement.style.background = "transparent";

@@ -38,6 +38,7 @@ const prefs: RecordingPrefs = {
 	countdownSeconds: 1,
 	micChannelMode: "auto",
 	cameraLayout: "screen",
+	micSilenceWarningEnabled: true,
 };
 
 function stub(startResult: () => Promise<unknown>) {

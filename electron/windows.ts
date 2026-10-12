@@ -85,7 +85,7 @@ const CONTENT_PROTECTION_BREAKS_DISPLAY = (() => {
 	return Number.isFinite(macOSMajor) && macOSMajor >= 26;
 })();
 
-function applyContentProtection(win: BrowserWindow, label: string) {
+export function applyContentProtection(win: BrowserWindow, label: string) {
 	if (CONTENT_PROTECTION_DISABLED) {
 		console.warn(
 			`[content-protection] OFF for the ${label} window ` +

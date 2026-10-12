@@ -20,6 +20,7 @@
 		"pauseToggle": "Пауза / продолжить запись",
 		"addMarker": "Добавить маркер во время записи",
 		"cameraLayoutToggle": "Переключить Лицо / Экран + камера",
+		"drawingToggle": "Draw on Screen While Recording",
 		"addZoom": "Добавить масштабирование",
 		"addTrim": "Добавить обрезку",
 		"addSpeed": "Изменить скорость",

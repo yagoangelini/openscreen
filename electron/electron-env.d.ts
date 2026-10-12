@@ -23,6 +23,8 @@ declare namespace NodeJS {
 
 // Used in Renderer process, expose in `preload.ts`
 interface Window {
+	/** The drawing layer, its toolbar and the camera self-view (electron/recordingExtras/). */
+	recordingExtrasAPI?: import("../src/lib/recordingExtrasApi").RecordingExtrasApi;
 	electronAPI: {
 		invokeNativeBridge: <TData = unknown>(
 			request: import("../src/native/contracts").NativeBridgeRequest,

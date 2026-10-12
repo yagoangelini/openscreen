@@ -115,6 +115,35 @@ private:
     double gain_ = 1.0;
 };
 
+// The microphone's level over short windows, for the app's "your microphone seems muted"
+// warning. Fed the raw capture packets (before gain and channel picking, so a mic the user
+// turned down in the app still reads as live), it closes a window every `windowMs` of audio
+// and hands back its peak and RMS in dBFS. Digital silence -- a muted endpoint, a dead
+// input -- reads as kSilenceDb rather than -infinity, so the JSON stays finite.
+struct MicLevel {
+    double peakDb = -120.0;
+    double rmsDb = -120.0;
+};
+
+class MicLevelMeter {
+public:
+    static constexpr double kSilenceDb = -120.0;
+    explicit MicLevelMeter(UINT32 windowMs = 250) : windowMs_(windowMs) {}
+    void reset();
+    // Returns true when this packet completed a window; `out` then holds that window.
+    bool process(const BYTE* data, DWORD byteCount, const AudioInputFormat& format, MicLevel& out);
+
+private:
+    UINT32 windowMs_ = 250;
+    double peak_ = 0.0;
+    double sumSquares_ = 0.0;
+    uint64_t samples_ = 0;
+    uint64_t frames_ = 0;
+};
+
+// One `{"event":"mic-level",...}` line, newline included, for the helper's stdout.
+std::string formatMicLevelEvent(const MicLevel& level);
+
 // Adds `source`, scaled by `gain`, into an interleaved double sum of the same
 // layout, and writes such a sum back out in `format` (clamped at full scale).
 void accumulateAudio(

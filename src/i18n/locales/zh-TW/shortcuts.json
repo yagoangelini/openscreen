@@ -20,6 +20,7 @@
 		"pauseToggle": "暫停 / 繼續錄製",
 		"addMarker": "錄製時新增標記",
 		"cameraLayoutToggle": "切換 人像 / 螢幕 + 攝影機",
+		"drawingToggle": "Draw on Screen While Recording",
 		"addZoom": "新增縮放",
 		"addTrim": "新增剪輯",
 		"addSpeed": "新增速度",

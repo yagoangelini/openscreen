@@ -85,6 +85,38 @@
 		"screen": "Ekran + kamera",
 		"switched": "Şimdi: {{layout}}"
 	},
+	"drawing": {
+		"startTip": "Draw on the screen: pen, arrow, shapes and highlighter. The strokes are in the video. Esc leaves.",
+		"stopTip": "Stop drawing (Esc). What you drew fades out on its own.",
+		"move": "Drag to move the toolbar",
+		"tools": {
+			"pen": "Pen",
+			"arrow": "Arrow",
+			"rectangle": "Rectangle",
+			"ellipse": "Ellipse",
+			"highlighter": "Highlighter"
+		},
+		"color": "Color {{color}}",
+		"width": "Thickness {{width}} px",
+		"fadeAfter": "Strokes fade after {{seconds}} s. Click to change.",
+		"fadeNever": "Strokes stay until cleared. Click to change.",
+		"undo": "Undo the last stroke (Ctrl+Z)",
+		"clear": "Clear everything (Delete)",
+		"exit": "Stop drawing (Esc)",
+		"windowCaptureNote": "You are recording a window: Windows records only that window's pixels, so these strokes do NOT go into the video. To record them, record the screen."
+	},
+	"selfView": {
+		"name": "See the camera",
+		"showTip": "See the camera: a small floating window with your camera, for you only. It never goes into the video.",
+		"hideTip": "Hide the camera view",
+		"windowTip": "Only you see this: it is not recorded. Drag to move, scroll to resize.",
+		"makeRounded": "Rounded square",
+		"makeCircle": "Circle"
+	},
+	"micSilent": {
+		"title": "Your microphone seems muted",
+		"description": "No sound from the microphone for a few seconds. Check that it is not muted (on the device or in Windows) and that the right input is picked."
+	},
 	"language": "Dil",
 	"languageWithName": "Dil: {{language}}",
 	"systemLanguagePrompt": {
@@ -115,7 +147,8 @@
 		"micChannelLeft": "Sol",
 		"micChannelRight": "Sağ",
 		"micChannelMix": "Karışık",
-		"broadcastTip": "İpucu: arka plan gürültüsünü kaldırmak için \"NVIDIA Broadcast\" mikrofonunu seçin."
+		"broadcastTip": "İpucu: arka plan gürültüsünü kaldırmak için \"NVIDIA Broadcast\" mikrofonunu seçin.",
+		"micSilenceWarning": "Warn if the microphone seems muted"
 	},
 	"permissions": {
 		"title": "OpenScreen'in birkaç izne ihtiyacı var",

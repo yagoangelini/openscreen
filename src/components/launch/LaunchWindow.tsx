@@ -31,6 +31,7 @@ import {
 	HudCursorButton,
 	HudDivider,
 	HudDragHandle,
+	HudDrawButton,
 	HudLanguageButton,
 	HudLanguageMenu,
 	HudLayoutProvider,
@@ -39,6 +40,7 @@ import {
 	HudNotice,
 	HudRecordButton,
 	HudRecordingControls,
+	HudSelfViewButton,
 	HudSettingsButton,
 	HudSourceButton,
 	HudStudioButton,
@@ -62,6 +64,9 @@ import styles from "./LaunchWindow.module.css";
 // Locale list is computed once at module load; keeping the reference stable lets
 // the language menu sit behind a memo boundary.
 const AVAILABLE_LOCALES = getAvailableLocales();
+
+/** One toast for the muted-microphone warning, replaced and dismissed by id. */
+const MIC_SILENT_TOAST_ID = "hud-mic-silent";
 
 // Used only when the renderer can't see a real display (tests, headless).
 const FALLBACK_SCREEN_HEIGHT = 1080;
@@ -901,6 +906,77 @@ export function LaunchWindow() {
 			});
 	}, [cameraLayout, saving]);
 
+	// Drawing on the screen and the camera self-view (electron/recordingExtras/). Their state
+	// lives in the main process: the global shortcut toggles drawing too, and the self-view
+	// outlives this window's re-creation for every take.
+	const [drawingActive, setDrawingActive] = useState(false);
+	const [selfViewRequested, setSelfViewRequested] = useState(false);
+	const [micSilent, setMicSilent] = useState(false);
+	useEffect(() => {
+		const api = window.recordingExtrasAPI;
+		if (!api) return;
+		let cancelled = false;
+		void api
+			.getDrawingState()
+			.then((state) => {
+				if (!cancelled) setDrawingActive(state.phase === "drawing");
+			})
+			.catch(() => undefined);
+		void api
+			.getSelfViewState()
+			.then((state) => {
+				if (!cancelled) setSelfViewRequested(state.requested);
+			})
+			.catch(() => undefined);
+		const offDrawing = api.onDrawingState((state) => setDrawingActive(state.phase === "drawing"));
+		const offSelfView = api.onSelfViewState((state) => setSelfViewRequested(state.requested));
+		return () => {
+			cancelled = true;
+			offDrawing();
+			offSelfView();
+		};
+	}, []);
+	// The self-view follows the camera toggle and the camera picked here.
+	const selfViewCameraId = webcamDeviceId || selectedCameraId || null;
+	useEffect(() => {
+		window.recordingExtrasAPI?.reportSelfViewCamera(
+			isWindowsHud && webcamEnabled,
+			selfViewCameraId,
+		);
+	}, [isWindowsHud, webcamEnabled, selfViewCameraId]);
+	// "Seu microfone parece mudo": a badge on the mic and a toast that stays until signal returns.
+	useEffect(() => {
+		return window.recordingExtrasAPI?.onMicSilent((silent) => {
+			setMicSilent(silent);
+			if (silent) {
+				toast.error(t("micSilent.title"), {
+					id: MIC_SILENT_TOAST_ID,
+					description: t("micSilent.description"),
+					duration: Number.POSITIVE_INFINITY,
+				});
+			} else {
+				toast.dismiss(MIC_SILENT_TOAST_ID);
+			}
+		});
+	}, [t]);
+	useEffect(() => {
+		if (recording) return;
+		setMicSilent(false);
+		toast.dismiss(MIC_SILENT_TOAST_ID);
+	}, [recording]);
+	const toggleDrawingMode = useCallback(() => {
+		void window.recordingExtrasAPI
+			?.toggleDrawing()
+			.then((state) => setDrawingActive(state.phase === "drawing"))
+			.catch((error) => console.warn("Failed to toggle drawing:", error));
+	}, []);
+	const toggleSelfView = useCallback(() => {
+		void window.recordingExtrasAPI
+			?.toggleSelfView()
+			.then((state) => setSelfViewRequested(state.requested))
+			.catch((error) => console.warn("Failed to toggle the self-view:", error));
+	}, []);
+
 	const sendHudOverlayHide = useCallback(() => {
 		window.electronAPI?.hudOverlayHide?.();
 	}, []);
@@ -1191,6 +1267,7 @@ export function LaunchWindow() {
 			micChannelRight: t("deviceSettings.micChannelRight"),
 			micChannelMix: t("deviceSettings.micChannelMix"),
 			broadcastTip: t("deviceSettings.broadcastTip"),
+			micSilenceWarning: t("deviceSettings.micSilenceWarning"),
 			cameraQuality: t("webcam.quality"),
 			cameraQualityOptions: {
 				"1080p": t("webcam.quality1080p"),
@@ -1307,6 +1384,7 @@ export function LaunchWindow() {
 									locked={controlsLocked}
 									name={t("audio.microphone")}
 									tooltip={t("tooltips.microphone")}
+									silentWarning={micSilent ? t("micSilent.title") : null}
 									onClick={toggleMicrophone}
 								/>
 							)}
@@ -1328,6 +1406,15 @@ export function LaunchWindow() {
 									}
 									disabled={saving}
 									onClick={toggleCameraLayout}
+								/>
+							)}
+							{isWindowsHud && webcamEnabled && (
+								<HudSelfViewButton
+									active={selfViewRequested}
+									name={t("selfView.name")}
+									tooltip={selfViewRequested ? t("selfView.hideTip") : t("selfView.showTip")}
+									disabled={saving}
+									onClick={toggleSelfView}
 								/>
 							)}
 							<HudSettingsButton
@@ -1386,6 +1473,15 @@ export function LaunchWindow() {
 								onTogglePause={togglePaused}
 								onRestart={restartRecording}
 								onCancel={cancelRecording}
+							/>
+						)}
+
+						{isWindowsHud && (
+							<HudDrawButton
+								active={drawingActive}
+								label={drawingActive ? t("drawing.stopTip") : t("drawing.startTip")}
+								disabled={saving}
+								onClick={toggleDrawingMode}
 							/>
 						)}
 
