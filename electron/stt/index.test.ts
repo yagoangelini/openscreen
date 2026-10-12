@@ -1,7 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from "vitest";
 
 import { planChunks } from "./chunking";
-import { _resetSttManagerForTests, getSttManager, SttManager, shutdownStt } from "./index";
+import {
+	_resetSttManagerForTests,
+	getSttManager,
+	SttManager,
+	shutdownStt,
+	throttledProgress,
+} from "./index";
 import type { SttStatusEvent, SttTranscribeResponse } from "./transcriptionContract";
 
 // We swap the long-lived modules for fakes so the manager's `init()` and
@@ -416,6 +422,43 @@ describe("SttManager", () => {
 		expect(fakeWhisperServer.transcribe).toHaveBeenCalledOnce();
 	});
 
+	it("stops the helper when cancelled mid-chunk, and starts it again for the next run", async () => {
+		const mgr = new SttManager();
+		await mgr.init({ modelsBaseDir: "/tmp/fake-stt-models" });
+		// A one-chunk take: the boundary check alone never fired, so the helper went on
+		// computing on the GPU after Cancel. The request only ends when the helper stops.
+		let failInFlight: (error: Error) => void = () => undefined;
+		fakeWhisperServer.transcribe.mockImplementationOnce(
+			() =>
+				new Promise((_resolve, reject) => {
+					failInFlight = reject;
+				}),
+		);
+		fakeWhisperServer.stop.mockImplementation(async () => {
+			failInFlight(new Error("socket hang up"));
+		});
+		const run = mgr.transcribe({ samples: new Float32Array(10 * 16000) }).catch((e: unknown) => e);
+		await vi.waitFor(() => expect(fakeWhisperServer.transcribe).toHaveBeenCalledOnce());
+		mgr.cancel();
+		const error = await run;
+
+		expect((error as Error).name).toBe("AbortError");
+		expect(fakeWhisperServer.stop).toHaveBeenCalledOnce();
+		// No retry of a chunk the user cancelled.
+		expect(fakeWhisperServer.transcribe).toHaveBeenCalledOnce();
+
+		const startsBefore = fakeWhisperServer.start.mock.calls.length;
+		await mgr.transcribe({ samples: new Float32Array(16000) });
+		expect(fakeWhisperServer.start.mock.calls.length).toBe(startsBefore + 1);
+	});
+
+	it("leaves the helper alone when cancelled between runs", async () => {
+		const mgr = new SttManager();
+		await mgr.init({ modelsBaseDir: "/tmp/fake-stt-models" });
+		mgr.cancel();
+		expect(fakeWhisperServer.stop).not.toHaveBeenCalled();
+	});
+
 	it("shutdown() stops whisper-stt-server", async () => {
 		const mgr = new SttManager();
 		await mgr.init({ modelsBaseDir: "/tmp/fake-stt-models" });
@@ -795,5 +838,24 @@ describe("SttManager", () => {
 		await mgr.transcribe({ samples: new Float32Array(16000), language: "en" });
 		expect(a).not.toHaveBeenCalled();
 		expect(b).toHaveBeenCalled();
+	});
+});
+
+describe("throttledProgress", () => {
+	it("lets through the first and the last report of a file, and one per interval between", () => {
+		let clock = 0;
+		const gate = throttledProgress(250, () => clock);
+		const passed: number[] = [];
+		// 264 MB in 16 KB network chunks, one every millisecond: ~16 900 reports.
+		const total = 264 * 1024 * 1024;
+		for (let bytes = 16 * 1024; bytes < total; bytes += 16 * 1024) {
+			clock += 1;
+			if (gate("whisper", bytes, total)) passed.push(bytes);
+		}
+		expect(gate("whisper", total, total)).toBe(true);
+		expect(passed[0]).toBe(16 * 1024);
+		expect(passed.length).toBeLessThan(80);
+		// A new file always starts with a report.
+		expect(gate("silero-vad", 1, 100)).toBe(true);
 	});
 });

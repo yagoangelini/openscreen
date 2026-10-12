@@ -76,6 +76,7 @@ import {
 	showPermissionsWindow,
 	showPermissionsWindowIfNeeded,
 } from "./permissions";
+import { createQuitWhileRecordingPrompt } from "./quitWhileRecording";
 import { setDisplaySleepBlocked } from "./recording/displaySleepBlocker";
 import { killRunningScans } from "./recording/ocrScan";
 import { RecordingsDirManager } from "./recording/recordingsDirManager";
@@ -222,7 +223,44 @@ function createWindow() {
 	hudWindow.on("session-end", () => {
 		void recordingControls?.stopAndSaveNativeWindowsRecording({ openEditor: false });
 	});
+	// Closing the Recorder window mid-take (taskbar "Close window", Alt+F4) asks like the
+	// HUD's quit button: as the last window, its close quit the app without a word. The
+	// app's own closes (opening the editor) set isForceClosing.
+	hudWindow.on("close", (event) => {
+		if (isForceClosing || !isTakeRunning()) return;
+		event.preventDefault();
+		void askBeforeQuittingMidTake();
+	});
 }
+
+/** A take is running: the renderer said so, or the native capture is still going. */
+function isTakeRunning(): boolean {
+	return isRecording || Boolean(recordingControls?.isNativeWindowsCaptureActive());
+}
+
+const askBeforeQuittingMidTake = createQuitWhileRecordingPrompt({
+	isRecording: isTakeRunning,
+	ask: () =>
+		showMessageBox({
+			type: "question",
+			buttons: [
+				mainT("dialogs", "quitWhileRecording.stopAndOpen"),
+				mainT("dialogs", "quitWhileRecording.keepRecording"),
+			],
+			defaultId: 0,
+			cancelId: 1,
+			title: mainT("dialogs", "quitWhileRecording.title"),
+			message: mainT("dialogs", "quitWhileRecording.message"),
+		}).then(({ response }) => response === 0),
+	stopAndOpen: () => {
+		const hudWindow = liveHudWindow();
+		if (hudWindow) {
+			hudWindow.webContents.send("stop-recording-from-tray");
+			return;
+		}
+		void recordingControls?.stopAndSaveNativeWindowsRecording({ openEditor: true });
+	},
+});
 
 function showMainWindow() {
 	if (mainWindow && !mainWindow.isDestroyed()) {
@@ -1422,8 +1460,16 @@ app.on("before-quit", (event) => {
 	updateCheckAbort?.abort();
 	// Quitting mid-take -- the HUD's quit button, Alt+F4, the tray -- used to end
 	// the capture with nothing written but the MP4: no cursor file, no session,
-	// no editor, and nothing that would ever point the user at it again. Finish
-	// the take first; it is journaled, so the next launch offers it back.
+	// no editor, and nothing that would ever point the user at it again. A quit
+	// that reaches here with the HUD alive asks first, as the HUD's quit button
+	// does (stop and open in the editor, or keep recording). Without a HUD to stop
+	// it, the take is finished and saved; it is journaled, so the next launch
+	// offers it back.
+	if (isTakeRunning() && !quitStopPromise && liveHudWindow()) {
+		event.preventDefault();
+		void askBeforeQuittingMidTake();
+		return;
+	}
 	if (recordingControls?.isNativeWindowsCaptureActive()) {
 		event.preventDefault();
 		if (!quitStopPromise) {
@@ -1555,31 +1601,13 @@ appReady?.then(async () => {
 	registerPermissionsIpc();
 
 	ipcMain.on("hud-overlay-close", () => {
-		if (!isRecording) {
+		if (!isTakeRunning()) {
 			app.quit();
 			return;
 		}
 		// Quitting mid-take kept the file but never opened it in the editor, and said nothing.
 		// The take is stopped and opened instead, or recording goes on.
-		void showMessageBox({
-			type: "question",
-			buttons: [
-				mainT("dialogs", "quitWhileRecording.stopAndOpen"),
-				mainT("dialogs", "quitWhileRecording.keepRecording"),
-			],
-			defaultId: 0,
-			cancelId: 1,
-			title: mainT("dialogs", "quitWhileRecording.title"),
-			message: mainT("dialogs", "quitWhileRecording.message"),
-		}).then(({ response }) => {
-			if (response !== 0 || !isRecording) return;
-			const hudWindow = liveHudWindow();
-			if (hudWindow) {
-				hudWindow.webContents.send("stop-recording-from-tray");
-				return;
-			}
-			void recordingControls?.stopAndSaveNativeWindowsRecording({ openEditor: true });
-		});
+		void askBeforeQuittingMidTake();
 	});
 	ipcMain.handle("set-locale", (_, locale: string) => {
 		setMainLocale(locale);

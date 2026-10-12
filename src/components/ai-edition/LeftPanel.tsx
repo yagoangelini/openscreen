@@ -6,6 +6,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Tooltip } from "@/components/ui/tooltip";
 import { useEditorDialogActions, useEditorDialogSection } from "@/contexts/EditorDialogsContext";
 import { useScopedT } from "@/contexts/I18nContext";
+import { formatTime } from "@/i18n/format";
+import { currentLocale } from "@/i18n/toastText";
 import { type AxcutDocument, ensureDocument } from "@/lib/ai-edition/schema";
 import {
 	applyAgentDocumentIfCurrent,
@@ -822,7 +824,7 @@ export function ChatStripPanel() {
 				id: optimisticUserId,
 				role: "user",
 				content: text,
-				time: new Date().toLocaleTimeString(),
+				time: formatTime(new Date(), currentLocale()),
 				checkpointId: optimisticUserId,
 			},
 		]);
@@ -874,7 +876,7 @@ export function ChatStripPanel() {
 						id: turnId,
 						role: "assistant",
 						content: assistant.content,
-						time: new Date().toLocaleTimeString(),
+						time: formatTime(new Date(), currentLocale()),
 						toolCalls: assistant.toolCalls,
 						// ponytail: snapshot the live reasoning trace onto the
 						// finished message so it can be revisited (collapsed by

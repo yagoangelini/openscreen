@@ -15,7 +15,7 @@
 
 import "@testing-library/jest-dom";
 import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 const ASSISTANT_CONTENT =
 	"Stub assistant reply for issue 738.\nSecond line with unicode: ✓ 🎬 — em dash, accént, 中文.";
@@ -178,6 +178,14 @@ const copyButtonsOf = (view: ReturnType<typeof render>) =>
 	view.getAllByRole("button", { name: "chat.copyMessage" });
 
 describe("ChatStripPanel Copy message (issue #738)", () => {
+	// The chat panel is a large module graph; transforming it on first import took longer than a
+	// test's 15 s under a loaded full run, failing whichever test came first. Paid once here.
+	beforeAll(async () => {
+		await import("./LeftPanel");
+		await import("@/contexts/EditorDialogsContext");
+		await import("@/components/ui/tooltip");
+	}, 120_000);
+
 	it("copies the full message through the preload bridge and reports success, never touching the denied navigator clipboard", async () => {
 		stubClipboard(copyToClipboard);
 		const view = await renderPanelWithAssistantMessage();

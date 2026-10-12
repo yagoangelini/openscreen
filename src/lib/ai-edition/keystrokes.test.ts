@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { keystrokeTextRegions } from "./keystrokeRegions";
-import { formatKeystroke, keystrokesFromCursorSamples } from "./keystrokes";
+import {
+	appShortcutCombos,
+	bindingCombo,
+	formatKeystroke,
+	keystrokesFromCursorSamples,
+} from "./keystrokes";
 import { type AxcutDocument, createEmptyDocument } from "./schema";
 
 const key = (timeMs: number, combo?: string) => ({
@@ -64,6 +69,33 @@ describe("keystrokesFromCursorSamples", () => {
 	});
 });
 
+describe("the app's own shortcuts", () => {
+	it("names a binding the way the sampler names the chord", () => {
+		expect(bindingCombo({ key: "f9", ctrl: true, shift: true })).toBe("Ctrl+Shift+F9");
+		expect(bindingCombo({ key: "k", ctrl: true, alt: true })).toBe("Ctrl+Alt+K");
+		expect(bindingCombo({ key: "arrowup", ctrl: true })).toBe("Ctrl+Up");
+		expect(bindingCombo({ key: " ", ctrl: true })).toBe("Ctrl+Space");
+	});
+
+	it("drops OpenScreen's global shortcuts from a take, defaults and custom bindings", () => {
+		const samples = [
+			key(1000, "Ctrl+Shift+F9"),
+			key(2000, "Ctrl+Shift+F10"),
+			key(3000, "Ctrl+Shift+F7"),
+			key(4000, "Ctrl+Shift+F8"),
+			key(5000, "Ctrl+Shift+F12"),
+			key(6000, "Ctrl+C"),
+			key(7000, "Ctrl+Alt+R"),
+		];
+		expect(keystrokesFromCursorSamples(samples).map((k) => k.combo)).toEqual([
+			"Ctrl+C",
+			"Ctrl+Alt+R",
+		]);
+		const custom = appShortcutCombos([{ key: "r", ctrl: true, alt: true }]);
+		expect(keystrokesFromCursorSamples(samples, custom).map((k) => k.combo)).toEqual(["Ctrl+C"]);
+	});
+});
+
 describe("formatKeystroke", () => {
 	it("spaces the keys and counts repeats", () => {
 		expect(formatKeystroke({ combo: "Win+Shift+S" })).toBe("Win + Shift + S");
@@ -121,6 +153,17 @@ describe("keystrokeTextRegions", () => {
 		]);
 		expect(regions[0].space).toBe("frame");
 		expect(regions[0].position.y + regions[0].size.height).toBeCloseTo(94);
+	});
+
+	it("shows no plate for the app's own shortcuts a take imported earlier still carries", () => {
+		const regions = keystrokeTextRegions(
+			documentWith([
+				{ sec: 10, combo: "Ctrl+Shift+F10" },
+				{ sec: 20, combo: "Ctrl+C" },
+				{ sec: 30, combo: "Ctrl+Shift+F7" },
+			]),
+		);
+		expect(regions.map((r) => r.content)).toEqual(["Ctrl + C"]);
 	});
 
 	it("follows the clip, and leaves out a chord the edit cut away", () => {

@@ -37,6 +37,7 @@ import {
 } from "@/lib/exporter";
 import { calculateMp4ExportSettings, wouldUpscale } from "@/lib/exporter/mp4ExportSettings";
 import { outputFrameCount } from "@/lib/exporter/outputFrameCount";
+import { exportBaseName } from "@/lib/exportFileName";
 import { loadUserPreferences, saveUserPreferences } from "@/lib/userPreferences";
 import {
 	cancelExportNative,
@@ -371,11 +372,8 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 			return;
 		}
 
-		const safeName = (document.project.title || "OpenScreen")
-			.replace(/[^a-z0-9-_]+/gi, "_")
-			.replace(/^_+|_+$/g, "")
-			.slice(0, 60);
-		const suggested = `${safeName || "export"}${format === "gif" ? ".gif" : ".mp4"}`;
+		const baseName = exportBaseName(document.project.title || "OpenScreen");
+		const suggested = `${baseName}${format === "gif" ? ".gif" : ".mp4"}`;
 
 		setPhase("configuring");
 		setError(null);

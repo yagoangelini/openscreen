@@ -132,6 +132,56 @@ describe("useTranscriptionStore", () => {
 		delete (window as any).electronAPI;
 	});
 
+	it("cancel stops the run: no transcript, no failure, no toast", async () => {
+		localStorage.clear();
+		let seenSignal: AbortSignal | undefined;
+		transcribeMocks.transcribeAsset.mockImplementation(
+			(_doc: AxcutDocument, _assetId: string, options: { signal?: AbortSignal }) =>
+				new Promise((_resolve, reject) => {
+					seenSignal = options.signal;
+					options.signal?.addEventListener("abort", () =>
+						reject(new DOMException("Aborted", "AbortError")),
+					);
+				}),
+		);
+		loadDocument(makeDoc(["asset_1"]));
+
+		const settled = useTranscriptionStore.getState().request("asset_1");
+		await vi.waitFor(() => expect(seenSignal).toBeDefined());
+		useTranscriptionStore.getState().cancel("asset_1");
+		await settled;
+
+		expect(seenSignal?.aborted).toBe(true);
+		expect(useTranscriptionStore.getState().jobs).toEqual({});
+		expect(useProjectStore.getState().document?.transcripts).toEqual([]);
+		expect(toastMocks.error).not.toHaveBeenCalled();
+	});
+
+	it("cancel drops a job still waiting in the queue", async () => {
+		localStorage.clear();
+		const hold = deferred();
+		transcribeMocks.transcribeAsset.mockImplementation(
+			async (_doc: AxcutDocument, assetId: string) => {
+				await hold.promise;
+				return transcriptFor(assetId);
+			},
+		);
+		loadDocument(makeDoc(["asset_1", "asset_2"]));
+
+		const first = useTranscriptionStore.getState().request("asset_1");
+		const second = useTranscriptionStore.getState().request("asset_2");
+		useTranscriptionStore.getState().cancel("asset_2");
+		await second;
+		hold.release();
+		await first;
+		await whenTranscriptionIdle();
+
+		expect(transcribeMocks.transcribeAsset).toHaveBeenCalledTimes(1);
+		expect(useProjectStore.getState().document?.transcripts.map((t) => t.assetId)).toEqual([
+			"asset_1",
+		]);
+	});
+
 	it("transcribes nothing on its own while automatic transcription is off", async () => {
 		localStorage.clear();
 		loadDocument(makeDoc(["asset_1"]));

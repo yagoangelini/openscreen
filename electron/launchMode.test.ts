@@ -136,6 +136,27 @@ describe("taskbar identities agree with the installer", () => {
 		expect(nsh).toContain('"$appExe" "${APP_ID}" "${RECORDER_APP_ID}"');
 	});
 
+	// A changed shortcutName made the 2.4.0 update unpin the Studio from the taskbar (E2E
+	// 2.4.0, D-1): the template renames the old shortcut and then WinShell::UninstShortcut's
+	// it. build/installer.nsh now shields the pins, but only installers that carry it do.
+	it("never renames the Studio's shortcut, and shields taskbar pins on every install", () => {
+		const config = readFileSync(path.join(ROOT, "electron-builder.json5"), "utf8");
+		expect(config).toMatch(/"shortcutName":\s*"OpenScreen Studio"/);
+		const nsh = readFileSync(path.join(ROOT, "build", "installer.nsh"), "utf8");
+		const customInit = nsh.slice(nsh.indexOf("!macro customInit"));
+		expect(customInit.slice(0, customInit.indexOf("!macroend"))).toContain(
+			"!insertmacro openscreenShieldPins",
+		);
+		const afterDir = nsh.slice(nsh.indexOf("!macro customPageAfterChangeDir"));
+		expect(afterDir.slice(0, afterDir.indexOf("!macroend"))).toContain(
+			"!insertmacro openscreenShieldPins",
+		);
+		const unInstall = nsh.slice(nsh.indexOf("!macro customUnInstall"));
+		expect(unInstall).toContain("${if} ${isUpdated}");
+		// The only unpin left is the real uninstall's.
+		expect(unInstall).toMatch(/\$\{ifNot\} \$\{isKeepShortcuts\}\s*\$\{andIfNot\} \$\{isUpdated\}/);
+	});
+
 	it("stamps the recorder's ID and switch on the installer's Recorder shortcuts", () => {
 		const nsh = readFileSync(path.join(ROOT, "build", "installer.nsh"), "utf8");
 		expect(nsh).toContain(`!define RECORDER_APP_ID "${RECORDER_APP_USER_MODEL_ID}"`);

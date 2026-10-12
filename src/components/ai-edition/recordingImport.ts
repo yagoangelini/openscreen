@@ -15,7 +15,8 @@
 // after this point is the CLI runner, which lives in its own process.
 
 import type { CursorTelemetryPoint } from "@/components/video-editor/types";
-import { toastText } from "@/i18n/toastText";
+import { formatDateTime } from "@/i18n/format";
+import { currentLocale, toastText } from "@/i18n/toastText";
 import {
 	cameraSegmentsFromRecordingLayout,
 	readCameraSegments,
@@ -690,11 +691,11 @@ export async function importPendingRecording(
 	const warning = result.success ? result.warning : undefined;
 
 	const label = screenPath.split(/[\\/]/).pop() || toastText("editor", "projectNames.asset");
-	await useProjectStore
-		.getState()
-		.createProject(
-			toastText("editor", "projectNames.recording", { date: new Date().toLocaleString() }),
-		);
+	await useProjectStore.getState().createProject(
+		toastText("editor", "projectNames.recording", {
+			date: formatDateTime(new Date(), currentLocale()),
+		}),
+	);
 	await useProjectStore.getState().addAsset(screenPath, label);
 	// Before the zoom hand-off below, so the zooms wait for the "face" spans to be pieces.
 	void applyFreshRecordingCameraLayout(screenPath).catch((error) => {
