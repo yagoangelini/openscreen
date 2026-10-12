@@ -30,6 +30,13 @@ import {
 	type StylePresetAppearance,
 	stylePresetLegacyEditor,
 } from "../../src/lib/ai-edition/stylePresets";
+import {
+	parseRecordingLayout,
+	RECORDING_LAYOUT_SUFFIX,
+	type RecordingLayoutOnAsset,
+	recordingLayoutHasFace,
+	recordingLayoutOnAsset,
+} from "../../src/lib/recordingLayout";
 import { audioStemPathsFor, RECORDING_MARKERS_SUFFIX } from "../../src/lib/recordingSession";
 import { ensureDocumentExtensions } from "../media/extensionClip";
 import { hasMp4Index } from "../media/mp4Index";
@@ -183,6 +190,23 @@ async function readRecordingMarkersSec(videoPath: string): Promise<number[] | un
 			.filter((ms): ms is number => typeof ms === "number" && Number.isFinite(ms) && ms >= 0)
 			.map((ms) => ms / 1000)
 			.sort((a, b) => a - b);
+	} catch {
+		return undefined;
+	}
+}
+
+/**
+ * "Rosto / Tela + câmera" as the take was recorded, from its .layout.json. Undefined when
+ * there is none, it cannot be read, or the take never left the default -- like the markers,
+ * never a reason to refuse an import.
+ */
+async function readRecordingLayout(videoPath: string): Promise<RecordingLayoutOnAsset | undefined> {
+	try {
+		const file = parseRecordingLayout(
+			JSON.parse(await fs.readFile(`${videoPath}${RECORDING_LAYOUT_SUFFIX}`, "utf8")),
+		);
+		const layout = file ? recordingLayoutOnAsset(file) : undefined;
+		return layout && recordingLayoutHasFace(layout) ? layout : undefined;
 	} catch {
 		return undefined;
 	}
@@ -579,6 +603,7 @@ export class DocumentService {
 		const markersSec = kind === "audio" ? undefined : await readRecordingMarkersSec(absolutePath);
 		const keystrokes = kind === "audio" ? undefined : await readRecordingKeystrokes(absolutePath);
 		const audioStems = kind === "audio" ? undefined : await readRecordingStems(absolutePath);
+		const cameraLayout = kind === "audio" ? undefined : await readRecordingLayout(absolutePath);
 		const asset: AxcutAsset = {
 			id: createId("asset"),
 			kind,
@@ -589,6 +614,7 @@ export class DocumentService {
 			...(markersSec && markersSec.length > 0 ? { markersSec } : {}),
 			...(keystrokes && keystrokes.length > 0 ? { keystrokes } : {}),
 			...(audioStems ? { audioStems } : {}),
+			...(cameraLayout ? { cameraLayout } : {}),
 		};
 		// An audio import is an overlay, never the thing the timeline is built
 		// around, so it must not claim the empty primaryAssetId slot — otherwise the

@@ -124,6 +124,29 @@ describe("collectAutoZoomSuggestionsForDocument", () => {
 		);
 		expect(suggestions).toEqual([]);
 	});
+
+	it("plans no zoom where the camera fills the frame ('Rosto'): there is no screen to zoom into", async () => {
+		const fullCamera = (startMs: number, endMs: number) => ({
+			id: `cam_${startMs}`,
+			segmentId: `seg_${startMs}`,
+			startMs,
+			endMs,
+			clipId: "clip_1",
+			sourceStartSec: startMs / 1000,
+			sourceEndSec: endMs / 1000,
+			mode: "fullscreen" as const,
+			origin: "system" as const,
+		});
+		const telemetry = async () => clickAt(4000, 0.4, 0.6);
+		const inside = { ...documentWithClip(), cameraSegments: [fullCamera(2000, 7000)] };
+		expect(await collectAutoZoomSuggestionsForDocument(inside, telemetry)).toEqual([]);
+		// Just after one, the screen first comes back wide.
+		const justBefore = { ...documentWithClip(), cameraSegments: [fullCamera(0, 3000)] };
+		expect(await collectAutoZoomSuggestionsForDocument(justBefore, telemetry)).toEqual([]);
+		// Well clear of it, the zoom stays.
+		const clear = { ...documentWithClip(20), cameraSegments: [fullCamera(14000, 20000)] };
+		expect(await collectAutoZoomSuggestionsForDocument(clear, telemetry)).toHaveLength(1);
+	});
 });
 
 describe("appendAutoZoomSuggestions", () => {

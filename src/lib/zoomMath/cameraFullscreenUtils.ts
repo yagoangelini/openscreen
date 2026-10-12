@@ -23,7 +23,10 @@ function computeCameraFullscreenRegionStrength(
 	timeMs: number,
 	speedRegions: readonly SpeedRegion[],
 ): number {
-	if (timeMs <= region.startMs || timeMs >= region.endMs) {
+	// A span that opens the video has nothing to ease from: held from the first frame, as the
+	// compositor holds it (`holdAtProgrammeEdges` in sceneDescription.ts).
+	const opensVideo = region.startMs <= 0;
+	if ((opensVideo ? timeMs < region.startMs : timeMs <= region.startMs) || timeMs >= region.endMs) {
 		return 0;
 	}
 
@@ -31,8 +34,8 @@ function computeCameraFullscreenRegionStrength(
 	const end = screenTimeMs(speedRegions, region.endMs);
 	const t = screenTimeMs(speedRegions, timeMs);
 	const halfDuration = (end - start) / 2;
-	const leadInWindow = Math.min(TRANSITION_WINDOW_MS, halfDuration);
-	const leadOutWindow = Math.min(LEAD_OUT_WINDOW_MS, halfDuration);
+	const leadInWindow = opensVideo ? 0 : Math.min(TRANSITION_WINDOW_MS, halfDuration);
+	const leadOutWindow = Math.min(LEAD_OUT_WINDOW_MS, opensVideo ? end - start : halfDuration);
 	const leadInEnd = start + leadInWindow;
 	const leadOutStart = end - leadOutWindow;
 

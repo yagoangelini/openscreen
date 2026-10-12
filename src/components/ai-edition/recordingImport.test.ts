@@ -7,6 +7,7 @@ import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
 import { undo } from "@/lib/ai-edition/store/undo";
 import { clearHistory, past } from "@/lib/ai-edition/store/undoStack";
 import {
+	applyFreshRecordingCameraLayout,
 	applyFreshRecordingRedactions,
 	applyPendingFreshRecordingAutoZooms,
 	consumeFreshRecordingAutoZoomPending,
@@ -415,6 +416,107 @@ describe("fresh-recording privacy blur", () => {
 				waitTimeoutMs: 50,
 			}),
 		).toBe(0);
+		expect(saveDocument).not.toHaveBeenCalled();
+		useProjectStore.setState({ saveDocument: realActions.saveDocument });
+	});
+});
+
+describe("fresh-recording camera layout ('Rosto / Tela + câmera')", () => {
+	/** The take as the HUD logged it: the face for the first 6 s, then the screen. */
+	const withFaceIntro = (document: AxcutDocument): AxcutDocument => ({
+		...document,
+		assets: document.assets.map((asset) => ({
+			...asset,
+			cameraLayout: { initial: "face", switches: [{ atSec: 6, layout: "screen" }] },
+		})),
+	});
+
+	beforeEach(() => {
+		vi.clearAllMocks();
+		consumeFreshRecordingAutoZoomPending();
+	});
+
+	it("makes the face span one full-screen piece in one undoable write, then asks for the zooms", async () => {
+		const saveDocument = vi.fn(async (next: AxcutDocument) => {
+			useProjectStore.setState({ document: next });
+			return true;
+		});
+		useProjectStore.setState({ document: withFaceIntro(documentWithClip()), saveDocument });
+		markFreshRecordingAutoZoomPending(RECORDING_PATH);
+		const autoZoom = vi.fn(async () => undefined);
+		expect(
+			await applyFreshRecordingCameraLayout(RECORDING_PATH, { waitTimeoutMs: 50, autoZoom }),
+		).toBe(1);
+		expect(saveDocument).toHaveBeenCalledTimes(1);
+		expect(saveDocument).toHaveBeenCalledWith(expect.anything(), { history: true });
+		expect(useProjectStore.getState().document?.cameraSegments).toEqual([
+			expect.objectContaining({
+				startMs: 0,
+				endMs: 6000,
+				clipId: "clip_1",
+				mode: "fullscreen",
+				origin: "system",
+			}),
+		]);
+		expect(autoZoom).toHaveBeenCalledTimes(1);
+		useProjectStore.setState({ saveDocument: realActions.saveDocument });
+	});
+
+	it("holds the take's automatic zooms until the pieces are in, then plans around the face", async () => {
+		let release: () => void = () => undefined;
+		const gate = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		const saveDocument = vi.fn(async (next: AxcutDocument) => {
+			await gate;
+			useProjectStore.setState({ document: next });
+			return true;
+		});
+		const start = withFaceIntro(documentWithClip());
+		useProjectStore.setState({ document: start, saveDocument });
+		markFreshRecordingAutoZoomPending(RECORDING_PATH);
+		const pass = applyFreshRecordingCameraLayout(RECORDING_PATH, {
+			waitTimeoutMs: 50,
+			autoZoom: async () => undefined,
+		});
+		const zoomDeps = {
+			enabled: true,
+			getTelemetry: async () => clickAt(4000, 0.4, 0.6),
+			createId: (prefix: string) => `${prefix}_test`,
+		};
+		// A click at 4 s, under the face: no zoom while the pieces are on their way...
+		expect((await applyPendingFreshRecordingAutoZooms(start, zoomDeps)).zoomRanges).toEqual([]);
+		release();
+		expect(await pass).toBe(1);
+		// ...and none once they are in: there is no screen to zoom into there.
+		const live = useProjectStore.getState().document as AxcutDocument;
+		expect((await applyPendingFreshRecordingAutoZooms(live, zoomDeps)).zoomRanges).toEqual([]);
+		useProjectStore.setState({ saveDocument: realActions.saveDocument });
+	});
+
+	it("writes nothing for a take without a layout, or over camera pieces already there", async () => {
+		const saveDocument = vi.fn(async () => true);
+		useProjectStore.setState({ document: documentWithClip(), saveDocument });
+		expect(await applyFreshRecordingCameraLayout(RECORDING_PATH, { waitTimeoutMs: 50 })).toBe(0);
+		const edited = withFaceIntro(documentWithClip());
+		useProjectStore.setState({
+			document: {
+				...edited,
+				cameraSegments: [
+					{
+						id: "cam_user",
+						startMs: 2000,
+						endMs: 3000,
+						clipId: "clip_1",
+						sourceStartSec: 2,
+						sourceEndSec: 3,
+						mode: "hidden",
+						origin: "user",
+					},
+				],
+			},
+		});
+		expect(await applyFreshRecordingCameraLayout(RECORDING_PATH, { waitTimeoutMs: 50 })).toBe(0);
 		expect(saveDocument).not.toHaveBeenCalled();
 		useProjectStore.setState({ saveDocument: realActions.saveDocument });
 	});

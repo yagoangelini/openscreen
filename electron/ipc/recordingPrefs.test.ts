@@ -27,6 +27,7 @@ const defaults: RecordingPrefs = {
 	recordingsFolder: null,
 	countdownSeconds: 3,
 	micChannelMode: "auto",
+	cameraLayout: "screen",
 };
 let dir: string;
 beforeEach(() => {

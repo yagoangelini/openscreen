@@ -34,6 +34,13 @@ import {
 } from "../../src/lib/nativeMacRecording";
 import type { NativeWindowsRecordingRequest } from "../../src/lib/nativeWindowsRecording";
 import {
+	DEFAULT_RECORDING_CAMERA_LAYOUT,
+	isRecordingCameraLayout,
+	otherRecordingCameraLayout,
+	RECORDING_LAYOUT_SUFFIX,
+	type RecordingCameraLayout,
+} from "../../src/lib/recordingLayout";
+import {
 	audioStemPathsFor,
 	type CursorCaptureMode,
 	normalizeCursorCaptureMode,
@@ -154,8 +161,10 @@ import {
 	clearPendingTake,
 	collectRecoverableTakes,
 	recordPendingTake,
+	settlePendingTakeHandOff,
 } from "../recording/pendingTakes";
 import { removeEmptyCaptureOutput } from "../recording/removeEmptyCaptureOutput";
+import { TakeCameraLayoutLog, takeMediaTimeMs } from "../recording/takeCameraLayout";
 import { patchWebmDurationOnDisk } from "../recording/webm-duration";
 import { reindexRecordingOnDisk } from "../recording/webm-seek-index";
 import {
@@ -747,6 +756,8 @@ export interface RecordingPrefs {
 	countdownSeconds: number;
 	/** The microphone's voice channel: auto, left, right or mix. */
 	micChannelMode: "auto" | "left" | "right" | "mix";
+	/** How a take with the camera starts: the screen with the camera, or only the camera. */
+	cameraLayout: RecordingCameraLayout;
 }
 const defaultRecordingPrefs: RecordingPrefs = {
 	micEnabled: false,
@@ -763,6 +774,7 @@ const defaultRecordingPrefs: RecordingPrefs = {
 	recordingsFolder: null,
 	countdownSeconds: 3,
 	micChannelMode: "auto",
+	cameraLayout: DEFAULT_RECORDING_CAMERA_LAYOUT,
 };
 
 // Cached source from the user's pick. Used by setDisplayMediaRequestHandler in main.ts for cursor-free capture.
@@ -888,6 +900,33 @@ let nativeWindowsPausedTotalMs = 0;
 let nativeWindowsPausedSinceMs: number | null = null;
 /** Media-time positions (ms) the user marked with the marker shortcut during this take. */
 let nativeWindowsMarkersMs: number[] = [];
+/** The take's "Rosto / Tela + câmera" switches; null for a take without a camera. */
+let nativeWindowsCameraLayout: TakeCameraLayoutLog | null = null;
+/** The layout sidecar's writes, one after the other (see persistNativeWindowsCameraLayout). */
+let nativeWindowsCameraLayoutWrites: Promise<void> = Promise.resolve();
+
+/**
+ * Writes the take's layout beside it as it changes, not only at the stop: a take that
+ * never reaches the stop -- a crash, Windows shutting down -- is offered back at the next
+ * launch, and it should open showing the camera the way it was recorded. A take that is the
+ * default from start to end has no file.
+ */
+function persistNativeWindowsCameraLayout(screenVideoPath: string | null) {
+	const log = nativeWindowsCameraLayout;
+	if (!log || !screenVideoPath) {
+		return nativeWindowsCameraLayoutWrites;
+	}
+	const target = `${screenVideoPath}${RECORDING_LAYOUT_SUFFIX}`;
+	const content = log.isWorthWriting ? JSON.stringify(log.toFile(), null, 2) : null;
+	nativeWindowsCameraLayoutWrites = nativeWindowsCameraLayoutWrites
+		.then(() =>
+			content === null ? fs.rm(target, { force: true }) : fs.writeFile(target, content, "utf-8"),
+		)
+		.catch((error) => {
+			console.warn("[native-wgc] could not write the take's camera layout", error);
+		});
+	return nativeWindowsCameraLayoutWrites;
+}
 
 function detachNativeWindowsCaptureOutputDrain() {
 	nativeWindowsCaptureDrainCleanup?.();
@@ -913,6 +952,7 @@ function resetNativeWindowsCaptureState() {
 	nativeWindowsPausedTotalMs = 0;
 	nativeWindowsPausedSinceMs = null;
 	nativeWindowsMarkersMs = [];
+	nativeWindowsCameraLayout = null;
 	if (nativeWindowsDiskWatch) {
 		clearInterval(nativeWindowsDiskWatch);
 		nativeWindowsDiskWatch = null;
@@ -960,6 +1000,11 @@ async function removeNativeWindowsCaptureOutputs(
 			}
 			await fs
 				.rm(`${screenVideoPath}${CURSOR_CHECKPOINT_SUFFIX}`, { force: true })
+				.catch(() => undefined);
+			// The layout follows the video too, once no write of it is still on its way.
+			await nativeWindowsCameraLayoutWrites;
+			await fs
+				.rm(`${screenVideoPath}${RECORDING_LAYOUT_SUFFIX}`, { force: true })
 				.catch(() => undefined);
 		}
 	};
@@ -2493,7 +2538,7 @@ export function registerIpcHandlers(
 	});
 
 	applyCaptureOutputDir(appSettings.getSnapshot().recording.recordingsFolder);
-	registerRecordingPrefsHandlers(
+	const recordingPrefsStore = registerRecordingPrefsHandlers(
 		defaultRecordingPrefs,
 		getMainWindow,
 		() => BrowserWindow.getAllWindows(),
@@ -2519,6 +2564,66 @@ export function registerIpcHandlers(
 					.catch((error) => console.warn("[permissions] system audio request failed:", error));
 			}
 		},
+	);
+
+	/**
+	 * "Rosto / Tela + câmera". Before a take, the choice is the next take's start (a recording
+	 * pref); during one, a switch at the take's media time, logged like a marker. A switch
+	 * before the first frame (the countdown) is both. A take without the camera has no layout
+	 * to switch: null. Every change is told to the windows, so the HUD shows it whether the
+	 * button or the shortcut made it.
+	 */
+	const currentRecordingCameraLayout = (): RecordingCameraLayout | null => {
+		if (nativeWindowsCaptureProcess) {
+			return nativeWindowsCameraLayout?.current ?? null;
+		}
+		return appSettings.getSnapshot().recording.cameraLayout;
+	};
+	const switchRecordingCameraLayout = (
+		layout: RecordingCameraLayout,
+		source: "hud" | "shortcut",
+	): RecordingCameraLayout | null => {
+		let shown: RecordingCameraLayout = layout;
+		let beforeFirstFrame = true;
+		if (nativeWindowsCaptureProcess) {
+			const log = nativeWindowsCameraLayout;
+			if (!log || nativeWindowsStopInFlight) {
+				return null;
+			}
+			const mediaMs = takeMediaTimeMs({
+				nowMs: Date.now(),
+				captureStartedAtMs: nativeWindowsCaptureStartedAtMs,
+				pausedTotalMs: nativeWindowsPausedTotalMs,
+				pausedSinceMs: nativeWindowsPausedSinceMs,
+			});
+			beforeFirstFrame = mediaMs === null;
+			shown = log.switchTo(layout, mediaMs);
+			console.info("[native-wgc] camera layout", { layout: shown, mediaMs, source });
+			void persistNativeWindowsCameraLayout(nativeWindowsCaptureTargetPath);
+		}
+		if (beforeFirstFrame && appSettings.getSnapshot().recording.cameraLayout !== shown) {
+			try {
+				recordingPrefsStore.setRecordingPrefs({ cameraLayout: shown });
+			} catch (error) {
+				console.warn("[recording] could not save the camera layout", error);
+			}
+		}
+		for (const window of BrowserWindow.getAllWindows()) {
+			if (!window.isDestroyed()) {
+				window.webContents.send("recording-camera-layout-changed", { layout: shown, source });
+			}
+		}
+		return shown;
+	};
+	const toggleRecordingCameraLayout = (source: "hud" | "shortcut") => {
+		const current = currentRecordingCameraLayout();
+		return current
+			? switchRecordingCameraLayout(otherRecordingCameraLayout(current), source)
+			: null;
+	};
+	ipcMain.handle("get-recording-camera-layout", () => currentRecordingCameraLayout());
+	ipcMain.handle("set-recording-camera-layout", (_, layout: unknown) =>
+		isRecordingCameraLayout(layout) ? switchRecordingCameraLayout(layout, "hud") : null,
 	);
 
 	// Asked before every take starts. A disk that fills up mid-take used to be found only
@@ -3251,6 +3356,12 @@ export function registerIpcHandlers(
 				nativeWindowsPauseStartedAtMs = null;
 				nativeWindowsPauseRanges = [];
 				nativeWindowsIsPaused = false;
+				// Screen and camera are both recorded whatever the layout: it only says how the
+				// editor shows them, so it starts from the HUD's choice and is switched from there.
+				nativeWindowsCameraLayout = request.webcam.enabled
+					? new TakeCameraLayoutLog(appSettings.getSnapshot().recording.cameraLayout)
+					: null;
+				void persistNativeWindowsCameraLayout(outputPath);
 
 				// The cursor sampler and the helper start side by side: they are
 				// independent processes, and the sampler's warm-up used to be paid in
@@ -4067,6 +4178,14 @@ export function registerIpcHandlers(
 					console.warn("[native-wgc] could not write the take's markers", error);
 				}
 			}
+			// The layout written during the take, made final. Without the camera it says
+			// nothing (there is no face to show), so it goes.
+			await persistNativeWindowsCameraLayout(webcamVideoPath ? screenVideoPath : null);
+			if (preferredPath && (!webcamVideoPath || preferredPath !== screenVideoPath)) {
+				await fs
+					.rm(`${preferredPath}${RECORDING_LAYOUT_SUFFIX}`, { force: true })
+					.catch(() => undefined);
+			}
 			// The journal keeps the session as it was saved, so a take that never
 			// reaches the editor -- the app quit, or the editor never opened -- is
 			// offered back with its camera, not just the screen.
@@ -4194,10 +4313,17 @@ export function registerIpcHandlers(
 			message: mainT("dialogs", "recovery.message"),
 			detail: `${mainT("dialogs", "recovery.detail")}\n\n${take.screenVideoPath}`,
 		};
+		console.info("[recovery] offering a take", {
+			path: take.screenVideoPath,
+			waiting: takes.length,
+		});
 		const { response } =
 			parent && !parent.isDestroyed()
 				? await dialog.showMessageBox(parent, options)
 				: await dialog.showMessageBox(options);
+		console.info("[recovery] answer", {
+			response: ["open", "later", "forget"][response] ?? response,
+		});
 		if (response === 2) {
 			await clearPendingTake(RECORDINGS_DIR, take.screenVideoPath).catch(() => undefined);
 			return;
@@ -4217,6 +4343,21 @@ export function registerIpcHandlers(
 		});
 		if (!session) {
 			return;
+		}
+		// A take the stop never reached (a crash, a kill) has no manifest beside it, and the
+		// editor links the camera through it (`find-recording-camera`): without it the take
+		// came back as the screen alone. Written now, as the stop would have.
+		const manifestPath = getSessionManifestPathForVideo(session.screenVideoPath);
+		if (!(await fs.stat(manifestPath).catch(() => null))) {
+			try {
+				await fs.writeFile(manifestPath, JSON.stringify(session, null, 2), "utf-8");
+				await registerRecordingMediaLinks(session.screenVideoPath, {
+					webcamVideoPath: session.webcamVideoPath,
+					cursorCaptureMode: session.cursorCaptureMode,
+				});
+			} catch (error) {
+				console.warn("[recovery] could not write the take's session manifest", error);
+			}
 		}
 		setCurrentRecordingSessionState(session);
 		currentVideoPath = session.screenVideoPath;
@@ -5530,8 +5671,13 @@ export function registerIpcHandlers(
 		return setCurrentVideoPath(path);
 	});
 
-	ipcMain.handle("set-current-recording-session", (_, session: RecordingSession | null) => {
+	ipcMain.handle("set-current-recording-session", async (_, session: RecordingSession | null) => {
 		const normalizedSession = normalizeRecordingSession(session);
+		// Null is the editor consuming the hand-off (`importPendingRecording`): the take is in a
+		// project now, and only now has nothing left to offer back.
+		await settlePendingTakeHandOff(RECORDINGS_DIR, currentRecordingSession, session).catch(
+			() => undefined,
+		);
 		setCurrentRecordingSessionState(normalizedSession);
 		currentVideoPath = normalizedSession?.screenVideoPath ?? null;
 		currentProjectPath = null;
@@ -5546,12 +5692,8 @@ export function registerIpcHandlers(
 			nativeMacRecordingWarning?.screenVideoPath === currentRecordingSession.screenVideoPath
 				? nativeMacRecordingWarning.message
 				: undefined;
-		// The editor asking for the take is the proof it arrived. Until now the
-		// journal kept it, so a crash anywhere between capture and here offers it
-		// back on the next launch.
-		void clearPendingTake(RECORDINGS_DIR, currentRecordingSession.screenVideoPath).catch(
-			() => undefined,
-		);
+		// The journal keeps the take until the editor has put it in a project (the null
+		// `set-current-recording-session` above), not merely asked for it.
 		return { success: true, session: currentRecordingSession, ...(warning ? { warning } : {}) };
 	});
 
@@ -5805,6 +5947,10 @@ export function registerIpcHandlers(
 
 	return {
 		addRecordingMarker,
+		toggleRecordingCameraLayout,
+		/** The take reached whoever asked for it outside the editor (the CLI's record). */
+		forgetPendingTake: (screenVideoPath: string) =>
+			clearPendingTake(RECORDINGS_DIR, screenVideoPath).catch(() => undefined),
 		isNativeWindowsCaptureActive: () => nativeWindowsCaptureProcess !== null,
 		stopAndSaveNativeWindowsRecording,
 		offerPendingTakeRecovery,

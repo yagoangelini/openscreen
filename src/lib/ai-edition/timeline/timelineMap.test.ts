@@ -120,7 +120,8 @@ describe("projectRegionsToSource", () => {
 
 	it("splits a region whose source range a trim cuts across two kept segments", () => {
 		// Identity clip src[0,10]; trim removes src[4,6]. Region raw[3,8] covers source
-		// [3,4] (seg1, kept) + [6,8] (seg2, kept); the [4,6] middle is trimmed away.
+		// [3,4] (seg1, kept) + [6,8] (seg2, kept); the [4,6] middle is trimmed away, and is
+		// kept too, under the cut, for a playhead parked there (B-10).
 		const c = clip({
 			id: "c1",
 			assetId: "a",
@@ -133,6 +134,15 @@ describe("projectRegionsToSource", () => {
 		expect(out).toEqual([
 			{ id: "r", startMs: 3000, endMs: 4000, clipIndex: 0, continuesAfter: true },
 			{ id: "r2", startMs: 6000, endMs: 8000, clipIndex: 1, continuesBefore: true },
+			{
+				id: "r2",
+				startMs: 4000,
+				endMs: 6000,
+				clipIndex: 0,
+				underTrim: true,
+				continuesBefore: true,
+				continuesAfter: true,
+			},
 		]);
 	});
 
@@ -297,7 +307,45 @@ describe("projectRegionsToSource", () => {
 		expect(out).toEqual([
 			{ ...anchored, id: "r", startMs: 3000, endMs: 4000, clipIndex: 0, continuesAfter: true },
 			{ ...anchored, id: "r2", startMs: 6000, endMs: 8000, clipIndex: 1, continuesBefore: true },
+			{
+				...anchored,
+				id: "r2",
+				startMs: 4000,
+				endMs: 6000,
+				clipIndex: 0,
+				underTrim: true,
+				continuesBefore: true,
+				continuesAfter: true,
+			},
 		]);
+	});
+
+	it("keeps the cut head of a region that starts inside a trim, on the playhead's segment", () => {
+		// The region starts under the cut [4,6] and runs into the kept [6,10]: the removed
+		// [5,6] is addressed to the segment the cut interrupts, the one the parked playhead uses.
+		const c = clip({
+			id: "c1",
+			assetId: "a",
+			sourceStartSec: 0,
+			sourceEndSec: 10,
+			timelineEndSec: 10,
+		});
+		const segments = resolvePlaybackSegments([c], [trim("a", 4, 6)]);
+		const anchored = { ...region("r", 5, 8), clipId: "c1", sourceStartSec: 5, sourceEndSec: 8 };
+		const out = projectRegionsToSource([anchored], segments, [c], () => "r2");
+		expect(out).toEqual([
+			{ ...anchored, id: "r", startMs: 6000, endMs: 8000, clipIndex: 1, continuesBefore: true },
+			{
+				...anchored,
+				id: "r2",
+				startMs: 5000,
+				endMs: 6000,
+				clipIndex: 0,
+				underTrim: true,
+				continuesAfter: true,
+			},
+		]);
+		expect(resolveNativePosition(5.5, segments, [c])?.clipIndex).toBe(0);
 	});
 
 	it("never places an anchored region on a different clip that shares the asset", () => {

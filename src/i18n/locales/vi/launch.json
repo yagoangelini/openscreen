@@ -70,6 +70,14 @@
 		"saving": "Đang lưu...",
 		"markerAdded": "Đã thêm điểm đánh dấu {{count}}"
 	},
+	"cameraLayout": {
+		"name": "Khuôn mặt: chỉ máy ảnh",
+		"faceTip": "Khuôn mặt: chỉ máy ảnh, toàn màn hình. Nhấp để hiện màn hình cùng máy ảnh.",
+		"screenTip": "Màn hình + máy ảnh: màn hình của bạn, máy ảnh ở góc. Nhấp để chỉ hiện máy ảnh, toàn màn hình.",
+		"face": "Khuôn mặt",
+		"screen": "Màn hình + máy ảnh",
+		"switched": "Hiện tại: {{layout}}"
+	},
 	"language": "Ngôn ngữ",
 	"languageWithName": "Ngôn ngữ: {{language}}",
 	"systemLanguagePrompt": {

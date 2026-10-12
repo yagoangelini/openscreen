@@ -362,6 +362,11 @@ const globalShortcutHandlers: Record<GlobalShortcutAction, () => void> = {
 			hudWindow.webContents.send("hud-marker-added", count);
 		}
 	},
+	// "Rosto / Tela + câmera": the main process logs it and tells the HUD, which shows it.
+	cameraLayoutToggle: () => {
+		const layout = recordingControls?.toggleRecordingCameraLayout("shortcut") ?? null;
+		console.info("[shortcut] cameraLayoutToggle", { at: Date.now(), isRecording, layout });
+	},
 };
 
 /** Replaced the editor with the HUD; assigned once the windows exist. */

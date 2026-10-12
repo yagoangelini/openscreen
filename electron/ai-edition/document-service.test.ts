@@ -411,6 +411,43 @@ describe("DocumentService", () => {
 			expect(updated.assets[0]?.markersSec).toEqual([5.532, 20.11]);
 		});
 
+		it("carries a take's 'Rosto / Tela + câmera' switches into the asset, in seconds", async () => {
+			const doc = await service.createProject("P");
+			const videoPath = path.join(mediaDir, "recording-layout.mp4");
+			await fs.writeFile(videoPath, "");
+			await fs.writeFile(
+				`${videoPath}.layout.json`,
+				JSON.stringify({
+					version: 1,
+					initial: "face",
+					switches: [{ atMs: 5230, layout: "screen" }],
+				}),
+			);
+			const updated = await service.addAsset(doc.project.id, { path: videoPath });
+			expect(updated.assets[0]?.cameraLayout).toEqual({
+				initial: "face",
+				switches: [{ atSec: 5.23, layout: "screen" }],
+			});
+			// The project file keeps it: the schema knows the key.
+			expect((await service.getProject(doc.project.id)).assets[0]?.cameraLayout).toBeDefined();
+		});
+
+		it("leaves out a layout that never left the screen, or cannot be read", async () => {
+			const doc = await service.createProject("P");
+			const plain = path.join(mediaDir, "recording-plain.mp4");
+			await fs.writeFile(plain, "");
+			await fs.writeFile(
+				`${plain}.layout.json`,
+				JSON.stringify({ initial: "screen", switches: [] }),
+			);
+			const broken = path.join(mediaDir, "recording-broken.mp4");
+			await fs.writeFile(broken, "");
+			await fs.writeFile(`${broken}.layout.json`, "{ not json");
+			await service.addAsset(doc.project.id, { path: plain });
+			const updated = await service.addAsset(doc.project.id, { path: broken });
+			expect(updated.assets.map((asset) => "cameraLayout" in asset)).toEqual([false, false]);
+		});
+
 		/** The boxes of a finished M4A: what the helper's writer leaves once it finalizes. */
 		const finishedM4a = () => {
 			const box = (type: string, payload: Buffer) => {

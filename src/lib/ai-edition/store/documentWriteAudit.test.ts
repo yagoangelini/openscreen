@@ -136,6 +136,15 @@ const DECLARED: WritePath[] = [
 	w("src/components/ai-edition/autoZoomReplan.ts", "replanAutoZooms", "save", "gesture"),
 	// The privacy blurs the OCR pass suggests for a freshly imported recording. Undoable
 	// for the same reason as the auto-zooms below: a suggestion the user may reject.
+	// The camera pieces a fresh take's "Rosto / Tela + câmera" switches make (the HUD's layout
+	// sidecar). Undoable like the blurs: the user chose the layout while recording, but the
+	// pieces are the editor's reading of it, and one Ctrl+Z takes them all back.
+	w(
+		"src/components/ai-edition/recordingImport.ts",
+		"applyFreshRecordingCameraLayout",
+		"save",
+		"gesture",
+	),
 	w(
 		"src/components/ai-edition/recordingImport.ts",
 		"applyFreshRecordingRedactions",

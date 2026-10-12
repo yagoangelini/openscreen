@@ -33,6 +33,7 @@ function prefs(micEnabled: boolean): RecordingPrefs {
 		recordingsFolder: null,
 		countdownSeconds: 3,
 		micChannelMode: "auto",
+		cameraLayout: "screen",
 	};
 }
 

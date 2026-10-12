@@ -72,7 +72,7 @@ Every public export of
 | `dropPillById` / `dropPillsByIds` (`:368` / `:377`) | Delete every region under a pill (resolved from the merge rule) | regions → regions |
 | `replacePillSpan` (`:398`) | Move/resize a pill: clamp against different-identity neighbours, then re-anchor to the clamped span, keeping the id of the member it was called with | pill + clip layout → re-anchored fragments |
 | `segmentRawSpanSec` (`:484`) | One kept playback segment → its RAW-virtual extent | segment → RAW span |
-| `projectRegionsToSource` (`:641`) | Region array → source-ms entries with `clipIndex` for native (anchored path uses anchor; unanchored path falls back to RAW mapping through each segment's own raw extent — never drops an un-anchorable region onto an unrelated clip). A region wholly under a trim is emitted once, marked `underTrim`, addressed by the segment the cut interrupts. A region a cut splits marks each piece's cut edge `continuesBefore` / `continuesAfter`, so Full Camera ramps only at its own edges and stays full across the cut | RAW/anchored → source + `clipIndex` |
+| `projectRegionsToSource` (`:641`) | Region array → source-ms entries with `clipIndex` for native (anchored path uses anchor; unanchored path falls back to RAW mapping through each segment's own raw extent — never drops an un-anchorable region onto an unrelated clip). A region wholly under a trim is emitted once, marked `underTrim`, addressed by the segment the cut interrupts; a region that straddles a trim also gets one `underTrim` piece per removed stretch. A region a cut splits marks each piece's cut edge `continuesBefore` / `continuesAfter`, so Full Camera ramps only at its own edges and stays full across the cut | RAW/anchored → source + `clipIndex` |
 | `resolveNativePosition` (`:759`) | RAW-virtual playhead → `{clip, clipIndex, sourceTimeSec}` for the active native decoder + paired camera (over a trimmed-out stretch it presents the removed frames themselves, borrowing the same segment index the modifiers under that cut borrow) | RAW-virtual → source + `clipIndex` |
 
 The two **universal region rules** every region kind obeys are expressed once in this
@@ -247,6 +247,13 @@ the contract a reviewer can grade against. Each is asserted in
   interrupts; the borrowed index is what pins it to one clip. Dropped only when its clip
   has no kept segment left to name it. (`projectRegionsToSource` "keeps a fully-trimmed
   region on its own clip instead of leaking it onto a later one".)
+- **A region that straddles a trim keeps its removed stretch too.** Its kept pieces go out
+  as usual, plus one `underTrim` piece per stretch the trim removed, addressed the same
+  way and flagged `continuesBefore` / `continuesAfter` on the sides the region goes on.
+  Without it the playhead parked on the trim showed the removed frame with none of the
+  region: an auto-blur across a cut left the e-mail sharp in the paused preview, while the
+  export was right. (`buildSceneDescription` "blurs the cut stretch of a blur a trim
+  splits, for a playhead parked on the trim".)
 - **The render still cuts.** `underTrim` tells native (`scene.rs`, `regions.rs`) to gate
   the region hard on its own span: full strength inside, nothing outside, no ease-in/out
   window and no chaining with a neighbouring zoom. An export never composes a frame at

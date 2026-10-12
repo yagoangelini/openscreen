@@ -28,6 +28,7 @@
 //
 // Relative imports only: the main process (agent tools) imports this module.
 
+import { type RecordingLayoutOnAsset, recordingFaceSpansSec } from "../../recordingLayout";
 import type {
 	AxcutCameraLook,
 	AxcutCameraMode,
@@ -436,6 +437,40 @@ export function clearCameraPieceLook(
 	const piece = findCameraPiece(cameraPieces(segments, cameraTimelineEndMs(clips)), keyOrId);
 	if (!piece || piece.implicit || !piece.overrides) return null;
 	return setCameraPieceStyle(segments, clips, keyOrId, { mode: piece.mode });
+}
+
+/**
+ * The camera pieces of a take recorded with "Rosto / Tela + câmera": a full-screen piece over
+ * each "face" span, the default picture-in-picture (implicit) everywhere else. The spans are
+ * in the take's source seconds, so each lands on every clip of `assetId` that plays it, as
+ * the take's cursor and zooms do; a span across a cut becomes one piece per side. Pieces
+ * already there are carved away under the new ones. `ids` are the new fragments.
+ */
+export function cameraSegmentsFromRecordingLayout(
+	segments: readonly AxcutCameraSegment[],
+	clips: AxcutClip[],
+	assetId: string,
+	layout: RecordingLayoutOnAsset,
+): { segments: AxcutCameraSegment[]; ids: string[] } {
+	let out = [...segments];
+	const ids: string[] = [];
+	const faceSpans = recordingFaceSpansSec(layout, Number.POSITIVE_INFINITY);
+	for (const clip of clips) {
+		if (clip.assetId !== assetId || clip.sourceEndSec === undefined) continue;
+		for (const span of faceSpans) {
+			const from = Math.max(span.startSec, clip.sourceStartSec);
+			const to = Math.min(span.endSec, clip.sourceEndSec);
+			if ((to - from) * 1000 < MIN_CAMERA_PIECE_MS) continue;
+			const startMs = (clip.timelineStartSec + (from - clip.sourceStartSec)) * 1000;
+			const endMs = (clip.timelineStartSec + (to - clip.sourceStartSec)) * 1000;
+			const placed = setCameraModeOverSpan(out, clips, startMs, endMs, "fullscreen", {
+				origin: "system",
+			});
+			out = placed.segments;
+			ids.push(...placed.ids);
+		}
+	}
+	return { segments: out, ids };
 }
 
 /** Put a piece back to the default: its stored fragments go, and the gap left is an

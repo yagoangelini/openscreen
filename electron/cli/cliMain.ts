@@ -157,7 +157,7 @@ function registerAppHandlersForCli(cliWindowRef: () => BrowserWindow | null) {
 	const notAvailable = () => {
 		throw new Error("Window not available in CLI mode");
 	};
-	registerIpcHandlers(
+	return registerIpcHandlers(
 		noop, // createEditorWindow: recording finished; runner drives completion
 		notAvailable, // createSourceSelectorWindow
 		notAvailable, // createCountdownOverlayWindow
@@ -382,7 +382,7 @@ export function runCli(command: CliCommand): void {
 			milestone("media access checked");
 
 			let cliWindow: BrowserWindow | null = null;
-			registerAppHandlersForCli(() => cliWindow);
+			const appControls = registerAppHandlersForCli(() => cliWindow);
 			milestone("app handlers registered");
 
 			// Speech-to-text backs the captions command; registered by the GUI boot
@@ -420,6 +420,10 @@ export function runCli(command: CliCommand): void {
 				finished = true;
 
 				try {
+					// The take reached the one who asked for it: nothing for the GUI to offer back.
+					if (result.success && command.kind === "record" && result.screenVideoPath) {
+						await appControls.forgetPendingTake(result.screenVideoPath);
+					}
 					if (result.success && command.kind === "record" && command.projectOut) {
 						if (result.projectData !== undefined) {
 							await writeProjectFile(command.projectOut, result.projectData);
