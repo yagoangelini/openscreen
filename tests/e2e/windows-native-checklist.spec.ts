@@ -19,6 +19,8 @@ async function launchApp() {
 			"--enable-unsafe-swiftshader",
 			"--lang=en-US",
 			`--user-data-dir=${testUserDataDir}`,
+			// A bare launch opens the Studio on Windows (electron/launchMode.ts); these specs start at the HUD.
+			"--recorder",
 		],
 		env: {
 			...process.env,

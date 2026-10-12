@@ -270,7 +270,7 @@ export function NewEditorShell() {
 	// The take just recorded, while its automatic zooms wait on the transcript question.
 	const [transcriptZoomOffer, setTranscriptZoomOffer] = useState<{ assetId: string } | null>(null);
 	const [unsavedPrompt, setUnsavedPrompt] = useState<{
-		action: "close" | "new" | "open" | "record";
+		action: "close" | "new" | "open" | "record" | "recorder";
 		resolve: (choice: UnsavedChoice) => void;
 	} | null>(null);
 	const { shortcuts, isMac, openConfig: openShortcutsConfig } = useShortcuts();
@@ -343,7 +343,7 @@ export function NewEditorShell() {
 	});
 
 	const promptUnsaved = useCallback(
-		(action: "close" | "new" | "open" | "record"): Promise<UnsavedChoice> => {
+		(action: "close" | "new" | "open" | "record" | "recorder"): Promise<UnsavedChoice> => {
 			if (!dirty) return Promise.resolve("discard");
 			return new Promise<UnsavedChoice>((resolve) => {
 				setUnsavedPrompt({ action, resolve });
@@ -1004,6 +1004,19 @@ export function NewEditorShell() {
 		},
 		[saveDocument, unsavedPrompt],
 	);
+
+	// "OpenScreen Recorder" launched while the editor is open: hand over to the HUD like
+	// Record mode does, but without starting a take, and only once unsaved work is settled.
+	useEffect(() => {
+		return window.electronAPI?.onOpenRecorderRequested?.(() => {
+			void promptUnsaved("recorder").then((choice) => {
+				if (choice === "cancel") return;
+				void window.electronAPI?.switchToHud?.().catch((err) => {
+					console.warn("[editor] failed to open the recorder:", err);
+				});
+			});
+		});
+	}, [promptUnsaved]);
 
 	const handleNewRecording = useCallback(async () => {
 		const choice = await promptUnsaved("record");

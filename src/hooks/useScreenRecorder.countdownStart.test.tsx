@@ -37,6 +37,7 @@ const prefs: RecordingPrefs = {
 	recordingsFolder: null,
 	countdownSeconds: 1,
 	micChannelMode: "auto",
+	cameraLayout: "screen",
 };
 
 function stub(startResult: () => Promise<unknown>) {

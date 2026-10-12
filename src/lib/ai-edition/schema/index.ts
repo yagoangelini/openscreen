@@ -213,6 +213,17 @@ export const assetSchema = z.object({
 	// The take's voice and computer sound on their own (.m4a beside it), when it recorded
 	// both: what the editor's Voice and Computer volumes act on. Additive, like markersSec.
 	audioStems: z.object({ voicePath: z.string().min(1), systemPath: z.string().min(1) }).optional(),
+	// "Rosto / Tela + câmera" as recorded (the take's .layout.json, read at import), in source
+	// seconds. Data, not a path: nothing to relink. The import turns it into camera pieces
+	// once; kept so the take still says how it was recorded. Additive, like markersSec.
+	cameraLayout: z
+		.object({
+			initial: z.enum(["screen", "face"]),
+			switches: z.array(
+				z.object({ atSec: z.number().nonnegative(), layout: z.enum(["screen", "face"]) }),
+			),
+		})
+		.optional(),
 });
 
 // A crop is a sub-rectangle of the source video, expressed as fractions

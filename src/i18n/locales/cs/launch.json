@@ -77,6 +77,14 @@
 		"saving": "Ukládání...",
 		"markerAdded": "Značka {{count}} přidána"
 	},
+	"cameraLayout": {
+		"name": "Tvář: jen kamera",
+		"faceTip": "Tvář: jen kamera, přes celou obrazovku. Kliknutím zobrazíte obrazovku s kamerou.",
+		"screenTip": "Obrazovka + kamera: vaše obrazovka s kamerou v rohu. Kliknutím zobrazíte jen kameru přes celou obrazovku.",
+		"face": "Tvář",
+		"screen": "Obrazovka + kamera",
+		"switched": "Nyní: {{layout}}"
+	},
 	"language": "Jazyk",
 	"languageWithName": "Jazyk: {{language}}",
 	"systemLanguagePrompt": {

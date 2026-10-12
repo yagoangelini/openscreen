@@ -19,6 +19,7 @@
 		"recordToggle": "Start / Stop Recording",
 		"pauseToggle": "Pause / Resume Recording",
 		"addMarker": "Add Marker While Recording",
+		"cameraLayoutToggle": "Switch Face / Screen + Camera",
 		"addZoom": "Add Zoom",
 		"addTrim": "Add Trim",
 		"addSpeed": "Add Speed",

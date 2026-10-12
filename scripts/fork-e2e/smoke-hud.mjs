@@ -1,6 +1,6 @@
 // Smoke test of a build: its HUD loads and offers the record button.
 //
-//   release/<ver>/win-unpacked/Openscreen.exe --user-data-dir=<temp dir> --remote-debugging-port=9232
+//   release/<ver>/win-unpacked/Openscreen.exe --recorder --user-data-dir=<temp dir> --remote-debugging-port=9232
 //   node scripts/fork-e2e/smoke-hud.mjs --port 9232
 //
 // Close that instance afterwards by its profile, never by name alone: the user's installed

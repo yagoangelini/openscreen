@@ -19,9 +19,15 @@ import { usePortalOwnsSource } from "../../hooks/usePortalOwnsSource";
 import { useRememberedSourceName } from "../../hooks/useRememberedSourceName";
 import { useScreenRecorder } from "../../hooks/useScreenRecorder";
 import type { WebcamQualityId } from "../../hooks/webcamCaptureTarget";
+import {
+	DEFAULT_RECORDING_CAMERA_LAYOUT,
+	otherRecordingCameraLayout,
+	type RecordingCameraLayout,
+} from "../../lib/recordingLayout";
 import { requestCameraAccess } from "../../lib/requestCameraAccess";
 import {
 	HudCameraButton,
+	HudCameraLayoutButton,
 	HudCursorButton,
 	HudDivider,
 	HudDragHandle,
@@ -146,6 +152,11 @@ export function LaunchWindow() {
 	// cursor toggle is only shown once it is known to change something.
 	const [supportsCursorModeToggle, setSupportsCursorModeToggle] = useState(false);
 	const [isLinuxHud, setIsLinuxHud] = useState(false);
+	// "Rosto / Tela + câmera" is logged by the Windows capture's main-process clock only.
+	const [isWindowsHud, setIsWindowsHud] = useState(false);
+	const [cameraLayout, setCameraLayout] = useState<RecordingCameraLayout>(
+		DEFAULT_RECORDING_CAMERA_LAYOUT,
+	);
 	// The running version, and whether this copy may offer an update check at all — a
 	// Store/Flathub/Snap/Nix install is kept current by its package manager and is offered
 	// nothing (electron/install-channel.ts). Asked once: neither answer changes while the app
@@ -251,6 +262,7 @@ export function LaunchWindow() {
 					// time. The helper is what makes the control mean something,
 					// because it owns the video and never asks WebRTC for anything.
 					setIsLinuxHud(platform === "linux");
+					setIsWindowsHud(platform === "win32");
 					// Without its native helper, macOS or Linux records through the browser, which
 					// always bakes in the system cursor: an option that changes nothing is not
 					// shown, so the toggle waits for the helper's answer, and a failed answer keeps
@@ -847,6 +859,48 @@ export function LaunchWindow() {
 		};
 	}, [t]);
 
+	// The layout lives in the main process: the next take's start between takes, the take's
+	// own while one runs (its first value is the start). Read again at both edges, and told
+	// of every switch, the shortcut's included -- which is the one the HUD says out loud.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: re-read at each edge of a take
+	useEffect(() => {
+		let cancelled = false;
+		void window.electronAPI
+			?.getRecordingCameraLayout?.()
+			.then((layout) => {
+				if (!cancelled && layout) setCameraLayout(layout);
+			})
+			.catch(() => undefined);
+		return () => {
+			cancelled = true;
+		};
+	}, [recording]);
+	useEffect(() => {
+		return window.electronAPI?.onRecordingCameraLayoutChanged?.(({ layout, source }) => {
+			setCameraLayout(layout);
+			if (source === "shortcut") {
+				toast.success(
+					t("cameraLayout.switched", {
+						layout: t(layout === "face" ? "cameraLayout.face" : "cameraLayout.screen"),
+					}),
+					{ duration: 1500 },
+				);
+			}
+		});
+	}, [t]);
+	const toggleCameraLayout = useCallback(() => {
+		if (saving) return;
+		const next = otherRecordingCameraLayout(cameraLayout);
+		void window.electronAPI
+			?.setRecordingCameraLayout?.(next)
+			.then((layout) => {
+				if (layout) setCameraLayout(layout);
+			})
+			.catch((error) => {
+				console.warn("Failed to switch the camera layout:", error);
+			});
+	}, [cameraLayout, saving]);
+
 	const sendHudOverlayHide = useCallback(() => {
 		window.electronAPI?.hudOverlayHide?.();
 	}, []);
@@ -1180,6 +1234,12 @@ export function LaunchWindow() {
 						onPointerDown={enableHudMouseEvents}
 						onMouseEnter={enableHudMouseEvents}
 						onMouseLeave={handlePointerLeave}
+						// A click leaves no keyboard focus on the bar's buttons: the HUD keeps the window's focus
+						// after one, and the user then typing into what they think is another app pressed the
+						// focused button again with Space or Enter (five layout switches in one take).
+						onMouseDown={(event) => {
+							if ((event.target as Element).closest("button")) event.preventDefault();
+						}}
 					>
 						<HudDragHandle
 							vertical={isVertical}
@@ -1257,6 +1317,19 @@ export function LaunchWindow() {
 								tooltip={t("tooltips.camera")}
 								onClick={toggleWebcam}
 							/>
+							{isWindowsHud && webcamEnabled && (
+								<HudCameraLayoutButton
+									layout={cameraLayout}
+									name={t("cameraLayout.name")}
+									tooltip={
+										cameraLayout === "face"
+											? t("cameraLayout.faceTip")
+											: t("cameraLayout.screenTip")
+									}
+									disabled={saving}
+									onClick={toggleCameraLayout}
+								/>
+							)}
 							<HudSettingsButton
 								buttonRef={settingsTriggerRef}
 								locked={controlsLocked}

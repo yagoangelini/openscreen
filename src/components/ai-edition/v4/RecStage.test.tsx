@@ -424,6 +424,7 @@ describe("RecStage controls", () => {
 			recordingsFolder: null,
 			countdownSeconds: 3,
 			micChannelMode: "auto",
+			cameraLayout: "screen",
 		};
 		stubRecordingPrefs();
 		let answerReread: ((prefs: RecordingPrefs) => void) | undefined;
@@ -639,6 +640,7 @@ describe("RecStage controls", () => {
 			recordingsFolder: null,
 			countdownSeconds: 3,
 			micChannelMode: "auto",
+			cameraLayout: "screen",
 		};
 		act(() => {
 			recordingPrefsListeners.forEach((listener) => listener(resetPrefs));

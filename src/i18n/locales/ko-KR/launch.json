@@ -77,6 +77,14 @@
 		"saving": "저장 중...",
 		"markerAdded": "마커 {{count}} 추가됨"
 	},
+	"cameraLayout": {
+		"name": "얼굴: 카메라만",
+		"faceTip": "얼굴: 카메라만 전체 화면으로 보여 줍니다. 클릭하면 화면과 카메라를 함께 보여 줍니다.",
+		"screenTip": "화면 + 카메라: 화면과 구석의 카메라를 보여 줍니다. 클릭하면 카메라만 전체 화면으로 보여 줍니다.",
+		"face": "얼굴",
+		"screen": "화면 + 카메라",
+		"switched": "현재: {{layout}}"
+	},
 	"language": "언어",
 	"languageWithName": "언어: {{language}}",
 	"systemLanguagePrompt": {

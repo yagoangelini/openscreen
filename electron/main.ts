@@ -60,6 +60,13 @@ import {
 	getSelectedDesktopSource,
 	registerIpcHandlers,
 } from "./ipc/handlers";
+import {
+	type LaunchTarget,
+	type RunningAppState,
+	requestedLaunchTarget,
+	routeSecondInstance,
+	STUDIO_APP_USER_MODEL_ID,
+} from "./launchMode";
 import { isOnlyLingeringOverlay } from "./lingeringOverlay";
 import { installMainProcessErrorGuards } from "./main-process-errors";
 import { showMessageBoxOver } from "./messageBox";
@@ -235,8 +242,10 @@ const hasSingleInstanceLock = cliCommand ? false : app.requestSingleInstanceLock
 if (cliCommand) {
 	runCli(cliCommand);
 } else if (hasSingleInstanceLock) {
-	app.on("second-instance", () => {
-		showMainWindow();
+	// Launching again (the Studio or the Recorder shortcut) routes the running app to the
+	// window that shortcut stands for. See electron/launchMode.ts.
+	app.on("second-instance", (_event, argv) => {
+		void app.whenReady().then(() => handleSecondInstance(argv));
 	});
 } else {
 	app.quit();
@@ -244,6 +253,54 @@ if (cliCommand) {
 
 function isEditorWindow(window: BrowserWindow) {
 	return window.webContents.getURL().includes("windowType=editor");
+}
+
+/** Opens the first window of this run: the Studio (editor) or the recorder (HUD). */
+function openLaunchTarget(target: LaunchTarget) {
+	if (target === "studio") {
+		createEditorWindowWrapper();
+	} else {
+		createWindow();
+	}
+}
+
+function runningAppState(): RunningAppState {
+	const window = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
+	const open = !window ? "none" : isEditorWindow(window) ? "editor" : "hud";
+	return {
+		open,
+		recordingBusy:
+			isRecording ||
+			Boolean(recordingControls?.isNativeWindowsCaptureActive()) ||
+			Boolean(
+				countdownOverlayWindow &&
+					!countdownOverlayWindow.isDestroyed() &&
+					countdownOverlayWindow.isVisible(),
+			),
+		editorExporting:
+			open === "editor" && window ? exportJobs.isRunning(window.webContents.id) : false,
+	};
+}
+
+function handleSecondInstance(argv: readonly string[]) {
+	const target = requestedLaunchTarget(argv, process.platform);
+	const action = routeSecondInstance(target, runningAppState());
+	console.info("[launch] second instance", { target, action });
+	switch (action) {
+		case "open-studio":
+		case "open-recorder":
+			openLaunchTarget(action === "open-studio" ? "studio" : "recorder");
+			return;
+		case "editor-to-recorder": {
+			// The editor asks about unsaved changes, then calls switch-to-hud itself.
+			const editor = mainWindow;
+			showMainWindow();
+			editor?.webContents.send("open-recorder-requested");
+			return;
+		}
+		default:
+			showMainWindow();
+	}
 }
 
 /** The HUD, when it is the open window and its renderer can still answer. */
@@ -305,6 +362,11 @@ const globalShortcutHandlers: Record<GlobalShortcutAction, () => void> = {
 		if (count !== null && hudWindow) {
 			hudWindow.webContents.send("hud-marker-added", count);
 		}
+	},
+	// "Rosto / Tela + câmera": the main process logs it and tells the HUD, which shows it.
+	cameraLayoutToggle: () => {
+		const layout = recordingControls?.toggleRecordingCameraLayout("shortcut") ?? null;
+		console.info("[shortcut] cameraLayoutToggle", { at: Date.now(), isRecording, layout });
 	},
 };
 
@@ -1346,6 +1408,14 @@ app.on("will-quit", () => {
 const appReady = !cliCommand && hasSingleInstanceLock ? app.whenReady() : null;
 
 appReady?.then(async () => {
+	// The Studio's identity for the whole process; the recorder windows override it per
+	// window (windows.ts, applyRecorderTaskbarIdentity). Equal to electron-builder's appId,
+	// which the installer stamps on the shortcuts, so the user's pinned icon groups the
+	// Studio windows.
+	if (process.platform === "win32") {
+		app.setAppUserModelId(STUDIO_APP_USER_MODEL_ID);
+	}
+
 	if (isDiagnosticModeEnabled()) {
 		mainLogBuffer.install();
 		console.info("[diagnostic] OPENSCREEN_DIAGNOSTIC=1, capturing console.* into ring buffer");
@@ -1635,7 +1705,10 @@ appReady?.then(async () => {
 		return;
 	}
 
-	createWindow();
+	// `Openscreen.exe` opens the Studio, `Openscreen.exe --recorder` the HUD.
+	const launchTarget = requestedLaunchTarget(process.argv, process.platform);
+	console.info("[launch] opening", launchTarget);
+	openLaunchTarget(launchTarget);
 	// Off unless the user turned it on in Settings → AI. Started here rather than
 	// in registerIpcHandlers so neither the headless CLI nor a bench run binds it.
 	void ipcControls.mcpController.startIfEnabled();

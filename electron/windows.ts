@@ -19,6 +19,12 @@ import {
 	sameRect,
 } from "./hudWindowBounds";
 import { mainT } from "./i18n";
+import {
+	RECORDER_APP_USER_MODEL_ID,
+	RECORDER_NAME,
+	recorderRelaunchCommand,
+	STUDIO_NAME,
+} from "./launchMode";
 import { followAcrossSpaces } from "./macSpaces";
 import { markSheetless } from "./messageBox";
 
@@ -106,6 +112,35 @@ const ASSET_BASE_DIR = process.defaultApp
 	? path.join(__dirname, "..", "public")
 	: process.resourcesPath;
 export const ASSET_BASE_URL_ARG = `--asset-base-url=${pathToFileURL(`${ASSET_BASE_DIR}${path.sep}`).toString()}`;
+
+/**
+ * Puts a recording window (HUD, source picker, Notes) under the "OpenScreen Recorder"
+ * taskbar button instead of the Studio's: its own AppUserModelID, the recorder icon, and
+ * the command Windows stores when that button is pinned (`Openscreen.exe --recorder`).
+ * The process-wide ID, set in main.ts, stays the Studio's.
+ */
+function applyRecorderTaskbarIdentity(win: BrowserWindow) {
+	if (process.platform !== "win32") return;
+	// Packaged: shipped by electron-builder.json5's win.extraResources. Dev: the committed icon.
+	const appIconPath = app.isPackaged
+		? path.join(process.resourcesPath, "recorder.ico")
+		: path.join(APP_ROOT, "icons", "icons", "win", "recorder.ico");
+	win.setAppDetails({
+		appId: RECORDER_APP_USER_MODEL_ID,
+		appIconPath,
+		appIconIndex: 0,
+		relaunchCommand: recorderRelaunchCommand(
+			process.execPath,
+			app.isPackaged ? null : app.getAppPath(),
+		),
+		relaunchDisplayName: RECORDER_NAME,
+	});
+}
+
+const RECORDER_WINDOW_ICON = path.join(
+	process.env.VITE_PUBLIC || RENDERER_DIST,
+	"openscreen-recorder.png",
+);
 
 let hudOverlayWindow: BrowserWindow | null = null;
 
@@ -413,8 +448,8 @@ export function createHudOverlayWindow(): BrowserWindow {
 		// of stays open unnoticed, and "Hide recording bar" (a minimize) had no way back but
 		// the tray. macOS has the Dock icon, and Linux docks treat tool windows differently.
 		skipTaskbar: process.platform !== "win32",
-		title: "OpenScreen",
-		icon: path.join(process.env.VITE_PUBLIC || RENDERER_DIST, "openscreen.png"),
+		title: RECORDER_NAME,
+		icon: RECORDER_WINDOW_ICON,
 		hasShadow: false,
 		show: false, // shown via ready-to-show to avoid black rectangle flash
 		webPreferences: {
@@ -434,6 +469,9 @@ export function createHudOverlayWindow(): BrowserWindow {
 	// cost them: the whole app (issue #266). A window nothing ever asks for — a
 	// renderer that dies before mount — then stays clickable instead of becoming a
 	// ghost. See the "hud-overlay-cursor" poll above for the way back out.
+
+	// Its own taskbar button, before the window is first shown.
+	applyRecorderTaskbarIdentity(win);
 
 	// Keep the recording controls out of the recording (see applyContentProtection).
 	applyContentProtection(win, "HUD");
@@ -526,7 +564,7 @@ export function createEditorWindow(query: Record<string, string> = {}): BrowserW
 		resizable: true,
 		alwaysOnTop: false,
 		skipTaskbar: false,
-		title: "OpenScreen",
+		title: STUDIO_NAME,
 		backgroundColor: "#09090b",
 		show: false, // shown via ready-to-show to avoid white flash on first load
 		webPreferences: {
@@ -542,6 +580,9 @@ export function createEditorWindow(query: Record<string, string> = {}): BrowserW
 			enableBlinkFeatures: "AudioVideoTracks",
 		},
 	});
+
+	// The page's empty <title> would otherwise blank the taskbar button and Alt+Tab.
+	win.on("page-title-updated", (event) => event.preventDefault());
 
 	if (creation.maximize) win.maximize();
 	if (creation.persist) {
@@ -632,6 +673,8 @@ export function createSourceSelectorWindow(): BrowserWindow {
 	// Follow the user across macOS Spaces so the selector appears on the active
 	// desktop regardless of where the HUD was opened.
 	followAcrossSpaces(win);
+	// Part of recording: it groups under the recorder's taskbar button, not the Studio's.
+	applyRecorderTaskbarIdentity(win);
 
 	if (VITE_DEV_SERVER_URL) {
 		win.loadURL(VITE_DEV_SERVER_URL + "?windowType=source-selector");
@@ -771,6 +814,7 @@ export function createNotesWindow(): BrowserWindow {
 		win.setAutoHideMenuBar(true);
 	}
 
+	applyRecorderTaskbarIdentity(win);
 	applyContentProtection(win, "Notes");
 	win.once("ready-to-show", () => {
 		applyContentProtection(win, "Notes");

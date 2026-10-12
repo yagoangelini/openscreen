@@ -77,6 +77,14 @@
 		"saving": "Salvataggio...",
 		"markerAdded": "Marcatore {{count}} aggiunto"
 	},
+	"cameraLayout": {
+		"name": "Volto: solo la fotocamera",
+		"faceTip": "Volto: solo la fotocamera, a schermo intero. Fai clic per mostrare lo schermo con la fotocamera.",
+		"screenTip": "Schermo + fotocamera: il tuo schermo, con la fotocamera in un angolo. Fai clic per mostrare solo la fotocamera, a schermo intero.",
+		"face": "Volto",
+		"screen": "Schermo + fotocamera",
+		"switched": "Ora: {{layout}}"
+	},
 	"language": "Lingua",
 	"languageWithName": "Lingua: {{language}}",
 	"systemLanguagePrompt": {

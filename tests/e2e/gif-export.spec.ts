@@ -24,6 +24,8 @@ async function launchApp(userDataDir: string, tmpDir: string) {
 			// The selectors below are the English accessible names, so pin the locale.
 			"--lang=en-US",
 			`--user-data-dir=${userDataDir}`,
+			// A bare launch opens the Studio on Windows (electron/launchMode.ts); these specs start at the HUD.
+			"--recorder",
 		],
 		env: {
 			...process.env,

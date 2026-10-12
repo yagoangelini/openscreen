@@ -3,6 +3,7 @@ import type { AxcutCameraSegment, AxcutClip } from "../schema";
 import {
 	cameraPieceAt,
 	cameraPieces,
+	cameraSegmentsFromRecordingLayout,
 	cameraTimelineEndMs,
 	carveCameraSpan,
 	clearCameraPieceLook,
@@ -364,5 +365,63 @@ describe("a piece's own look (overrides)", () => {
 		});
 		expect(mergeCameraLook(global, undefined)).toBe(global);
 		expect(normalizeCameraLook({})).toBeUndefined();
+	});
+});
+
+describe("cameraSegmentsFromRecordingLayout", () => {
+	it("puts the face intro full screen and leaves the rest to the default", () => {
+		const single = [{ ...clip("c1", 0, 0), sourceEndSec: 20, timelineEndSec: 20 }];
+		const placed = cameraSegmentsFromRecordingLayout([], single, "a", {
+			initial: "face",
+			switches: [{ atSec: 5.23, layout: "screen" }],
+		});
+		expect(placed.ids).toHaveLength(1);
+		expect(placed.segments[0]).toMatchObject({
+			startMs: 0,
+			endMs: 5230,
+			clipId: "c1",
+			sourceStartSec: 0,
+			sourceEndSec: 5.23,
+			mode: "fullscreen",
+			origin: "system",
+		});
+		expect(spans(placed.segments)).toEqual([
+			[0, 5230, "fullscreen", false],
+			[5230, END, "pip", true],
+		]);
+	});
+
+	it("follows the take's source time through a cut", () => {
+		// Face from 8 s to 22 s of the take: 8-10 s of c1, then 20-22 s of c2 (ruler 10-12 s).
+		const placed = cameraSegmentsFromRecordingLayout([], clips, "a", {
+			initial: "screen",
+			switches: [
+				{ atSec: 8, layout: "face" },
+				{ atSec: 22, layout: "screen" },
+			],
+		});
+		expect(spans(placed.segments)).toEqual([
+			[0, 8000, "pip", true],
+			[8000, 10000, "fullscreen", false],
+			[10000, 12000, "fullscreen", false],
+			[12000, END, "pip", true],
+		]);
+		expect(readCameraFullscreenRegions({ cameraSegments: placed.segments })).toHaveLength(2);
+	});
+
+	it("leaves other recordings' clips alone and skips a sliver too short to aim at", () => {
+		const placed = cameraSegmentsFromRecordingLayout([], clips, "other", {
+			initial: "face",
+			switches: [],
+		});
+		expect(placed.ids).toEqual([]);
+		const sliver = cameraSegmentsFromRecordingLayout([], clips, "a", {
+			initial: "screen",
+			switches: [
+				{ atSec: 9.95, layout: "face" },
+				{ atSec: 10, layout: "screen" },
+			],
+		});
+		expect(sliver.ids).toEqual([]);
 	});
 });

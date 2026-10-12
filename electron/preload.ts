@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer, sharedTexture, webUtils } from "electron";
 import type { NativeLinuxRecordingRequest } from "../src/lib/nativeLinuxRecording";
 import type { NativeMacRecordingRequest } from "../src/lib/nativeMacRecording";
 import type { NativeWindowsRecordingRequest } from "../src/lib/nativeWindowsRecording";
+import type { RecordingCameraLayout } from "../src/lib/recordingLayout";
 import type { RecordingSession, StoreRecordedSessionInput } from "../src/lib/recordingSession";
 import type { GlobalShortcutsConfig } from "../src/lib/shortcuts";
 import type {
@@ -220,6 +221,24 @@ contextBridge.exposeInMainWorld("electronAPI", {
 		const listener = (_event: unknown, count: number) => callback(count);
 		ipcRenderer.on("hud-marker-added", listener);
 		return () => ipcRenderer.removeListener("hud-marker-added", listener);
+	},
+	getRecordingCameraLayout: (): Promise<RecordingCameraLayout | null> => {
+		return ipcRenderer.invoke("get-recording-camera-layout");
+	},
+	setRecordingCameraLayout: (
+		layout: RecordingCameraLayout,
+	): Promise<RecordingCameraLayout | null> => {
+		return ipcRenderer.invoke("set-recording-camera-layout", layout);
+	},
+	onRecordingCameraLayoutChanged: (
+		callback: (change: { layout: RecordingCameraLayout; source: "hud" | "shortcut" }) => void,
+	) => {
+		const listener = (
+			_event: unknown,
+			change: { layout: RecordingCameraLayout; source: "hud" | "shortcut" },
+		) => callback(change);
+		ipcRenderer.on("recording-camera-layout-changed", listener);
+		return () => ipcRenderer.removeListener("recording-camera-layout-changed", listener);
 	},
 	onAutoStartRecording: (callback: () => void) => {
 		const listener = () => callback();
@@ -459,6 +478,12 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	},
 	loadCurrentProjectFile: () => {
 		return ipcRenderer.invoke("load-current-project-file");
+	},
+	// A second launch with --recorder while the editor is open (electron/launchMode.ts).
+	onOpenRecorderRequested: (callback: () => void) => {
+		const listener = () => callback();
+		ipcRenderer.on("open-recorder-requested", listener);
+		return () => ipcRenderer.removeListener("open-recorder-requested", listener);
 	},
 	onMenuNewProject: (callback: () => void) => {
 		const listener = () => callback();

@@ -77,6 +77,14 @@
 		"saving": "Saving...",
 		"markerAdded": "Marker {{count}} added"
 	},
+	"cameraLayout": {
+		"name": "Face: only the camera",
+		"faceTip": "Face: only the camera, full screen. Click to show the screen with the camera.",
+		"screenTip": "Screen + camera: your screen, with the camera in a corner. Click to show only the camera, full screen.",
+		"face": "Face",
+		"screen": "Screen + camera",
+		"switched": "Now: {{layout}}"
+	},
 	"language": "Language",
 	"languageWithName": "Language: {{language}}",
 	"systemLanguagePrompt": {

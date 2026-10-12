@@ -104,6 +104,21 @@ interface Window {
 		onHudTogglePause: (callback: () => void) => () => void;
 		/** The marker shortcut added a marker; `count` is the take's total so far. */
 		onHudMarkerAdded: (callback: (count: number) => void) => () => void;
+		/** "Rosto / Tela + câmera": the take's now, or the next take's start; null without a camera. */
+		getRecordingCameraLayout?: () => Promise<
+			import("../src/lib/recordingLayout").RecordingCameraLayout | null
+		>;
+		/** Switches it; answers the layout now shown, or null when the take has no camera. */
+		setRecordingCameraLayout?: (
+			layout: import("../src/lib/recordingLayout").RecordingCameraLayout,
+		) => Promise<import("../src/lib/recordingLayout").RecordingCameraLayout | null>;
+		/** Every switch, the shortcut's included. Returns an unsubscribe. */
+		onRecordingCameraLayoutChanged?: (
+			callback: (change: {
+				layout: import("../src/lib/recordingLayout").RecordingCameraLayout;
+				source: "hud" | "shortcut";
+			}) => void,
+		) => () => void;
 		onAiEditionChatEvent: (
 			callback: (event: import("../src/native/contracts").AiEditionChatEvent) => void,
 		) => () => void;
@@ -488,6 +503,7 @@ interface Window {
 			canceled?: boolean;
 			error?: string;
 		}>;
+		onOpenRecorderRequested: (callback: () => void) => () => void;
 		onMenuNewProject: (callback: () => void) => () => void;
 		onMenuImportVideo: (callback: () => void) => () => void;
 		onMenuLoadProject: (callback: () => void) => () => void;
