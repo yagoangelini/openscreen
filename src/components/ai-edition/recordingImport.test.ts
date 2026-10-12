@@ -15,6 +15,7 @@ import {
 	markFreshRecordingAutoZoomPending,
 	maybeSaveFreshRecordingAutoZooms,
 	prefetchFreshRecordingTelemetry,
+	rescanAutoRedactions,
 } from "./recordingImport";
 
 // The first describe stubs the store actions, so the bridge is never reached
@@ -418,6 +419,111 @@ describe("fresh-recording privacy blur", () => {
 		).toBe(0);
 		expect(saveDocument).not.toHaveBeenCalled();
 		useProjectStore.setState({ saveDocument: realActions.saveDocument });
+	});
+});
+
+describe("the user's own sensitive words, and 'Procurar de novo'", () => {
+	const scanWith = (word: string) => async () => ({
+		success: true,
+		output: [
+			'{"type":"info","width":1920,"height":1080,"durationSec":10,"language":"pt-BR"}',
+			'{"type":"frame","t":0.0,"words":[],"lines":[]}',
+			`{"type":"frame","t":2.0,"words":[[0.4,0.38,0.1,0.02,"${word}"]],"lines":[[0,1]]}`,
+			'{"type":"frame","t":4.0,"words":[],"lines":[]}',
+			'{"type":"done","frames":3,"read":3,"ocrMs":30}',
+		].join("\n"),
+	});
+
+	beforeEach(() => {
+		vi.clearAllMocks();
+		useProjectStore.getState().clear();
+		useProjectStore.setState(realActions);
+		clearHistory();
+		bridge.save.mockImplementation(async (document: unknown) => ({ success: true, document }));
+	});
+
+	it("blurs a fresh take's own sensitive word, matched without case or accents", async () => {
+		const saveDocument = vi.fn(async (next: AxcutDocument) => {
+			useProjectStore.setState({ document: next });
+			return true;
+		});
+		useProjectStore.setState({ document: documentWithClip(), saveDocument });
+		const count = await applyFreshRecordingRedactions(RECORDING_PATH, {
+			scan: scanWith("PROJETO-JOÃO"),
+			terms: "joao",
+			waitTimeoutMs: 50,
+		});
+		expect(count).toBe(1);
+		expect(useProjectStore.getState().document?.annotations[0]).toMatchObject({
+			annotationSource: "auto-redact",
+			startMs: 0,
+			endMs: 4000,
+		});
+		useProjectStore.setState({ saveDocument: realActions.saveDocument });
+	});
+
+	it("replaces the automatic blurs, keeps the user's own, and undoes as one step", async () => {
+		const start = documentWithClip();
+		const blur = (id: string, annotationSource?: string) => ({
+			id,
+			clipId: "clip_1",
+			sourceStartSec: 6,
+			sourceEndSec: 8,
+			startMs: 6000,
+			endMs: 8000,
+			type: "blur" as const,
+			content: "",
+			position: { x: 10, y: 10 },
+			size: { width: 10, height: 5 },
+			style: {
+				color: "#ffffff",
+				backgroundColor: "transparent",
+				fontSize: 32,
+				fontFamily: "Inter",
+				fontWeight: "bold" as const,
+				fontStyle: "normal" as const,
+				textDecoration: "none" as const,
+				textAlign: "center" as const,
+			},
+			zIndex: 1,
+			...(annotationSource ? { annotationSource } : {}),
+		});
+		const before = {
+			...start,
+			annotations: [blur("old_auto", "auto-redact"), blur("mine")],
+		} as unknown as AxcutDocument;
+		useProjectStore.setState({ document: before, projectId: before.project.id });
+
+		const result = await rescanAutoRedactions({
+			scan: scanWith("Fabrikam"),
+			terms: "fabrikam",
+			createId: (prefix) => `${prefix}_new`,
+			waitTimeoutMs: 50,
+		});
+		expect(result).toMatchObject({ scanned: 1, failed: 0, removed: 1, added: 1, saved: true });
+		const ids = useProjectStore.getState().document?.annotations.map((a) => a.id) ?? [];
+		expect(ids).toContain("mine");
+		expect(ids).not.toContain("old_auto");
+		expect(past).toHaveLength(1);
+
+		undo();
+		const restored = useProjectStore.getState().document?.annotations.map((a) => a.id) ?? [];
+		expect(restored.sort()).toEqual(["mine", "old_auto"]);
+	});
+
+	it("leaves the suggestions alone when the recording cannot be read again", async () => {
+		const before = documentWithClip();
+		useProjectStore.setState({ document: before, projectId: before.project.id });
+		const onScanIssue = vi.fn();
+		const result = await rescanAutoRedactions({
+			scan: async () => ({ success: false, error: "Not a recording." }),
+			onScanIssue,
+			waitTimeoutMs: 50,
+		});
+		expect(result).toMatchObject({ scanned: 0, failed: 1, saved: false });
+		expect(onScanIssue).toHaveBeenCalledWith({ kind: "failed", reason: "Not a recording." });
+		expect(useProjectStore.getState().document).toBe(before);
+		expect(past).toHaveLength(0);
 	});
 });
 

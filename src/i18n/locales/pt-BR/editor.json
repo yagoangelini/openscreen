@@ -219,7 +219,18 @@
 		"modelSmall": "Rápido: small ({{size}})",
 		"standingTerms": "Termos de sempre (Microsoft e IA)",
 		"standingTermsHint": "O Whisper recebe estes termos em toda transcrição, antes dos nomes e termos do projeto. Separe por vírgula; os primeiros pesam mais.",
-		"standingTermsReset": "Restaurar a lista padrão"
+		"standingTermsReset": "Restaurar a lista padrão",
+		"redactTerms": "Minhas palavras sensíveis",
+		"redactTermsHint": "Nomes, palavras e números para desfocar também, um por linha. Maiúsculas e acentos não importam, e um trecho dentro de uma palavra maior desfoca a palavra toda.",
+		"redactTermsPlaceholder": "Contoso\nMaria Silva\n4021-7788",
+		"redactRescan": "Procurar de novo",
+		"redactRescanHint": "Ler de novo as gravações deste projeto e trocar os desfoques automáticos. Os desfoques que você desenhou ficam.",
+		"redactRescanning": "Procurando…",
+		"redactRescanFailed": "Não deu para ler as gravações de novo.",
+		"redactRescanNothing": "Nada mudou: os desfoques automáticos já estão em dia.",
+		"redactRescanDone": "Desfoques automáticos atualizados: {{added}} novos, {{removed}} trocados. Desfaça com Ctrl+Z.",
+		"transcribeGuest": "Transcrever também o som do computador (convidado)",
+		"transcribeGuestHint": "Para um take com voz e som do computador separados: transcreve os dois e marca quem disse cada palavra. Desligado: só o seu microfone é transcrito."
 	},
 	"exportDialog": {
 		"title": "Exportar",
@@ -590,5 +601,16 @@
 		"recording": "Gravação {{date}}",
 		"project": "Projeto {{date}}",
 		"asset": "Gravação"
+	},
+	"speechCleanup": {
+		"nothingLeft": "Nada mais para cortar: a transcrição mudou nesse meio-tempo.",
+		"applied": "{{count}} corte(s), {{seconds}} s a menos. Desfaça com Ctrl+Z."
+	},
+	"speakers": {
+		"noTranscript": "Transcreva antes um take gravado com microfone e som do computador.",
+		"stemsUnreadable": "Não deu para ler as trilhas de áudio do take.",
+		"undecided": "Não deu para separar quem fala neste take.",
+		"onlyYou": "Só a sua voz aparece na transcrição.",
+		"labelled": "Falas marcadas: {{mic}} palavra(s) suas, {{system}} do convidado."
 	}
 }

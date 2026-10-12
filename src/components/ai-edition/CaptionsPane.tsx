@@ -10,7 +10,7 @@
 // "Original" goes straight back to the SSOT text.
 
 import { Captions as CaptionsIcon, Languages, Loader2, Trash2, X } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Tooltip, TooltipProvider } from "@/components/ui/tooltip";
 import { useScopedT } from "@/contexts/I18nContext";
 import type {
@@ -41,6 +41,7 @@ import {
 	useTimelineTranscriptGate,
 } from "@/lib/ai-edition/store/transcriptionStore";
 import { useCaptions } from "@/lib/ai-edition/store/useCaptions";
+import { transcriptHasTwoSpeakers } from "@/lib/ai-edition/transcription/speakers";
 import { firstTimelineBusyView } from "@/lib/ai-edition/transcription/status";
 import { TEXT_FONT_FAMILIES } from "@/lib/textFonts";
 import { nativeBridgeClient } from "@/native";
@@ -127,6 +128,7 @@ export function CaptionsPane({ onClose }: { onClose?: () => void } = {}) {
 	} = useCaptions();
 	const document = useProjectStore((s) => s.document);
 	const saveDocument = useProjectStore((s) => s.saveDocument);
+	const hasTwoSpeakers = (document?.transcripts ?? []).some(transcriptHasTwoSpeakers);
 	// Captions are a view of the transcript, and the transcript arrives on its
 	// own (transcriptionStore's background pass). The pane reads that state
 	// straight from the store rather than being handed a busy flag: it is the
@@ -684,8 +686,89 @@ export function CaptionsPane({ onClose }: { onClose?: () => void } = {}) {
 						onCommit={() => void commit()}
 					/>
 				</div>
+
+				{/* ── Who speaks ─────────────────────────────────────────── */}
+				{/* Only for a project where a take's stems told two speakers apart: a solo
+				    tutorial has nobody to label. */}
+				{hasTwoSpeakers ? (
+					<>
+						<div className={styles.sectionLabel}>{t("captions.speakers")}</div>
+						<div className={styles.paneRow}>
+							<span className={styles.label}>{t("captions.speakerLabels")}</span>
+							<Toggle
+								checked={settings.speakerLabels}
+								disabled={disabled}
+								tooltip={t("captions.speakerLabelsHint")}
+								onChange={(next) =>
+									void set({
+										speakerLabels: next,
+										// The names in the user's language, written once so the export
+										// (which runs no i18n) says the same thing as the pane.
+										...(next && !settings.speakerNameMic.trim()
+											? { speakerNameMic: t("captions.speakerMicDefault") }
+											: {}),
+										...(next && !settings.speakerNameSystem.trim()
+											? { speakerNameSystem: t("captions.speakerSystemDefault") }
+											: {}),
+									})
+								}
+							/>
+						</div>
+						{settings.speakerLabels ? (
+							<>
+								<SpeakerNameRow
+									label={t("captions.speakerMic")}
+									value={settings.speakerNameMic}
+									disabled={disabled}
+									onCommit={(speakerNameMic) => void set({ speakerNameMic })}
+								/>
+								<SpeakerNameRow
+									label={t("captions.speakerSystem")}
+									value={settings.speakerNameSystem}
+									disabled={disabled}
+									onCommit={(speakerNameSystem) => void set({ speakerNameSystem })}
+								/>
+							</>
+						) : null}
+					</>
+				) : null}
 			</div>
 		</div>
+	);
+}
+
+/** One speaker's name for the labels, saved when the field is left (or Enter). */
+function SpeakerNameRow({
+	label,
+	value,
+	disabled,
+	onCommit,
+}: {
+	label: string;
+	value: string;
+	disabled: boolean;
+	onCommit: (value: string) => void;
+}) {
+	const [draft, setDraft] = useState(value);
+	useEffect(() => setDraft(value), [value]);
+	return (
+		<label className={styles.paneRow}>
+			<span className={styles.label}>{label}</span>
+			<input
+				type="text"
+				value={draft}
+				maxLength={40}
+				disabled={disabled}
+				onChange={(event) => setDraft(event.target.value)}
+				onBlur={() => {
+					if (draft.trim() !== value) onCommit(draft.trim());
+				}}
+				onKeyDown={(event) => {
+					if (event.key === "Enter") (event.target as HTMLInputElement).blur();
+				}}
+				style={{ ...selectStyle, cursor: "text", width: 140 }}
+			/>
+		</label>
 	);
 }
 

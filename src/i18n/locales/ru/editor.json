@@ -219,7 +219,18 @@
 		"modelSmall": "Fast: small ({{size}})",
 		"standingTerms": "Standing terms (Microsoft and AI)",
 		"standingTermsHint": "Whisper is told to expect these terms in every transcription, before the project's names and terms. Separate them with commas; the first ones matter most.",
-		"standingTermsReset": "Restore the default list"
+		"standingTermsReset": "Restore the default list",
+		"redactTerms": "My sensitive words",
+		"redactTermsHint": "Names, words and numbers to blur too, one per line. Case and accents do not matter, and a match inside a longer word blurs that word.",
+		"redactTermsPlaceholder": "Contoso\nMaria Silva\n4021-7788",
+		"redactRescan": "Search again",
+		"redactRescanHint": "Read this project's recordings again and replace the automatic blurs. Blurs you drew stay.",
+		"redactRescanning": "Searching…",
+		"redactRescanFailed": "The recordings could not be read again.",
+		"redactRescanNothing": "Nothing changed: the automatic blurs are already up to date.",
+		"redactRescanDone": "Automatic blurs updated: {{added}} added, {{removed}} replaced. Undo with Ctrl+Z.",
+		"transcribeGuest": "Transcribe the computer sound too (call guest)",
+		"transcribeGuestHint": "For a take with separate voice and computer tracks: transcribes both and marks who said each word. Off: only your microphone is transcribed."
 	},
 	"exportDialog": {
 		"title": "Экспорт",
@@ -590,5 +601,16 @@
 		"recording": "Recording {{date}}",
 		"project": "Project {{date}}",
 		"asset": "Recording"
+	},
+	"speechCleanup": {
+		"nothingLeft": "Nothing left to cut: the transcript changed in the meantime.",
+		"applied": "{{count}} cut(s), {{seconds}} s shorter. Undo with Ctrl+Z."
+	},
+	"speakers": {
+		"noTranscript": "Transcribe a take recorded with microphone and computer sound first.",
+		"stemsUnreadable": "The take's audio tracks could not be read.",
+		"undecided": "Could not tell the speakers apart in this take.",
+		"onlyYou": "Only your voice was found in the transcript.",
+		"labelled": "Speakers labelled: {{mic}} word(s) yours, {{system}} from the guest."
 	}
 }

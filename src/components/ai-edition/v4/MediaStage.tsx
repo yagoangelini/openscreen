@@ -38,6 +38,7 @@ import {
 	STT_WHISPER_MODEL_BYTES,
 	type SttWhisperModelPreference,
 } from "../../../../electron/stt/transcriptionContract";
+import { rescanAutoRedactions } from "../recordingImport";
 import {
 	TranscriptionProgressBar,
 	TranscriptionStatusDot,
@@ -95,6 +96,31 @@ export function MediaStage({
 	const t = useScopedT("editor");
 	const [autoTranscribe, setAutoTranscribe] = useState(() => loadUserPreferences().autoTranscribe);
 	const [autoRedact, setAutoRedact] = useState(() => loadUserPreferences().autoRedact);
+	const [redactTerms, setRedactTerms] = useState(() => loadUserPreferences().autoRedactTerms);
+	const [rescanning, setRescanning] = useState(false);
+	const [transcribeGuest, setTranscribeGuest] = useState(
+		() => loadUserPreferences().transcribeGuestAudio,
+	);
+	// "Procurar de novo": the OCR over the project's recordings again, with the sensitive words
+	// as they are now, replacing the automatic blurs (never the user's own) in one undoable edit.
+	const rescanRedactions = useCallback(async () => {
+		saveUserPreferences({ autoRedactTerms: redactTerms });
+		setRescanning(true);
+		try {
+			const result = await rescanAutoRedactions({ terms: redactTerms });
+			if (result.scanned === 0) {
+				toast.error(t("mediaStage.redactRescanFailed"));
+			} else if (result.removed === 0 && result.added === 0) {
+				toast.info(t("mediaStage.redactRescanNothing"));
+			} else if (result.saved) {
+				toast.success(
+					t("mediaStage.redactRescanDone", { added: result.added, removed: result.removed }),
+				);
+			}
+		} finally {
+			setRescanning(false);
+		}
+	}, [redactTerms, t]);
 	const [glossary, setGlossary] = useState(() => loadUserPreferences().glossary);
 	const [standingTerms, setStandingTerms] = useState(
 		() => loadUserPreferences().transcriptionVocabulary,
@@ -654,6 +680,30 @@ export function MediaStage({
 										color: "var(--fg-2)",
 										cursor: "pointer",
 									}}
+									title={t("mediaStage.transcribeGuestHint")}
+								>
+									<input
+										type="checkbox"
+										data-testid="media-stage-transcribe-guest"
+										checked={transcribeGuest}
+										onChange={(event) => {
+											const enabled = event.target.checked;
+											setTranscribeGuest(enabled);
+											saveUserPreferences({ transcribeGuestAudio: enabled });
+										}}
+									/>
+									{t("mediaStage.transcribeGuest")}
+								</label>
+								<label
+									style={{
+										display: "flex",
+										alignItems: "center",
+										gap: 8,
+										marginTop: 6,
+										fontSize: 12.5,
+										color: "var(--fg-2)",
+										cursor: "pointer",
+									}}
 									title={t("mediaStage.autoRedactHint")}
 								>
 									<input
@@ -668,6 +718,42 @@ export function MediaStage({
 									/>
 									{t("mediaStage.autoRedact")}
 								</label>
+								<details style={{ marginTop: 8, fontSize: 12.5, color: "var(--fg-2)" }}>
+									<summary style={{ cursor: "pointer" }}>{t("mediaStage.redactTerms")}</summary>
+									<p style={{ margin: "6px 0", color: "var(--muted)" }}>
+										{t("mediaStage.redactTermsHint")}
+									</p>
+									<textarea
+										data-testid="media-stage-redact-terms"
+										value={redactTerms}
+										spellCheck={false}
+										rows={4}
+										placeholder={t("mediaStage.redactTermsPlaceholder")}
+										onChange={(event) => setRedactTerms(event.target.value)}
+										onBlur={() => saveUserPreferences({ autoRedactTerms: redactTerms })}
+										style={{
+											width: "100%",
+											resize: "vertical",
+											padding: "8px 10px",
+											borderRadius: 9,
+											border: "1px solid var(--border)",
+											background: "var(--surface-2)",
+											color: "var(--fg)",
+											font: "500 12px var(--font-mono)",
+										}}
+									/>
+									<button
+										type="button"
+										className={styles.ghostBtn}
+										data-testid="media-stage-redact-rescan"
+										title={t("mediaStage.redactRescanHint")}
+										disabled={rescanning || (document?.timeline.clips.length ?? 0) === 0}
+										onClick={() => void rescanRedactions()}
+										style={{ marginTop: 6 }}
+									>
+										{rescanning ? t("mediaStage.redactRescanning") : t("mediaStage.redactRescan")}
+									</button>
+								</details>
 								<details style={{ marginTop: 8, fontSize: 12.5, color: "var(--fg-2)" }}>
 									<summary style={{ cursor: "pointer" }}>{t("mediaStage.standingTerms")}</summary>
 									<p style={{ margin: "6px 0", color: "var(--muted)" }}>
