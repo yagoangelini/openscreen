@@ -144,6 +144,35 @@ As decisões e o porquê de cada fase estão em [`PLANO-FORK.md`](PLANO-FORK.md)
 - **Take salvo ao sair ou num crash é oferecido de novo.** O diário `.pending-takes.json` era apagado quando o editor *pedia* o take; se o app morresse antes de o projeto ser salvo (por exemplo o editor aberto pelo stop que o main faz quando o HUD morre, e o resto do app morto em seguida), o take ficava salvo e nunca mais era oferecido. Agora ele sai do diário só quando o take está num projeto salvo (`settlePendingTakeHandOff`, no `set-current-recording-session(null)` da importação) ou quando o `record` da CLI termina. Um take reaberto pela oferta sem `.session.json` (crash) ganha o manifesto antes de abrir, e o editor liga a câmera dele (antes voltava só a tela).
   - **Verificado:** sair pelo `app.quit` (o Sair da bandeja) no meio do take → ao abrir de novo, a janela "Recover recording" → "Open in editor" abre o take com câmera e o pedaço de rosto. Matar o processo main no meio do take → idem, com a câmera e o cursor do checkpoint. O log do main agora diz `[recovery] offering a take` e `[recovery] answer`.
 
+**Transcrição pt-BR para Microsoft e IA** (branch `feat/stt`, pedido de 11/10: "melhore o modelo de transcrição para português, principalmente para o universo Microsoft e IA"):
+
+- **Modelo.** Configuração "Modelo de transcrição" no painel de mídia: **Automático** (padrão), **Preciso** (`ggml-large-v3-turbo-q8_0.bin`, 874 MB) ou **Rápido** (`ggml-small-q8_0.bin`, 264 MB). O Automático pergunta ao helper as GPUs que ele vê (`whisper-stt-server --list-devices`, `electron/stt/whisperDevices.ts`) **antes** de baixar qualquer coisa: GPU dedicada com 3,5 GiB ou mais (e 1,5 GiB livres, quando o driver informa) → turbo; senão, small. O download é o de antes (SHA-256, `.partial`, revisão fixa), com progresso na janela pós-gravação, agora limitado a 5 eventos/s (eram ~4.400 mensagens IPC para o small e ~14.000 para o turbo).
+- **Volta ao small sozinho** quando o turbo não roda: download falhou (offline, disco cheio), o helper não carregou (um helper antigo **morre** com o turbo: 0xC0000005, "aheads_masks_init: tried to set alignment head on text layer 6, but model only has 4"), ou, no Automático, o helper caiu na CPU (o probe `GET /` agora diz o `backend`). A escolha explícita do Preciso fica no turbo mesmo na CPU.
+- **Helper (C++).** `main.cpp` ganhou `--dtw-preset` (o turbo precisa de `WHISPER_AHEADS_LARGE_V3_TURBO`; o SMALL fixo impedia de carregar), `--list-devices` e `backend`/`dtw_preset` no `GET /`. Com o small, o helper novo dá **as mesmas palavras e tempos, byte a byte**, que o antigo (conferido em dois áudios).
+- **Termos de sempre** (prompt do Whisper). Preferência `transcriptionVocabulary`, editável no painel de mídia ("Termos de sempre (Microsoft e IA)", com "Restaurar a lista padrão"). O padrão está em `src/lib/ai-edition/transcription/vocabulary.ts` (`DEFAULT_VOCABULARY`: Microsoft 365, Copilot Studio, Power Automate, SharePoint, Dataverse, Entra ID, Purview, Azure OpenAI, ChatGPT, IA generativa, RAG, MCP, tenant, licença E3...). `buildTranscriptionPrompt` junta com os "nomes e termos" do projeto (os do projeto por último, mais perto do áudio), sem repetir, e corta pelo fim da lista padrão em 640 caracteres, para o "Glossary:" não sair do limite de 224 tokens do Whisper.
+- **Idioma.** Com o app em português, a transcrição sai **em português** (`pt`) em vez de detectar: `effectiveTranscriptionLanguage` em `userPreferences.ts`, usado pela fila de fundo, pela janela pós-gravação e pelo seletor do painel de mídia, que agora começa em Português e grava a escolha ("Detectar" continua lá).
+- **Glossário.** `DEFAULT_GLOSSARY` ganhou as grafias erradas que os dois modelos escreveram de verdade (Timoz/tims → Teams, Tenet/tênet → tenant, Andrile → OneDrive, Pervil/pervio → Purview, EJAR/Eger → Azure, Febric → Fabric, chat GPT → ChatGPT, licença e três → licença E3...). Ficaram de fora de propósito palavras que também são português: defender, ordem, cloud, a gente. Um glossário salvo que ainda é o padrão antigo (não editado) passa para o novo ao carregar (`upgradeStoredGlossary`); um editado fica como está.
+- **Medido** (roteiro de tutorial M365/IA de 19 frases lido pela Maria (SAPI, 159 s) e pelo Daniel (OneCore, 121 s), mais o Daniel acelerado 1,12× com eco, filtro de banda e ruído rosa (108 s). Cada configuração passou pelo helper como o app faz, em pedaços de 90 s. WER sobre palavras minúsculas sem pontuação; "termos certos" = ocorrências dos 40 termos com a grafia exata):
+
+  | Configuração | WER Maria | WER Daniel | WER ruidoso | Termos certos |
+  |---|---|---|---|---|
+  | **Antes** (small, detectar, sem termos, glossário antigo) | 8,9% | 8,6% | 10,2% | 61–63% |
+  | small, pt, sem termos | 8,9% | 8,6% | 10,5% | 57–61% |
+  | small, pt, termos de sempre | 3,8% | 3,5% | 6,7% | 78–90% |
+  | **small, pt, termos + glossário novo** | 3,2% | 3,5% | 5,1% | 90–94% |
+  | turbo q8, pt, sem termos | 5,1% | 3,8% | 4,8% | 73–80% |
+  | turbo q8, pt, termos de sempre | 4,1% | 3,2% | 3,8% | 82–84% |
+  | **turbo q8, pt, termos + glossário novo** (novo padrão na RTX) | 3,5% | 2,9% | 3,2% | 86–88% |
+  | turbo q5, pt, termos + glossário novo | 3,5% | 2,2% | 2,9% | 86–90% |
+
+  - O "Glossary:" em inglês ganhou do "Glossário:" (small ruidoso 6,7% contra 7,3%; turbo Daniel 2,5% contra 2,9%) e ficou como está.
+  - Os erros que sobram são quase todos da voz sintética: "Azure AI Foundry" lido como "Azure iPhone 3", "IA" como "aí a", "Claude" como "Cloud", "E3" como "I3" (turbo).
+  - **Take real** (`recording-1791731439127.voice.m4a`, 34 s, só lido): o small escreve "eu posso **volar** essa tela" e "arquivo, ar-seção e inativas"; o turbo q5, "**acumular**"; o **turbo q8 escreve "rolar" e "arquivar seções inativas"**, com e sem termos. Os termos não inseriram nenhuma palavra que não foi dita. Por isso o padrão é o q8, não o q5 (300 MB menor).
+  - **Tempo das palavras** (DTW, contra as marcas de palavra do SAPI na voz da Maria): small com mediana de 16–17 ms e p90 ~150 ms; turbo com mediana de 26–28 ms e p90 190–260 ms. Um pouco pior, e ainda bem abaixo do que o auto-zoom pela fala (`speechCues.ts`) precisa.
+  - **Velocidade na RTX 3060 (Vulkan)**, rtf = tempo/áudio: no banco de teste, small 0,03–0,05 e turbo 0,035–0,06; no app (prévia aberta na mesma GPU), turbo 0,04–0,08 (13–25× o tempo real) e small 0,04. Carregar: small 3 s, turbo ~11 s na primeira vez. VRAM: small ~0,7 GB, turbo ~1,4 GB. Na CPU (i7-11800H, 8 threads, take de 34 s): small rtf 3,8 e turbo 1,3, os dois lentos; sem GPU o Automático fica no small pelo download menor.
+  - **No app** (instância isolada, porta 9252): um vídeo com o áudio TTS entregue como take → "Usar a transcrição" → `[stt] model "auto" -> large-v3-turbo (NVIDIA GeForce RTX 3060 Laptop GPU, 5.9 GB)`, `dtw_preset=large-v3-turbo`, Vulkan, 107,6 s em 8,5 s, transcrição em `pt` com tenant e Purview já corrigidos. Trocar para o Rápido baixou o small (264 MB) com progresso e recarregou o helper.
+- **Pendente para a release:** o `whisper-stt-server.exe` novo **não** está no `electron/native/bin/win32-x64` da checkout principal (pasta fora do git). Veja "Armadilhas". Sem ele o app continua funcionando: o helper antigo não responde ao `--list-devices` e o Automático fica no small.
+
 Os PRs do fork são abertos e mesclados com `gh pr merge N --merge`, sem CI. Antes do merge, rode todo o portão de validação abaixo.
 
 ## Onde mora cada recurso do fork
@@ -170,7 +199,10 @@ Os PRs do fork são abertos e mesclados com `gh pr merge N --merge`, sem CI. Ant
 | Auto-zoom calmo | `timeline/zoom-suggestions.ts` (planner), `zoom-motion.ts` (`resolveZoomRendering`, `MIN_WIDE_SEC_OPTIONS`), `AutoZoomSettings` | calmo, 2,5 s |
 | Auto-zoom guiado pela fala | `timeline/speechCues.ts` (palavras de apontar, frases, rolagem); `zoom-suggestions.ts` (`words` / `wordsByAssetId`, `speechAwareEnd`); `apply-auto-zooms.ts` (`transcriptWordsByAssetId`, `transcriptSignature`, `legacyEditor.autoZoomTranscript`); `autoZoomReplan.ts`; janela pós-gravação `TranscriptAutoZoomDialog.tsx`; aviso `TranscriptAutoZoomBar.tsx` no painel da transcrição; pref `autoZoomAfterRecording` | pergunta depois de gravar |
 | Acelerar esperas | `timeline/waits.ts` (`WAIT_SPEED = 4`); Auto-enhance no `V4Timeline` | só sugere |
-| Glossário | `src/lib/ai-edition/transcription/glossary.ts`; aplicado em `transcriptionStore.ts`; pref `glossary` | lista padrão M365 |
+| Glossário | `src/lib/ai-edition/transcription/glossary.ts` (`upgradeStoredGlossary` troca um padrão antigo não editado); aplicado em `transcriptionStore.ts`; pref `glossary` | lista padrão M365 e IA |
+| Modelo de transcrição | `WHISPER_MODELS` em `electron/stt/modelManager.ts`; escolha em `electron/stt/whisperDevices.ts` (`resolveWhisperModel`, `--list-devices`); `prepare`/`load` em `electron/stt/index.ts`; `--dtw-preset` no helper (`electron/native/whisper-stt/src/main.cpp`); pref `transcriptionModel`; seletor no `MediaStage.tsx` | Automático: large-v3-turbo q8 numa GPU dedicada, small no resto |
+| Termos de sempre (prompt) | `src/lib/ai-edition/transcription/vocabulary.ts` (`DEFAULT_VOCABULARY`, `buildTranscriptionPrompt`); usado em `document/transcribe.ts`; pref `transcriptionVocabulary` | lista M365 e IA |
+| Idioma da transcrição | `effectiveTranscriptionLanguage` em `src/lib/userPreferences.ts`; pref `transcriptionLanguage` | `pt` com o app em português |
 | Transcrição automática | pref `autoTranscribe` (Media stage) | **desligada** |
 | Capítulos e `.srt` | `chapters.ts`, `captions/srt.ts`, `YouTubeChapters.tsx`, IPC `write-subtitles-beside`, `electron/ai-edition/chapter-titles.ts` | no fim do export |
 | Loudness YouTube | `src/lib/ai-edition/deliveryLoudness.ts` (+2 dB, −16 → −14 LUFS); pref `youtubeLoudness` | ligado |
@@ -387,6 +419,11 @@ O fork acompanha `getopenscreen/openscreen`. O último merge (2.1.0) foi até `1
 - **Texto novo na UI.** Toda string visível passa pelo i18n, com pt-BR de verdade e a chave nos 15 idiomas (os outros recebem o inglês). Erro técnico em toast vai como `description`, com um título traduzido.
 - **`recordingImport.test`.** Um teste trava saves de propósito; describes novos entram **antes** dele.
 - **Disco cheio.** O C: tem cerca de 9,7 GB livres e já encheu uma vez. As pastas `release/1.13.0` a `1.19.0` são builds antigos que podem ir embora, mas só arquivo por arquivo ou pedindo ao usuário. `crates/target` também cresce (cerca de 3 GB).
+- **Helper do Whisper novo.** O large-v3-turbo precisa do `whisper-stt-server.exe` com `--dtw-preset` e `--list-devices`. O `npm run build:win` **não** compila o helper (só copia `electron/native/bin/win32-x64`). O exe novo está em `openscreen-stt/electron/native/bin/win32-x64/whisper-stt-server.exe` e em `C:\wstb-stt\whisper-stt-server.exe` (a pasta de build, ~300 MB, que pode ser apagada depois de copiar).
+  - Ele foi compilado **sem Vulkan** (não há Vulkan SDK nesta máquina): o `CMakeLists.txt` do helper com o CMake e o Ninja do VS 2022 Build Tools, numa pasta de build curta por causa do MAX_PATH. Ele usa o `whisper.dll` e o `ggml-vulkan.dll` que já estão na pasta: o exe só chama a API C do whisper e do ggml, e o Vulkan vem das DLLs.
+  - Para a release, copie **só esse exe** para a pasta de binários da checkout principal e confira com `findstr /M /C:"list-devices" whisper-stt-server.exe` (controle, presente no antigo e no novo: `/C:"guardrail"`).
+  - O jeito completo continua sendo `npm run build:whisper-binaries` numa máquina com o Vulkan SDK.
+- **Playwright `browser.close()` fecha a instância isolada.** Num script que só conecta por CDP (`connectOverCDP`), termine com `process.exit(0)`: o `close()` derrubou o app inteiro no meio de um teste de transcrição.
 - **Kaspersky.** Ele colocou em quarentena um gravador que ficava parado esperando no stdin (o "início armado" de `0d9dc984`, revertido em `c956ea4e`). Desde a 2.1.1 o início durante a contagem usa `startAtEpochMs` e um `sleep_until`, sem ler o stdin antes de gravar. Se o `wgc-capture.exe` sumir depois de um build, esse é o primeiro suspeito.
 
 ## Pendências
@@ -448,7 +485,7 @@ Valide com `record-take.mjs`, com um take que comece no rosto e passe para a tel
 7. Avisar no app quando o leitor do cursor desiste. Hoje é só `logDiagnostic("restart-gave-up")`.
 8. Mostrar o projeto danificado na lista. Hoje só existe a restauração pelo `.bak`.
 9. `appId` próprio do fork: ainda é `com.etiennelescot.openscreen`. **Cuidado:** trocar muda a pasta de dados e a identidade do instalador, então planeje uma migração antes.
-10. Whisper large-v3-turbo como padrão. Ainda é `ggml-small-q8_0.bin` (`electron/stt/modelManager.ts`) e precisa de espaço em disco.
+10. ~~Whisper large-v3-turbo como padrão.~~ **Feito** no branch `feat/stt` (Automático numa GPU dedicada; veja "Transcrição pt-BR para Microsoft e IA"). Falta pôr o helper novo na pasta de binários antes da release.
 11. Spotlight no Metal e no wgpu (mac/Linux), se um dia importar.
 12. Poll do HUD ainda a cada 32 ms (item 3.5 não revisto).
 13. Fila do mixer de áudio sem limite e sem compensar a diferença de relógio (`AudioMixer::append` em `audio_sample_utils.cpp`). Vai junto com o item 6. O colchão de 100 ms do 2.0 resolveu a oscilação (as microfalhas), não a deriva de relógio.

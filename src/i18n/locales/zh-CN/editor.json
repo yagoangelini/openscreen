@@ -211,7 +211,15 @@
 		"glossaryHint": "转录中要更正的名称，每行一个：术语: 误听1, 误听2。适用于新的转录。",
 		"glossaryApply": "应用到此项目的转录",
 		"glossaryApplied": "已应用术语表：{{count}} 处更正。按 Ctrl+Z 撤销。",
-		"glossaryNothingToFix": "无需更正：转录已符合术语表。"
+		"glossaryNothingToFix": "无需更正：转录已符合术语表。",
+		"model": "Transcription model",
+		"modelHint": "The accurate model is downloaded on the first transcription and runs on a dedicated GPU. Automatic uses it when the GPU has room for it, and the fast one otherwise.",
+		"modelAuto": "Automatic (accurate on a dedicated GPU)",
+		"modelTurbo": "Accurate: large-v3-turbo ({{size}})",
+		"modelSmall": "Fast: small ({{size}})",
+		"standingTerms": "Standing terms (Microsoft and AI)",
+		"standingTermsHint": "Whisper is told to expect these terms in every transcription, before the project's names and terms. Separate them with commas; the first ones matter most.",
+		"standingTermsReset": "Restore the default list"
 	},
 	"exportDialog": {
 		"title": "导出",

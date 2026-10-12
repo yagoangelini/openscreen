@@ -211,7 +211,15 @@
 		"glossaryHint": "받아쓰기에서 고칠 이름을 한 줄에 하나씩: 용어: 잘못 1, 잘못 2. 새 받아쓰기에 적용됩니다.",
 		"glossaryApply": "이 프로젝트의 전사에 적용",
 		"glossaryApplied": "용어집 적용: {{count}}개 수정. Ctrl+Z로 되돌릴 수 있습니다.",
-		"glossaryNothingToFix": "수정할 내용이 없습니다. 전사가 이미 용어집을 따릅니다."
+		"glossaryNothingToFix": "수정할 내용이 없습니다. 전사가 이미 용어집을 따릅니다.",
+		"model": "Transcription model",
+		"modelHint": "The accurate model is downloaded on the first transcription and runs on a dedicated GPU. Automatic uses it when the GPU has room for it, and the fast one otherwise.",
+		"modelAuto": "Automatic (accurate on a dedicated GPU)",
+		"modelTurbo": "Accurate: large-v3-turbo ({{size}})",
+		"modelSmall": "Fast: small ({{size}})",
+		"standingTerms": "Standing terms (Microsoft and AI)",
+		"standingTermsHint": "Whisper is told to expect these terms in every transcription, before the project's names and terms. Separate them with commas; the first ones matter most.",
+		"standingTermsReset": "Restore the default list"
 	},
 	"exportDialog": {
 		"title": "내보내기",

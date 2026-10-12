@@ -104,7 +104,8 @@ subtitle is the reason rather than "With AI".
 
 ### One phase, including the first-run model download
 
-On a fresh install the GGML model (~264 MB) is not on disk. It is fetched by
+On a fresh install the GGML model (~264 MB for small, ~874 MB for
+large-v3-turbo, see [Model](#model)) is not on disk. It is fetched by
 `SttManager.prepare()` **inside** the `stt:transcribe` IPC call — i.e. inside a
 run this store has already marked `running` — so the user sees one single busy
 phase that simply takes longer the first time. That is deliberate: no separate
@@ -231,7 +232,8 @@ it verbatim in the response.
    array.
 2. **DTW timestamp** — every non-special token carries `t_dtw` in
    centiseconds from whisper.cpp's native DTW
-   (`dtw_token_timestamps=true`, `dtw_aheads_preset=WHISPER_AHEADS_SMALL`,
+   (`dtw_token_timestamps=true`, `dtw_aheads_preset` from `--dtw-preset`:
+   `WHISPER_AHEADS_SMALL` or `WHISPER_AHEADS_LARGE_V3_TURBO`,
    `flash_attn=false`, which together are the prerequisites for DTW to
    actually run). `t_dtw == -1` is the DTW-inactive guardrail: the helper
    fails the request rather than emit zero-quality timestamps.
@@ -254,7 +256,8 @@ it verbatim in the response.
    - the decoder has 448 positions. A window too long as characters is
      aligned in several passes, each with one stretch as characters and the
      rest of the window as BPE tokens;
-   - the alignment heads stay `WHISPER_AHEADS_SMALL`. Picking the ten heads
+   - the alignment heads stay whisper.cpp's preset for the model
+     (`WHISPER_AHEADS_SMALL` for small). Picking the ten heads
      with the most concentrated attention per window out of all 144, as the
      paper does, chose nearly the same ten every time and scored worse
      (inner median 24 ms, phrase starts 82% within 50 ms).
@@ -433,9 +436,27 @@ linked above).
 
 ### Model
 
-The recogniser is `ggml-small-q8_0.bin` from
-`ggerganov/whisper.cpp` on HuggingFace: Whisper `small`, multilingual (~99
-languages), q8_0 quantised, ~264 MB. Beside it, the same code path fetches
+The recogniser is one of two files from `ggerganov/whisper.cpp` on
+HuggingFace, both multilingual (~99 languages), q8_0 quantised and pinned to the
+same revision (`WHISPER_MODELS` in `modelManager.ts`):
+
+- `ggml-large-v3-turbo-q8_0.bin`, ~874 MB: what the "auto" setting picks on a
+  dedicated GPU with at least 3.5 GiB (and 1.5 GiB free when the driver says).
+  The helper answers that before any download (`whisper-stt-server
+  --list-devices`, one JSON line, `whisperDevices.ts`). It needs its own DTW
+  alignment heads (`--dtw-preset large-v3-turbo`): it has 4 text layers, the
+  SMALL heads sit on layers 3 to 5, and whisper.cpp refuses to create the
+  context, so a helper built before the flag dies loading it.
+- `ggml-small-q8_0.bin`, ~264 MB: everywhere else, and the fallback whenever
+  turbo cannot run as intended (download failed, helper could not load it, or
+  under "auto" the helper landed on the CPU, which its readiness probe now
+  reports as `backend`).
+
+The media stage offers Automatic / Accurate / Fast (`transcriptionModel` in
+`userPreferences.ts`). Measured on pt-BR tutorial speech on an RTX 3060 (Vulkan):
+turbo halves small's word errors without a prompt at about the same speed, and
+it is the one that got a real take's "rolar" right; numbers in the fork's
+`docs/HANDOFF.md`. Beside it, the same code path fetches
 Silero VAD v6.2.0 (`ggml-org/whisper-vad`, 0.9 MB) for step 0 of the
 alignment. Precision is baked into the GGML file —
 there is no runtime `--int8` flag. `electron/stt/modelManager.ts` downloads
@@ -627,8 +648,11 @@ which is far too late to explain a wait that is already happening.
 
 The request takes a raw `Float32Array` of mono 16 kHz PCM and an optional
 ISO 639-1 `language` code; `"auto"` or absent leaves detection to Whisper.
-An optional `prompt` carries the project's names and terms
-(`project.vocabulary`, the media stage's "Names and terms" field, issue #1023).
+An optional `prompt` carries the standing terms (a preference whose default is
+a Microsoft 365 and AI list, `transcription/vocabulary.ts`) followed by the
+project's names and terms (`project.vocabulary`, the media stage's "Names and
+terms" field, issue #1023), each once and cut to 640 characters from the end of
+the standing list (`buildTranscriptionPrompt`).
 `whisperServer.ts` sends it framed as `Glossary: <terms>.`, and the helper sets
 that as whisper's `initial_prompt` with `carry_initial_prompt`, so every 30 s
 window of every chunk is conditioned on it. The framing is not cosmetic: whisper

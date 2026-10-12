@@ -398,7 +398,9 @@ describe("useTranscriptionStore", () => {
 		await requested;
 		await whenTranscriptionIdle();
 
-		expect(languages).toEqual(["auto", "fr"]);
+		// The background pass runs in the default language: Portuguese, since nothing is
+		// stored and the app speaks pt-BR natively. The manual run keeps the one it asked for.
+		expect(languages).toEqual(["pt", "fr"]);
 		expect(useProjectStore.getState().document?.transcripts).toHaveLength(1);
 		expect(useProjectStore.getState().document?.transcripts[0].language).toBe("fr");
 		expect(useTranscriptionStore.getState().jobs).toEqual({});

@@ -27,8 +27,17 @@ import {
 	transcriptHasSpeech,
 	transcriptionFailureHintKey,
 } from "@/lib/ai-edition/transcription/status";
-import { loadUserPreferences, saveUserPreferences } from "@/lib/userPreferences";
+import { DEFAULT_VOCABULARY } from "@/lib/ai-edition/transcription/vocabulary";
+import {
+	effectiveTranscriptionLanguage,
+	loadUserPreferences,
+	saveUserPreferences,
+} from "@/lib/userPreferences";
 import { formatBytes } from "@/utils/formatBytes";
+import {
+	STT_WHISPER_MODEL_BYTES,
+	type SttWhisperModelPreference,
+} from "../../../../electron/stt/transcriptionContract";
 import {
 	TranscriptionProgressBar,
 	TranscriptionStatusDot,
@@ -87,6 +96,12 @@ export function MediaStage({
 	const [autoTranscribe, setAutoTranscribe] = useState(() => loadUserPreferences().autoTranscribe);
 	const [autoRedact, setAutoRedact] = useState(() => loadUserPreferences().autoRedact);
 	const [glossary, setGlossary] = useState(() => loadUserPreferences().glossary);
+	const [standingTerms, setStandingTerms] = useState(
+		() => loadUserPreferences().transcriptionVocabulary,
+	);
+	const [model, setModel] = useState<SttWhisperModelPreference>(
+		() => loadUserPreferences().transcriptionModel,
+	);
 	// The glossary runs on each new transcript by itself; this puts the transcripts the
 	// project already has right too, after the list was edited. One undoable edit, and
 	// the words the user corrected by hand are theirs, so it never touches them.
@@ -126,7 +141,9 @@ export function MediaStage({
 	const [busy, setBusy] = useState(false);
 	const [selectedId, setSelectedId] = useState<string | null>(null);
 	const [detailOpen, setDetailOpen] = useState(false);
-	const [lang, setLang] = useState<TranscriptLanguageCode>("auto");
+	// Starts on the default language (Portuguese while the app speaks it); a pick here
+	// becomes the default for every later run too.
+	const [lang, setLang] = useState<TranscriptLanguageCode>(() => effectiveTranscriptionLanguage());
 	const regenLanguageOptions = useMemo(
 		() => sortedLanguageOptions(locale, t("mediaStage.auto")),
 		[locale, t],
@@ -493,7 +510,11 @@ export function MediaStage({
 								<div style={{ display: "flex", gap: 8 }}>
 									<select
 										value={lang}
-										onChange={(e) => setLang(e.target.value as TranscriptLanguageCode)}
+										onChange={(e) => {
+											const next = e.target.value as TranscriptLanguageCode;
+											setLang(next);
+											saveUserPreferences({ transcriptionLanguage: next });
+										}}
 										style={{
 											flex: 1,
 											minWidth: 0,
@@ -553,6 +574,53 @@ export function MediaStage({
 										</button>
 									</Tooltip>
 								</div>
+								<label style={{ display: "block", marginTop: 10 }}>
+									<span
+										style={{
+											display: "block",
+											fontSize: 12.5,
+											fontWeight: 600,
+											color: "var(--fg-2)",
+											marginBottom: 6,
+										}}
+									>
+										{t("mediaStage.model")}
+									</span>
+									<select
+										data-testid="media-stage-model"
+										value={model}
+										title={t("mediaStage.modelHint")}
+										onChange={(e) => {
+											const next = e.target.value as SttWhisperModelPreference;
+											setModel(next);
+											saveUserPreferences({ transcriptionModel: next });
+										}}
+										style={{
+											width: "100%",
+											height: 36,
+											padding: "0 10px",
+											borderRadius: 9,
+											border: "1px solid var(--border)",
+											background: "var(--surface-2)",
+											color: "var(--fg)",
+											fontSize: 12.5,
+											fontWeight: 500,
+											outline: "none",
+										}}
+									>
+										<option value="auto">{t("mediaStage.modelAuto")}</option>
+										<option value="large-v3-turbo">
+											{t("mediaStage.modelTurbo", {
+												size: formatBytes(STT_WHISPER_MODEL_BYTES["large-v3-turbo"]),
+											})}
+										</option>
+										<option value="small">
+											{t("mediaStage.modelSmall", {
+												size: formatBytes(STT_WHISPER_MODEL_BYTES.small),
+											})}
+										</option>
+									</select>
+								</label>
 								<label
 									style={{
 										display: "flex",
@@ -600,6 +668,43 @@ export function MediaStage({
 									/>
 									{t("mediaStage.autoRedact")}
 								</label>
+								<details style={{ marginTop: 8, fontSize: 12.5, color: "var(--fg-2)" }}>
+									<summary style={{ cursor: "pointer" }}>{t("mediaStage.standingTerms")}</summary>
+									<p style={{ margin: "6px 0", color: "var(--muted)" }}>
+										{t("mediaStage.standingTermsHint")}
+									</p>
+									<textarea
+										data-testid="media-stage-standing-terms"
+										value={standingTerms}
+										spellCheck={false}
+										rows={5}
+										onChange={(event) => setStandingTerms(event.target.value)}
+										onBlur={() => saveUserPreferences({ transcriptionVocabulary: standingTerms })}
+										style={{
+											width: "100%",
+											resize: "vertical",
+											padding: "8px 10px",
+											borderRadius: 9,
+											border: "1px solid var(--border)",
+											background: "var(--surface-2)",
+											color: "var(--fg)",
+											font: "500 12px var(--font-mono)",
+										}}
+									/>
+									<button
+										type="button"
+										className={styles.ghostBtn}
+										data-testid="media-stage-standing-terms-reset"
+										disabled={standingTerms === DEFAULT_VOCABULARY}
+										onClick={() => {
+											setStandingTerms(DEFAULT_VOCABULARY);
+											saveUserPreferences({ transcriptionVocabulary: DEFAULT_VOCABULARY });
+										}}
+										style={{ marginTop: 6 }}
+									>
+										{t("mediaStage.standingTermsReset")}
+									</button>
+								</details>
 								<details style={{ marginTop: 8, fontSize: 12.5, color: "var(--fg-2)" }}>
 									<summary style={{ cursor: "pointer" }}>{t("mediaStage.glossary")}</summary>
 									<p style={{ margin: "6px 0", color: "var(--muted)" }}>

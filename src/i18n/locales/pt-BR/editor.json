@@ -211,7 +211,15 @@
 		"glossaryHint": "Nomes que a transcrição corrige, um por linha: Termo: errado 1, errado 2. Vale para as próximas transcrições.",
 		"glossaryApply": "Aplicar às transcrições deste projeto",
 		"glossaryApplied": "Glossário aplicado: {{count}} correção(ões). Desfaça com Ctrl+Z.",
-		"glossaryNothingToFix": "Nada a corrigir: as transcrições já seguem o glossário."
+		"glossaryNothingToFix": "Nada a corrigir: as transcrições já seguem o glossário.",
+		"model": "Modelo de transcrição",
+		"modelHint": "O modelo preciso é baixado na primeira transcrição e roda numa GPU dedicada. O Automático usa esse modelo quando a GPU tem espaço para ele e, se não tiver, o rápido.",
+		"modelAuto": "Automático (preciso numa GPU dedicada)",
+		"modelTurbo": "Preciso: large-v3-turbo ({{size}})",
+		"modelSmall": "Rápido: small ({{size}})",
+		"standingTerms": "Termos de sempre (Microsoft e IA)",
+		"standingTermsHint": "O Whisper recebe estes termos em toda transcrição, antes dos nomes e termos do projeto. Separe por vírgula; os primeiros pesam mais.",
+		"standingTermsReset": "Restaurar a lista padrão"
 	},
 	"exportDialog": {
 		"title": "Exportar",

@@ -37,9 +37,20 @@ vi.mock("./modelManager", () => ({
 	ensureAligner: vi.fn(async ({ language }: { language: string }) => `/fake/${language}.gguf`),
 	cachedAligner: vi.fn(async () => null),
 	alignerPath: vi.fn((base: string, language: string): string | null => `${base}/${language}.gguf`),
-	modelPaths: (base: string) => ({
-		whisper: `${base}/whisper-ggml/ggml-small-q8_0.bin`,
+	modelPaths: (base: string, model = "small") => ({
+		whisper: `${base}/whisper-ggml/ggml-${model === "small" ? "small" : "large-v3-turbo"}-q8_0.bin`,
+		"silero-vad": `${base}/whisper-ggml/ggml-silero-v6.2.0.bin`,
 	}),
+	WHISPER_MODELS: {
+		small: { dtwPreset: "small" },
+		"large-v3-turbo": { dtwPreset: "large-v3-turbo" },
+	},
+}));
+
+// The device probe spawns the helper; the decision itself (resolveWhisperModel) stays real.
+vi.mock("./whisperDevices", async (importOriginal) => ({
+	...(await importOriginal<typeof import("./whisperDevices")>()),
+	listWhisperDevices: vi.fn(async () => []),
 }));
 
 vi.mock("./gpuDetector", () => ({
@@ -494,6 +505,170 @@ describe("SttManager", () => {
 
 		expect(mocked).toHaveBeenCalledTimes(2);
 		expect(fakeWhisperServer.start).toHaveBeenCalledOnce();
+	});
+
+	describe("whisper model", () => {
+		const RTX = {
+			name: "Vulkan0",
+			description: "NVIDIA GeForce RTX 3060 Laptop GPU",
+			type: "gpu" as const,
+			memoryFreeBytes: 5 * 1024 ** 3,
+			memoryTotalBytes: 6 * 1024 ** 3,
+		};
+
+		async function probe() {
+			const { listWhisperDevices } = await import("./whisperDevices");
+			return vi.mocked(listWhisperDevices);
+		}
+		async function downloads() {
+			const { ensureModels } = await import("./modelManager");
+			const mocked = vi.mocked(ensureModels);
+			mocked.mockClear();
+			return mocked;
+		}
+		const started = () =>
+			fakeWhisperServer.start.mock.calls.map(
+				([options]) => (options as { dtwPreset: string }).dtwPreset,
+			);
+
+		beforeEach(async () => {
+			(await probe()).mockReset().mockResolvedValue([]);
+			fakeWhisperServer.start
+				.mockReset()
+				.mockResolvedValue({ port: 9000, backend: "whispercpp-cpu" });
+			fakeWhisperServer.status.backend = "whispercpp-cpu";
+		});
+		afterEach(() => {
+			fakeWhisperServer.status.backend = "whispercpp-cpu";
+		});
+
+		it("auto runs large-v3-turbo on a dedicated GPU, with its DTW preset", async () => {
+			(await probe()).mockResolvedValue([RTX]);
+			fakeWhisperServer.status.backend = "whispercpp-vulkan" as never;
+			const ensure = await downloads();
+			const mgr = new SttManager();
+			await mgr.init({ modelsBaseDir: "/tmp/fake-stt-models" });
+			const result = await mgr.transcribe({ samples: new Float32Array(16000), language: "pt" });
+			expect(ensure).toHaveBeenCalledWith(
+				expect.objectContaining({ whisperModel: "large-v3-turbo" }),
+			);
+			expect(started()).toEqual(["large-v3-turbo"]);
+			expect(fakeWhisperServer.start).toHaveBeenCalledWith(
+				expect.objectContaining({
+					modelPath: "/tmp/fake-stt-models/whisper-ggml/ggml-large-v3-turbo-q8_0.bin",
+				}),
+			);
+			expect(result.model).toBe("large-v3-turbo");
+		});
+
+		it("auto stays on small without such a GPU, and downloads nothing else", async () => {
+			const ensure = await downloads();
+			const mgr = new SttManager();
+			await mgr.init({ modelsBaseDir: "/tmp/fake-stt-models" });
+			const result = await mgr.transcribe({ samples: new Float32Array(16000), language: "pt" });
+			expect(ensure.mock.calls.map(([o]) => o.whisperModel)).toEqual(["small"]);
+			expect(started()).toEqual(["small"]);
+			expect(result.model).toBe("small");
+		});
+
+		it("an explicit small never asks for the devices", async () => {
+			const list = await probe();
+			const mgr = new SttManager();
+			await mgr.init({ modelsBaseDir: "/tmp/fake-stt-models", model: "small" });
+			expect(list).not.toHaveBeenCalled();
+			expect(started()).toEqual(["small"]);
+		});
+
+		it("falls back to small when turbo cannot start (a helper without --dtw-preset)", async () => {
+			(await probe()).mockResolvedValue([RTX]);
+			fakeWhisperServer.start
+				.mockRejectedValueOnce(new Error("whisper-stt-server exited during startup (3221225477)"))
+				.mockResolvedValue({ port: 9000, backend: "whispercpp-vulkan" });
+			const mgr = new SttManager();
+			await mgr.init({ modelsBaseDir: "/tmp/fake-stt-models" });
+			const result = await mgr.transcribe({ samples: new Float32Array(16000), language: "pt" });
+			expect(started()).toEqual(["large-v3-turbo", "small"]);
+			expect(result.model).toBe("small");
+			expect(warnSpy).toHaveBeenCalledWith(
+				expect.stringMatching(/large-v3-turbo could not start, using small/),
+			);
+		});
+
+		it("falls back to small when the turbo download fails", async () => {
+			(await probe()).mockResolvedValue([RTX]);
+			const ensure = await downloads();
+			ensure.mockRejectedValueOnce(new Error("ENOSPC: no space left on device"));
+			const mgr = new SttManager();
+			await mgr.init({ modelsBaseDir: "/tmp/fake-stt-models" });
+			expect(ensure.mock.calls.map(([o]) => o.whisperModel)).toEqual(["large-v3-turbo", "small"]);
+			expect(started()).toEqual(["small"]);
+		});
+
+		it("under auto, swaps a turbo that landed on the CPU for small", async () => {
+			(await probe()).mockResolvedValue([RTX]);
+			fakeWhisperServer.status.backend = "whispercpp-cpu";
+			const mgr = new SttManager();
+			await mgr.init({ modelsBaseDir: "/tmp/fake-stt-models" });
+			expect(started()).toEqual(["large-v3-turbo", "small"]);
+			// The helper holding turbo is stopped before small starts.
+			expect(fakeWhisperServer.stop).toHaveBeenCalled();
+		});
+
+		it("keeps an explicit turbo even on the CPU", async () => {
+			const mgr = new SttManager();
+			await mgr.init({ modelsBaseDir: "/tmp/fake-stt-models", model: "large-v3-turbo" });
+			const result = await mgr.transcribe({
+				samples: new Float32Array(16000),
+				language: "pt",
+				model: "large-v3-turbo",
+			});
+			expect(started()).toEqual(["large-v3-turbo"]);
+			expect(result.model).toBe("large-v3-turbo");
+		});
+
+		it("switching the preference reloads the helper with the other model", async () => {
+			const mgr = new SttManager();
+			await mgr.init({ modelsBaseDir: "/tmp/fake-stt-models", model: "small" });
+			fakeWhisperServer.stop.mockClear();
+			await mgr.transcribe({ samples: new Float32Array(16000), model: "large-v3-turbo" });
+			expect(started()).toEqual(["small", "large-v3-turbo"]);
+			expect(fakeWhisperServer.stop).toHaveBeenCalledOnce();
+			// Same preference again: nothing to reload.
+			await mgr.transcribe({ samples: new Float32Array(16000), model: "large-v3-turbo" });
+			expect(started()).toEqual(["small", "large-v3-turbo"]);
+		});
+
+		it("reports a download a few times a second, not once per network chunk", async () => {
+			const ensure = await downloads();
+			ensure.mockImplementationOnce(async ({ onProgress }) => {
+				for (let bytes = 1; bytes <= 1000; bytes++) {
+					onProgress?.({
+						id: "whisper",
+						file: "ggml-large-v3-turbo-q8_0.bin",
+						downloadedBytes: bytes,
+						totalBytes: 1000,
+					});
+				}
+			});
+			const sink = vi.fn<(e: SttStatusEvent) => void>();
+			const mgr = new SttManager();
+			await mgr.init({ statusSink: sink, modelsBaseDir: "/tmp/fake-stt-models", model: "small" });
+			const progress = sink.mock.calls.filter(([e]) => e.phase === "model" && e.totalBytes);
+			expect(progress.length).toBeGreaterThan(0);
+			expect(progress.length).toBeLessThan(5);
+		});
+
+		it("a chunk retry respawns the helper with the model's DTW preset", async () => {
+			const mgr = new SttManager();
+			await mgr.init({ modelsBaseDir: "/tmp/fake-stt-models", model: "large-v3-turbo" });
+			fakeWhisperServer.transcribe.mockRejectedValueOnce(new Error("helper died"));
+			await mgr.transcribe({
+				samples: new Float32Array(16000),
+				language: "pt",
+				model: "large-v3-turbo",
+			});
+			expect(started()).toEqual(["large-v3-turbo", "large-v3-turbo"]);
+		});
 	});
 
 	describe("word aligner", () => {
