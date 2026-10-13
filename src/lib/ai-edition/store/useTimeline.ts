@@ -53,6 +53,7 @@ import {
 	setCameraPieceMode,
 	setCameraPieceStyle,
 	splitCameraAt,
+	withRecordedSwitchCuts,
 } from "../document/cameraSegments";
 import { createId } from "../document/ids";
 import { resolveAspectRatioValue } from "../document/outputFormat";
@@ -1737,9 +1738,16 @@ export function useTimeline() {
 		() => cameraPieces(cameraSegments, cameraTimelineEnd),
 		[cameraSegments, cameraTimelineEnd],
 	);
+	const cameraAssets = document?.assets;
+	const cameraClips = document?.timeline.clips;
 	const cameraFullscreenRegions = useMemo(
-		() => readCameraFullscreenRegions({ cameraSegments }),
-		[cameraSegments],
+		() =>
+			withRecordedSwitchCuts(
+				readCameraFullscreenRegions({ cameraSegments }),
+				cameraAssets ?? [],
+				cameraClips ?? [],
+			),
+		[cameraSegments, cameraAssets, cameraClips],
 	);
 	const cameraHiddenRegions = useMemo(
 		() => readCameraHiddenRegions({ cameraSegments }),

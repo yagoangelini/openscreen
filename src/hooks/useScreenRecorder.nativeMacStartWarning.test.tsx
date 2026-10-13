@@ -86,7 +86,7 @@ describe("useScreenRecorder native macOS start warnings", () => {
 		await act(async () => {
 			view.result.current.toggleRecording();
 		});
-		await settle(3_500);
+		await settle(5_500);
 
 		expect(api.startNativeMacRecording).toHaveBeenCalledWith(
 			expect.objectContaining({
@@ -112,7 +112,7 @@ describe("useScreenRecorder native macOS start warnings", () => {
 		await act(async () => {
 			view.result.current.toggleRecording();
 		});
-		await settle(3_500);
+		await settle(5_500);
 
 		expect(api.checkRecordingStorage).toHaveBeenCalledOnce();
 		expect(api.startNativeMacRecording).not.toHaveBeenCalled();
@@ -135,7 +135,7 @@ describe("useScreenRecorder native macOS start warnings", () => {
 		await act(async () => {
 			view.result.current.toggleRecording();
 		});
-		await settle(3_500);
+		await settle(5_500);
 
 		expect(view.result.current.recording).toBe(true);
 		expect(toast.error).toHaveBeenCalledWith("recording.microphoneUnavailable");
@@ -154,7 +154,7 @@ describe("useScreenRecorder native macOS start warnings", () => {
 		await act(async () => {
 			view.result.current.toggleRecording();
 		});
-		await settle(3_500);
+		await settle(5_500);
 
 		expect(view.result.current.recording).toBe(true);
 		expect(toast.error).toHaveBeenCalledWith("rec.noMicrophoneFound");
@@ -168,7 +168,7 @@ describe("useScreenRecorder native macOS start warnings", () => {
 		await act(async () => {
 			view.result.current.toggleRecording();
 		});
-		await settle(3_500);
+		await settle(5_500);
 		expect(view.result.current.recording).toBe(true);
 
 		await act(async () => {
@@ -194,7 +194,7 @@ describe("useScreenRecorder native macOS start warnings", () => {
 			await act(async () => {
 				view.result.current.toggleRecording();
 			});
-			await settle(3_500);
+			await settle(5_500);
 			expect(view.result.current.recording).toBe(true);
 
 			await act(async () => {
@@ -221,7 +221,7 @@ describe("useScreenRecorder native macOS start warnings", () => {
 		await act(async () => {
 			view.result.current.toggleRecording();
 		});
-		await settle(3_500);
+		await settle(5_500);
 		expect(view.result.current.recording).toBe(true);
 
 		api.startNativeMacRecording.mockResolvedValue({
@@ -250,7 +250,7 @@ describe("useScreenRecorder native macOS start warnings", () => {
 		await act(async () => {
 			view.result.current.toggleRecording();
 		});
-		await settle(3_500);
+		await settle(5_500);
 
 		expect(api.startNativeMacRecording).toHaveBeenCalledWith(
 			expect.objectContaining({
@@ -286,7 +286,7 @@ describe("useScreenRecorder native macOS start warnings", () => {
 		await act(async () => {
 			view.result.current.toggleRecording();
 		});
-		await settle(3_500);
+		await settle(5_500);
 
 		expect(api.requestNativeMacCursorAccess).toHaveBeenCalledOnce();
 		expect(api.startNativeMacRecording).toHaveBeenCalledOnce();
@@ -345,7 +345,7 @@ describe("useScreenRecorder native macOS start warnings", () => {
 		await act(async () => {
 			view.result.current.toggleRecording();
 		});
-		await settle(3_500);
+		await settle(5_500);
 
 		expect(api.requestNativeMacCursorAccess).toHaveBeenCalledTimes(2);
 		expect(api.startNativeMacRecording).toHaveBeenCalledOnce();
@@ -366,7 +366,7 @@ describe("useScreenRecorder native macOS start warnings", () => {
 		await act(async () => {
 			view.result.current.toggleRecording();
 		});
-		await settle(3_500);
+		await settle(5_500);
 
 		expect(view.result.current.recording).toBe(true);
 		expect(view.result.current.elapsedSeconds).toBe(20);
@@ -388,7 +388,7 @@ describe("useScreenRecorder native macOS start warnings", () => {
 		await act(async () => {
 			view.result.current.toggleRecording();
 		});
-		await settle(3_500);
+		await settle(5_500);
 		expect(api.startNativeMacRecording).toHaveBeenCalledOnce();
 
 		view.unmount();

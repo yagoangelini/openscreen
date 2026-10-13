@@ -171,7 +171,12 @@ import {
 } from "../recording/pendingTakes";
 import { takeFolderName, takeFolderNameForFile } from "../recording/recordingsLibrary";
 import { removeEmptyCaptureOutput } from "../recording/removeEmptyCaptureOutput";
-import { TakeCameraLayoutLog, takeMediaTimeMs } from "../recording/takeCameraLayout";
+import {
+	mediaClockOriginMs,
+	TakeCameraLayoutLog,
+	takeMediaTimeMs,
+} from "../recording/takeCameraLayout";
+import { dropControlPressClicks, plausiblePressEpochMs } from "../recording/takeControlPresses";
 import { TakeOwnership } from "../recording/takeOwnership";
 import { patchWebmDurationOnDisk } from "../recording/webm-duration";
 import { reindexRecordingOnDisk } from "../recording/webm-seek-index";
@@ -810,7 +815,8 @@ const defaultRecordingPrefs: RecordingPrefs = {
 	hideDesktopIcons: false,
 	autoZoomEnabled: true,
 	recordingsFolder: null,
-	countdownSeconds: 3,
+	// The default of app-settings.ts (see there for why 5).
+	countdownSeconds: 5,
 	micChannelMode: "auto",
 	cameraLayout: DEFAULT_RECORDING_CAMERA_LAYOUT,
 	micSilenceWarningEnabled: true,
@@ -949,6 +955,10 @@ let nativeWindowsPausedSinceMs: number | null = null;
 let nativeWindowsMarkersMs: number[] = [];
 /** The take's "Rosto / Tela + câmera" switches; null for a take without a camera. */
 let nativeWindowsCameraLayout: TakeCameraLayoutLog | null = null;
+/** Presses on OpenScreen's own controls during the take (epoch ms), kept out of its cursor. */
+let nativeWindowsControlPressesMs: number[] = [];
+/** Where the take was stopped on its media clock (the press on Stop), once a stop is asked. */
+let nativeWindowsStopAtMediaMs: number | null = null;
 /** The layout sidecar's writes, one after the other (see persistNativeWindowsCameraLayout). */
 let nativeWindowsCameraLayoutWrites: Promise<void> = Promise.resolve();
 
@@ -1000,6 +1010,8 @@ function resetNativeWindowsCaptureState() {
 	nativeWindowsPausedSinceMs = null;
 	nativeWindowsMarkersMs = [];
 	nativeWindowsCameraLayout = null;
+	nativeWindowsControlPressesMs = [];
+	nativeWindowsStopAtMediaMs = null;
 	if (nativeWindowsDiskWatch) {
 		clearInterval(nativeWindowsDiskWatch);
 		nativeWindowsDiskWatch = null;
@@ -1710,6 +1722,21 @@ async function registerRecordingMediaLinks(
 	} catch (error) {
 		console.warn("[media-links] failed to register recording links:", error);
 	}
+}
+
+/** `pressesEpochMs`: presses on OpenScreen's own controls; `samplerStartMs`: the epoch of the
+ *  sampler's 0. See takeControlPresses.ts. */
+function dropPendingCursorControlPresses(
+	pressesEpochMs: readonly number[],
+	samplerStartMs: number,
+) {
+	if (!pendingCursorRecordingData || pressesEpochMs.length === 0 || samplerStartMs <= 0) {
+		return;
+	}
+	pendingCursorRecordingData = dropControlPressClicks(
+		pendingCursorRecordingData,
+		pressesEpochMs.map((at) => at - samplerStartMs),
+	);
 }
 
 function shiftPendingCursorTelemetry(offsetMs: number) {
@@ -2686,6 +2713,8 @@ export function registerIpcHandlers(
 	const switchRecordingCameraLayout = (
 		layout: RecordingCameraLayout,
 		source: "hud" | "shortcut",
+		/** When the HUD's button was pressed (epoch ms), so the switch lands on the press. */
+		pressedAtEpochMs?: unknown,
 	): RecordingCameraLayout | null => {
 		let shown: RecordingCameraLayout = layout;
 		let beforeFirstFrame = true;
@@ -2694,8 +2723,9 @@ export function registerIpcHandlers(
 			if (!log || nativeWindowsStopInFlight) {
 				return null;
 			}
+			const nowMs = Date.now();
 			const mediaMs = takeMediaTimeMs({
-				nowMs: Date.now(),
+				nowMs: plausiblePressEpochMs(pressedAtEpochMs, nowMs) ?? nowMs,
 				captureStartedAtMs: nativeWindowsCaptureStartedAtMs,
 				pausedTotalMs: nativeWindowsPausedTotalMs,
 				pausedSinceMs: nativeWindowsPausedSinceMs,
@@ -2726,9 +2756,22 @@ export function registerIpcHandlers(
 			: null;
 	};
 	ipcMain.handle("get-recording-camera-layout", () => currentRecordingCameraLayout());
-	ipcMain.handle("set-recording-camera-layout", (_, layout: unknown) =>
-		isRecordingCameraLayout(layout) ? switchRecordingCameraLayout(layout, "hud") : null,
+	ipcMain.handle("set-recording-camera-layout", (_, layout: unknown, pressedAtEpochMs?: unknown) =>
+		isRecordingCameraLayout(layout)
+			? switchRecordingCameraLayout(layout, "hud", pressedAtEpochMs)
+			: null,
 	);
+	// A press on one of OpenScreen's own controls during a take (the HUD's buttons), which the
+	// video never shows: its click is taken out of the take's cursor at the stop.
+	ipcMain.on("note-recording-control-press", (_, pressedAtEpochMs: unknown) => {
+		if (!nativeWindowsCaptureProcess) {
+			return;
+		}
+		const at = plausiblePressEpochMs(pressedAtEpochMs, Date.now());
+		if (at !== null && nativeWindowsControlPressesMs.length < 10_000) {
+			nativeWindowsControlPressesMs.push(at);
+		}
+	});
 
 	// Asked before every take starts. A disk that fills up mid-take used to be found only
 	// when the take was saved, and the take was lost with it.
@@ -3557,8 +3600,11 @@ export function registerIpcHandlers(
 					cursorSamplerReady,
 				]);
 				const captureStartedAtMs = Date.now();
-				nativeWindowsCaptureStartedAtMs = captureStartedAtMs;
 				const firstFrameEpochMs = readFirstFrameEpochMs(nativeWindowsCaptureOutput);
+				// The zero of the take's media time is its first frame, not the moment this
+				// process heard of it: that came 20-90 ms later (and after the cursor sampler was
+				// ready), and every switch and marker landed that much early in the editor.
+				nativeWindowsCaptureStartedAtMs = mediaClockOriginMs(firstFrameEpochMs, captureStartedAtMs);
 				nativeWindowsCursorOffsetMs =
 					cursorCaptureMode === "editable-overlay"
 						? cursorOffsetToFirstFrameMs(cursorStartTimeMs, firstFrameEpochMs, captureStartedAtMs)
@@ -4338,6 +4384,11 @@ export function registerIpcHandlers(
 					return;
 				}
 				try {
+					// On the sampler's own clock, before the pauses and the first frame move it.
+					dropPendingCursorControlPresses(
+						nativeWindowsControlPressesMs,
+						nativeWindowsCursorRecordingStartMs,
+					);
 					compactPendingCursorTelemetryPauseRanges(nativeWindowsPauseRanges);
 					shiftPendingCursorTelemetry(nativeWindowsCursorOffsetMs);
 					await writePendingCursorTelemetry(screenVideoPath);
@@ -4383,9 +4434,14 @@ export function registerIpcHandlers(
 			})();
 			const [, webcamVideoPath] = await Promise.all([cursorWritten, webcamChecked]);
 			markStop("cursor-written");
-			const session: RecordingSession = webcamVideoPath
-				? { screenVideoPath, webcamVideoPath, createdAt: recordingId, cursorCaptureMode }
-				: { screenVideoPath, createdAt: recordingId, cursorCaptureMode };
+			const stopAtMs = nativeWindowsStopAtMediaMs;
+			const session: RecordingSession = {
+				screenVideoPath,
+				...(webcamVideoPath ? { webcamVideoPath } : {}),
+				createdAt: recordingId,
+				cursorCaptureMode,
+				...(stopAtMs !== null && stopAtMs > 0 ? { stopAtMs } : {}),
+			};
 			// The hand-off itself: the editor's import reads this, and only this. The HUD
 			// used to set it again on the way to the editor, which could land after the
 			// editor had already consumed it and hand the same take over twice.
@@ -4483,26 +4539,40 @@ export function registerIpcHandlers(
 		}
 	};
 
-	ipcMain.handle("stop-native-windows-recording", async (_, discard?: boolean) => {
-		// The editor's window and page load while the take finalizes: the HUD asks for
-		// it the moment the take is saved, and it is already there. Only for the stop that
-		// starts the save; a second stop joins it.
-		const opensEditor =
-			!discard && Boolean(nativeWindowsCaptureProcess) && !nativeWindowsStopPromise;
-		// The stop command goes out first, synchronously: building a window blocks this
-		// thread for tens of ms, and the take would run on for them after the click.
-		const stopped = stopNativeWindowsCapture(discard);
-		if (opensEditor) {
-			editorPrewarm?.open();
-		}
-		const result = await stopped;
-		if (opensEditor) {
-			// Saved: the HUD switches to it now. Kept a while for a HUD that died on the way,
-			// whose take the journal offers back anyway.
-			editorPrewarm?.discard(result.success && !("discarded" in result) ? 30_000 : 0);
-		}
-		return result;
-	});
+	ipcMain.handle(
+		"stop-native-windows-recording",
+		async (_, discard?: boolean, pressedAtEpochMs?: unknown) => {
+			// The editor's window and page load while the take finalizes: the HUD asks for
+			// it the moment the take is saved, and it is already there. Only for the stop that
+			// starts the save; a second stop joins it.
+			const opensEditor =
+				!discard && Boolean(nativeWindowsCaptureProcess) && !nativeWindowsStopPromise;
+			if (opensEditor) {
+				// The take ends where Stop was pressed, not where the helper stopped writing: the
+				// import ends the take's clip here (`recordedEndSec`).
+				const nowMs = Date.now();
+				nativeWindowsStopAtMediaMs = takeMediaTimeMs({
+					nowMs: plausiblePressEpochMs(pressedAtEpochMs, nowMs) ?? nowMs,
+					captureStartedAtMs: nativeWindowsCaptureStartedAtMs,
+					pausedTotalMs: nativeWindowsPausedTotalMs,
+					pausedSinceMs: nativeWindowsPausedSinceMs,
+				});
+			}
+			// The stop command goes out first, synchronously: building a window blocks this
+			// thread for tens of ms, and the take would run on for them after the click.
+			const stopped = stopNativeWindowsCapture(discard);
+			if (opensEditor) {
+				editorPrewarm?.open();
+			}
+			const result = await stopped;
+			if (opensEditor) {
+				// Saved: the HUD switches to it now. Kept a while for a HUD that died on the way,
+				// whose take the journal offers back anyway.
+				editorPrewarm?.discard(result.success && !("discarded" in result) ? 30_000 : 0);
+			}
+			return result;
+		},
+	);
 
 	/**
 	 * Stops and saves the take without the HUD's help, for the callers that

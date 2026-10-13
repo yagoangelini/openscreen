@@ -471,6 +471,27 @@ describe("DocumentService", () => {
 			expect((await service.getProject(doc.project.id)).assets[0]?.cameraLayout).toBeDefined();
 		});
 
+		it("carries where the take was stopped (its .session.json) into the asset", async () => {
+			const doc = await service.createProject("P");
+			const videoPath = path.join(mediaDir, "recording-stop.mp4");
+			await fs.writeFile(videoPath, "");
+			await fs.writeFile(
+				path.join(mediaDir, "recording-stop.session.json"),
+				JSON.stringify({ screenVideoPath: videoPath, createdAt: 1, stopAtMs: 6537 }),
+			);
+			const older = path.join(mediaDir, "recording-older.mp4");
+			await fs.writeFile(older, "");
+			await fs.writeFile(
+				path.join(mediaDir, "recording-older.session.json"),
+				JSON.stringify({ screenVideoPath: older, createdAt: 1 }),
+			);
+			await service.addAsset(doc.project.id, { path: videoPath });
+			const updated = await service.addAsset(doc.project.id, { path: older });
+			expect(updated.assets[0]?.recordedEndSec).toBe(6.537);
+			expect("recordedEndSec" in (updated.assets[1] ?? {})).toBe(false);
+			expect((await service.getProject(doc.project.id)).assets[0]?.recordedEndSec).toBe(6.537);
+		});
+
 		it("leaves out a layout that never left the screen, or cannot be read", async () => {
 			const doc = await service.createProject("P");
 			const plain = path.join(mediaDir, "recording-plain.mp4");

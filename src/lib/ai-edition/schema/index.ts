@@ -230,6 +230,11 @@ export const assetSchema = z.object({
 			),
 		})
 		.optional(),
+	// Where the take was stopped (source seconds): the press on Stop, read from the take's
+	// .session.json at import. The helper still writes a few frames, and the mixer its cushion
+	// of audio, after that press; the take's first clip ends here instead, so the stop click and
+	// what follows it are not in the video. Additive, like markersSec.
+	recordedEndSec: z.number().positive().optional(),
 });
 
 // A crop is a sub-rectangle of the source video, expressed as fractions

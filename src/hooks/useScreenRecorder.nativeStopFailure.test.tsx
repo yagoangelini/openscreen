@@ -59,7 +59,7 @@ async function startNativeRecording(view: RecorderView) {
 	await act(async () => {
 		view.result.current.toggleRecording();
 	});
-	await settle(3_500);
+	await settle(5_500);
 	expect(view.result.current.recording).toBe(true);
 }
 

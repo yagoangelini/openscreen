@@ -1063,6 +1063,45 @@ describe("buildSceneDescription.cameraFullscreenRegions", () => {
 		]);
 	});
 
+	it("cuts a span on a switch recorded on the HUD, and eases one moved off it", () => {
+		// Face from 2 s to 4 s by the HUD; a piece the user placed 6-8 s eases as before.
+		const doc = makeDoc({
+			assets: [
+				makeAsset({
+					id: "a",
+					originalPath: "/a.mp4",
+					cameraLayout: {
+						initial: "screen",
+						switches: [
+							{ atSec: 2, layout: "face" },
+							{ atSec: 4, layout: "screen" },
+						],
+					},
+				}),
+			],
+			clips: [
+				makeClip({
+					id: "c1",
+					assetId: "a",
+					sourceStartSec: 0,
+					sourceEndSec: 10,
+					timelineStartSec: 0,
+					timelineEndSec: 10,
+				}),
+			],
+			legacyEditor: {
+				cameraFullscreenRegions: [
+					{ id: "cf1", startMs: 2000, endMs: 4000 },
+					{ id: "cf2", startMs: 6000, endMs: 8000 },
+				],
+			},
+		});
+		expect(buildSceneDescription(loadedFromV8(doc)).cameraFullscreenRegions).toEqual([
+			{ startSec: 2, endSec: 4, clipIndex: 0, continuesBefore: true, continuesAfter: true },
+			{ startSec: 6, endSec: 8, clipIndex: 0 },
+		]);
+	});
+
 	it("yields [] when legacyEditor.cameraFullscreenRegions is missing", () => {
 		const doc = makeDoc({ legacyEditor: {} });
 		expect(buildSceneDescription(loadedFromV8(doc)).cameraFullscreenRegions).toEqual([]);

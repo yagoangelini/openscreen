@@ -60,6 +60,7 @@ import {
 	HUD_STACK_GAP,
 	hudNeedsResize,
 } from "./hudGeometry";
+import { pointerEventEpochMs } from "./hudPress";
 import styles from "./LaunchWindow.module.css";
 
 // Locale list is computed once at module load; keeping the reference stable lets
@@ -819,7 +820,27 @@ export function LaunchWindow() {
 			toggleRecording,
 		],
 	);
-	const handleRecordClick = useCallback(() => handleRecordButtonClick(), [handleRecordButtonClick]);
+	const handleRecordClick = useCallback(
+		(pressedAtEpochMs?: number) => {
+			// Stop is pressed, not clicked (HudRecordButton): the take ends at the press.
+			if (recording && !saving) {
+				toggleRecording(pressedAtEpochMs);
+				return;
+			}
+			handleRecordButtonClick();
+		},
+		[handleRecordButtonClick, recording, saving, toggleRecording],
+	);
+	// Every press on the HUD during a take is kept out of the take's cursor: the HUD is not in
+	// the video, so its clicks (record, pause, notes, layout, stop...) would ripple, click and
+	// draw a zoom over nothing. The main process ignores them outside a take.
+	useEffect(() => {
+		const onPointerDown = (event: PointerEvent) => {
+			window.electronAPI?.noteRecordingControlPress?.(pointerEventEpochMs(event.timeStamp));
+		};
+		window.addEventListener("pointerdown", onPointerDown, true);
+		return () => window.removeEventListener("pointerdown", onPointerDown, true);
+	}, []);
 
 	// The editor's Rec-mode stage sends this once it hands off to the HUD
 	// (source + prefs already persisted via IPC), so the user doesn't have to
@@ -894,18 +915,25 @@ export function LaunchWindow() {
 			}
 		});
 	}, [t]);
-	const toggleCameraLayout = useCallback(() => {
-		if (saving) return;
-		const next = otherRecordingCameraLayout(cameraLayout);
-		void window.electronAPI
-			?.setRecordingCameraLayout?.(next)
-			.then((layout) => {
-				if (layout) setCameraLayout(layout);
-			})
-			.catch((error) => {
-				console.warn("Failed to switch the camera layout:", error);
-			});
-	}, [cameraLayout, saving]);
+	const toggleCameraLayout = useCallback(
+		(pressedAtEpochMs?: number) => {
+			if (saving) return;
+			const next = otherRecordingCameraLayout(cameraLayout);
+			// Shown at once, on the press; the main process answers what is really shown (null
+			// without a camera, which puts the button back).
+			setCameraLayout(next);
+			void window.electronAPI
+				?.setRecordingCameraLayout?.(next, pressedAtEpochMs)
+				.then((layout) => {
+					setCameraLayout(layout ?? cameraLayout);
+				})
+				.catch((error) => {
+					console.warn("Failed to switch the camera layout:", error);
+					setCameraLayout(cameraLayout);
+				});
+		},
+		[cameraLayout, saving],
+	);
 
 	// Drawing on the screen and the camera self-view (electron/recordingExtras/). Their state
 	// lives in the main process: the global shortcut toggles drawing too, and the self-view

@@ -74,16 +74,23 @@ describe("app settings store", () => {
 		expect(new AppSettingsStore(dir).getSnapshot().recording.recordingsFolder).toBeNull();
 	});
 
-	it("keeps the countdown at 0, 3 or 5 seconds", () => {
+	it("keeps the countdown at 0, 3 or 5 seconds, 5 by default", () => {
 		const dir = temp();
 		const store = new AppSettingsStore(dir);
-		expect(store.getSnapshot().recording.countdownSeconds).toBe(3);
+		// 5 s: the helper opens the encoders, the camera and the audio during the countdown.
+		expect(store.getSnapshot().recording.countdownSeconds).toBe(5);
 		store.setRecordingPreferences({ countdownSeconds: 0 });
 		expect(new AppSettingsStore(dir).getSnapshot().recording.countdownSeconds).toBe(0);
 		expect(() => store.setRecordingPreferences({ countdownSeconds: 7 })).toThrow(TypeError);
 		writeFileSync(
 			path.join(dir, "recording-settings.json"),
 			JSON.stringify({ countdownSeconds: 9 }),
+		);
+		expect(new AppSettingsStore(dir).getSnapshot().recording.countdownSeconds).toBe(5);
+		// A choice saved before the default changed still applies.
+		writeFileSync(
+			path.join(dir, "recording-settings.json"),
+			JSON.stringify({ countdownSeconds: 3 }),
 		);
 		expect(new AppSettingsStore(dir).getSnapshot().recording.countdownSeconds).toBe(3);
 	});
