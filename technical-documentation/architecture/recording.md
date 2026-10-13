@@ -70,7 +70,7 @@ Windows and macOS both write their screen video as a fragmented MP4 — `MFCreat
 
 A session writes a screen video and a `.session.json` manifest. Windows normally muxes the webcam into that MP4; when `webcamPath` is supplied, it writes a separate webcam video. macOS currently writes the webcam as a separate Electron sidecar (`webcamVideoPath`) because native webcam composition is not part of the helper. Linux follows the Electron recorder's separate media-path convention. Audio that the selected backend captures is encoded into its screen output.
 
-Takes land in `Videos\OpenScreen` by default (`defaultCaptureOutputDir()` in `electron/ipc/handlers.ts`); the `recording.recordingsFolder` app setting moves new takes elsewhere, and older takes in `userData/recordings` stay readable. Beside `<take>.mp4` a Windows take may also have (note which names keep the `.mp4`):
+Takes land in `Videos\OpenScreen` by default (`defaultCaptureOutputDir()` in `electron/ipc/handlers.ts`); the `recording.recordingsFolder` app setting moves new takes elsewhere, and older takes in `userData/recordings` stay readable. Each new take gets a folder of its own, `<recordings folder>\recording-<id>\`, holding all its files; the name the user gives the take when it ends renames that folder (never the files, which keep their `recording-<id>` stem so every sidecar still finds the video). Takes made before this sit flat in the folder root and are listed by their stem; the Media tab library (`electron/recording/recordingsLibrary.ts`) renames and recycles both kinds. Beside `<take>.mp4` a Windows take may also have (note which names keep the `.mp4`):
 
 | Sidecar | Written by | Read by |
 |---|---|---|

@@ -26,6 +26,7 @@ import { isModalOpen } from "@/lib/ai-edition/modalGuard";
 import type { AxcutAudioTrack, AxcutClip, AxcutDocument } from "@/lib/ai-edition/schema";
 import { useMcpDocumentHost } from "@/lib/ai-edition/store/mcpDocumentHost";
 import { saveWithDeadline, useProjectStore } from "@/lib/ai-edition/store/projectStore";
+import { useMediaRelease } from "@/lib/ai-edition/store/recordingMedia";
 import {
 	useAssetTranscriptions,
 	useAutoTranscription,
@@ -63,6 +64,7 @@ import { ExportDialog } from "./ExportDialog";
 import { importProjectFile } from "./importProjectFile";
 import { insertionsEnabled } from "./insertionsEnabled";
 import { ChatStripPanel } from "./LeftPanel";
+import { MissingMediaPanel, useMissingMedia } from "./MissingMediaPanel";
 import {
 	EditClipModal,
 	NewProjectModal,
@@ -78,6 +80,7 @@ import {
 	maybeSaveFreshRecordingAutoZooms,
 	prefetchFreshRecordingTelemetry,
 } from "./recordingImport";
+import { TakeNameDialog } from "./TakeNameDialog";
 import { TranscriptAutoZoomDialog } from "./TranscriptAutoZoomDialog";
 import { AddAudioLayerDialog } from "./v4/AddAudioLayerDialog";
 import v4 from "./v4/EditorShellV4.module.css";
@@ -1643,7 +1646,13 @@ export function NewEditorShell() {
 		handleSeek,
 	]);
 
-	const showTimeline = mode !== "rec";
+	// A project whose recording is gone shows what to do about it, never a timeline for it;
+	// and while a library rename or delete needs the take's files let go, the preview and
+	// the timeline step aside (`withMediaReleased`).
+	const missingMedia = useMissingMedia();
+	const mediaReleased = useMediaRelease((s) => s.released > 0);
+	const mediaBlocked = hasProject && (!missingMedia.checked || missingMedia.missing.length > 0);
+	const showTimeline = mode !== "rec" && !mediaBlocked && !mediaReleased;
 	const timelineRow = mode === "media" ? "188px" : `${timelineHeightPx}px`;
 	const bodyColumns = mode === "edit" && chatOpen ? `${chatWidthPx}px 1fr` : "1fr";
 
@@ -1738,7 +1747,7 @@ export function NewEditorShell() {
 				onModeChange={setMode}
 				projectTitle={project?.title ?? null}
 				dirty={dirty}
-				canExport={hasAsset}
+				canExport={hasAsset && !mediaBlocked}
 				// The stacks are plain arrays, not state; every push or pop comes with a document
 				// write, which re-renders this shell, so reading them here is never stale.
 				canUndo={undoStack.length > 0}
@@ -1778,7 +1787,11 @@ export function NewEditorShell() {
 				) : null}
 
 				<section className={v4.stage} aria-label={te("shell.previewStage")}>
-					{mode === "edit" ? (
+					{mode === "edit" && (mediaBlocked || mediaReleased) ? (
+						missingMedia.missing.length > 0 && !mediaReleased ? (
+							<MissingMediaPanel missing={missingMedia.missing} onResolved={missingMedia.recheck} />
+						) : null
+					) : mode === "edit" ? (
 						<>
 							<div
 								style={{
@@ -1871,7 +1884,7 @@ export function NewEditorShell() {
 							/>
 						</>
 					) : mode === "media" ? (
-						<MediaStage onAddToTimeline={handleDropAsset} />
+						<MediaStage onAddToTimeline={handleDropAsset} onShowEditor={() => setMode("edit")} />
 					) : (
 						<RecStage
 							onStartRecording={() => void handleNewRecording()}
@@ -1969,6 +1982,7 @@ export function NewEditorShell() {
 				onChoose={handleConfirmUnsaved}
 			/>
 			<ExportDialog open={exportOpen} onClose={() => setExportOpen(false)} document={document} />
+			<TakeNameDialog />
 			<TranscriptAutoZoomDialog
 				offer={transcriptZoomOffer}
 				onClose={() => setTranscriptZoomOffer(null)}

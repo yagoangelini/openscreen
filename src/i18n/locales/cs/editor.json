@@ -639,5 +639,62 @@
 		"undecided": "Could not tell the speakers apart in this take.",
 		"onlyYou": "Only your voice was found in the transcript.",
 		"labelled": "Speakers labelled: {{mic}} word(s) yours, {{system}} from the guest."
+	},
+	"library": {
+		"title": "Recordings",
+		"refresh": "Refresh",
+		"openFolder": "Open the recordings folder",
+		"loading": "Reading the recordings folder…",
+		"empty": "No recordings in this folder yet.",
+		"busy": "Recording…",
+		"usedHere": "In this project",
+		"flat": "Older take",
+		"open": "Open",
+		"openProject": "Open the project “{{title}}”",
+		"rename": "Rename",
+		"reveal": "Show in Explorer",
+		"delete": "Delete",
+		"save": "Save",
+		"cancel": "Cancel",
+		"renamed": "Renamed to “{{name}}”.",
+		"deleted": "“{{name}}” went to the Recycle Bin.",
+		"deleteTitle": "Delete “{{name}}”?",
+		"deleteFolderBody": "This recording’s whole folder will be removed, with the {{count}} files inside it:",
+		"deleteFlatBody": "The {{count}} files of this recording will be removed:",
+		"deleteRecycleBin": "They go to the Windows Recycle Bin, where you can still restore them.",
+		"deleteUsedHere": "This recording is in the open project: it will be taken out of it.",
+		"deleteUsedElsewhere": "Other projects that use it ({{count}}) will show it as missing.",
+		"deleteConfirm": "Move to Recycle Bin",
+		"errors": {
+			"busy": "This recording is still being recorded or finalized. Try again in a moment.",
+			"inUse": "Another program has this recording open. Close it and try again.",
+			"invalidName": "That name can’t be used for a folder.",
+			"trashFailed": "The recording could not go to the Recycle Bin. Nothing was deleted.",
+			"notFound": "This recording is no longer in the folder.",
+			"openFailed": "Could not open this recording.",
+			"generic": "Something went wrong with this recording."
+		}
+	},
+	"takeName": {
+		"title": "Name this recording",
+		"subtitle": "Its folder in the recordings folder gets this name.",
+		"label": "Name",
+		"hint": "You can rename it later in the Media tab.",
+		"willBeSavedAs": "Will be saved as “{{name}}”.",
+		"save": "Save",
+		"skip": "Keep this name",
+		"renameFailed": "The recording was saved, but its folder could not be renamed. You can rename it in the Media tab."
+	},
+	"missingMedia": {
+		"title": "This project’s recording is missing",
+		"body": "These files are no longer where the project expects them. They may have been deleted or moved.",
+		"screen": "Screen:",
+		"camera": "Camera:",
+		"locate": "Locate…",
+		"remove": "Remove from the project",
+		"close": "Close the project",
+		"relinked": "Recording found. The project points to it now.",
+		"removed": "The missing recording was removed from the project.",
+		"removeFailed": "Could not remove the recording from the project."
 	}
 }

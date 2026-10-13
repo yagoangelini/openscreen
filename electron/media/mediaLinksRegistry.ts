@@ -19,6 +19,7 @@
 
 import fs from "node:fs/promises";
 import path from "node:path";
+import { type PathMapper, rewriteMediaPaths } from "../../src/lib/mediaPathRewrite";
 import type { CursorCaptureMode } from "../../src/lib/recordingSession";
 
 // ponytail: `baseDir` is passed in by every caller (RECORDINGS_DIR in
@@ -214,6 +215,17 @@ async function updateRegistry(
 	await withWriteLock(baseDir, async () => {
 		const current = await readRegistry(baseDir);
 		await writeRegistry(baseDir, mutator(current));
+	});
+}
+
+/**
+ * A recording moved (renamed in the library): every path the registry recorded for it
+ * follows, so the fingerprint fallback and the relinker keep finding its camera and cursor.
+ */
+export async function rewriteRegistryPaths(baseDir: string, mapper: PathMapper): Promise<void> {
+	await updateRegistry(baseDir, (file) => {
+		const { value } = rewriteMediaPaths(file.entries, mapper);
+		return { version: 1, entries: value };
 	});
 }
 

@@ -639,5 +639,62 @@
 		"undecided": "Não deu para separar quem fala neste take.",
 		"onlyYou": "Só a sua voz aparece na transcrição.",
 		"labelled": "Falas marcadas: {{mic}} palavra(s) suas, {{system}} do convidado."
+	},
+	"library": {
+		"title": "Gravações",
+		"refresh": "Atualizar",
+		"openFolder": "Abrir a pasta de gravações",
+		"loading": "Lendo a pasta de gravações…",
+		"empty": "Ainda não há gravações nesta pasta.",
+		"busy": "Gravando…",
+		"usedHere": "Neste projeto",
+		"flat": "Take antigo",
+		"open": "Abrir",
+		"openProject": "Abrir o projeto “{{title}}”",
+		"rename": "Renomear",
+		"reveal": "Mostrar no Explorador",
+		"delete": "Excluir",
+		"save": "Salvar",
+		"cancel": "Cancelar",
+		"renamed": "Renomeada para “{{name}}”.",
+		"deleted": "“{{name}}” foi para a Lixeira.",
+		"deleteTitle": "Excluir “{{name}}”?",
+		"deleteFolderBody": "A pasta inteira desta gravação vai sair, com os {{count}} arquivos dentro dela:",
+		"deleteFlatBody": "Os {{count}} arquivos desta gravação vão sair:",
+		"deleteRecycleBin": "Eles vão para a Lixeira do Windows, de onde você ainda pode restaurar.",
+		"deleteUsedHere": "Esta gravação está no projeto aberto: ela sai dele.",
+		"deleteUsedElsewhere": "Outros projetos que usam esta gravação ({{count}}) vão mostrá-la como ausente.",
+		"deleteConfirm": "Mover para a Lixeira",
+		"errors": {
+			"busy": "Esta gravação ainda está sendo gravada ou finalizada. Tente de novo daqui a pouco.",
+			"inUse": "Outro programa está com esta gravação aberta. Feche-o e tente de novo.",
+			"invalidName": "Esse nome não pode ser usado numa pasta.",
+			"trashFailed": "A gravação não foi para a Lixeira. Nada foi apagado.",
+			"notFound": "Esta gravação não está mais na pasta.",
+			"openFailed": "Não deu para abrir esta gravação.",
+			"generic": "Algo deu errado com esta gravação."
+		}
+	},
+	"takeName": {
+		"title": "Dê um nome à gravação",
+		"subtitle": "A pasta dela, na pasta de gravações, recebe este nome.",
+		"label": "Nome",
+		"hint": "Dá para renomear depois, na aba Mídia.",
+		"willBeSavedAs": "Vai ser salva como “{{name}}”.",
+		"save": "Salvar",
+		"skip": "Manter este nome",
+		"renameFailed": "A gravação foi salva, mas a pasta dela não pôde ser renomeada. Renomeie pela aba Mídia."
+	},
+	"missingMedia": {
+		"title": "A gravação deste projeto sumiu",
+		"body": "Estes arquivos não estão mais onde o projeto espera. Eles podem ter sido excluídos ou movidos.",
+		"screen": "Tela:",
+		"camera": "Câmera:",
+		"locate": "Localizar…",
+		"remove": "Remover do projeto",
+		"close": "Fechar o projeto",
+		"relinked": "Gravação encontrada. O projeto agora aponta para ela.",
+		"removed": "A gravação que faltava saiu do projeto.",
+		"removeFailed": "Não deu para tirar a gravação do projeto."
 	}
 }
