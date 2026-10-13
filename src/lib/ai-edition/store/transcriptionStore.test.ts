@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { toastText } from "@/i18n/toastText";
 import { saveUserPreferences } from "@/lib/userPreferences";
+import { withProjectOverrides } from "../projectTranscriptionSettings";
 import type { AxcutDocument, AxcutTranscript } from "../schema";
 import { useProjectStore } from "./projectStore";
 import { useTranscriptionStore, whenTranscriptionIdle } from "./transcriptionStore";
@@ -531,5 +532,49 @@ describe("useTranscriptionStore", () => {
 		await useTranscriptionStore.getState().request("asset_1");
 
 		expect(useProjectStore.getState().document?.transcripts).toHaveLength(1);
+	});
+
+	it("corrects a new transcript with the default glossary plus the project's own lines", async () => {
+		// biome-ignore lint/suspicious/noExplicitAny: test-only stub of the preload bridge
+		delete (window as any).electronAPI;
+		saveUserPreferences({ glossary: "SharePoint: share point" });
+		transcribeMocks.transcribeAsset.mockImplementation(
+			async (_doc: AxcutDocument, assetId: string) => ({
+				assetId,
+				language: "pt",
+				segments: [
+					{
+						id: "seg_1",
+						kind: "speech",
+						startSec: 0,
+						endSec: 2,
+						text: "share point contozo",
+						wordIds: ["w1", "w2", "w3"],
+					},
+				],
+				words: [
+					{ id: "w1", segmentId: "seg_1", startSec: 0, endSec: 0.5, text: "share" },
+					{ id: "w2", segmentId: "seg_1", startSec: 0.5, endSec: 1, text: "point" },
+					{ id: "w3", segmentId: "seg_1", startSec: 1, endSec: 2, text: "contozo" },
+				],
+			}),
+		);
+		loadDocument(
+			withProjectOverrides(makeDoc(["asset_1"]), {
+				glossaryAdditions: "Contoso: contozo",
+				transcriptionLanguage: "es",
+			}),
+		);
+
+		await useTranscriptionStore.getState().request("asset_1");
+
+		// The project's language is what the run decodes in when none is asked for.
+		expect(transcribeMocks.transcribeAsset).toHaveBeenCalledWith(
+			expect.anything(),
+			"asset_1",
+			expect.objectContaining({ language: "es" }),
+		);
+		const words = useProjectStore.getState().document?.transcripts[0]?.words.map((w) => w.text);
+		expect(words).toEqual(["SharePoint", "Contoso"]);
 	});
 });

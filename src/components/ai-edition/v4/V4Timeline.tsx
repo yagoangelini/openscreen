@@ -96,6 +96,7 @@ import { nativeBridgeClient } from "@/native/client";
 import { TransportBar } from "../TransportBar";
 import type { VideoSource } from "../VirtualPreview";
 import styles from "./EditorShellV4.module.css";
+import { useTrackResetMenu } from "./TrackResetMenu";
 
 // The AI option's prompt — sent straight to the chat agent via the prompt-bus.
 //
@@ -752,6 +753,8 @@ export function V4Timeline({
 	/** Stored raw seconds → a percentage of the expanded ruler. */
 	const pctAt = pctOf;
 	const showLanes = variant === "edit";
+	// Right-click on a lane: "Restaurar" of that track, or of the whole project.
+	const trackReset = useTrackResetMenu(showLanes);
 
 	// The visible fraction of the timeline, and what one second is worth on screen
 	// at that zoom. Every screen-space rule below — ruler step, pill affordances,
@@ -1974,6 +1977,7 @@ export function V4Timeline({
 				className={`${styles.tlLane} ${styles.tlLaneCamera}`}
 				role="group"
 				aria-label={t("labels.cameraTrack")}
+				onContextMenu={hasAnyCamera ? trackReset.onContextMenuFor("camera") : undefined}
 			>
 				{!hasAnyCamera ? (
 					// No webcam anywhere: nothing to show, and every camera edit is refused. The
@@ -2691,7 +2695,10 @@ export function V4Timeline({
 								    strings the pre-v4 timeline used, so the keys stay translated. The key
 								    is the live binding, formatted like the toolbar tooltip's chip, so a
 								    rebind in the shortcuts dialog moves the hint with it (#966). */}
-								<div className={styles.tlLane}>
+								<div
+									className={styles.tlLane}
+									onContextMenu={trackReset.onContextMenuFor("annotations")}
+								>
 									{renderPills(
 										annPills,
 										t("hints.pressAnnotation", {
@@ -2699,19 +2706,19 @@ export function V4Timeline({
 										}),
 									)}
 								</div>
-								<div className={styles.tlLane}>
+								<div className={styles.tlLane} onContextMenu={trackReset.onContextMenuFor("video")}>
 									{renderPills(
 										speedPills,
 										t("hints.pressSpeed", { key: formatBinding(shortcuts.addSpeed, isMac) }),
 									)}
 								</div>
-								<div className={styles.tlLane}>
+								<div className={styles.tlLane} onContextMenu={trackReset.onContextMenuFor("video")}>
 									{renderPills(
 										trimPills,
 										t("hints.pressTrim", { key: formatBinding(shortcuts.addTrim, isMac) }),
 									)}
 								</div>
-								<div className={styles.tlLane}>
+								<div className={styles.tlLane} onContextMenu={trackReset.onContextMenuFor("zooms")}>
 									{/* Its own provider, like the toolbar's: see the note there. */}
 									<TooltipProvider>{renderZoomTrails()}</TooltipProvider>
 									{renderPills(
@@ -2818,6 +2825,7 @@ export function V4Timeline({
 						<div
 							ref={clipsRef}
 							className={`${styles.tlClips}${dragOver ? ` ${styles.tlClipsDrag}` : ""}`}
+							onContextMenu={trackReset.onContextMenuFor("video")}
 							onDragOver={(e) => {
 								e.preventDefault();
 								e.dataTransfer.dropEffect = "copy";
@@ -3024,6 +3032,7 @@ export function V4Timeline({
 					{audioDragTip.durationSec > 0 ? ` / ${formatSec(audioDragTip.durationSec)}` : ""}
 				</div>
 			) : null}
+			{trackReset.menu}
 		</div>
 	);
 }

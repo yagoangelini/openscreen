@@ -38,6 +38,7 @@ import {
 	readCameraFullscreenRegions,
 	readCameraHiddenRegions,
 	readCameraLookRegions,
+	recordedSwitchCuts,
 } from "@/lib/ai-edition/document/cameraSegments";
 import { createId } from "@/lib/ai-edition/document/ids";
 import { isFormatFillActive, pickOutputDims } from "@/lib/ai-edition/document/outputFormat";
@@ -951,6 +952,38 @@ function holdAtProgrammeEdges<
 	});
 }
 
+/**
+ * A full-camera span whose edge is a switch made on the HUD while recording is cut there, not
+ * eased (`recordedSwitchCuts`): held on that side like a trim edge, so the camera changes on the
+ * frame of the press. Spans are in their clip's source ms.
+ */
+function cutAtRecordedSwitches<
+	T extends {
+		startMs: number;
+		endMs: number;
+		clipIndex?: number;
+		continuesBefore?: boolean;
+		continuesAfter?: boolean;
+	},
+>(
+	regions: T[],
+	visibleClips: readonly AxcutClip[],
+	assetById: ReadonlyMap<string, AxcutDocument["assets"][number]>,
+): T[] {
+	return regions.map((region) => {
+		const clip = visibleClips[region.clipIndex ?? 0];
+		const layout = clip ? assetById.get(clip.assetId)?.cameraLayout : undefined;
+		if (!layout) return region;
+		const cuts = recordedSwitchCuts(layout, region.startMs, region.endMs);
+		if (!cuts.before && !cuts.after) return region;
+		return {
+			...region,
+			...(cuts.before ? { continuesBefore: true } : {}),
+			...(cuts.after ? { continuesAfter: true } : {}),
+		};
+	});
+}
+
 /** Serialize a document into a {@link SceneDescription}. No per-frame math; the one side effect is
  *  handing the click cues to the preview, which has no document of its own to read them from. */
 export function buildSceneDescription(
@@ -1749,9 +1782,10 @@ export function buildSceneDescription(
 			})
 			// Ascending zIndex so the compositor paints in order without sorting per frame.
 			.sort((a, b) => a.zIndex - b.zIndex),
-		cameraFullscreenRegions: holdAtProgrammeEdges(
-			projectedCameraFullscreenRegions,
+		cameraFullscreenRegions: cutAtRecordedSwitches(
+			holdAtProgrammeEdges(projectedCameraFullscreenRegions, visibleClips),
 			visibleClips,
+			assetById,
 		).map(sceneCameraRegion),
 		cameraHiddenRegions: holdAtProgrammeEdges(projectedCameraHiddenRegions, visibleClips).map(
 			sceneCameraRegion,

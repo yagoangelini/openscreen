@@ -4,7 +4,13 @@
 // or a new document with updated clips.
 
 import { clampToBound } from "../../projectDefaults";
-import type { AxcutClip, AxcutDocument, AxcutTranscript, AxcutTrimRange } from "../schema";
+import type {
+	AxcutAsset,
+	AxcutClip,
+	AxcutDocument,
+	AxcutTranscript,
+	AxcutTrimRange,
+} from "../schema";
 
 /**
  * What `resolvePlaybackSegments` returns: a clip-shaped slice of playable film.
@@ -494,6 +500,19 @@ function rederiveAnchoredRegion<
 // is the last thing we know. Deleted rather than left exported: a dead helper
 // that does the wrong thing is an invitation.
 
+/**
+ * How much of a take its first clip plays once the media is measured: up to the press on Stop
+ * when the take recorded one (`recordedEndSec`), never past the media itself. The frames the
+ * helper wrote after that press stay in the file, so dragging the clip edge brings them back.
+ */
+export function recordedClipLengthSec(
+	asset: Pick<AxcutAsset, "recordedEndSec"> | undefined,
+	durationSec: number,
+): number {
+	const endSec = asset?.recordedEndSec;
+	return endSec !== undefined && endSec > 0 && endSec < durationSec ? endSec : durationSec;
+}
+
 /** A clip that does not yet describe a real stretch of media: either it carries no
  *  source extent at all (what `migrateProjectDataToAxcutDocument` produces — the
  *  migration is pure, so it cannot probe the file for a duration), or it still sits at
@@ -548,6 +567,7 @@ export function applyProbedDuration(
 		};
 	}
 
+	const probedAsset = document.assets.find((asset) => asset.id === assetId);
 	// Widening a clip pushes everything after it down the ruler by the same delta.
 	let shiftSec = 0;
 	const nextClips = clips.map((clip) => {
@@ -558,11 +578,12 @@ export function applyProbedDuration(
 		};
 		if (!clipAwaitsProbedDuration(clip, assetId)) return shifted;
 		const previousLength = clip.timelineEndSec - clip.timelineStartSec;
-		shiftSec += durationSec - previousLength;
+		const lengthSec = recordedClipLengthSec(probedAsset, durationSec);
+		shiftSec += lengthSec - previousLength;
 		return {
 			...shifted,
-			sourceEndSec: clip.sourceStartSec + durationSec,
-			timelineEndSec: shifted.timelineStartSec + durationSec,
+			sourceEndSec: clip.sourceStartSec + lengthSec,
+			timelineEndSec: shifted.timelineStartSec + lengthSec,
 		};
 	});
 
@@ -644,7 +665,7 @@ export function documentAfterProbedDuration(
 		};
 		return replaceTimeline(
 			docWithDuration,
-			[{ startSec: 0, endSec: knownSec }],
+			[{ startSec: 0, endSec: recordedClipLengthSec(primaryAsset, knownSec) }],
 			"Auto-created full-duration clip",
 		);
 	}
@@ -1282,7 +1303,10 @@ function joinable(left: AxcutClip, right: AxcutClip): boolean {
 /** Move every row anchored to an absorbed clip onto the one that swallowed it. A trim, a
  *  zoom, an annotation and an audio take all name a clip the same way, and an id that no
  *  longer exists has to stop being named. */
-function reanchorRows(document: AxcutDocument, absorbed: Map<string, string>): AxcutDocument {
+export function reanchorRows(
+	document: AxcutDocument,
+	absorbed: Map<string, string>,
+): AxcutDocument {
 	const relabel = <T extends StoredRegion>(regions: T[]): T[] =>
 		regions.map((region) =>
 			hasCompleteClipAnchor(region) && absorbed.has(region.clipId)

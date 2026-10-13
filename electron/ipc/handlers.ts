@@ -1,6 +1,6 @@
 import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 import { EventEmitter } from "node:events";
-import { constants as fsConstants } from "node:fs";
+import { constants as fsConstants, mkdirSync } from "node:fs";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -165,11 +165,18 @@ import { runFrameChangeScan, runOcrScan } from "../recording/ocrScan";
 import {
 	clearPendingTake,
 	collectRecoverableTakes,
+	readPendingTakes,
 	recordPendingTake,
 	settlePendingTakeHandOff,
 } from "../recording/pendingTakes";
+import { takeFolderName, takeFolderNameForFile } from "../recording/recordingsLibrary";
 import { removeEmptyCaptureOutput } from "../recording/removeEmptyCaptureOutput";
-import { TakeCameraLayoutLog, takeMediaTimeMs } from "../recording/takeCameraLayout";
+import {
+	mediaClockOriginMs,
+	TakeCameraLayoutLog,
+	takeMediaTimeMs,
+} from "../recording/takeCameraLayout";
+import { dropControlPressClicks, plausiblePressEpochMs } from "../recording/takeControlPresses";
 import { TakeOwnership } from "../recording/takeOwnership";
 import { patchWebmDurationOnDisk } from "../recording/webm-duration";
 import { reindexRecordingOnDisk } from "../recording/webm-seek-index";
@@ -200,6 +207,7 @@ import { registerNativeBridgeHandlers } from "./nativeBridge";
 import { createNativeMacMidCaptureErrorWatch } from "./nativeMacMidCaptureErrorWatch";
 import { registerRecordingPrefsHandlers } from "./recordingPrefs";
 import { RecordingStreamRegistry, registerRecordingStreamHandlers } from "./recordingStream";
+import { registerRecordingsLibraryHandlers } from "./recordingsLibraryHandlers";
 import { type SelectSourceContext, selectSourceWithOwnership } from "./selectSourceOwnership";
 
 const PROJECT_FILE_EXTENSION = "openscreen";
@@ -284,6 +292,15 @@ export function defaultCaptureOutputDir(): string {
 
 function applyCaptureOutputDir(folder: string | null | undefined) {
 	captureOutputDir = folder && path.isAbsolute(folder) ? folder : defaultCaptureOutputDir();
+}
+
+/**
+ * The folder a take is written into: one per take, inside the recordings folder, holding
+ * all its files. The user names it once the take ends (`name-fresh-take`), and the Media
+ * tab lists it (`recordingsLibraryHandlers.ts`).
+ */
+function takeOutputDir(recordingId: number): string {
+	return path.join(currentCaptureOutputDir(), takeFolderName(recordingId));
 }
 
 function isInRecordingDirs(filePath: string): boolean {
@@ -578,7 +595,14 @@ function resolveRecordingOutputPath(fileName: string): string {
 		throw new Error("Recording file name must not contain path segments");
 	}
 
-	return path.join(currentCaptureOutputDir(), parsedPath.base);
+	// A take's files (`recording-<id>.webm`, `recording-<id>-webcam.webm`) go into its own
+	// folder, like the native helpers' do; anything else stays at the top.
+	const takeFolder = takeFolderNameForFile(parsedPath.base);
+	const dir = takeFolder
+		? path.join(currentCaptureOutputDir(), takeFolder)
+		: currentCaptureOutputDir();
+	mkdirSync(dir, { recursive: true });
+	return path.join(dir, parsedPath.base);
 }
 
 function isValidDurationMs(value: number | undefined): value is number {
@@ -791,7 +815,8 @@ const defaultRecordingPrefs: RecordingPrefs = {
 	hideDesktopIcons: false,
 	autoZoomEnabled: true,
 	recordingsFolder: null,
-	countdownSeconds: 3,
+	// The default of app-settings.ts (see there for why 5).
+	countdownSeconds: 5,
 	micChannelMode: "auto",
 	cameraLayout: DEFAULT_RECORDING_CAMERA_LAYOUT,
 	micSilenceWarningEnabled: true,
@@ -930,6 +955,10 @@ let nativeWindowsPausedSinceMs: number | null = null;
 let nativeWindowsMarkersMs: number[] = [];
 /** The take's "Rosto / Tela + câmera" switches; null for a take without a camera. */
 let nativeWindowsCameraLayout: TakeCameraLayoutLog | null = null;
+/** Presses on OpenScreen's own controls during the take (epoch ms), kept out of its cursor. */
+let nativeWindowsControlPressesMs: number[] = [];
+/** Where the take was stopped on its media clock (the press on Stop), once a stop is asked. */
+let nativeWindowsStopAtMediaMs: number | null = null;
 /** The layout sidecar's writes, one after the other (see persistNativeWindowsCameraLayout). */
 let nativeWindowsCameraLayoutWrites: Promise<void> = Promise.resolve();
 
@@ -981,6 +1010,8 @@ function resetNativeWindowsCaptureState() {
 	nativeWindowsPausedSinceMs = null;
 	nativeWindowsMarkersMs = [];
 	nativeWindowsCameraLayout = null;
+	nativeWindowsControlPressesMs = [];
+	nativeWindowsStopAtMediaMs = null;
 	if (nativeWindowsDiskWatch) {
 		clearInterval(nativeWindowsDiskWatch);
 		nativeWindowsDiskWatch = null;
@@ -994,6 +1025,23 @@ async function salvageNativeWindowsFragmentedCapture(screenVideoPath: string | n
 	}
 	const stats = await fs.stat(screenVideoPath).catch(() => null);
 	return isSalvageableFragmentedCapture(nativeWindowsCaptureContainer, stats?.size ?? null);
+}
+
+/**
+ * A take cancelled before it was a take leaves its folder empty, and the folder goes with
+ * it. Only a `recording-<id>` folder directly in the recordings folder, and only if empty
+ * (`rmdir` refuses anything else), so nothing the user put there can go.
+ */
+async function removeEmptyTakeFolder(filePath: string | null | undefined) {
+	if (!filePath) return;
+	const dir = path.dirname(path.resolve(filePath));
+	if (
+		path.dirname(dir).toLowerCase() !== path.resolve(currentCaptureOutputDir()).toLowerCase() ||
+		!/^recording-d+$/.test(path.basename(dir))
+	) {
+		return;
+	}
+	await fs.rmdir(dir).catch(() => undefined);
 }
 
 /**
@@ -1059,6 +1107,7 @@ async function removeNativeWindowsCaptureOutputs(
 		}
 	}
 	await removeCheckpointIfVideoGone();
+	await removeEmptyTakeFolder(screenVideoPath ?? webcamVideoPath);
 }
 let nativeMacCaptureProcess: ChildProcessWithoutNullStreams | null = null;
 /**
@@ -1673,6 +1722,21 @@ async function registerRecordingMediaLinks(
 	} catch (error) {
 		console.warn("[media-links] failed to register recording links:", error);
 	}
+}
+
+/** `pressesEpochMs`: presses on OpenScreen's own controls; `samplerStartMs`: the epoch of the
+ *  sampler's 0. See takeControlPresses.ts. */
+function dropPendingCursorControlPresses(
+	pressesEpochMs: readonly number[],
+	samplerStartMs: number,
+) {
+	if (!pendingCursorRecordingData || pressesEpochMs.length === 0 || samplerStartMs <= 0) {
+		return;
+	}
+	pendingCursorRecordingData = dropControlPressClicks(
+		pendingCursorRecordingData,
+		pressesEpochMs.map((at) => at - samplerStartMs),
+	);
 }
 
 function shiftPendingCursorTelemetry(offsetMs: number) {
@@ -2649,6 +2713,8 @@ export function registerIpcHandlers(
 	const switchRecordingCameraLayout = (
 		layout: RecordingCameraLayout,
 		source: "hud" | "shortcut",
+		/** When the HUD's button was pressed (epoch ms), so the switch lands on the press. */
+		pressedAtEpochMs?: unknown,
 	): RecordingCameraLayout | null => {
 		let shown: RecordingCameraLayout = layout;
 		let beforeFirstFrame = true;
@@ -2657,8 +2723,9 @@ export function registerIpcHandlers(
 			if (!log || nativeWindowsStopInFlight) {
 				return null;
 			}
+			const nowMs = Date.now();
 			const mediaMs = takeMediaTimeMs({
-				nowMs: Date.now(),
+				nowMs: plausiblePressEpochMs(pressedAtEpochMs, nowMs) ?? nowMs,
 				captureStartedAtMs: nativeWindowsCaptureStartedAtMs,
 				pausedTotalMs: nativeWindowsPausedTotalMs,
 				pausedSinceMs: nativeWindowsPausedSinceMs,
@@ -2689,9 +2756,22 @@ export function registerIpcHandlers(
 			: null;
 	};
 	ipcMain.handle("get-recording-camera-layout", () => currentRecordingCameraLayout());
-	ipcMain.handle("set-recording-camera-layout", (_, layout: unknown) =>
-		isRecordingCameraLayout(layout) ? switchRecordingCameraLayout(layout, "hud") : null,
+	ipcMain.handle("set-recording-camera-layout", (_, layout: unknown, pressedAtEpochMs?: unknown) =>
+		isRecordingCameraLayout(layout)
+			? switchRecordingCameraLayout(layout, "hud", pressedAtEpochMs)
+			: null,
 	);
+	// A press on one of OpenScreen's own controls during a take (the HUD's buttons), which the
+	// video never shows: its click is taken out of the take's cursor at the stop.
+	ipcMain.on("note-recording-control-press", (_, pressedAtEpochMs: unknown) => {
+		if (!nativeWindowsCaptureProcess) {
+			return;
+		}
+		const at = plausiblePressEpochMs(pressedAtEpochMs, Date.now());
+		if (at !== null && nativeWindowsControlPressesMs.length < 10_000) {
+			nativeWindowsControlPressesMs.push(at);
+		}
+	});
 
 	// Asked before every take starts. A disk that fills up mid-take used to be found only
 	// when the take was saved, and the take was lost with it.
@@ -2990,13 +3070,13 @@ export function registerIpcHandlers(
 						? request.recordingId
 						: Date.now();
 				const outputPath = path.join(
-					currentCaptureOutputDir(),
+					takeOutputDir(recordingId),
 					`${RECORDING_FILE_PREFIX}${recordingId}.mp4`,
 				);
 				const cursorCaptureMode =
 					normalizeCursorCaptureMode(request?.cursor?.mode) ?? "editable-overlay";
 
-				await fs.mkdir(currentCaptureOutputDir(), { recursive: true });
+				await fs.mkdir(takeOutputDir(recordingId), { recursive: true });
 
 				const session = new LinuxNativeCaptureSession({
 					outputPath,
@@ -3070,13 +3150,13 @@ export function registerIpcHandlers(
 						? request.recordingId
 						: Date.now();
 				outputPath = path.join(
-					currentCaptureOutputDir(),
+					takeOutputDir(recordingId),
 					`${RECORDING_FILE_PREFIX}${recordingId}.mp4`,
 				);
 				const cursorCaptureMode =
 					normalizeCursorCaptureMode(request?.cursor?.mode) ?? "editable-overlay";
 
-				await fs.mkdir(currentCaptureOutputDir(), { recursive: true });
+				await fs.mkdir(takeOutputDir(recordingId), { recursive: true });
 
 				// A session prepared before the countdown, if there was one. Taking
 				// it here rather than requiring it is what keeps every caller
@@ -3180,13 +3260,14 @@ export function registerIpcHandlers(
 			if (discard) {
 				session.discard();
 				const discarded = path.join(
-					currentCaptureOutputDir(),
+					takeOutputDir(recordingId),
 					`${RECORDING_FILE_PREFIX}${recordingId}.mp4`,
 				);
 				await Promise.all([
 					fs.rm(discarded, { force: true }),
 					fs.rm(`${discarded}.cursor.json`, { force: true }),
 				]);
+				await removeEmptyTakeFolder(discarded);
 				return { success: true, discarded: true };
 			}
 
@@ -3311,11 +3392,11 @@ export function registerIpcHandlers(
 						? request.recordingId
 						: Date.now();
 				const outputPath = path.join(
-					currentCaptureOutputDir(),
+					takeOutputDir(recordingId),
 					`${RECORDING_FILE_PREFIX}${recordingId}.mp4`,
 				);
 				const webcamOutputPath = path.join(
-					currentCaptureOutputDir(),
+					takeOutputDir(recordingId),
 					`${RECORDING_FILE_PREFIX}${recordingId}-webcam.mp4`,
 				);
 				const sourceDisplay =
@@ -3420,7 +3501,7 @@ export function registerIpcHandlers(
 					outputPath,
 				});
 
-				await fs.mkdir(currentCaptureOutputDir(), { recursive: true });
+				await fs.mkdir(takeOutputDir(recordingId), { recursive: true });
 				nativeWindowsCaptureOutput = "";
 				nativeWindowsCaptureTargetPath = outputPath;
 				nativeWindowsCaptureWebcamTargetPath = request.webcam.enabled ? webcamOutputPath : null;
@@ -3519,8 +3600,11 @@ export function registerIpcHandlers(
 					cursorSamplerReady,
 				]);
 				const captureStartedAtMs = Date.now();
-				nativeWindowsCaptureStartedAtMs = captureStartedAtMs;
 				const firstFrameEpochMs = readFirstFrameEpochMs(nativeWindowsCaptureOutput);
+				// The zero of the take's media time is its first frame, not the moment this
+				// process heard of it: that came 20-90 ms later (and after the cursor sampler was
+				// ready), and every switch and marker landed that much early in the editor.
+				nativeWindowsCaptureStartedAtMs = mediaClockOriginMs(firstFrameEpochMs, captureStartedAtMs);
 				nativeWindowsCursorOffsetMs =
 					cursorCaptureMode === "editable-overlay"
 						? cursorOffsetToFirstFrameMs(cursorStartTimeMs, firstFrameEpochMs, captureStartedAtMs)
@@ -3693,6 +3777,7 @@ export function registerIpcHandlers(
 					if (screenPath) {
 						await clearPendingTake(RECORDINGS_DIR, screenPath).catch(() => undefined);
 					}
+					await removeEmptyTakeFolder(screenPath ?? webcamPath);
 					return { success: false, cancelled: true };
 				}
 				return { success: false, error: String(error) };
@@ -3735,7 +3820,7 @@ export function registerIpcHandlers(
 					? request.recordingId
 					: Date.now();
 			const outputPath = path.join(
-				currentCaptureOutputDir(),
+				takeOutputDir(recordingId),
 				`${RECORDING_FILE_PREFIX}${recordingId}.mp4`,
 			);
 			const cursorCaptureMode =
@@ -3817,7 +3902,7 @@ export function registerIpcHandlers(
 				outputs: {
 					screenPath: outputPath,
 					manifestPath: path.join(
-						currentCaptureOutputDir(),
+						takeOutputDir(recordingId),
 						`${RECORDING_FILE_PREFIX}${recordingId}${RECORDING_SESSION_SUFFIX}`,
 					),
 				},
@@ -3833,7 +3918,7 @@ export function registerIpcHandlers(
 				outputPath,
 			});
 
-			await fs.mkdir(currentCaptureOutputDir(), { recursive: true });
+			await fs.mkdir(takeOutputDir(recordingId), { recursive: true });
 			nativeMacCaptureOutput = "";
 			nativeMacCaptureTargetPath = outputPath;
 			nativeMacCaptureRecordingId = recordingId;
@@ -4299,6 +4384,11 @@ export function registerIpcHandlers(
 					return;
 				}
 				try {
+					// On the sampler's own clock, before the pauses and the first frame move it.
+					dropPendingCursorControlPresses(
+						nativeWindowsControlPressesMs,
+						nativeWindowsCursorRecordingStartMs,
+					);
 					compactPendingCursorTelemetryPauseRanges(nativeWindowsPauseRanges);
 					shiftPendingCursorTelemetry(nativeWindowsCursorOffsetMs);
 					await writePendingCursorTelemetry(screenVideoPath);
@@ -4344,9 +4434,14 @@ export function registerIpcHandlers(
 			})();
 			const [, webcamVideoPath] = await Promise.all([cursorWritten, webcamChecked]);
 			markStop("cursor-written");
-			const session: RecordingSession = webcamVideoPath
-				? { screenVideoPath, webcamVideoPath, createdAt: recordingId, cursorCaptureMode }
-				: { screenVideoPath, createdAt: recordingId, cursorCaptureMode };
+			const stopAtMs = nativeWindowsStopAtMediaMs;
+			const session: RecordingSession = {
+				screenVideoPath,
+				...(webcamVideoPath ? { webcamVideoPath } : {}),
+				createdAt: recordingId,
+				cursorCaptureMode,
+				...(stopAtMs !== null && stopAtMs > 0 ? { stopAtMs } : {}),
+			};
 			// The hand-off itself: the editor's import reads this, and only this. The HUD
 			// used to set it again on the way to the editor, which could land after the
 			// editor had already consumed it and hand the same take over twice.
@@ -4444,26 +4539,40 @@ export function registerIpcHandlers(
 		}
 	};
 
-	ipcMain.handle("stop-native-windows-recording", async (_, discard?: boolean) => {
-		// The editor's window and page load while the take finalizes: the HUD asks for
-		// it the moment the take is saved, and it is already there. Only for the stop that
-		// starts the save; a second stop joins it.
-		const opensEditor =
-			!discard && Boolean(nativeWindowsCaptureProcess) && !nativeWindowsStopPromise;
-		// The stop command goes out first, synchronously: building a window blocks this
-		// thread for tens of ms, and the take would run on for them after the click.
-		const stopped = stopNativeWindowsCapture(discard);
-		if (opensEditor) {
-			editorPrewarm?.open();
-		}
-		const result = await stopped;
-		if (opensEditor) {
-			// Saved: the HUD switches to it now. Kept a while for a HUD that died on the way,
-			// whose take the journal offers back anyway.
-			editorPrewarm?.discard(result.success && !("discarded" in result) ? 30_000 : 0);
-		}
-		return result;
-	});
+	ipcMain.handle(
+		"stop-native-windows-recording",
+		async (_, discard?: boolean, pressedAtEpochMs?: unknown) => {
+			// The editor's window and page load while the take finalizes: the HUD asks for
+			// it the moment the take is saved, and it is already there. Only for the stop that
+			// starts the save; a second stop joins it.
+			const opensEditor =
+				!discard && Boolean(nativeWindowsCaptureProcess) && !nativeWindowsStopPromise;
+			if (opensEditor) {
+				// The take ends where Stop was pressed, not where the helper stopped writing: the
+				// import ends the take's clip here (`recordedEndSec`).
+				const nowMs = Date.now();
+				nativeWindowsStopAtMediaMs = takeMediaTimeMs({
+					nowMs: plausiblePressEpochMs(pressedAtEpochMs, nowMs) ?? nowMs,
+					captureStartedAtMs: nativeWindowsCaptureStartedAtMs,
+					pausedTotalMs: nativeWindowsPausedTotalMs,
+					pausedSinceMs: nativeWindowsPausedSinceMs,
+				});
+			}
+			// The stop command goes out first, synchronously: building a window blocks this
+			// thread for tens of ms, and the take would run on for them after the click.
+			const stopped = stopNativeWindowsCapture(discard);
+			if (opensEditor) {
+				editorPrewarm?.open();
+			}
+			const result = await stopped;
+			if (opensEditor) {
+				// Saved: the HUD switches to it now. Kept a while for a HUD that died on the way,
+				// whose take the journal offers back anyway.
+				editorPrewarm?.discard(result.success && !("discarded" in result) ? 30_000 : 0);
+			}
+			return result;
+		},
+	);
 
 	/**
 	 * Stops and saves the take without the HUD's help, for the callers that
@@ -4632,6 +4741,7 @@ export function registerIpcHandlers(
 						fs.rm(target, { force: true }),
 					),
 				);
+				await removeEmptyTakeFolder(preferredPath);
 				if (!stopResult.ok) {
 					console.warn("[native-sck] discarded a take whose stop did not complete", {
 						reason: stopResult.reason,
@@ -6235,6 +6345,51 @@ export function registerIpcHandlers(
 		nativeWindowsMarkersMs.push(Math.max(0, Math.round(mediaMs)));
 		return nativeWindowsMarkersMs.length;
 	};
+
+	// The recordings library in the Media tab, and the name asked for after a take.
+	registerRecordingsLibraryHandlers(ipcMain, {
+		recordingsFolder: currentCaptureOutputDir,
+		guards: {
+			// The take being recorded or stopped right now, on any platform.
+			activeTakePaths: () => {
+				const paths = [
+					nativeWindowsCaptureTargetPath,
+					nativeWindowsCaptureWebcamTargetPath,
+					nativeMacCaptureTargetPath,
+				].filter((value): value is string => Boolean(value));
+				for (const id of [
+					nativeWindowsCaptureRecordingId,
+					nativeMacCaptureRecordingId,
+					linuxNativeCaptureRecordingId,
+				]) {
+					if (typeof id === "number") {
+						paths.push(path.join(takeOutputDir(id), `${RECORDING_FILE_PREFIX}${id}.mp4`));
+					}
+				}
+				return paths;
+			},
+			// Recorded at the start of every take, cleared once it is in a saved project: a take
+			// still listed is being finalized, handed to the editor, or waiting to be recovered.
+			pendingTakePaths: async () =>
+				(await readPendingTakes(RECORDINGS_DIR)).flatMap((take) =>
+					take.webcamVideoPath
+						? [take.screenVideoPath, take.webcamVideoPath]
+						: [take.screenVideoPath],
+				),
+		},
+		documents: aiEditionDocuments,
+		journalDir: () => RECORDINGS_DIR,
+		registryDir: () => DEFAULT_RECORDINGS_DIR,
+		currentSession: () => currentRecordingSession,
+		setCurrentSession: (session) => setCurrentRecordingSessionState(session),
+		takeSettled: async () => {
+			await nativeWindowsStopPromise?.catch(() => undefined);
+			await Promise.race([
+				nativeWindowsHelperExit ?? Promise.resolve(),
+				new Promise((resolve) => setTimeout(resolve, 4_000)),
+			]);
+		},
+	});
 
 	return {
 		addRecordingMarker,

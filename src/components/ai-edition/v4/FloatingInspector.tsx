@@ -80,7 +80,11 @@ import { resolveAspectRatioValue } from "@/lib/ai-edition/document/outputFormat"
 import type { AxcutAnnotationRegion, AxcutClip } from "@/lib/ai-edition/schema";
 import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
 import { rafCoalesce } from "@/lib/ai-edition/store/rafCoalesce";
-import { useEditorSettings } from "@/lib/ai-edition/store/useEditorSettings";
+import {
+	applyCameraLookToAllPieces,
+	type EditorSettingsWriteOptions,
+	useEditorSettings,
+} from "@/lib/ai-edition/store/useEditorSettings";
 import type { useTimeline } from "@/lib/ai-edition/store/useTimeline";
 import { hasAnyClipWithCamera } from "@/lib/ai-edition/timeline/camera";
 import { formatSeconds } from "@/lib/ai-edition/timeline/format";
@@ -1462,27 +1466,49 @@ const PANE_BUTTON = `${shell.btn} ${shell.btnSecondary}`;
 
 type LookScope = "piece" | "all";
 
+/** "Todos os trechos" writes: the global setting, and every piece's own value for it dropped. */
+const LOOK_FOR_ALL_PIECES: EditorSettingsWriteOptions = {
+	transform: applyCameraLookToAllPieces,
+	historyLabel: "cameraLookAll",
+};
+
+/**
+ * The scope the user last picked, for the next piece selected in this session. Until they pick
+ * one, a piece opens on its own scope when it has a look of its own and on "all" otherwise.
+ * Sticky because the choice is about the edit, not the piece: re-opening every piece with a
+ * look of its own on "Este trecho" made a user who had chosen "Todos os trechos" restyle only
+ * the piece they clicked next.
+ */
+let pickedLookScope: LookScope | null = null;
+
 /**
  * A camera piece's look: the global camera controls (`CameraLookControls`) behind a scope
  * switch. "Este trecho" edits the piece's own overrides and shows what the piece shows (the
- * global settings with its overrides over them); "Todos os trechos" edits the global settings,
- * exactly as the Layout pane does. A piece with a look of its own opens on its own scope.
+ * global settings with its overrides over them); "Todos os trechos" edits the global settings
+ * AND drops each piece's own value for the setting changed (`applyCameraLookToAllPieces`), so
+ * every piece ends up with it, in one undoable write.
  */
 function CameraPieceLook({ tl, piece }: { tl: TimelineApi; piece: CameraPiece }) {
 	const tt = useScopedT("timeline");
-	const { settings, set, setLive, commit } = useEditorSettings();
+	const { settings } = useEditorSettings();
+	const { set, setLive, commit } = useEditorSettings(LOOK_FOR_ALL_PIECES);
 	const doc = useProjectStore((s) => s.document);
 	const hasAnyCamera = useMemo(
 		() => (doc ? hasAnyClipWithCamera(doc.assets, doc.timeline.clips) : false),
 		[doc],
 	);
 	const ownLook = piece.overrides !== undefined;
-	const [scope, setScope] = useState<LookScope>(ownLook ? "piece" : "all");
-	// Another piece selected: open on its own scope. Keyed on the start, which a piece keeps when
-	// its first write stores it (an implicit piece changes key, not place).
-	// biome-ignore lint/correctness/useExhaustiveDependencies: the start is the trigger; `ownLook` is read once per piece
+	const initialScope = (): LookScope => pickedLookScope ?? (ownLook ? "piece" : "all");
+	const [scope, setScopeState] = useState<LookScope>(initialScope);
+	const setScope = (next: LookScope) => {
+		pickedLookScope = next;
+		setScopeState(next);
+	};
+	// Another piece selected: open on the scope picked last, else on its own. Keyed on the start,
+	// which a piece keeps when its first write stores it (an implicit piece changes key, not place).
+	// biome-ignore lint/correctness/useExhaustiveDependencies: the start is the trigger; the scope is read once per piece
 	useEffect(() => {
-		setScope(ownLook ? "piece" : "all");
+		setScopeState(initialScope());
 	}, [piece.startMs]);
 	const isPip =
 		resolveWebcamLayoutPreset(settings.webcamLayoutPreset, hasAnyCamera) === "picture-in-picture";

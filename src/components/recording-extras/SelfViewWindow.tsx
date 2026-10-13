@@ -1,5 +1,6 @@
 import { Circle, Square, VideoOff } from "lucide-react";
 import {
+	type CSSProperties,
 	type PointerEvent as ReactPointerEvent,
 	useEffect,
 	useRef,
@@ -8,11 +9,54 @@ import {
 } from "react";
 import { useScopedT } from "@/contexts/I18nContext";
 import { useCameraPreviewStream } from "@/hooks/useCameraPreviewStream";
-import type { SelfViewFrameMessage, SelfViewSnapshot } from "@/lib/recordingExtrasApi";
+import type {
+	SelfViewFrameMessage,
+	SelfViewShape,
+	SelfViewSnapshot,
+} from "@/lib/recordingExtrasApi";
 
 const RESIZE_STEP = 24;
 
-/** Draws `frame` into `canvas` the way `object-fit: cover` would, mirrored like a mirror. */
+/**
+ * The crop, for both sources. A `clip-path`, not `overflow: hidden` plus a border radius:
+ * Chromium can hand a playing <video> to the compositor as its own layer, and that layer
+ * was not clipped by the parent's rounded corners. Before a take the self-view showed the
+ * camera as a full square, with the faint ring that used to be drawn on top marking where
+ * the crop should have been; during a take (frames painted on a canvas) it was cropped.
+ * Now both are painted on the same canvas and clipped the same way.
+ */
+export function selfViewShapeStyle(shape: SelfViewShape): CSSProperties {
+	return shape === "circle"
+		? { borderRadius: "50%", clipPath: "circle(50% at 50% 50%)" }
+		: { borderRadius: "18%", clipPath: "inset(0 round 18%)" };
+}
+
+/** Draws `source` into `canvas` the way `object-fit: cover` would, mirrored like a mirror. */
+function paintCover(
+	canvas: HTMLCanvasElement,
+	source: CanvasImageSource,
+	sourceWidth: number,
+	sourceHeight: number,
+) {
+	const ctx = canvas.getContext("2d");
+	if (!ctx || sourceWidth <= 0 || sourceHeight <= 0) return false;
+	const scale = window.devicePixelRatio || 1;
+	const width = Math.round(canvas.clientWidth * scale);
+	const height = Math.round(canvas.clientHeight * scale);
+	if (canvas.width !== width || canvas.height !== height) {
+		canvas.width = width;
+		canvas.height = height;
+	}
+	const cover = Math.max(width / sourceWidth, height / sourceHeight);
+	const drawWidth = sourceWidth * cover;
+	const drawHeight = sourceHeight * cover;
+	ctx.setTransform(-1, 0, 0, 1, width, 0);
+	ctx.imageSmoothingQuality = "medium";
+	ctx.drawImage(source, (width - drawWidth) / 2, (height - drawHeight) / 2, drawWidth, drawHeight);
+	return true;
+}
+
+/** A helper frame (RGBA bytes) through a scratch canvas, then like any other source. */
 function paintFrame(
 	canvas: HTMLCanvasElement,
 	scratch: HTMLCanvasElement,
@@ -31,30 +75,20 @@ function paintFrame(
 		frame.rgba.byteLength,
 	);
 	scratchCtx.putImageData(new ImageData(pixels, frame.width, frame.height), 0, 0);
-	const scale = window.devicePixelRatio || 1;
-	const width = Math.round(canvas.clientWidth * scale);
-	const height = Math.round(canvas.clientHeight * scale);
-	if (canvas.width !== width || canvas.height !== height) {
-		canvas.width = width;
-		canvas.height = height;
-	}
-	const cover = Math.max(width / frame.width, height / frame.height);
-	const drawWidth = frame.width * cover;
-	const drawHeight = frame.height * cover;
-	ctx.setTransform(-1, 0, 0, 1, width, 0);
-	ctx.imageSmoothingQuality = "medium";
-	ctx.drawImage(scratch, (width - drawWidth) / 2, (height - drawHeight) / 2, drawWidth, drawHeight);
+	paintCover(canvas, scratch, frame.width, frame.height);
 }
 
 /**
  * The floating camera self-view: the user sees themselves, the video never does (the window is
  * content-protected). Between takes it opens the camera itself; during a take the recording
- * helper owns the camera, so it lets go and paints the small frames the helper sends.
+ * helper owns the camera, so it lets go and paints the small frames the helper sends. Both
+ * end up on the same canvas, mirrored, covering the window and clipped to the same shape, so
+ * what the user sees before a take is what they see during it.
  */
 export function SelfViewWindow() {
 	const t = useScopedT("launch");
 	const [state, setState] = useState<SelfViewSnapshot | null>(null);
-	const [hasHelperFrame, setHasHelperFrame] = useState(false);
+	const [hasFrame, setHasFrame] = useState(false);
 	const canvasRef = useRef<HTMLCanvasElement | null>(null);
 	const scratchRef = useRef<HTMLCanvasElement | null>(null);
 	const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -70,27 +104,46 @@ export function SelfViewWindow() {
 		return api.onSelfViewState(setState);
 	}, []);
 
-	const ownCamera = state?.source === "camera";
+	const source = state?.source;
+	const ownCamera = source === "camera";
 	const { stream, error } = useCameraPreviewStream({
 		enabled: Boolean(state && ownCamera),
 		deviceId: state?.deviceId ?? undefined,
 	});
 
-	// The take's helper is about to open the camera: the stream above is already stopped
-	// (its effect ran first), so the main process may spawn it.
+	// A new source has painted nothing yet: the placeholder until it does. The take's
+	// helper is about to open the camera: the stream above is already stopped (its effect
+	// ran first), so the main process may spawn it.
 	useEffect(() => {
-		if (state?.source !== "helper") {
-			setHasHelperFrame(false);
-			return;
-		}
-		window.recordingExtrasAPI?.selfViewCameraReleased();
-	}, [state?.source]);
+		setHasFrame(false);
+		if (source === "helper") window.recordingExtrasAPI?.selfViewCameraReleased();
+	}, [source]);
 
+	// Between takes: the camera's own frames, painted onto the canvas as they arrive. The
+	// <video> only decodes; it is never what the user sees (see selfViewShapeStyle).
 	useEffect(() => {
 		const video = videoRef.current;
-		if (!video) return;
+		if (!video || !stream) return;
 		video.srcObject = stream;
+		let cancelled = false;
+		let handle = 0;
+		const usesFrameCallback = typeof video.requestVideoFrameCallback === "function";
+		const paint = () => {
+			if (cancelled) return;
+			const canvas = canvasRef.current;
+			if (canvas && video.readyState >= 2) {
+				if (paintCover(canvas, video, video.videoWidth, video.videoHeight)) setHasFrame(true);
+			}
+			handle = usesFrameCallback
+				? video.requestVideoFrameCallback(paint)
+				: window.requestAnimationFrame(paint);
+		};
+		video.play?.()?.catch(() => undefined);
+		paint();
 		return () => {
+			cancelled = true;
+			if (usesFrameCallback) video.cancelVideoFrameCallback(handle);
+			else window.cancelAnimationFrame(handle);
 			video.srcObject = null;
 		};
 	}, [stream]);
@@ -103,7 +156,7 @@ export function SelfViewWindow() {
 			if (canvas) {
 				scratchRef.current ??= document.createElement("canvas");
 				paintFrame(canvas, scratchRef.current, frame);
-				setHasHelperFrame(true);
+				setHasFrame(true);
 			}
 			api.ackSelfViewFrame();
 		});
@@ -111,7 +164,6 @@ export function SelfViewWindow() {
 
 	const api = window.recordingExtrasAPI;
 	const shape = state?.shape ?? "circle";
-	const radius = shape === "circle" ? "50%" : "18%";
 
 	const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
 		if (event.button !== 0) return;
@@ -134,16 +186,15 @@ export function SelfViewWindow() {
 		api?.selfViewResize(window.innerWidth + step);
 	};
 
-	const showVideo = ownCamera && stream && !error;
-	const showCanvas = !ownCamera;
-	const placeholder = (ownCamera && (!stream || error)) || (!ownCamera && !hasHelperFrame);
+	const placeholder = !hasFrame || (ownCamera && (!stream || Boolean(error)));
 
 	return (
 		<div
 			data-testid="self-view"
-			data-source={state?.source ?? "camera"}
+			data-source={source ?? "camera"}
+			data-shape={shape}
 			className="group relative h-screen w-screen cursor-grab select-none overflow-hidden bg-[#0b0d10] active:cursor-grabbing"
-			style={{ borderRadius: radius }}
+			style={selfViewShapeStyle(shape)}
 			title={t("selfView.windowTip")}
 			onPointerDown={handlePointerDown}
 			onPointerMove={handlePointerMove}
@@ -151,28 +202,26 @@ export function SelfViewWindow() {
 			onPointerCancel={handlePointerUp}
 			onWheel={handleWheel}
 		>
+			{/* Decoder only: one transparent pixel, so the compositor never shows it. */}
 			<video
 				ref={videoRef}
-				className="absolute inset-0 h-full w-full object-cover"
-				style={{ transform: "scaleX(-1)", display: showVideo ? "block" : "none" }}
+				data-testid="self-view-decoder"
+				className="pointer-events-none absolute top-0 left-0 h-px w-px opacity-0"
+				aria-hidden="true"
 				autoPlay
 				muted
 				playsInline
 			/>
 			<canvas
 				ref={canvasRef}
+				data-testid="self-view-canvas"
 				className="absolute inset-0 h-full w-full"
-				style={{ display: showCanvas ? "block" : "none" }}
 			/>
 			{placeholder ? (
 				<div className="absolute inset-0 flex items-center justify-center text-[#6b7480]">
 					<VideoOff size={28} />
 				</div>
 			) : null}
-			<div
-				className="pointer-events-none absolute inset-0 border-2 border-white/15"
-				style={{ borderRadius: radius }}
-			/>
 			<button
 				type="button"
 				data-testid="self-view-shape"

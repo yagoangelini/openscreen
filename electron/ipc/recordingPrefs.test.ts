@@ -25,7 +25,7 @@ const defaults: RecordingPrefs = {
 	hideDesktopIcons: false,
 	autoZoomEnabled: true,
 	recordingsFolder: null,
-	countdownSeconds: 3,
+	countdownSeconds: 5,
 	micChannelMode: "auto",
 	cameraLayout: "screen",
 	micSilenceWarningEnabled: true,

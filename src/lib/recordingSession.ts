@@ -33,6 +33,11 @@ export type CursorCaptureMode = "editable-overlay" | "system";
 
 export interface RecordingSession extends ProjectMedia {
 	createdAt: number;
+	/**
+	 * Where the take was stopped, in ms of its media time (the press on Stop). The files run a
+	 * little past it; the import ends the take there. Absent on takes from before it existed.
+	 */
+	stopAtMs?: number;
 }
 
 export interface RecordedVideoAssetInput {
@@ -113,5 +118,8 @@ export function normalizeRecordingSession(candidate: unknown): RecordingSession 
 			typeof raw.createdAt === "number" && Number.isFinite(raw.createdAt)
 				? raw.createdAt
 				: Date.now(),
+		...(typeof raw.stopAtMs === "number" && Number.isFinite(raw.stopAtMs) && raw.stopAtMs > 0
+			? { stopAtMs: raw.stopAtMs }
+			: {}),
 	};
 }

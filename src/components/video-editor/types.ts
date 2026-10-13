@@ -343,6 +343,10 @@ export interface CameraFullscreenRegion {
 	id: string;
 	startMs: number;
 	endMs: number;
+	/** A cut, not a ramp, at the start (a switch made on the HUD while recording). */
+	continuesBefore?: boolean;
+	/** A cut, not a ramp, at the end. */
+	continuesAfter?: boolean;
 }
 
 export type AnnotationType = "text" | "image" | "figure" | "blur" | "highlight" | "step";

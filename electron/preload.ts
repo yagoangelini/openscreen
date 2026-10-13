@@ -228,8 +228,12 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	},
 	setRecordingCameraLayout: (
 		layout: RecordingCameraLayout,
+		pressedAtEpochMs?: number,
 	): Promise<RecordingCameraLayout | null> => {
-		return ipcRenderer.invoke("set-recording-camera-layout", layout);
+		return ipcRenderer.invoke("set-recording-camera-layout", layout, pressedAtEpochMs);
+	},
+	noteRecordingControlPress: (pressedAtEpochMs: number) => {
+		ipcRenderer.send("note-recording-control-press", pressedAtEpochMs);
 	},
 	onRecordingCameraLayoutChanged: (
 		callback: (change: { layout: RecordingCameraLayout; source: "hud" | "shortcut" }) => void,
@@ -328,8 +332,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	cancelNativeWindowsPendingStart: () => {
 		return ipcRenderer.invoke("cancel-native-windows-pending-start") as Promise<boolean>;
 	},
-	stopNativeWindowsRecording: (discard?: boolean) => {
-		return ipcRenderer.invoke("stop-native-windows-recording", discard);
+	stopNativeWindowsRecording: (discard?: boolean, pressedAtEpochMs?: number) => {
+		return ipcRenderer.invoke("stop-native-windows-recording", discard, pressedAtEpochMs);
 	},
 	pauseNativeWindowsRecording: () => {
 		return ipcRenderer.invoke("pause-native-windows-recording");
@@ -394,6 +398,37 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	},
 	scanRecordingText: (videoPath: string) => {
 		return ipcRenderer.invoke("scan-recording-text", videoPath);
+	},
+	// The recordings library (Media tab). A recording is always named by the key the
+	// listing handed out, never by a path: the main process resolves it inside the folder.
+	recordingsLibraryList: () => {
+		return ipcRenderer.invoke("recordings-library:list");
+	},
+	recordingsLibraryPreview: (key: string) => {
+		return ipcRenderer.invoke("recordings-library:preview", key);
+	},
+	recordingsLibraryRename: (key: string, name: string) => {
+		return ipcRenderer.invoke("recordings-library:rename", key, name);
+	},
+	recordingsLibraryTrash: (key: string) => {
+		return ipcRenderer.invoke("recordings-library:trash", key);
+	},
+	recordingsLibraryReveal: (key: string) => {
+		return ipcRenderer.invoke("recordings-library:reveal", key);
+	},
+	recordingsLibraryWatch: (on: boolean) => {
+		return ipcRenderer.invoke("recordings-library:watch", on);
+	},
+	onRecordingsLibraryChanged: (callback: () => void) => {
+		const listener = () => callback();
+		ipcRenderer.on("recordings-library-changed", listener);
+		return () => ipcRenderer.removeListener("recordings-library-changed", listener);
+	},
+	mediaFilesExist: (paths: string[]) => {
+		return ipcRenderer.invoke("media-files-exist", paths);
+	},
+	nameFreshTake: (name: string) => {
+		return ipcRenderer.invoke("name-fresh-take", name);
 	},
 	openExternalUrl: (url: string) => {
 		return ipcRenderer.invoke("open-external-url", url);

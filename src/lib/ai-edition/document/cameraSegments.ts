@@ -489,6 +489,106 @@ export function cameraSegmentsFromRecordingLayout(
 	return { segments: out, ids };
 }
 
+/** How close (ms) a camera edge must be to a recorded switch to be that switch. */
+export const RECORDED_SWITCH_TOLERANCE_MS = 2;
+
+/**
+ * Which edges of a full-camera span, in its take's source ms, are a "Rosto / Tela + câmera"
+ * switch made while recording. Those are cuts, on the press: the camera takes the frame, or
+ * gives it back, on the very frame the button was pressed, instead of easing in over the second
+ * after it (the lag the user saw) or out over the 1.5 s before it. An edge the user moved is no
+ * longer on a switch, and eases as any other piece's.
+ */
+export function recordedSwitchCuts(
+	layout: RecordingLayoutOnAsset | undefined,
+	startSourceMs: number,
+	endSourceMs: number,
+): { before: boolean; after: boolean } {
+	const switches = layout?.switches ?? [];
+	const on = (ms: number, to: "face" | "screen") =>
+		switches.some(
+			(entry) =>
+				entry.layout === to && Math.abs(entry.atSec * 1000 - ms) <= RECORDED_SWITCH_TOLERANCE_MS,
+		);
+	return { before: on(startSourceMs, "face"), after: on(endSourceMs, "screen") };
+}
+
+/**
+ * The full-camera runs as the preview reads them, each edge on a switch recorded on the HUD
+ * marked as a cut (`continuesBefore` / `continuesAfter`), as `buildSceneDescription` marks
+ * them for the compositor.
+ */
+export function withRecordedSwitchCuts<T extends CameraModeRun>(
+	runs: readonly T[],
+	assets: readonly AxcutDocument["assets"][number][],
+	clips: readonly AxcutClip[],
+): (T & { continuesBefore?: boolean; continuesAfter?: boolean })[] {
+	return runs.map((run) => {
+		if (run.clipId === undefined || run.sourceStartSec === undefined) return run;
+		const clip = clips.find((candidate) => candidate.id === run.clipId);
+		const layout = clip
+			? assets.find((asset) => asset.id === clip.assetId)?.cameraLayout
+			: undefined;
+		if (!layout) return run;
+		const endSec = run.sourceEndSec ?? run.sourceStartSec + (run.endMs - run.startMs) / 1000;
+		const cuts = recordedSwitchCuts(layout, run.sourceStartSec * 1000, endSec * 1000);
+		if (!cuts.before && !cuts.after) return run;
+		return {
+			...run,
+			...(cuts.before ? { continuesBefore: true } : {}),
+			...(cuts.after ? { continuesAfter: true } : {}),
+		};
+	});
+}
+
+/**
+ * The camera track as the take(s) recorded it: for every recording with a "Rosto / Tela +
+ * câmera" log (`asset.cameraLayout`), the pieces `cameraSegmentsFromRecordingLayout` makes --
+ * the very function the import writes them with -- on an otherwise empty track. No piece keeps
+ * a look of its own. What "Restaurar trilha da câmera" writes; an empty track for a project
+ * whose recordings logged no switch (the default picture-in-picture everywhere).
+ */
+export function cameraSegmentsFromRecordedLayouts(
+	document: Pick<AxcutDocument, "assets" | "timeline">,
+): AxcutCameraSegment[] {
+	let out: AxcutCameraSegment[] = [];
+	for (const asset of document.assets) {
+		if (!asset.cameraLayout) continue;
+		out = cameraSegmentsFromRecordingLayout(
+			out,
+			document.timeline.clips,
+			asset.id,
+			asset.cameraLayout,
+		).segments;
+	}
+	return out;
+}
+
+/**
+ * "Todos os trechos": a look change meant for every piece. The keys it sets stop being
+ * overridden on every piece that had its own value for them, so each piece ends up showing the
+ * new global value; the keys it does not touch keep their overrides (a piece with its own size
+ * keeps it when only the mirror changes for all). The same array when no piece overrode them.
+ */
+export function clearCameraLookKeys(
+	segments: readonly AxcutCameraSegment[],
+	keys: readonly string[],
+): AxcutCameraSegment[] {
+	const drop = new Set(keys);
+	let changed = false;
+	const out = segments.map((segment) => {
+		const own = normalizeCameraLook(segment.overrides);
+		if (!own || !Object.keys(own).some((key) => drop.has(key))) return segment;
+		changed = true;
+		const kept: Record<string, unknown> = {};
+		for (const [key, value] of Object.entries(own)) if (!drop.has(key)) kept[key] = value;
+		const { overrides: _old, ...rest } = segment;
+		const overrides = normalizeCameraLook(kept as CameraLook);
+		return overrides ? { ...rest, overrides } : rest;
+	});
+	return changed ? out : (segments as AxcutCameraSegment[]);
+}
+
 /** Put a piece back to the default: its stored fragments go, and the gap left is an
  *  implicit picture-in-picture piece. An implicit piece is already there. */
 export function removeCameraPiece(

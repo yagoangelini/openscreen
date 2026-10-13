@@ -145,7 +145,7 @@
 		"lookScopePiece": "Dieses Stück",
 		"lookScopeAll": "Alle Stücke",
 		"lookPieceHint": "Änderungen hier gelten nur für dieses Stück. Die Kamera gleitet sanft in sein Aussehen und zurück.",
-		"lookAllHint": "Änderungen hier gelten für alle Stücke ohne eigenes Aussehen.",
+		"lookAllHint": "Änderungen hier gelten für alle Abschnitte, auch für die mit eigenem Aussehen: Sie übernehmen ebenfalls den neuen Wert.",
 		"lookRestore": "Standard-Aussehen wiederherstellen",
 		"ownLook": "Eigenes Aussehen"
 	}

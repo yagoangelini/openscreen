@@ -401,6 +401,28 @@ describe("LaunchWindow record button", () => {
 		vi.unstubAllGlobals();
 	});
 
+	it("stops on the press, with when it was pressed, and not again on the click", async () => {
+		recorderState.value.recording = true;
+		renderLaunchWindow();
+		const button = await screen.findByTestId("launch-record-button");
+		const before = Date.now();
+		fireEvent.pointerDown(button, { button: 0 });
+		expect(recorderState.value.toggleRecording).toHaveBeenCalledTimes(1);
+		const [pressedAt] = vi.mocked(recorderState.value.toggleRecording).mock.calls[0];
+		expect(pressedAt).toBeGreaterThanOrEqual(before - 50);
+		fireEvent.click(button, { detail: 1 });
+		expect(recorderState.value.toggleRecording).toHaveBeenCalledTimes(1);
+	});
+
+	it("tells the main process of every press on the HUD, to keep it out of the take", async () => {
+		const note = vi.fn();
+		window.electronAPI.noteRecordingControlPress = note;
+		recorderState.value.recording = true;
+		renderLaunchWindow();
+		fireEvent.pointerDown(await screen.findByTestId("launch-record-button"), { button: 0 });
+		expect(note).toHaveBeenCalledWith(expect.any(Number));
+	});
+
 	it("opens the source selector instead of disabling the primary action when no source is selected", async () => {
 		renderLaunchWindow();
 
@@ -1101,6 +1123,39 @@ describe("LaunchWindow record button", () => {
 			expect(setIgnore).toHaveBeenCalledWith(false);
 		} finally {
 			Reflect.deleteProperty(document, "elementFromPoint");
+		}
+	});
+
+	// The low-disk toast's cross used to be dead: a toast is sonner's markup, not the HUD's,
+	// so the pushed cursor over it never handed input back and the click went through.
+	it("hands input back for the pushed cursor over a toast's close cross", async () => {
+		platformState.value = "win32";
+
+		renderLaunchWindow();
+
+		await waitFor(() => {
+			expect(window.electronAPI.setHudOverlayIgnoreMouseEvents).toHaveBeenLastCalledWith(true);
+		});
+		const list = document.createElement("ol");
+		list.setAttribute("data-sonner-toaster", "true");
+		list.innerHTML = `<li data-sonner-toast="" data-removed="false"><button data-close-button="true"></button></li>`;
+		document.body.appendChild(list);
+		const cross = list.querySelector("[data-close-button]");
+		const elementFromPoint = vi.fn((_x: number, _y: number): Element | null => cross);
+		Object.defineProperty(document, "elementFromPoint", {
+			value: elementFromPoint,
+			configurable: true,
+		});
+		const setIgnore = vi.mocked(window.electronAPI.setHudOverlayIgnoreMouseEvents);
+
+		try {
+			setIgnore.mockClear();
+			for (const listener of hudCursorListeners) listener(763, 560);
+			expect(elementFromPoint).toHaveBeenCalledWith(763, 560);
+			expect(setIgnore).toHaveBeenCalledWith(false);
+		} finally {
+			Reflect.deleteProperty(document, "elementFromPoint");
+			list.remove();
 		}
 	});
 
@@ -2315,8 +2370,34 @@ describe("LaunchWindow camera layout ('Rosto / Tela + câmera')", () => {
 
 		fireEvent.click(button);
 		await waitFor(() => expect(button).toHaveAttribute("data-layout", "screen"));
-		expect(api.setRecordingCameraLayout).toHaveBeenCalledWith("screen");
+		expect(api.setRecordingCameraLayout).toHaveBeenCalledWith("screen", expect.any(Number));
 		expect(button).toHaveAttribute("aria-pressed", "false");
+	});
+
+	it("switches on the press, shown at once and timed at the press, not on the click", async () => {
+		const api = stubLayoutBridge("screen");
+		let answer: (layout: "face" | "screen") => void = () => undefined;
+		api.setRecordingCameraLayout = vi.fn(
+			() => new Promise<"face" | "screen" | null>((resolve) => (answer = resolve)),
+		);
+		recorderState.value.webcamEnabled = true;
+		recorderState.value.recording = true;
+		renderLaunchWindow();
+		const button = await screen.findByTestId("launch-camera-layout-button");
+		await waitFor(() => expect(button).toHaveAttribute("data-layout", "screen"));
+		const before = Date.now();
+		fireEvent.pointerDown(button, { button: 0 });
+		// Before the main process answered: the HUD does not wait for the round trip.
+		expect(button).toHaveAttribute("data-layout", "face");
+		expect(api.setRecordingCameraLayout).toHaveBeenCalledTimes(1);
+		const [, pressedAt] = vi.mocked(api.setRecordingCameraLayout).mock.calls[0];
+		expect(pressedAt).toBeGreaterThanOrEqual(before - 50);
+		expect(pressedAt).toBeLessThanOrEqual(Date.now());
+		// The click the release fires is the same press: no second switch.
+		fireEvent.click(button, { detail: 1 });
+		expect(api.setRecordingCameraLayout).toHaveBeenCalledTimes(1);
+		await act(async () => answer("face"));
+		expect(button).toHaveAttribute("data-layout", "face");
 	});
 
 	it("follows a switch the shortcut made in the main process", async () => {

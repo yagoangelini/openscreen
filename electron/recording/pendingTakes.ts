@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { type PathMapper, rewriteMediaPaths } from "../../src/lib/mediaPathRewrite";
 import type { RecordingSession } from "../../src/lib/recordingSession";
 
 /**
@@ -81,6 +82,13 @@ export async function clearPendingTake(recordingsDir: string, screenVideoPath: s
 	if (rest.length !== takes.length) {
 		await writePendingTakes(recordingsDir, rest);
 	}
+}
+
+/** A take folder was renamed: the journal follows its files. */
+export async function rewritePendingTakePaths(recordingsDir: string, mapper: PathMapper) {
+	const takes = await readPendingTakes(recordingsDir);
+	const { value, changed } = rewriteMediaPaths(takes, mapper);
+	if (changed > 0) await writePendingTakes(recordingsDir, value);
 }
 
 /**

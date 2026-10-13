@@ -34,6 +34,7 @@ import {
 	VolumeIcon,
 } from "./HudIcons";
 import { computeHudTooltipClearance } from "./hudGeometry";
+import { pressHandlers } from "./hudPress";
 import styles from "./LaunchWindow.module.css";
 
 // Every control below is a `memo` boundary on purpose. The HUD's root re-renders
@@ -352,6 +353,7 @@ export const HudCameraButton = memo(function HudCameraButton({
 /**
  * "Rosto / Tela + câmera". Unlike the toggles beside it, never locked: switching DURING the take
  * is the point. Its icon is the layout now shown; the tooltip says it and what a click does.
+ * It acts on the press (`pressHandlers`), and says when, so the switch lands on the press.
  */
 export const HudCameraLayoutButton = memo(function HudCameraLayoutButton({
 	layout,
@@ -364,7 +366,7 @@ export const HudCameraLayoutButton = memo(function HudCameraLayoutButton({
 	name: string;
 	tooltip: string;
 	disabled: boolean;
-	onClick: () => void;
+	onClick: (pressedAtEpochMs: number) => void;
 }) {
 	return (
 		<HudTooltip content={tooltip}>
@@ -376,7 +378,7 @@ export const HudCameraLayoutButton = memo(function HudCameraLayoutButton({
 				aria-label={name}
 				aria-pressed={layout === "face"}
 				disabled={disabled}
-				onClick={onClick}
+				{...pressHandlers(onClick)}
 			>
 				{layout === "face" ? (
 					<ScanFace size={ICON_SIZE} className="text-[#10b981]" />
@@ -472,8 +474,12 @@ export const HudRecordButton = memo(function HudRecordButton({
 	elapsedSeconds: number;
 	label: string;
 	savingLabel: string;
-	onClick: () => void;
+	/** `pressedAtEpochMs` is set when Stop was pressed (see below). */
+	onClick: (pressedAtEpochMs?: number) => void;
 }) {
+	// Stop acts on the press: a click fires on the release, and the take recorded the click
+	// itself and everything until it. Starting stays on the click.
+	const stopsOnPress = recording && !saving;
 	return (
 		// The tooltip is the only one: it carries the name, and a native `title` beside it
 		// stacked a second, OS-drawn tooltip on the same button.
@@ -487,7 +493,7 @@ export const HudRecordButton = memo(function HudRecordButton({
 						? "bg-transparent opacity-60 cursor-not-allowed"
 						: "bg-[rgba(248,113,113,0.12)] hover:bg-[rgba(248,113,113,0.22)]"
 				}`}
-				onClick={onClick}
+				{...(stopsOnPress ? pressHandlers(onClick) : { onClick: () => onClick() })}
 				aria-label={label}
 				style={{ flex: "0 0 auto" }}
 			>

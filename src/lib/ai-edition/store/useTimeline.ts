@@ -53,6 +53,7 @@ import {
 	setCameraPieceMode,
 	setCameraPieceStyle,
 	splitCameraAt,
+	withRecordedSwitchCuts,
 } from "../document/cameraSegments";
 import { createId } from "../document/ids";
 import { resolveAspectRatioValue } from "../document/outputFormat";
@@ -1430,7 +1431,13 @@ export function useTimeline() {
 	const hasEditRegions = document !== null && countEditRegions(document) > 0;
 	const clearTimeline = useCallback(async () => {
 		if (!document || !hasEditRegions) return;
-		if (!(await saveDocument(clearEditRegions(document), { history: true }))) return;
+		if (
+			!(await saveDocument(clearEditRegions(document), {
+				history: true,
+				historyLabel: "clearTimeline",
+			}))
+		)
+			return;
 		// Every region a selection can point at is gone. An audio track is not one of them.
 		if (selection && selection.kind !== "audio") setSelection(null);
 		setMultiSelection((prev) => prev.filter((h) => h.kind === "audio"));
@@ -1731,9 +1738,16 @@ export function useTimeline() {
 		() => cameraPieces(cameraSegments, cameraTimelineEnd),
 		[cameraSegments, cameraTimelineEnd],
 	);
+	const cameraAssets = document?.assets;
+	const cameraClips = document?.timeline.clips;
 	const cameraFullscreenRegions = useMemo(
-		() => readCameraFullscreenRegions({ cameraSegments }),
-		[cameraSegments],
+		() =>
+			withRecordedSwitchCuts(
+				readCameraFullscreenRegions({ cameraSegments }),
+				cameraAssets ?? [],
+				cameraClips ?? [],
+			),
+		[cameraSegments, cameraAssets, cameraClips],
 	);
 	const cameraHiddenRegions = useMemo(
 		() => readCameraHiddenRegions({ cameraSegments }),

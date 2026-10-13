@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { accessSync, constants as fsConstants, statSync } from "node:fs";
-import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { app } from "electron";
 import { createInactivityTimer } from "./inactivityTimer";
@@ -337,12 +337,34 @@ export async function decodePeaks(
  * The leading version changes whenever the decode does: v2 put the peaks on the
  * media clock and mixed every audio stream, which the v1 entries do not.
  */
-async function cacheKey(filePath: string): Promise<string> {
-	const info = await stat(filePath);
+function cacheKeyFor(filePath: string, info: { size: number; mtimeMs: number }): string {
 	return createHash("sha1")
 		.update(`v2:${filePath}:${info.size}:${info.mtimeMs}`)
 		.digest("hex")
 		.slice(0, 32);
+}
+
+async function cacheKey(filePath: string): Promise<string> {
+	return cacheKeyFor(filePath, await stat(filePath));
+}
+
+/**
+ * The file moved (a recording renamed in the library): its cached peaks follow it, so the
+ * waveform is not decoded again. A move keeps the size and the modification time, which is
+ * what lets the old key be rebuilt from the new file.
+ */
+export async function moveCachedPeaks(fromPath: string, toPath: string): Promise<void> {
+	const dir = cacheDir();
+	if (!dir) return;
+	try {
+		const info = await stat(toPath);
+		await rename(
+			path.join(dir, `${cacheKeyFor(fromPath, info)}.f32`),
+			path.join(dir, `${cacheKeyFor(toPath, info)}.f32`),
+		);
+	} catch {
+		// Nothing cached for it, or the cache is unwritable: it is decoded again on demand.
+	}
 }
 
 /** Null outside Electron (tests, any headless use): decoding still works, it

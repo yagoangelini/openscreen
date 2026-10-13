@@ -24,9 +24,14 @@ function computeCameraFullscreenRegionStrength(
 	speedRegions: readonly SpeedRegion[],
 ): number {
 	// A span that opens the video has nothing to ease from: held from the first frame, as the
-	// compositor holds it (`holdAtProgrammeEdges` in sceneDescription.ts).
-	const opensVideo = region.startMs <= 0;
-	if ((opensVideo ? timeMs < region.startMs : timeMs <= region.startMs) || timeMs >= region.endMs) {
+	// compositor holds it (`holdAtProgrammeEdges` in sceneDescription.ts). A switch recorded on
+	// the HUD is a cut on its side (`continuesBefore` / `continuesAfter`, as the scene carries).
+	const opensVideo = region.startMs <= 0 || region.continuesBefore === true;
+	const cutAtEnd = region.continuesAfter === true;
+	if (
+		(opensVideo ? timeMs < region.startMs : timeMs <= region.startMs) ||
+		(cutAtEnd ? timeMs > region.endMs : timeMs >= region.endMs)
+	) {
 		return 0;
 	}
 
@@ -35,7 +40,9 @@ function computeCameraFullscreenRegionStrength(
 	const t = screenTimeMs(speedRegions, timeMs);
 	const halfDuration = (end - start) / 2;
 	const leadInWindow = opensVideo ? 0 : Math.min(TRANSITION_WINDOW_MS, halfDuration);
-	const leadOutWindow = Math.min(LEAD_OUT_WINDOW_MS, opensVideo ? end - start : halfDuration);
+	const leadOutWindow = cutAtEnd
+		? 0
+		: Math.min(LEAD_OUT_WINDOW_MS, opensVideo ? end - start : halfDuration);
 	const leadInEnd = start + leadInWindow;
 	const leadOutStart = end - leadOutWindow;
 

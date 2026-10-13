@@ -78,7 +78,11 @@ export const DEFAULT_RECORDING_PREFERENCES: RecordingPreferences = {
 	hideDesktopIcons: false,
 	autoZoomEnabled: true,
 	recordingsFolder: null,
-	countdownSeconds: 3,
+	// 5 s, not 3: the helper opens the encoders, the camera and the audio during the countdown,
+	// and on the Dell G15 that took 4-5 s with the camera on (the Intel encoder 3-4 s alone), so a
+	// 3 s countdown sat on its last number for 0.2-3.8 s before the first frame. A saved choice
+	// (0, 3 or 5) still wins.
+	countdownSeconds: 5,
 	micChannelMode: "auto",
 	cameraLayout: DEFAULT_RECORDING_CAMERA_LAYOUT,
 	micSilenceWarningEnabled: true,

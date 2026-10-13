@@ -13,6 +13,7 @@ import {
 	factoryStylePresetAppearance,
 	stylePresetAppearanceFromSettings,
 } from "../../src/lib/ai-edition/stylePresetsEditor";
+import { folderMoveMapper } from "../../src/lib/mediaPathRewrite";
 import { registerMediaLinks } from "../media/mediaLinksRegistry";
 import { DocumentNotFoundError, DocumentService, ProjectFileError } from "./document-service";
 
@@ -110,6 +111,44 @@ describe("DocumentService", () => {
 					...PRESET,
 					aspectRatio: DEFAULT_EDITOR_SETTINGS.aspectRatio,
 				});
+			});
+
+			it("starts a new project from the user's defaults, copied, not the last project", async () => {
+				await editedProject(22, "2026-03-01T00:00:00.000Z");
+				const defaults: Record<string, unknown> = {
+					cursorSize: 2.6,
+					aspectRatio: "9:16",
+					cropRegion: { x: 0.5, y: 0, width: 0.5, height: 1 },
+				};
+				const doc = await service.createProject("Next", defaults);
+				const settings = getEditorSettings(doc);
+				expect(settings.cursor.size).toBe(2.6);
+				expect(settings.aspectRatio).toBe("9:16");
+				// Not the latest project's padding: the defaults decide now.
+				expect(settings.padding).toBe(DEFAULT_EDITOR_SETTINGS.padding);
+				// Footage never travels in a default.
+				expect(settings.cropRegion).toEqual(DEFAULT_EDITOR_SETTINGS.cropRegion);
+				expect(settings.cursor.showKeystrokes).toBe(true);
+				// A copy: changing the defaults afterwards cannot reach the saved project.
+				defaults.cursorSize = 5;
+				const reread = await service.getProject(doc.project.id);
+				expect(getEditorSettings(reread).cursor.size).toBe(2.6);
+			});
+
+			it("treats empty defaults as none saved", async () => {
+				await editedProject(22, "2026-03-01T00:00:00.000Z");
+				const settings = getEditorSettings(await service.createProject("Next", {}));
+				expect(settings.padding).toBe(22);
+			});
+
+			it("puts the preset marked for new projects over the defaults' look", async () => {
+				const withPreset = new DocumentService(tempDir, mediaDir, undefined, async () => PRESET);
+				const settings = getEditorSettings(
+					await withPreset.createProject("Next", { padding: 40, autoZoom: { maxScale: 1.6 } }),
+				);
+				expect(settings.padding).toBe(PRESET.padding);
+				// What the preset does not carry still comes from the defaults.
+				expect(settings.autoZoom.maxScale).toBe(1.6);
 			});
 
 			it("falls back to the last project when the marked preset is gone or unreadable", async () => {
@@ -430,6 +469,27 @@ describe("DocumentService", () => {
 			});
 			// The project file keeps it: the schema knows the key.
 			expect((await service.getProject(doc.project.id)).assets[0]?.cameraLayout).toBeDefined();
+		});
+
+		it("carries where the take was stopped (its .session.json) into the asset", async () => {
+			const doc = await service.createProject("P");
+			const videoPath = path.join(mediaDir, "recording-stop.mp4");
+			await fs.writeFile(videoPath, "");
+			await fs.writeFile(
+				path.join(mediaDir, "recording-stop.session.json"),
+				JSON.stringify({ screenVideoPath: videoPath, createdAt: 1, stopAtMs: 6537 }),
+			);
+			const older = path.join(mediaDir, "recording-older.mp4");
+			await fs.writeFile(older, "");
+			await fs.writeFile(
+				path.join(mediaDir, "recording-older.session.json"),
+				JSON.stringify({ screenVideoPath: older, createdAt: 1 }),
+			);
+			await service.addAsset(doc.project.id, { path: videoPath });
+			const updated = await service.addAsset(doc.project.id, { path: older });
+			expect(updated.assets[0]?.recordedEndSec).toBe(6.537);
+			expect("recordedEndSec" in (updated.assets[1] ?? {})).toBe(false);
+			expect((await service.getProject(doc.project.id)).assets[0]?.recordedEndSec).toBe(6.537);
 		});
 
 		it("leaves out a layout that never left the screen, or cannot be read", async () => {
@@ -1034,6 +1094,65 @@ describe("DocumentService", () => {
 				service.storedProjectId(path.join(tempDir, "sub", "proj_a.openscreen")),
 			).toBeUndefined();
 			expect(service.storedProjectId(path.join(tempDir, "proj_a.json"))).toBeUndefined();
+		});
+	});
+
+	describe("rewriteMediaPaths (a recording renamed in the library)", () => {
+		it("rewrites every project pointing into the moved folder, and only those", async () => {
+			const from = path.join(mediaDir, "recording-1");
+			const to = path.join(mediaDir, "Aula 1");
+			await fs.mkdir(from, { recursive: true });
+			const video = path.join(from, "recording-1.mp4");
+			await fs.writeFile(video, "x");
+			const other = path.join(mediaDir, "other.mp4");
+			await fs.writeFile(other, "y");
+
+			const a = await service.createProject("A");
+			await service.addAsset(a.project.id, { path: video });
+			const withStems = await service.getProject(a.project.id);
+			await service.saveProject({
+				...withStems,
+				assets: withStems.assets.map((asset) => ({
+					...asset,
+					cameraTrack: {
+						sourcePath: path.join(from, "recording-1-webcam.mp4"),
+						startMs: 0,
+						offsetMs: 0,
+						visible: true,
+					},
+					audioStems: {
+						voicePath: path.join(from, "recording-1.voice.m4a"),
+						systemPath: path.join(from, "recording-1.system.m4a"),
+					},
+				})),
+			});
+			const b = await service.createProject("B");
+			await service.addAsset(b.project.id, { path: other });
+			const before = await fs.readFile(path.join(tempDir, `${b.project.id}.openscreen`), "utf8");
+
+			await fs.rename(from, to);
+			const changed = await service.rewriteMediaPaths(folderMoveMapper(from, to));
+
+			expect(changed).toEqual([a.project.id]);
+			const doc = await service.getProject(a.project.id);
+			expect(doc.assets[0].originalPath).toBe(path.join(to, "recording-1.mp4"));
+			expect(doc.assets[0].cameraTrack?.sourcePath).toBe(path.join(to, "recording-1-webcam.mp4"));
+			expect(doc.assets[0].audioStems).toEqual({
+				voicePath: path.join(to, "recording-1.voice.m4a"),
+				systemPath: path.join(to, "recording-1.system.m4a"),
+			});
+			expect(await fs.readFile(path.join(tempDir, `${b.project.id}.openscreen`), "utf8")).toBe(
+				before,
+			);
+		});
+
+		it("lists the paths each project uses", async () => {
+			const video = path.join(mediaDir, "v.mp4");
+			await fs.writeFile(video, "x");
+			const a = await service.createProject("A");
+			await service.addAsset(a.project.id, { path: video });
+			const listed = await service.listProjectMediaPaths();
+			expect(listed).toEqual([expect.objectContaining({ id: a.project.id, paths: [video] })]);
 		});
 	});
 });
