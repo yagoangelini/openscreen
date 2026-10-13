@@ -11,6 +11,7 @@ import {
 	Redo2,
 	RefreshCw,
 	Save,
+	SlidersHorizontal,
 	Sparkles,
 	Star,
 	Sun,
@@ -39,6 +40,8 @@ export interface TopBarActions {
 	renameProject: (title: string) => void;
 	toggleChat: () => void;
 	openProviderSettings: () => void;
+	/** The global defaults ("Padrões"). Optional: a bar mounted without it shows no row. */
+	openDefaults?: () => void;
 	showAbout: () => void;
 	checkForUpdates: () => void;
 	undo: () => void;
@@ -441,6 +444,18 @@ function AppMenu({ actions }: { actions: TopBarActions }) {
 						<Sparkles size={15} />
 						{tEditor("providerSettings.title")}
 					</button>
+					{actions.openDefaults ? (
+						<button
+							type="button"
+							role="menuitem"
+							className={styles.appMenuRow}
+							data-testid="app-menu-defaults"
+							onClick={run(actions.openDefaults)}
+						>
+							<SlidersHorizontal size={15} />
+							{tEditor("defaults.title")}
+						</button>
+					) : null}
 					<button
 						type="button"
 						role="menuitem"

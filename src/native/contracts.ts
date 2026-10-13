@@ -635,7 +635,8 @@ export type NativeBridgeRequest =
 	| {
 			domain: "aiEdition";
 			action: "document.create";
-			payload: { title?: string };
+			/** `editorDefaults`: the global defaults a new project copies (newProjectDefaults.ts). */
+			payload: { title?: string; editorDefaults?: Record<string, unknown> | null };
 			requestId?: string;
 	  }
 	| {
