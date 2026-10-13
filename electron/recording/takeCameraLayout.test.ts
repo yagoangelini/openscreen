@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { TakeCameraLayoutLog, takeMediaTimeMs } from "./takeCameraLayout";
+import { mediaClockOriginMs, TakeCameraLayoutLog, takeMediaTimeMs } from "./takeCameraLayout";
 
 describe("takeMediaTimeMs", () => {
 	it("is null before the first frame: the countdown, or the helper still opening", () => {
@@ -87,5 +87,20 @@ describe("TakeCameraLayoutLog", () => {
 		expect(log.toFile().switches).toEqual([]);
 		log.switchTo("face", 8_000);
 		expect(log.toFile().switches).toEqual([{ atMs: 8_000, layout: "face" }]);
+	});
+});
+
+describe("mediaClockOriginMs", () => {
+	it("is the helper's first frame, not the moment the main process heard of it", () => {
+		// Heard 90 ms late: a switch pressed 2 s after the first frame is 2 000, not 1 910.
+		expect(mediaClockOriginMs(10_000, 10_090)).toBe(10_000);
+	});
+
+	it("falls back to the moment heard without a plausible first-frame time", () => {
+		expect(mediaClockOriginMs(null, 10_090)).toBe(10_090);
+		expect(mediaClockOriginMs(Number.NaN, 10_090)).toBe(10_090);
+		// In the future, or seconds earlier: not this take's first frame.
+		expect(mediaClockOriginMs(10_100, 10_090)).toBe(10_090);
+		expect(mediaClockOriginMs(7_000, 10_090)).toBe(10_090);
 	});
 });

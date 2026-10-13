@@ -95,7 +95,7 @@ type UseScreenRecorderReturn = {
 	paused: boolean;
 	saving: boolean;
 	elapsedSeconds: number;
-	toggleRecording: () => void;
+	toggleRecording: (pressedAtEpochMs?: number) => void;
 	/** Starts recording with no countdown overlay. Used by the headless CLI runner. */
 	startRecordingImmediately: () => Promise<void>;
 	togglePaused: () => void;
@@ -336,7 +336,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			setSystemAudioEnabled(prefs.systemAudioEnabled);
 			setCursorCaptureMode(prefs.cursorCaptureMode);
 			countdownSecondsRef.current =
-				typeof prefs.countdownSeconds === "number" ? prefs.countdownSeconds : 3;
+				typeof prefs.countdownSeconds === "number" ? prefs.countdownSeconds : 5;
 			setRecordingPrefsLoaded(true);
 		};
 		const stop = window.electronAPI?.onRecordingPrefsChanged?.((prefs) => {
@@ -409,7 +409,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 
 	const pauseToggleInFlight = useRef(false);
 	/** The countdown length the user chose (0, 3 or 5 s), read when a countdown starts. */
-	const countdownSecondsRef = useRef(3);
+	const countdownSecondsRef = useRef(5);
 
 	const getRecordingDurationMs = useCallback(() => {
 		const segmentDuration =
@@ -761,7 +761,8 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 	);
 
 	const finalizeNativeWindowsRecording = useCallback(
-		async (discard = false) => {
+		/** `pressedAtEpochMs`: when Stop was pressed; the take ends there, not when the stop arrives. */
+		async (discard = false, pressedAtEpochMs?: number) => {
 			const activeNativeRecording = nativeWindowsRecording.current;
 			if (!activeNativeRecording || activeNativeRecording.finalizing) {
 				return false;
@@ -787,7 +788,10 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			};
 
 			try {
-				const result = await window.electronAPI.stopNativeWindowsRecording(discard);
+				const result =
+					pressedAtEpochMs === undefined
+						? await window.electronAPI.stopNativeWindowsRecording(discard)
+						: await window.electronAPI.stopNativeWindowsRecording(discard, pressedAtEpochMs);
 				if (discard || result.discarded) {
 					clearNativeRecordingState();
 					return true;
@@ -1115,9 +1119,9 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 		[cursorCaptureMode, getRecordingDurationMs],
 	);
 
-	const stopRecording = useRef(() => {
+	const stopRecording = useRef((pressedAtEpochMs?: number) => {
 		if (nativeWindowsRecording.current) {
-			void finalizeNativeWindowsRecording(false);
+			void finalizeNativeWindowsRecording(false, pressedAtEpochMs);
 			return;
 		}
 		if (nativeMacRecording.current) {
@@ -1971,12 +1975,12 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 					}
 				}
 
-				// On the clock the take starts by, not 1 s per tick: the ticks drift late, and a take
-				// started with the countdown begins on time, so the last tick ends a little early to
-				// have the overlay gone before the first frame.
-				const isLast = index === values.length - 1;
-				const tickEndsAt =
-					countdownEndsAt - (values.length - 1 - index) * 1000 - (isLast && earlyStart ? 150 : 0);
+				// On the clock the take starts by, not 1 s per tick: the ticks drift late. The last one
+				// ends on the countdown's end, which is the take's first frame: it used to end 150 ms
+				// early "to be gone before the first frame", but the countdown window is
+				// content-protected and never in the take, and those 150 ms were a gap the user saw
+				// between the countdown and the recording.
+				const tickEndsAt = countdownEndsAt - (values.length - 1 - index) * 1000;
 				await new Promise((resolve) =>
 					window.setTimeout(resolve, Math.max(0, tickEndsAt - Date.now())),
 				);
@@ -2562,9 +2566,10 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 		}
 	};
 
-	const toggleRecording = () => {
+	/** `pressedAtEpochMs`: when the control that asked was pressed, for a stop to end the take there. */
+	const toggleRecording = (pressedAtEpochMs?: number) => {
 		if (recording) {
-			stopRecording.current();
+			stopRecording.current(pressedAtEpochMs);
 			return;
 		}
 

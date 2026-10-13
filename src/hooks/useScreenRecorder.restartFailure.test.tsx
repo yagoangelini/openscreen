@@ -112,13 +112,13 @@ async function settle(ms = 0) {
 	});
 }
 
-/** Through the 3 s countdown into a running take. */
+/** Through the 5 s countdown into a running take. */
 async function startTake(view: RecorderView) {
 	await settle();
 	await act(async () => {
 		view.result.current.toggleRecording();
 	});
-	await settle(3_500);
+	await settle(5_500);
 	expect(view.result.current.recording).toBe(true);
 }
 

@@ -9,7 +9,11 @@
 import { describe, expect, it } from "vitest";
 import { type AxcutDocument, createEmptyDocument, documentSchema } from "@/lib/ai-edition/schema";
 import { migrateProjectDataToAxcutDocument } from "./migrate";
-import { documentAfterProbedDuration } from "./timeline";
+import {
+	applyProbedDuration,
+	documentAfterProbedDuration,
+	recordedClipLengthSec,
+} from "./timeline";
 
 const PROJECT = "proj_a";
 
@@ -146,5 +150,35 @@ describe("documentAfterProbedDuration", () => {
 		expect(
 			documentAfterProbedDuration(emptyTimeline("asset_1", []), "asset_1", 30, PROJECT),
 		).toBeNull();
+	});
+});
+
+describe("a take that recorded where it was stopped (recordedEndSec)", () => {
+	it("seeds the first clip up to the stop, with the asset keeping the whole file", () => {
+		const doc = emptyTimeline("asset_1", ["asset_1"]);
+		doc.assets[0].recordedEndSec = 6.537;
+		const next = documentAfterProbedDuration(doc, "asset_1", 6.549, PROJECT);
+		expect(next?.timeline.clips[0]).toMatchObject({ sourceStartSec: 0, sourceEndSec: 6.537 });
+		expect(next?.timeline.clips[0].timelineEndSec).toBeCloseTo(6.537);
+		expect(next?.assets[0].durationSec).toBe(6.549);
+	});
+
+	it("gives a placeholder clip the stop as its end, never past the media", () => {
+		const doc = legacyWithClip();
+		doc.assets[0].recordedEndSec = 12.25;
+		const next = applyProbedDuration(doc, doc.assets[0].id, 12.4);
+		expect(next.timeline.clips[0].sourceEndSec).toBe(12.25);
+		expect(next.timeline.clips[0].timelineEndSec).toBe(12.25);
+		const longer = legacyWithClip();
+		longer.assets[0].recordedEndSec = 20;
+		expect(
+			applyProbedDuration(longer, longer.assets[0].id, 12.4).timeline.clips[0].sourceEndSec,
+		).toBe(12.4);
+	});
+
+	it("is the whole media without one", () => {
+		expect(recordedClipLengthSec(undefined, 9)).toBe(9);
+		expect(recordedClipLengthSec({}, 9)).toBe(9);
+		expect(recordedClipLengthSec({ recordedEndSec: 8.9 }, 9)).toBe(8.9);
 	});
 });

@@ -114,11 +114,15 @@ interface Window {
 		getRecordingCameraLayout?: () => Promise<
 			import("../src/lib/recordingLayout").RecordingCameraLayout | null
 		>;
-		/** Switches it; answers the layout now shown, or null when the take has no camera. */
+		/** Switches it; answers the layout now shown, or null when the take has no camera.
+		 *  `pressedAtEpochMs`: when the button was pressed, so the switch lands on the press. */
 		setRecordingCameraLayout?: (
 			layout: import("../src/lib/recordingLayout").RecordingCameraLayout,
+			pressedAtEpochMs?: number,
 		) => Promise<import("../src/lib/recordingLayout").RecordingCameraLayout | null>;
 		/** Every switch, the shortcut's included. Returns an unsubscribe. */
+		/** A press on one of the HUD's controls during a take (epoch ms): kept out of the take's cursor. */
+		noteRecordingControlPress?: (pressedAtEpochMs: number) => void;
 		onRecordingCameraLayoutChanged?: (
 			callback: (change: {
 				layout: import("../src/lib/recordingLayout").RecordingCameraLayout;
@@ -215,7 +219,11 @@ interface Window {
 			request: import("../src/lib/nativeWindowsRecording").NativeWindowsRecordingRequest,
 		) => Promise<import("../src/lib/nativeWindowsRecording").NativeWindowsRecordingStartResult>;
 		cancelNativeWindowsPendingStart?: () => Promise<boolean>;
-		stopNativeWindowsRecording: (discard?: boolean) => Promise<{
+		/** `pressedAtEpochMs`: when Stop was pressed; the take ends there. */
+		stopNativeWindowsRecording: (
+			discard?: boolean,
+			pressedAtEpochMs?: number,
+		) => Promise<{
 			success: boolean;
 			path?: string;
 			session?: import("../src/lib/recordingSession").RecordingSession;

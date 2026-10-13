@@ -183,6 +183,58 @@ As decisões e o porquê de cada fase estão em [`PLANO-FORK.md`](PLANO-FORK.md)
   - **Medido** (contagem 3 s, sem câmera): `afterCountdownMs` 47, 145, 154, 382 com carga normal; 1498–6896 com a CPU a 100 % (outras compilações na máquina), agora com a contagem segurada. **Com câmera não foi medido** (a câmera estava em uso por outro teste).
 - **Câmera escura (D-4):** quando a câmera não entregou nenhum quadro antes do take (a C920 pode levar mais de 1 s), o helper julga o primeiro segundo de quadros do take e emite `webcam-dark` se nenhum tiver imagem. O main repassa ao HUD (`native-recording-camera-dark` → `onNativeRecordingCameraDark` → toast `recording.cameraDark`). **Não verificado com a lente tampada** pelo mesmo motivo.
 
+**Tempo da gravação: início, parada, Rosto/Tela e primeiro quadro** (pedido de 13/10, branch `fix/rec-timing`). Medido numa instância isolada, só a tela do notebook (Intel, encoder `VEN_8086`; o monitor da RTX estava desligado), C920 ligada, take de 4 a 6 s, com outras sessões compilando na máquina (CPU de 60 a 100 %). Ferramenta: uma faixa de código de barras com o relógio no canto da tela, lida quadro a quadro em cada take, mais o `firstFrameEpochMs` do helper.
+
+- **1. Atraso no início.**
+  - **Causa:** o helper abre tudo durante a contagem, e no Intel isso levou mais que os 3 s. Os encoders da tela e da câmera abriam um depois do outro: `encoders-ready` 3,0 a 6,7 s depois do spawn. O spawn ainda custa 0,3 a 1,9 s. A contagem ficava parada no "1".
+  - **Antes:** primeiro quadro 3,6 s depois do fim da contagem, com contagem de 3 s. Com 5 s: +25 ms numa medida e +4,8 s noutra.
+  - **Correções:**
+    - o encoder da câmera abre numa thread ao lado do da tela (`main.cpp`; o da câmera não usa o device D3D);
+    - **contagem padrão de 5 s** (`app-settings.ts`, `handlers.ts`, `RecStage.tsx`, `useScreenRecorder.ts`). Uma escolha salva (0, 3 ou 5) continua valendo;
+    - o último número da contagem sai no fim exato da contagem, e não 150 ms antes. A janela da contagem tem proteção de conteúdo, então nunca entra no take.
+  - **Depois:** os encoders ficam prontos em 1,9 a 2,5 s.
+    - Com 5 s, o primeiro quadro vem +14, +19 e +22 ms depois do fim (pelo código de barras, −4 ms), e +586 ms com a CPU a 90 %.
+    - Com 3 s: +14 e +38 ms, mas +19,5 s numa medida com a máquina sobrecarregada. Por isso o padrão ficou 5 s.
+    - O HUD mostra a gravação 116 a 136 ms depois do fim da contagem.
+- **2. O clique de parar entrava no take.**
+  - **Evidência:** o take citado (`recording-1791836816491`) não existe mais em `Vídeos\OpenScreen`; só o projeto ficou. No take mais novo da pasta (`recording-1791859616407`), o cursor tem um clique em 4475 ms (soltura em 4579 ms) no centro de baixo da tela, onde fica o HUD, e o vídeo vai até 5275 ms.
+  - **O que o espectador via:**
+    - o anel do clique (o projeto tinha `cursorClickRing` ligado);
+    - o som de clique, se ligado;
+    - o zoom automático mirando um botão invisível;
+    - os quadros entre o aperto e a soltura (80 a 104 ms nos cliques do usuário);
+    - o que o helper e o mixer escrevem depois do comando.
+  - **Medido antes:** com clique injetado, o vídeo terminava de +44 a +202 ms depois do clique e as stems ~100 ms depois do comando.
+  - **O que fica:** o ponteiro indo até o HUD. É conteúdo real, e cortá-lo levaria o fim da fala.
+  - **Correções:**
+    - Parar age no aperto (`pointerdown`, `pressHandlers` em `src/components/launch/hudPress.ts`). O horário do aperto vai junto no `stop-native-windows-recording`.
+    - O main grava esse instante, em tempo de mídia, no `.session.json` (`stopAtMs`). A importação lê como `asset.recordedEndSec`, e o primeiro clipe termina ali (`recordedClipLengthSec` em `timeline.ts`), para tela, câmera e stems. O que passa disso continua no arquivo: arrastar a borda do clipe traz de volta.
+    - Todo aperto no HUD durante o take é avisado ao main (`note-recording-control-press`). Os cliques correspondentes viram posições simples antes de o `.cursor.json` ser gravado (`dropControlPressClicks` em `electron/recording/takeControlPresses.ts`): sem anel, sem som, sem zoom nos botões gravar, pausar, notas, Rosto e parar.
+  - **Depois:** `stopAtMs` cai a +1 ms do clique, e o clipe corta 12 a 57 ms do fim do arquivo.
+  - **Não verificado:** o filtro de cliques com um mouse de verdade. O clique injetado não chega ao leitor do cursor; o filtro tem testes.
+- **3. Atraso na troca Rosto/Tela.**
+  - **Causas:**
+    - (a) o botão agia no clique (na soltura);
+    - (b) o relógio de mídia do main começava quando o main ouvia falar do primeiro quadro, 175 a 205 ms depois dele, e por isso a troca era registrada 175 a 205 ms **antes** do clique;
+    - (c) a troca virava uma rampa: Tela→Rosto só completava 598 ms depois do aperto (metade em +164 ms), e Rosto→Tela começava a sair 586 ms antes do aperto;
+    - (d) o ícone do HUD esperava a resposta do IPC (22 a 26 ms).
+  - **Correções:**
+    - o botão age no aperto e manda o horário;
+    - a origem do relógio é o `firstFrameEpochMs` do helper (`mediaClockOriginMs`), o que corrige também os marcadores;
+    - a borda de um pedaço de câmera cheia que cai numa troca gravada é um **corte** (`recordedSwitchCuts`, `cutAtRecordedSwitches`, `withRecordedSwitchCuts`), e uma borda que o usuário arrastou volta a ter rampa;
+    - o HUD troca o ícone na hora.
+  - **Depois:** o `atMs` cai a +1 e 0 ms do clique. No export, a câmera cheia entra no primeiro quadro depois do aperto e sai no primeiro quadro depois do outro aperto (≤ 1 quadro, 17 ms). O HUD reage em 12 ms.
+- **9. Primeiros quadros embaralhados no Rosto.**
+  - **Causa:** o desfoque de movimento do compositor lê a câmera um quadro antes. No quadro 0 isso é t < 0, fora de qualquer pedaço, e o quadro 0 misturava a bolinha PiP com a câmera cheia. O arquivo da câmera já sai limpo desde o quadro 0.
+  - **Correção:** `camera_fullscreen_progress_prev_at` (`regions.rs`): numa borda segurada (início do vídeo, trim, troca gravada), o quadro anterior é lido no próprio t.
+  - **Medido:** export do projeto do usuário que começa no Rosto (cópia, só leitura). A diferença média do quadro 0 para o quadro 1 caiu de 47,6 para 0,00 níveis de cinza.
+  - **Prévia:** usa o mesmo `frame_geometry` do addon. Não foi medida em pixels: a captura do `<canvas>` por CDP não dá o quadro composto.
+- **Nativos recompilados neste branch:**
+  - `wgc-capture.exe` (`npm run build:native:win`, com os testes C++ passando; `findstr` acha `screen-encoder-ready`, controle `encoder-selection`);
+  - `compositor_view.node` (`npm run build:native:compositor`; 462 testes Rust).
+  - O `crates/target` da worktree é junction para o da checkout principal: o `compositor_view.dll` de lá agora é o deste branch.
+- **Teste C++ instável:** `mixer-streaming-source-has-no-holes` (`audio_sample_utils_test`) falhou duas vezes com a CPU a 100 % e passou na terceira. O teste é de tempo real.
+
 **Extras de gravação** (pedido de 12/10, branch `feat/recording-extras`; todos opcionais, Windows):
 
 - **Desenhar na tela (roadmap #277).** Botão de caneta no HUD e atalho global **Ctrl+Shift+F6** (`drawingToggle`, configurável; registrou livre na máquina do usuário, e só conflita com o "janela anterior" do Excel e do Word). Duas janelas (`electron/recordingExtras/drawingOverlay.ts`, `extrasWindows.ts`):
@@ -367,6 +419,7 @@ Os PRs do fork são abertos e mesclados com `gh pr merge N --merge`, sem CI. Ant
 | Ver a câmera ao gravar | `electron/recordingExtras/selfView.ts`; helper `webcam_preview.{h,cpp}` (pipe; `selfViewPipe` e `selfViewPreview` no config; `selfview on` / `selfview off` no stdin); `electron/recording/selfViewStream.ts`; `SelfViewWindow.tsx`; botão `HudSelfViewButton` | desligado; lembra posição e tamanho |
 | Aviso de microfone mudo | helper `MicLevelMeter` (`mic-level`); `electron/recording/micSilence.ts` e `electron/recordingExtras/micSilenceWatch.ts`; badge em `HudMicButton`; pref `micSilenceWarningEnabled` | ligado; −60 dBFS, 6 s / 30 s |
 | Rosto / Tela + câmera (HUD) | botão `HudCameraLayoutButton` (`HudControls.tsx`, só no Windows e com a câmera ligada) e atalho `cameraLayoutToggle`; pref `cameraLayout` (`app-settings.ts`); no main `switchRecordingCameraLayout` (`handlers.ts`) e `TakeCameraLayoutLog` / `takeMediaTimeMs` (`electron/recording/takeCameraLayout.ts`); sidecar `<take>.mp4.layout.json` (`src/lib/recordingLayout.ts`); `asset.cameraLayout` (`readRecordingLayout` no `document-service.ts`); peças em `cameraSegmentsFromRecordingLayout` (`cameraSegments.ts`), gravadas por `applyFreshRecordingCameraLayout` (`recordingImport.ts`); auto-zoom reserva os trechos de câmera cheia (`apply-auto-zooms.ts`) | Tela + câmera |
+| Take termina no aperto de Parar; cliques do HUD fora do cursor | `pressHandlers` (`src/components/launch/hudPress.ts`); `stopAtMs` no `.session.json` → `asset.recordedEndSec` (`document-service.ts`) → `recordedClipLengthSec` (`timeline.ts`); `note-recording-control-press` → `dropControlPressClicks` (`electron/recording/takeControlPresses.ts`) | sempre (Windows) |
 | Turnos do agente (aprovar e desfazer) | cada resposta do chat devolve UM documento final (as ferramentas editam uma cópia no main), aplicado por `applyAgentDocumentIfCurrent` como uma única entrada de undo; `runAgentTurn` (`agentDocumentApply.ts`) guarda o handle da entrada e recusa aplicar em outro projeto; estado por resposta em `src/lib/ai-edition/store/agentTurns.ts` (`useAgentTurnStore`: pendente/aplicada/descartada/desfeita, resumo `summarizeAgentTurnChanges`); "Desfazer esta resposta" em `agentTurnUndo.ts` (só se for a última alteração; senão orienta usar Ctrl+Z); UI `AgentTurnFooter` em `LeftPanel.tsx`; config `requireAgentEditApproval` (`llm-config-store.ts`), toggle em `ProviderSettings.tsx` | **pede aprovação** (Aplicar/Descartar); desligado, aplica na hora e mantém o desfazer |
 | Movimentos de câmera 3D | `effects.dolly` (0..1) e `effects.leanToClicks` na cena (`SceneEffects`); `plan_frame` (`frame_geometry.rs`): o dolly escala `s_box` e a caixa da câmera em torno do centro do quadro por `1 + DOLLY_MAX (8%) × dolly × força do zoom` (frame anterior também, então o desfoque de movimento existente pega o empurrão); a inclinação é `regions::click_lean` (clique → o lado clicado chega perto, até 1,6°/2,6°, entra em 0,35 s e volta até 1,8 s) somada a `zoom_rotation_dyn`, só com a tela reta e o ponteiro visível (com ou sem desfoque, E-1 do E2E da 2.5.0), e `FrameGeometry::tilted()` passou a contar a parte dinâmica. Desfoque de movimento: era o existente (`effects.motionBlur`), só verificado. Prefs `dollyAmount` / `leanToClicks`; controles na seção "Movimento" do `VideoEffectsPane`. Medido no export: caixa 1611→1743 px no zoom (×1,082, centrada), igual fora dele; inclinação: 0 de diferença antes do clique, até 3,1/255 de média logo depois, 0,13 (ruído do encoder) depois de 1,8 s; borda com desfoque 20→37 px no empurrão. Três backends pelo `plan_frame` comum | desligados |
 | Melhorar a voz | Rust `crates/compositor/src/voice_enhance.rs` (RNNoise do crate `nnnoiseless`, BSD-3, puro Rust, + passa-altas 80 Hz + presença 3,5 kHz até +3 dB; atraso de um quadro de 480 amostras descontado); `EnhanceStream` antes do esticamento de velocidade em `ProgrammeAudio::clip_source` (Windows) e `enhance_pcm` em `decode_and_stretch_clip_audio` (mac/Linux); cena `voiceEnhance` (fora de `audio`, que só tem ganhos lineares); a prévia toca a cópia que o addon renderiza (`enhanceVoiceFile` → IPC `prepare-enhanced-voice`, WAV em `userData/preview-audio`) no lugar da voz; prefs `voiceEnhance` / `voiceEnhanceStrength` no editorSettings; toggle no `AudioPane`. Medido (TTS Maria + ruído rosa + 60 Hz): SNR 17,3 → 42,8 dB no export (80%), cópia da prévia 42,9 dB, atraso −1 amostra (0,02 ms), 64× o tempo real. Sem stems, o som do computador também é reduzido | desligado |

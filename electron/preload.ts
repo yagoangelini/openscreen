@@ -228,8 +228,12 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	},
 	setRecordingCameraLayout: (
 		layout: RecordingCameraLayout,
+		pressedAtEpochMs?: number,
 	): Promise<RecordingCameraLayout | null> => {
-		return ipcRenderer.invoke("set-recording-camera-layout", layout);
+		return ipcRenderer.invoke("set-recording-camera-layout", layout, pressedAtEpochMs);
+	},
+	noteRecordingControlPress: (pressedAtEpochMs: number) => {
+		ipcRenderer.send("note-recording-control-press", pressedAtEpochMs);
 	},
 	onRecordingCameraLayoutChanged: (
 		callback: (change: { layout: RecordingCameraLayout; source: "hud" | "shortcut" }) => void,
@@ -328,8 +332,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	cancelNativeWindowsPendingStart: () => {
 		return ipcRenderer.invoke("cancel-native-windows-pending-start") as Promise<boolean>;
 	},
-	stopNativeWindowsRecording: (discard?: boolean) => {
-		return ipcRenderer.invoke("stop-native-windows-recording", discard);
+	stopNativeWindowsRecording: (discard?: boolean, pressedAtEpochMs?: number) => {
+		return ipcRenderer.invoke("stop-native-windows-recording", discard, pressedAtEpochMs);
 	},
 	pauseNativeWindowsRecording: () => {
 		return ipcRenderer.invoke("pause-native-windows-recording");

@@ -173,3 +173,31 @@ describe("computeCameraLookBlend", () => {
 		expect(across?.k).toBeCloseTo(0.5, 5);
 	});
 });
+
+describe("computeCameraFullscreenProgress at a switch recorded on the HUD", () => {
+	it("cuts in and out on the press instead of easing over the second around it", () => {
+		const region: CameraFullscreenRegion = {
+			...makeRegion(2000, 6000),
+			continuesBefore: true,
+			continuesAfter: true,
+		};
+		expect(computeCameraFullscreenProgress([region], 1999)).toBe(0);
+		expect(computeCameraFullscreenProgress([region], 2000)).toBe(1);
+		expect(computeCameraFullscreenProgress([region], 2017)).toBe(1);
+		expect(computeCameraFullscreenProgress([region], 5983)).toBe(1);
+		expect(computeCameraFullscreenProgress([region], 6000)).toBe(1);
+		expect(computeCameraFullscreenProgress([region], 6017)).toBe(0);
+		// Without the flags the same span is still easing at both of those frames.
+		const eased = makeRegion(2000, 6000);
+		expect(computeCameraFullscreenProgress([eased], 2017)).toBeLessThan(1);
+		expect(computeCameraFullscreenProgress([eased], 5983)).toBeLessThan(1);
+	});
+
+	it("keeps the other side's ramp when only one side is a recorded switch", () => {
+		const region: CameraFullscreenRegion = { ...makeRegion(2000, 6000), continuesBefore: true };
+		expect(computeCameraFullscreenProgress([region], 2000)).toBe(1);
+		expect(computeCameraFullscreenProgress([region], 6000 - 100)).toBeLessThan(1);
+		expect(computeCameraFullscreenProgress([region], 6000)).toBe(0);
+		expect(TRANSITION_WINDOW_MS).toBeGreaterThan(0);
+	});
+});

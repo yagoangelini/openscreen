@@ -489,6 +489,58 @@ export function cameraSegmentsFromRecordingLayout(
 	return { segments: out, ids };
 }
 
+/** How close (ms) a camera edge must be to a recorded switch to be that switch. */
+export const RECORDED_SWITCH_TOLERANCE_MS = 2;
+
+/**
+ * Which edges of a full-camera span, in its take's source ms, are a "Rosto / Tela + câmera"
+ * switch made while recording. Those are cuts, on the press: the camera takes the frame, or
+ * gives it back, on the very frame the button was pressed, instead of easing in over the second
+ * after it (the lag the user saw) or out over the 1.5 s before it. An edge the user moved is no
+ * longer on a switch, and eases as any other piece's.
+ */
+export function recordedSwitchCuts(
+	layout: RecordingLayoutOnAsset | undefined,
+	startSourceMs: number,
+	endSourceMs: number,
+): { before: boolean; after: boolean } {
+	const switches = layout?.switches ?? [];
+	const on = (ms: number, to: "face" | "screen") =>
+		switches.some(
+			(entry) =>
+				entry.layout === to && Math.abs(entry.atSec * 1000 - ms) <= RECORDED_SWITCH_TOLERANCE_MS,
+		);
+	return { before: on(startSourceMs, "face"), after: on(endSourceMs, "screen") };
+}
+
+/**
+ * The full-camera runs as the preview reads them, each edge on a switch recorded on the HUD
+ * marked as a cut (`continuesBefore` / `continuesAfter`), as `buildSceneDescription` marks
+ * them for the compositor.
+ */
+export function withRecordedSwitchCuts<T extends CameraModeRun>(
+	runs: readonly T[],
+	assets: readonly AxcutDocument["assets"][number][],
+	clips: readonly AxcutClip[],
+): (T & { continuesBefore?: boolean; continuesAfter?: boolean })[] {
+	return runs.map((run) => {
+		if (run.clipId === undefined || run.sourceStartSec === undefined) return run;
+		const clip = clips.find((candidate) => candidate.id === run.clipId);
+		const layout = clip
+			? assets.find((asset) => asset.id === clip.assetId)?.cameraLayout
+			: undefined;
+		if (!layout) return run;
+		const endSec = run.sourceEndSec ?? run.sourceStartSec + (run.endMs - run.startMs) / 1000;
+		const cuts = recordedSwitchCuts(layout, run.sourceStartSec * 1000, endSec * 1000);
+		if (!cuts.before && !cuts.after) return run;
+		return {
+			...run,
+			...(cuts.before ? { continuesBefore: true } : {}),
+			...(cuts.after ? { continuesAfter: true } : {}),
+		};
+	});
+}
+
 /** Put a piece back to the default: its stored fragments go, and the gap left is an
  *  implicit picture-in-picture piece. An implicit piece is already there. */
 export function removeCameraPiece(

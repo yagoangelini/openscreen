@@ -18,12 +18,14 @@ import {
 	normalizeCameraLook,
 	readCameraFullscreenRegions,
 	readCameraHiddenRegions,
+	recordedSwitchCuts,
 	removeCameraPiece,
 	setCameraModeOverSpan,
 	setCameraPieceLook,
 	setCameraPieceMode,
 	setCameraPieceStyle,
 	splitCameraAt,
+	withRecordedSwitchCuts,
 } from "./cameraSegments";
 
 // Two clips of one take: source 0-10 s at 0-10 s on the ruler, then source 20-30 s at 10-20 s.
@@ -438,5 +440,66 @@ describe("cameraSegmentsFromRecordingLayout", () => {
 			],
 		});
 		expect(sliver.ids).toEqual([]);
+	});
+});
+
+describe("recordedSwitchCuts / withRecordedSwitchCuts", () => {
+	const layout = {
+		initial: "screen" as const,
+		switches: [
+			{ atSec: 2, layout: "face" as const },
+			{ atSec: 4.5, layout: "screen" as const },
+		],
+	};
+
+	it("says which edges of a span are the switches pressed on the HUD", () => {
+		expect(recordedSwitchCuts(layout, 2000, 4500)).toEqual({ before: true, after: true });
+		expect(recordedSwitchCuts(layout, 2001, 4600)).toEqual({ before: true, after: false });
+		// A switch to the face is not the END of a face span, nor the other way round.
+		expect(recordedSwitchCuts(layout, 0, 2000)).toEqual({ before: false, after: false });
+		expect(recordedSwitchCuts(undefined, 2000, 4500)).toEqual({ before: false, after: false });
+	});
+
+	it("marks the preview's runs the way the scene marks the compositor's", () => {
+		const placed = cameraSegmentsFromRecordingLayout([], clips, "a", layout);
+		const runs = withRecordedSwitchCuts(
+			readCameraFullscreenRegions({ cameraSegments: placed.segments }),
+			[
+				{
+					id: "a",
+					kind: "video",
+					label: "a",
+					originalPath: "/a.mp4",
+					cameraTrack: null,
+					cameraLayout: layout,
+				},
+			],
+			clips,
+		);
+		expect(runs).toHaveLength(1);
+		expect(runs[0]).toMatchObject({
+			startMs: 2000,
+			endMs: 4500,
+			continuesBefore: true,
+			continuesAfter: true,
+		});
+		// Moved by the user: eases again.
+		const moved = moveCameraBoundary(placed.segments, clips, placed.ids[0], 6000) ?? [];
+		const [run] = withRecordedSwitchCuts(
+			readCameraFullscreenRegions({ cameraSegments: moved }),
+			[
+				{
+					id: "a",
+					kind: "video",
+					label: "a",
+					originalPath: "/a.mp4",
+					cameraTrack: null,
+					cameraLayout: layout,
+				},
+			],
+			clips,
+		);
+		expect(run.continuesBefore).toBe(true);
+		expect(run.continuesAfter).toBeUndefined();
 	});
 });

@@ -73,3 +73,20 @@ export class TakeCameraLayoutLog {
 		);
 	}
 }
+
+/**
+ * The wall clock of a take's media time 0: the helper's own first-frame time when it gave a
+ * plausible one (at most 2 s before this process heard of the first frame), else the moment
+ * it heard. Switches, markers and the stop are all measured from it.
+ */
+export function mediaClockOriginMs(firstFrameEpochMs: number | null, heardAtMs: number): number {
+	if (
+		firstFrameEpochMs === null ||
+		!Number.isFinite(firstFrameEpochMs) ||
+		firstFrameEpochMs > heardAtMs ||
+		firstFrameEpochMs < heardAtMs - 2_000
+	) {
+		return heardAtMs;
+	}
+	return firstFrameEpochMs;
+}

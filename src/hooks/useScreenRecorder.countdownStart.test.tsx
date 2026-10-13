@@ -135,6 +135,38 @@ describe("useScreenRecorder: a Windows take starts with its countdown", () => {
 		await waitFor(() => expect(view.result.current.recording).toBe(true));
 	});
 
+	it("takes the countdown down on its end, the take's first frame, not before", async () => {
+		let hiddenAt = 0;
+		const { api } = stub(async () => ({ success: true, recordingId: 7 }));
+		api.hideCountdownOverlay.mockImplementation(async () => {
+			hiddenAt = Date.now();
+		});
+		const view = renderHook(() => useScreenRecorder());
+		await waitFor(() => expect(view.result.current.recordingPrefsLoaded).toBe(true));
+
+		act(() => view.result.current.toggleRecording());
+		await waitFor(() => expect(api.startNativeWindowsRecording).toHaveBeenCalled());
+		const [request] = api.startNativeWindowsRecording.mock.calls[0] as unknown as [
+			{ startAtEpochMs: number },
+		];
+		await waitFor(() => expect(api.hideCountdownOverlay).toHaveBeenCalled(), { timeout: 3000 });
+		// Timers can fire a hair early in jsdom; the old code took it down 150 ms early.
+		expect(hiddenAt).toBeGreaterThanOrEqual(request.startAtEpochMs - 20);
+		await waitFor(() => expect(view.result.current.recording).toBe(true));
+	});
+
+	it("passes the press on Stop to the main process, for the take to end there", async () => {
+		const { api } = stub(async () => ({ success: true, recordingId: 7 }));
+		const view = renderHook(() => useScreenRecorder());
+		await waitFor(() => expect(view.result.current.recordingPrefsLoaded).toBe(true));
+		act(() => view.result.current.toggleRecording());
+		await waitFor(() => expect(view.result.current.recording).toBe(true), { timeout: 3000 });
+
+		act(() => view.result.current.toggleRecording(1_234_567));
+		await waitFor(() => expect(api.stopNativeWindowsRecording).toHaveBeenCalled());
+		expect(api.stopNativeWindowsRecording).toHaveBeenCalledWith(false, 1_234_567);
+	});
+
 	it("ends the helper when the countdown is cancelled, and records nothing", async () => {
 		const { api } = stub(
 			() =>

@@ -1119,6 +1119,33 @@ pub fn camera_fullscreen_progress_at(
     ease_out_screen_studio(camera_fullscreen_phase_at(regions, t, clock))
 }
 
+/// The progress one frame earlier (`t_prev`), which the motion blur trails from towards the
+/// progress at `t`. Across a held edge (`continues_before` / `continues_after`: the start of the
+/// video, a trim, or a camera switch recorded as a cut) the camera jumps rather than moves, so
+/// there is nothing to trail from: a region that `t` has just entered or left through such an
+/// edge is read at `t` itself. Without this the first frame of a take that opens on the face
+/// blended the corner bubble into the full-screen camera (`t_prev` < 0 is outside every region).
+pub fn camera_fullscreen_progress_prev_at(
+    regions: &[SceneCameraFullscreenRegion],
+    t: f32,
+    t_prev: f32,
+    clock: &ScreenClock,
+) -> f32 {
+    let mut strongest = 0.0f32;
+    for r in regions {
+        let start = r.start_sec as f32;
+        let end = r.end_sec as f32;
+        let entered_held = r.continues_before && t_prev < start && t >= start;
+        let left_held = r.continues_after && t_prev <= end && t > end;
+        let at = if entered_held || left_held { t } else { t_prev };
+        let s = camera_fullscreen_region_phase(r, at, clock);
+        if s > strongest {
+            strongest = s;
+        }
+    }
+    ease_out_screen_studio(strongest)
+}
+
 /// Ce qui reste de la bulle PiP (coins arrondis, ombre) au temps `t` : 1 = bulle entière,
 /// 0 = plein cadre net. Pas `1 - progrès` : le rect part en ease-out et a fait 90 % du chemin au
 /// premier tiers de la montée, donc des coins qui le suivaient étaient carrés presque tout du
@@ -2222,6 +2249,30 @@ mod zoom_focus_tests {
             continues_before,
             continues_after,
         }
+    }
+
+    /// The motion blur reads the camera one frame earlier. A take that opens on the face has
+    /// nothing earlier: frame 0 must trail from the full-screen camera, not from the corner bubble
+    /// at t < 0 (the garbled first frame of a "Rosto" take). Same at a recorded cut, both ways,
+    /// while a real ramp still trails from the frame before.
+    #[test]
+    fn the_previous_frame_does_not_reach_across_a_held_edge() {
+        let clock = ScreenClock::default();
+        let frame = 1.0 / 60.0;
+        let opens = [full_camera_piece(Some(0), 0.0, 5.0, true, false)];
+        assert_eq!(camera_fullscreen_progress_prev_at(&opens, 0.0, -frame, &clock), 1.0);
+        let cut = [full_camera_piece(Some(0), 2.0, 4.0, true, true)];
+        assert_eq!(camera_fullscreen_progress_prev_at(&cut, 2.0, 2.0 - frame, &clock), 1.0);
+        assert_eq!(camera_fullscreen_progress_prev_at(&cut, 4.0 + frame, 4.0, &clock), 0.0);
+        // Inside the span, the frame before is read as it is.
+        assert_eq!(camera_fullscreen_progress_prev_at(&cut, 3.0, 3.0 - frame, &clock), 1.0);
+        let ramp = [full_camera_piece(Some(0), 2.0, 6.0, false, false)];
+        let t = 2.0 + frame;
+        assert_eq!(
+            camera_fullscreen_progress_prev_at(&ramp, t, 2.0, &clock),
+            camera_fullscreen_progress_at(&ramp, 2.0, &clock),
+            "a ramp keeps its trail"
+        );
     }
 
     /// Un trim au milieu d'une région Full Camera la coupe en deux morceaux, un par segment gardé

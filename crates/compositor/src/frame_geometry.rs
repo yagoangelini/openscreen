@@ -3291,7 +3291,12 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
         let cam_progress =
             crate::regions::camera_fullscreen_progress_at(cam_regions, source_t, &clock);
         let cam_progress_prev =
-            crate::regions::camera_fullscreen_progress_at(cam_regions, source_t_prev, &clock);
+            crate::regions::camera_fullscreen_progress_prev_at(
+                cam_regions,
+                source_t,
+                source_t_prev,
+                &clock,
+            );
         let shape_fade =
             crate::regions::camera_fullscreen_shape_at(cam_regions, source_t, &clock);
         // "Sans caméra" : la même enveloppe que Full Camera (contenue dans la zone, montée et
@@ -3301,7 +3306,12 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
         let hide_progress =
             crate::regions::camera_fullscreen_progress_at(hidden_regions, source_t, &clock);
         let hide_progress_prev =
-            crate::regions::camera_fullscreen_progress_at(hidden_regions, source_t_prev, &clock);
+            crate::regions::camera_fullscreen_progress_prev_at(
+                hidden_regions,
+                source_t,
+                source_t_prev,
+                &clock,
+            );
         // rétrécissement réactif : la webcam garde 70 % de sa taille pendant un zoom actif, quel
         // que soit son niveau (elle suivait 1/zoom, et rétrécissait donc d'autant plus que le zoom
         // était profond : ×0,6 au zoom maximal). L'enveloppe est celle de la région : elle descend

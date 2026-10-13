@@ -1043,18 +1043,64 @@ int wmain(int argc, wchar_t* argv[]) {
               << " env=" << dxgiInputEnv << std::endl;
 
     startTiming("audio-devices-opened");
+    // The camera's encoder opens on its own thread, beside the screen's: each took 1.5-4 s on
+    // the Intel encoder of the Dell G15, one after the other, all of it inside the countdown
+    // (and past its end, the take then starting late). The two share nothing on the way: the
+    // camera's sink writer gets no D3D device manager (`useDxgiInput` off, NV12 from system
+    // memory), so nothing here touches the capture's immediate context, and Media Foundation
+    // startup is reference-counted. Joined before anything can return.
+    MFEncoder webcamEncoder;
+    bool webcamEncoderReady = true;
+    std::thread webcamEncoderInit;
+    if (writeSeparateWebcam) {
+        MFEncoderOptions webcamEncoderOptions = encoderOptions;
+        webcamEncoderOptions.injectDefaultSinkWriterFailureOnce = false;
+        webcamEncoderOptions.useDxgiInput = false;
+        // The two-step ladder this replaces topped out at 8 Mbit/s for anything
+        // 720p or larger. That was sized for a camera nobody had configured
+        // above 640x480; now that the capture runs at the camera's real
+        // resolution, 8 Mbit/s starves a 1440p or 2160p frame badly enough to
+        // undo the extra pixels. The tiers mirror the screen ladder above.
+        const int webcamPixels = std::max(1, webcamCapture.width()) * std::max(1, webcamCapture.height());
+        const int webcamBitrate = webcamPixels >= 3840 * 2160   ? 40'000'000
+                                  : webcamPixels >= 2560 * 1440 ? 24'000'000
+                                  : webcamPixels >= 1920 * 1080 ? 16'000'000
+                                  : webcamPixels >= 1280 * 720  ? 8'000'000
+                                                                : 4'000'000;
+        webcamEncoderInit = std::thread([&, webcamEncoderOptions, webcamBitrate] {
+            webcamEncoderReady = webcamEncoder.initialize(
+                utf8ToWide(config.webcamOutputPath),
+                webcamCapture.width(),
+                webcamCapture.height(),
+                webcamCapture.fps(),
+                webcamBitrate,
+                session.device(),
+                session.context(),
+                nullptr,
+                webcamEncoderOptions);
+        });
+    }
     MFEncoder encoder;
-    if (!encoder.initialize(
-            utf8ToWide(config.outputPath),
-            width,
-            height,
-            config.fps,
-            bitrate,
-            session.device(),
-            session.context(),
-            audioFormat ? &encoderAudioFormat : nullptr,
-            encoderOptions)) {
+    const bool screenEncoderReady = encoder.initialize(
+        utf8ToWide(config.outputPath),
+        width,
+        height,
+        config.fps,
+        bitrate,
+        session.device(),
+        session.context(),
+        audioFormat ? &encoderAudioFormat : nullptr,
+        encoderOptions);
+    startTiming("screen-encoder-ready");
+    if (webcamEncoderInit.joinable()) {
+        webcamEncoderInit.join();
+    }
+    if (!screenEncoderReady) {
         std::cerr << "ERROR: Failed to initialize Media Foundation encoder" << std::endl;
+        return 1;
+    }
+    if (!webcamEncoderReady) {
+        std::cerr << "ERROR: Failed to initialize native webcam encoder" << std::endl;
         return 1;
     }
     // `videoInput` reports what the encoder settled on, not what was asked for:
@@ -1081,36 +1127,6 @@ int wmain(int argc, wchar_t* argv[]) {
               << ",\"videoEncoderRuntime\":\"" << encoder.videoEncoderRuntime()
               << "\",\"videoEncoderName\":\"" << jsonEscape(encoder.videoEncoderName())
               << "\"}" << std::endl;
-    MFEncoder webcamEncoder;
-    if (writeSeparateWebcam) {
-        MFEncoderOptions webcamEncoderOptions = encoderOptions;
-        webcamEncoderOptions.injectDefaultSinkWriterFailureOnce = false;
-        webcamEncoderOptions.useDxgiInput = false;
-        // The two-step ladder this replaces topped out at 8 Mbit/s for anything
-        // 720p or larger. That was sized for a camera nobody had configured
-        // above 640x480; now that the capture runs at the camera's real
-        // resolution, 8 Mbit/s starves a 1440p or 2160p frame badly enough to
-        // undo the extra pixels. The tiers mirror the screen ladder above.
-        const int webcamPixels = std::max(1, webcamCapture.width()) * std::max(1, webcamCapture.height());
-        const int webcamBitrate = webcamPixels >= 3840 * 2160   ? 40'000'000
-                                  : webcamPixels >= 2560 * 1440 ? 24'000'000
-                                  : webcamPixels >= 1920 * 1080 ? 16'000'000
-                                  : webcamPixels >= 1280 * 720  ? 8'000'000
-                                                                : 4'000'000;
-        if (!webcamEncoder.initialize(
-                utf8ToWide(config.webcamOutputPath),
-                webcamCapture.width(),
-                webcamCapture.height(),
-                webcamCapture.fps(),
-                webcamBitrate,
-                session.device(),
-                session.context(),
-                nullptr,
-                webcamEncoderOptions)) {
-            std::cerr << "ERROR: Failed to initialize native webcam encoder" << std::endl;
-            return 1;
-        }
-    }
 
     // By default, no mutex guards frame handoff: writeVideoFrames is the
     // only thread that ever touches WGC or latestFrameTexture. It pulls each

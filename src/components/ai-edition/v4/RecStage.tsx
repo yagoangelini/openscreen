@@ -57,7 +57,9 @@ const DEFAULT_PREFS: RecordingPrefsState = {
 	hideDesktopIcons: false,
 	autoZoomEnabled: true,
 	recordingsFolder: null,
-	countdownSeconds: 3,
+	// The main process's default (electron/app-settings.ts): 5 s, enough for the helper to open
+	// everything before the countdown ends.
+	countdownSeconds: 5,
 };
 
 /**

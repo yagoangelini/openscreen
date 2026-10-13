@@ -214,6 +214,26 @@ async function readRecordingLayout(videoPath: string): Promise<RecordingLayoutOn
 	}
 }
 
+/**
+ * Where the take was stopped, in source seconds, from its .session.json (`stopAtMs`, the
+ * press on Stop on the take's media clock). Undefined for anything else: a take from before
+ * it was written, a file that is not a take, a manifest that cannot be read.
+ */
+async function readRecordedEndSec(videoPath: string): Promise<number | undefined> {
+	try {
+		const manifest = path.join(
+			path.dirname(videoPath),
+			`${path.parse(videoPath).name}.session.json`,
+		);
+		const stopAtMs = JSON.parse(await fs.readFile(manifest, "utf8"))?.stopAtMs;
+		return typeof stopAtMs === "number" && Number.isFinite(stopAtMs) && stopAtMs > 0
+			? stopAtMs / 1000
+			: undefined;
+	} catch {
+		return undefined;
+	}
+}
+
 /** The shortcuts pressed during the take, from its cursor file; nothing when it has none. */
 async function readRecordingKeystrokes(videoPath: string) {
 	try {
@@ -609,6 +629,7 @@ export class DocumentService {
 		const keystrokes = kind === "audio" ? undefined : await readRecordingKeystrokes(absolutePath);
 		const audioStems = kind === "audio" ? undefined : await readRecordingStems(absolutePath);
 		const cameraLayout = kind === "audio" ? undefined : await readRecordingLayout(absolutePath);
+		const recordedEndSec = kind === "audio" ? undefined : await readRecordedEndSec(absolutePath);
 		const asset: AxcutAsset = {
 			id: createId("asset"),
 			kind,
@@ -620,6 +641,7 @@ export class DocumentService {
 			...(keystrokes && keystrokes.length > 0 ? { keystrokes } : {}),
 			...(audioStems ? { audioStems } : {}),
 			...(cameraLayout ? { cameraLayout } : {}),
+			...(recordedEndSec ? { recordedEndSec } : {}),
 		};
 		// An audio import is an overlay, never the thing the timeline is built
 		// around, so it must not claim the empty primaryAssetId slot — otherwise the
