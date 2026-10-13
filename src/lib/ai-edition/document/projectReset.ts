@@ -10,6 +10,8 @@
 //                of its own goes. A take with no log gets the default picture-in-picture.
 //   video        One clip per recording, the whole of it, in the order they first play: cuts,
 //                trims, speed changes, splits, reorders, crops, pauses and inserted words go.
+//                "The whole of it" is what the import plays: up to the press on Stop when the
+//                take recorded one (`recordedEndSec`), so the stop click never comes back.
 //                Regions anchored to the footage (zooms, annotations, camera pieces, audio)
 //                follow the footage, not the ruler: a zoom on second 40 of the take stays on
 //                second 40 even when a cut before it had pulled it to 30.
@@ -36,6 +38,7 @@ import { createId } from "./ids";
 import {
 	mapAllRegionCollections,
 	reanchorRows,
+	recordedClipLengthSec,
 	rederiveRegionMs,
 	resequenceClips,
 } from "./timeline";
@@ -95,8 +98,11 @@ export function resetVideoTrack(document: AxcutDocument): AxcutDocument {
 	// region anchored to any of them keeps its source time on the full clip (`reanchorRows`).
 	const absorbed = new Map<string, string>();
 	for (const asset of takes) {
-		const length = takeLengthSec(asset, oldClips);
-		if (length === null) continue;
+		const mediaSec = takeLengthSec(asset, oldClips);
+		if (mediaSec === null) continue;
+		// The import's length, not the file's: the frames after the press on Stop stay in the
+		// file (dragging the clip edge brings them back), but a restore must not.
+		const length = recordedClipLengthSec(asset, mediaSec);
 		const own = oldClips.filter((clip) => clip.assetId === asset.id);
 		const first = own[0];
 		const id = first?.id ?? createId("clip");

@@ -200,6 +200,23 @@ describe("resetVideoTrack", () => {
 		expect((reset.legacyEditor as { speedRegions: unknown[] }).speedRegions).toEqual([]);
 	});
 
+	it("ends the take's clip at the press on Stop, as the import does, not at the file's end", () => {
+		// The take recorded 30 s, but Stop was pressed at 29.85 s: the import plays 0-29.85.
+		const doc = edited();
+		const pressed: AxcutDocument = {
+			...doc,
+			assets: doc.assets.map((asset) => ({ ...asset, recordedEndSec: 29.85 })),
+		};
+		const reset = resetVideoTrack(pressed);
+		expect(reset.timeline.clips).toHaveLength(1);
+		expect(reset.timeline.clips[0]).toMatchObject({
+			sourceStartSec: 0,
+			sourceEndSec: 29.85,
+			timelineEndSec: 29.85,
+		});
+		expect(resetProjectToImport(pressed).timeline.clips[0].sourceEndSec).toBe(29.85);
+	});
+
 	it("keeps the regions on the same footage, not on the same ruler time", () => {
 		const reset = resetVideoTrack(edited());
 		// The zoom was on source 21-23 s of the second clip: on the full clip that is 21-23 s.

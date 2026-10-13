@@ -1,9 +1,9 @@
 // @vitest-environment node
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import os, { tmpdir } from "node:os";
 import path from "node:path";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { resolveFfmpeg } from "./audioPeaks";
 import { getScreenActivity, screenActivityArgs } from "./screenActivity";
 
@@ -22,6 +22,14 @@ const dir = mkdtempSync(path.join(tmpdir(), "screen-activity-"));
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
 describe.skipIf(!ffmpeg)("getScreenActivity (real ffmpeg)", () => {
+	// The app runs the scan below normal priority so the preview comes first. Under the full
+	// suite every core is busy at normal priority, and a below-normal ffmpeg was starved past
+	// even a 30 s timeout (it takes ~0.3 s on its own). The priority is not what this checks.
+	beforeAll(() => {
+		vi.spyOn(os, "setPriority").mockImplementation(() => undefined);
+	});
+	afterAll(() => vi.restoreAllMocks());
+
 	it("finds the box that appears half way through a clip, where it appears", async () => {
 		const video = path.join(dir, "box.mp4");
 		// Two seconds of dark grey; a white box over the right third, top half, from 1 s on.
@@ -51,7 +59,6 @@ describe.skipIf(!ffmpeg)("getScreenActivity (real ffmpeg)", () => {
 		expect(box.y).toBeCloseTo(0, 1);
 		expect(box.width).toBeCloseTo(200 / 640, 1);
 		expect(box.height).toBeCloseTo(0.5, 1);
-		// Two real ffmpeg runs, the scan one below normal priority: under a full suite they outlast
-		// the default 5 s.
+		// Two real ffmpeg runs: under a full suite they can outlast the default 5 s.
 	}, 30_000);
 });
