@@ -175,7 +175,7 @@
 		"openProjectFirst": "Ouvrez d'abord un projet",
 		"couldNotAddAsset": "Impossible d'ajouter le fichier",
 		"searchPlaceholder": "Rechercher des médias…",
-		"dragHint": "Glissez un clip sur la timeline ci-dessous pour l'ajouter",
+		"dragHint": "Faites glisser une carte vers la bande qui apparaît en bas pour l'ajouter à la timeline",
 		"emptyHint": "Aucun média pour l'instant — importez un enregistrement pour commencer.",
 		"importMedia": "Importer un média",
 		"added": "{{label}} ajouté",
@@ -230,7 +230,10 @@
 		"redactRescanNothing": "Nothing changed: the automatic blurs are already up to date.",
 		"redactRescanDone": "Automatic blurs updated: {{added}} added, {{removed}} replaced. Undo with Ctrl+Z.",
 		"transcribeGuest": "Transcribe the computer sound too (call guest)",
-		"transcribeGuestHint": "For a take with separate voice and computer tracks: transcribes both and marks who said each word. Off: only your microphone is transcribed."
+		"transcribeGuestHint": "For a take with separate voice and computer tracks: transcribes both and marks who said each word. Off: only your microphone is transcribed.",
+		"dropToTimeline": "Déposez ici pour l'ajouter à la timeline",
+		"notInProject": "Cet enregistrement n'est pas encore dans le projet ouvert.",
+		"addToProject": "Ajouter au projet"
 	},
 	"exportDialog": {
 		"title": "Exporter",
@@ -667,13 +670,14 @@
 		"deleteConfirm": "Mettre à la Corbeille",
 		"errors": {
 			"busy": "Cet enregistrement est encore en cours ou en finalisation. Réessayez dans un instant.",
-			"inUse": "Un autre programme a ouvert cet enregistrement. Fermez-le et réessayez.",
+			"inUse": "Un autre programme (l'Explorateur de fichiers, un lecteur ou l'antivirus) a encore cet enregistrement ouvert. Fermez-le et réessayez : rien n'a été supprimé.",
 			"invalidName": "Ce nom ne peut pas être utilisé pour un dossier.",
 			"trashFailed": "L’enregistrement n’a pas pu aller dans la Corbeille. Rien n’a été supprimé.",
 			"notFound": "Cet enregistrement n’est plus dans le dossier.",
 			"openFailed": "Impossible d’ouvrir cet enregistrement.",
 			"generic": "Un problème est survenu avec cet enregistrement."
-		}
+		},
+		"folderLabel": "Dossier : {{folder}}"
 	},
 	"takeName": {
 		"title": "Nommer cet enregistrement",

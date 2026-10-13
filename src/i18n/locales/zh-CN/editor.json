@@ -175,7 +175,7 @@
 		"openProjectFirst": "请先打开一个项目",
 		"couldNotAddAsset": "无法添加素材",
 		"searchPlaceholder": "搜索媒体…",
-		"dragHint": "将片段拖到下方时间轴上以添加",
+		"dragHint": "将卡片拖到下方出现的条带上，即可添加到时间轴",
 		"emptyHint": "暂无媒体 — 导入录制内容以开始。",
 		"importMedia": "导入媒体",
 		"added": "已添加 {{label}}",
@@ -230,7 +230,10 @@
 		"redactRescanNothing": "Nothing changed: the automatic blurs are already up to date.",
 		"redactRescanDone": "Automatic blurs updated: {{added}} added, {{removed}} replaced. Undo with Ctrl+Z.",
 		"transcribeGuest": "Transcribe the computer sound too (call guest)",
-		"transcribeGuestHint": "For a take with separate voice and computer tracks: transcribes both and marks who said each word. Off: only your microphone is transcribed."
+		"transcribeGuestHint": "For a take with separate voice and computer tracks: transcribes both and marks who said each word. Off: only your microphone is transcribed.",
+		"dropToTimeline": "拖放到这里以添加到时间轴",
+		"notInProject": "此录制尚未加入打开的项目。",
+		"addToProject": "添加到项目"
 	},
 	"exportDialog": {
 		"title": "导出",
@@ -667,13 +670,14 @@
 		"deleteConfirm": "移到回收站",
 		"errors": {
 			"busy": "此录制仍在录制或收尾中。请稍后再试。",
-			"inUse": "另一个程序打开了此录制。请关闭它后再试。",
+			"inUse": "另一个程序（文件资源管理器、播放器或杀毒软件）仍打开着此录制。请关闭它后再试：没有删除任何内容。",
 			"invalidName": "此名称不能用作文件夹名。",
 			"trashFailed": "无法将录制移到回收站。没有删除任何内容。",
 			"notFound": "此录制已不在文件夹中。",
 			"openFailed": "无法打开此录制。",
 			"generic": "此录制出现了问题。"
-		}
+		},
+		"folderLabel": "文件夹：{{folder}}"
 	},
 	"takeName": {
 		"title": "为此录制命名",

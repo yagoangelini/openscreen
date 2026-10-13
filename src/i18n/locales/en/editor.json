@@ -175,7 +175,7 @@
 		"openProjectFirst": "Open a project first",
 		"couldNotAddAsset": "Could not add asset",
 		"searchPlaceholder": "Search media…",
-		"dragHint": "Drag a clip onto the timeline below to add it",
+		"dragHint": "Drag a card down to the strip that appears to add it to the timeline",
 		"emptyHint": "No media yet — import a recording to get started.",
 		"importMedia": "Import media",
 		"added": "Added {{label}}",
@@ -230,7 +230,10 @@
 		"redactRescanNothing": "Nothing changed: the automatic blurs are already up to date.",
 		"redactRescanDone": "Automatic blurs updated: {{added}} added, {{removed}} replaced. Undo with Ctrl+Z.",
 		"transcribeGuest": "Transcribe the computer sound too (call guest)",
-		"transcribeGuestHint": "For a take with separate voice and computer tracks: transcribes both and marks who said each word. Off: only your microphone is transcribed."
+		"transcribeGuestHint": "For a take with separate voice and computer tracks: transcribes both and marks who said each word. Off: only your microphone is transcribed.",
+		"dropToTimeline": "Drop here to add it to the timeline",
+		"notInProject": "This recording is not in the open project yet.",
+		"addToProject": "Add to the project"
 	},
 	"exportDialog": {
 		"title": "Export",
@@ -667,13 +670,14 @@
 		"deleteConfirm": "Move to Recycle Bin",
 		"errors": {
 			"busy": "This recording is still being recorded or finalized. Try again in a moment.",
-			"inUse": "Another program has this recording open. Close it and try again.",
+			"inUse": "Another program (File Explorer, a player or the antivirus) still has this recording open. Close it and try again: nothing was deleted.",
 			"invalidName": "That name can’t be used for a folder.",
 			"trashFailed": "The recording could not go to the Recycle Bin. Nothing was deleted.",
 			"notFound": "This recording is no longer in the folder.",
 			"openFailed": "Could not open this recording.",
 			"generic": "Something went wrong with this recording."
-		}
+		},
+		"folderLabel": "Folder: {{folder}}"
 	},
 	"takeName": {
 		"title": "Name this recording",

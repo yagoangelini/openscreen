@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+	isAutomaticLabel,
 	RECORDING_NAME_MAX_LENGTH,
 	sanitizeRecordingName,
 	uniqueRecordingName,
@@ -79,5 +80,19 @@ describe("uniqueRecordingName", () => {
 		const result = uniqueRecordingName(desired, [desired]);
 		expect(result.endsWith(" (2)")).toBe(true);
 		expect(result.length).toBe(RECORDING_NAME_MAX_LENGTH);
+	});
+});
+
+describe("isAutomaticLabel", () => {
+	const file = "C:\\V\\Aula\\recording-1.mp4";
+	it("is true for no label, the file name and the folder's old name", () => {
+		expect(isAutomaticLabel(undefined, file)).toBe(true);
+		expect(isAutomaticLabel("", file)).toBe(true);
+		expect(isAutomaticLabel("recording-1.mp4", file)).toBe(true);
+		expect(isAutomaticLabel("Aula", file, "Aula")).toBe(true);
+	});
+	it("is false for a label the user typed", () => {
+		expect(isAutomaticLabel("Aula", file)).toBe(false);
+		expect(isAutomaticLabel("Abertura", file, "Aula")).toBe(false);
 	});
 });

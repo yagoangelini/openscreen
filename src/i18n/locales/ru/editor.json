@@ -175,7 +175,7 @@
 		"openProjectFirst": "Сначала откройте проект",
 		"couldNotAddAsset": "Не удалось добавить файл",
 		"searchPlaceholder": "Поиск медиа…",
-		"dragHint": "Перетащите клип на таймлайн ниже, чтобы добавить его",
+		"dragHint": "Перетащите карточку на полосу внизу, чтобы добавить её на таймлайн",
 		"emptyHint": "Пока нет медиафайлов — импортируйте запись, чтобы начать.",
 		"importMedia": "Импортировать медиа",
 		"added": "Добавлено: {{label}}",
@@ -230,7 +230,10 @@
 		"redactRescanNothing": "Nothing changed: the automatic blurs are already up to date.",
 		"redactRescanDone": "Automatic blurs updated: {{added}} added, {{removed}} replaced. Undo with Ctrl+Z.",
 		"transcribeGuest": "Transcribe the computer sound too (call guest)",
-		"transcribeGuestHint": "For a take with separate voice and computer tracks: transcribes both and marks who said each word. Off: only your microphone is transcribed."
+		"transcribeGuestHint": "For a take with separate voice and computer tracks: transcribes both and marks who said each word. Off: only your microphone is transcribed.",
+		"dropToTimeline": "Отпустите здесь, чтобы добавить на таймлайн",
+		"notInProject": "Этой записи пока нет в открытом проекте.",
+		"addToProject": "Добавить в проект"
 	},
 	"exportDialog": {
 		"title": "Экспорт",
@@ -667,13 +670,14 @@
 		"deleteConfirm": "Переместить в корзину",
 		"errors": {
 			"busy": "Эта запись ещё идёт или завершается. Попробуйте ещё раз чуть позже.",
-			"inUse": "Эту запись открыла другая программа. Закройте её и попробуйте снова.",
+			"inUse": "Другая программа (Проводник, плеер или антивирус) всё ещё держит эту запись открытой. Закройте её и попробуйте снова: ничего не удалено.",
 			"invalidName": "Такое имя нельзя использовать для папки.",
 			"trashFailed": "Не удалось переместить запись в корзину. Ничего не удалено.",
 			"notFound": "Этой записи больше нет в папке.",
 			"openFailed": "Не удалось открыть эту запись.",
 			"generic": "С этой записью что-то пошло не так."
-		}
+		},
+		"folderLabel": "Папка: {{folder}}"
 	},
 	"takeName": {
 		"title": "Назовите эту запись",

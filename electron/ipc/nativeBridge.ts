@@ -14,6 +14,7 @@ import { type ChatEventSink, deleteProjectChat } from "../ai-edition/chat-servic
 import type { DocumentService } from "../ai-edition/document-service";
 import { StylePresetError, type StylePresetService } from "../ai-edition/style-preset-service";
 import { isValidMcpPort } from "../mcp/mcp-settings-store";
+import { registerTakeFileHolder } from "../media/takeFileHolders";
 import {
 	type CursorTelemetryLoadResult,
 	TelemetryCursorAdapter,
@@ -263,6 +264,20 @@ export function registerNativeBridgeHandlers(context: NativeBridgeContext) {
 		}
 		views.add(id);
 	};
+	// Before a take is recycled from the library: a view still decoding it (one the renderer
+	// let go of but never destroyed) is destroyed here, so its decoder closes the files.
+	registerTakeFileHolder("preview views", (isTakeFile) => {
+		const doomed = compositorViewService.viewsUsing(isTakeFile);
+		for (const viewId of doomed) {
+			for (const owned of viewsBySender.values()) owned.delete(viewId);
+			try {
+				compositorViewService.destroyView(viewId);
+			} catch (error) {
+				console.warn("[native-bridge] could not destroy a preview view of a take:", error);
+			}
+		}
+		return doomed.length;
+	});
 	const aiEditionService = new AiEditionService({
 		documents: context.getAiEditionDocuments(),
 		deleteChatHistory: deleteProjectChat,

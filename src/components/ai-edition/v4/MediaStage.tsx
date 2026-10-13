@@ -3,6 +3,8 @@ import { useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Tooltip } from "@/components/ui/tooltip";
 import { useI18n, useScopedT } from "@/contexts/I18nContext";
+import { formatDate } from "@/i18n/format";
+import { buildMediaCards, type MediaCard } from "@/lib/ai-edition/mediaCards";
 import { resolveProjectTranscriptionSettings } from "@/lib/ai-edition/projectTranscriptionSettings";
 import type { AxcutAsset, AxcutDocument, AxcutTranscript } from "@/lib/ai-edition/schema";
 import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
@@ -27,9 +29,19 @@ import {
 } from "../TranscriptionStatus";
 import styles from "./EditorShellV4.module.css";
 import { ProjectTranscriptionSettings } from "./ProjectTranscriptionSettings";
-import { RecordingsLibrary } from "./RecordingsLibrary";
+import {
+	DeleteRecordingDialog,
+	LibraryFolderBar,
+	type LibraryItem,
+	RecordingActions,
+	RecordingRenameForm,
+	useRecordingsLibrary,
+} from "./RecordingsLibrary";
+import libraryStyles from "./RecordingsLibrary.module.css";
 
 const ASSET_MIME = "application/x-axcut-asset";
+/** A recording the project does not have yet, dragged by its library key. */
+const LIBRARY_MIME = "application/x-openscreen-recording";
 const THUMB_GRADIENTS = [
 	"linear-gradient(135deg, #fb7185, #f97316)",
 	"linear-gradient(135deg, #10b981, #0d986a)",
@@ -71,6 +83,109 @@ export async function addSelectedAssetToTimeline(
 	onSuccess(selected.label || basename(selected.originalPath));
 }
 
+/**
+ * A card's name: a recording's is the take's name in the library (its folder), whatever
+ * label its asset carries (takes made before they had names are labelled `recording-<id>.mp4`);
+ * any other medium's is its label, else its file name.
+ */
+export function mediaCardName(card: MediaCard<LibraryItem, AxcutAsset>): string {
+	if (card.kind === "recording") return card.recording.name;
+	return card.asset.label || basename(card.asset.originalPath);
+}
+
+function DetailHeader({
+	title,
+	closeLabel,
+	onClose,
+}: {
+	title: string;
+	closeLabel: string;
+	onClose: () => void;
+}) {
+	return (
+		<div
+			style={{
+				display: "flex",
+				alignItems: "flex-start",
+				justifyContent: "space-between",
+				gap: 10,
+				marginBottom: 4,
+			}}
+		>
+			<h2
+				style={{
+					margin: 0,
+					fontSize: 16.5,
+					fontWeight: 700,
+					color: "var(--fg-emphasis)",
+					letterSpacing: "-0.01em",
+				}}
+			>
+				{title}
+			</h2>
+			<button
+				type="button"
+				title={closeLabel}
+				aria-label={closeLabel}
+				onClick={onClose}
+				style={{
+					width: 26,
+					height: 26,
+					display: "grid",
+					placeItems: "center",
+					borderRadius: 8,
+					color: "var(--muted)",
+					background: "transparent",
+					border: 0,
+					cursor: "pointer",
+					flexShrink: 0,
+				}}
+			>
+				<X size={15} />
+			</button>
+		</div>
+	);
+}
+
+/**
+ * The drop target for "drag a card to the timeline". The Media tab shows no timeline (it is
+ * the Edit tab's), so this compact strip appears at the bottom only while a card is dragged.
+ */
+export function MediaDropZone({
+	visible,
+	hover,
+	label,
+	onHover,
+	onDrop,
+}: {
+	visible: boolean;
+	hover: boolean;
+	label: string;
+	onHover: (hover: boolean) => void;
+	onDrop: (data: DataTransfer) => void;
+}) {
+	if (!visible) return null;
+	return (
+		<div
+			className={`${styles.mediaDropZone}${hover ? ` ${styles.mediaDropZoneHover}` : ""}`}
+			data-testid="media-drop-zone"
+			onDragOver={(event) => {
+				event.preventDefault();
+				event.dataTransfer.dropEffect = "copy";
+				if (!hover) onHover(true);
+			}}
+			onDragLeave={() => onHover(false)}
+			onDrop={(event) => {
+				event.preventDefault();
+				onDrop(event.dataTransfer);
+			}}
+		>
+			<ArrowDown size={14} />
+			{label}
+		</div>
+	);
+}
+
 export function MediaStage({
 	onAddToTimeline,
 	onShowEditor,
@@ -92,23 +207,27 @@ export function MediaStage({
 	const transcriptions = useAssetTranscriptions();
 	const requestTranscription = useTranscriptionStore((s) => s.request);
 	const transcriptionLabel = useTranscriptionLabel();
+	const lib = useRecordingsLibrary({ onAddToTimeline, onShowEditor });
 	const [query, setQuery] = useState("");
 	const [busy, setBusy] = useState(false);
-	const [selectedId, setSelectedId] = useState<string | null>(null);
+	const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
 	const [detailOpen, setDetailOpen] = useState(false);
-	// Video only — this stage arranges clips. Imported audio (issue #350) is a
-	// timeline overlay added from the timeline toolbar, not a clip, so it never
-	// appears in this list.
-	const assets = (document?.assets ?? []).filter((a) => a.kind !== "audio");
-	const filtered = useMemo(
-		() =>
-			assets.filter((a) => {
-				if (!query) return true;
-				return `${a.label} ${a.originalPath}`.toLowerCase().includes(query.toLowerCase());
-			}),
-		[assets, query],
+	// The editor's timeline is not on this tab: while a card is dragged, a strip at the bottom
+	// takes the drop instead (`MediaDropZone`).
+	const [dragging, setDragging] = useState(false);
+	const [dropHover, setDropHover] = useState(false);
+	// One card per recording (a take the project uses shows once, as the take) and one per
+	// other video the project imported. Imported audio (issue #350) is a timeline overlay
+	// added from the timeline toolbar, not a clip, so it never appears here.
+	const assets = document?.assets ?? [];
+	const cards = useMemo(
+		() => buildMediaCards(lib.listing?.recordings ?? [], assets, query),
+		[lib.listing, assets, query],
 	);
-	const selected = assets.find((a) => a.id === selectedId) ?? null;
+	const selectedCard = cards.find((card) => card.id === selectedCardId) ?? null;
+	const selected = selectedCard?.asset ?? null;
+	const selectedRecording = selectedCard?.kind === "recording" ? selectedCard.recording : null;
+	const selectedName = selectedCard ? mediaCardName(selectedCard) : "";
 	const transcript = selected
 		? (document?.transcripts?.find((t) => t.assetId === selected.id) ?? null)
 		: null;
@@ -143,15 +262,43 @@ export function MediaStage({
 		}
 	};
 
-	const openDetail = (asset: AxcutAsset) => {
-		setSelectedId(asset.id);
+	const openDetail = (cardId: string) => {
+		setSelectedCardId(cardId);
 		setDetailOpen(true);
 	};
 
 	const addSelectedToTimeline = () => {
-		void addSelectedAssetToTimeline(selected, onAddToTimeline, (label) => {
-			toast.success(t("mediaStage.addedToTimeline", { label }));
-		}).catch(() => undefined);
+		if (!selected && selectedRecording) {
+			void lib.addToTimeline(selectedRecording);
+			return;
+		}
+		void addSelectedAssetToTimeline(
+			selected ? { ...selected, label: selectedName } : null,
+			onAddToTimeline,
+			(label) => {
+				toast.success(t("mediaStage.addedToTimeline", { label }));
+			},
+		).catch(() => undefined);
+	};
+
+	const dropOnTimeline = (data: DataTransfer) => {
+		const assetId = data.getData(ASSET_MIME);
+		if (assetId) {
+			const card = cards.find((candidate) => candidate.asset?.id === assetId);
+			void onAddToTimeline(assetId)
+				.then(() =>
+					toast.success(
+						t("mediaStage.addedToTimeline", {
+							label: card ? mediaCardName(card) : "",
+						}),
+					),
+				)
+				.catch(() => undefined);
+			return;
+		}
+		const key = data.getData(LIBRARY_MIME);
+		const recording = lib.listing?.recordings.find((candidate) => candidate.key === key);
+		if (recording) void lib.addToTimeline(recording);
 	};
 
 	return (
@@ -167,73 +314,133 @@ export function MediaStage({
 				</div>
 				<div className={styles.mediaCols}>
 					<div className={styles.mediaListCol}>
+						<LibraryFolderBar lib={lib} />
 						<div
 							className={styles.mediaGrid}
 							style={{ gridTemplateColumns: detailOpen ? "repeat(2,1fr)" : "repeat(3,1fr)" }}
 						>
-							{filtered.map((asset, i) => {
-								const transcription = transcriptions[asset.id] ?? {
-									assetId: asset.id,
-									status: "idle" as AssetTranscriptionStatus,
-								};
+							{cards.map((card, i) => {
+								const asset = card.asset;
+								const recording = card.kind === "recording" ? card.recording : null;
+								const preview = recording ? lib.previews[recording.key] : undefined;
+								const transcription = asset
+									? (transcriptions[asset.id] ?? {
+											assetId: asset.id,
+											status: "idle" as AssetTranscriptionStatus,
+										})
+									: null;
+								const name = mediaCardName(card);
+								const durationSec = preview?.durationSec ?? asset?.durationSec ?? null;
+								const sizeBytes = recording ? recording.sizeBytes : asset?.sizeBytes;
+								const isSelected = card.id === selectedCardId;
+								const inProject = Boolean(asset) || (recording ? lib.usedHere(recording) : false);
 								return (
-									<button
-										type="button"
-										key={asset.id}
-										draggable
-										className={`${styles.mediaCard}${
-											asset.id === selectedId ? ` ${styles.selected}` : ""
-										}`}
-										title={asset.originalPath}
-										onDragStart={(e) => {
-											e.dataTransfer.setData(ASSET_MIME, asset.id);
-											e.dataTransfer.effectAllowed = "copy";
-										}}
-										onClick={() => openDetail(asset)}
+									<div
+										key={card.id}
+										className={`${styles.mediaCard}${isSelected ? ` ${styles.selected}` : ""}`}
+										data-testid="media-card"
+										data-card-id={card.id}
+										data-in-project={inProject ? "true" : "false"}
 									>
-										<div
-											className={styles.mediaThumb}
-											style={{ background: THUMB_GRADIENTS[i % THUMB_GRADIENTS.length] }}
+										<button
+											type="button"
+											draggable
+											className={styles.mediaCardMain}
+											title={
+												recording?.folderPath ?? recording?.screenVideoPath ?? asset?.originalPath
+											}
+											onDragStart={(e) => {
+												if (asset) e.dataTransfer.setData(ASSET_MIME, asset.id);
+												else if (recording) e.dataTransfer.setData(LIBRARY_MIME, recording.key);
+												e.dataTransfer.effectAllowed = "copy";
+												setDragging(true);
+											}}
+											onDragEnd={() => {
+												setDragging(false);
+												setDropHover(false);
+											}}
+											onClick={() => openDetail(card.id)}
 										>
-											<Film size={30} strokeWidth={1.8} />
-										</div>
-										<div className={styles.mediaCardMeta}>
-											{asset.id === selectedId ? (
-												<span
-													aria-hidden
-													style={{
-														width: 6,
-														height: 6,
-														borderRadius: "50%",
-														background: "var(--accent)",
-														flexShrink: 0,
-													}}
-												/>
-											) : null}
-											<div className={styles.body}>
-												<div className={styles.mediaCardName}>
-													{asset.label || basename(asset.originalPath)}
-												</div>
-												<div className={styles.mediaCardStats}>
-													<span className={styles.dur}>
-														{formatSeconds(asset.durationSec ?? 0)}
+											<div
+												className={styles.mediaThumb}
+												style={{ background: THUMB_GRADIENTS[i % THUMB_GRADIENTS.length] }}
+											>
+												{preview?.thumbnailDataUrl ? (
+													<img
+														src={preview.thumbnailDataUrl}
+														alt=""
+														draggable={false}
+														className={styles.mediaThumbImg}
+													/>
+												) : (
+													<Film size={30} strokeWidth={1.8} />
+												)}
+												{recording?.busy ? (
+													<span className={libraryStyles.badge}>{t("library.busy")}</span>
+												) : inProject ? (
+													<span className={libraryStyles.badge}>{t("library.usedHere")}</span>
+												) : recording?.kind === "flat" ? (
+													<span className={libraryStyles.badge}>{t("library.flat")}</span>
+												) : null}
+												{durationSec ? (
+													<span className={libraryStyles.duration}>
+														{formatSeconds(durationSec)}
 													</span>
-													<span className={styles.size}>{formatBytes(asset.sizeBytes)}</span>
-												</div>
+												) : null}
 											</div>
-											<TranscriptionStatusDot view={transcription} />
-										</div>
-									</button>
+											{recording && lib.renaming?.key === recording.key ? null : (
+												<div className={styles.mediaCardMeta}>
+													{isSelected ? (
+														<span
+															aria-hidden
+															style={{
+																width: 6,
+																height: 6,
+																borderRadius: "50%",
+																background: "var(--accent)",
+																flexShrink: 0,
+															}}
+														/>
+													) : null}
+													<div className={styles.body}>
+														<div className={styles.mediaCardName} data-testid="media-card-name">
+															{name}
+														</div>
+														<div className={styles.mediaCardStats}>
+															<span className={styles.dur}>{formatSeconds(durationSec ?? 0)}</span>
+															{recording ? (
+																<span className={styles.size}>
+																	{formatDate(recording.createdAt, locale)}
+																</span>
+															) : null}
+															<span className={styles.size}>{formatBytes(sizeBytes)}</span>
+														</div>
+													</div>
+													{transcription ? <TranscriptionStatusDot view={transcription} /> : null}
+												</div>
+											)}
+										</button>
+										{recording ? (
+											<>
+												<RecordingRenameForm lib={lib} recording={recording} />
+												{lib.renaming?.key === recording.key ? null : (
+													<RecordingActions lib={lib} recording={recording} />
+												)}
+											</>
+										) : null}
+									</div>
 								);
 							})}
 						</div>
-						{assets.length > 0 ? (
+						{cards.length > 0 ? (
 							<div className={styles.mediaHint}>
 								<ArrowDown size={12} />
 								{t("mediaStage.dragHint")}
 							</div>
 						) : (
-							<div className={styles.mediaHint}>{t("mediaStage.emptyHint")}</div>
+							<div className={styles.mediaHint}>
+								{lib.available && !lib.listing ? t("library.loading") : t("mediaStage.emptyHint")}
+							</div>
 						)}
 						<button
 							type="button"
@@ -244,56 +451,44 @@ export function MediaStage({
 							<Plus size={14} />
 							{t("mediaStage.importMedia")}
 						</button>
-						<RecordingsLibrary
-							query={query}
-							onAddToTimeline={onAddToTimeline}
-							onShowEditor={onShowEditor}
-						/>
 					</div>
 
-					{detailOpen && selected ? (
-						<div className={styles.mediaDetail}>
-							<div
-								style={{
-									display: "flex",
-									alignItems: "flex-start",
-									justifyContent: "space-between",
-									gap: 10,
-									marginBottom: 4,
-								}}
+					{detailOpen && selectedCard && !selected && selectedRecording ? (
+						<div className={styles.mediaDetail} data-testid="media-detail">
+							<DetailHeader
+								title={selectedName}
+								closeLabel={t("mediaStage.close")}
+								onClose={() => setDetailOpen(false)}
+							/>
+							<p className={styles.mediaDetailNote}>{t("mediaStage.notInProject")}</p>
+							<button
+								type="button"
+								className={styles.mediaDetailPrimary}
+								onClick={() => void lib.importToProject(selectedRecording)}
+								data-testid="media-detail-add-to-project"
 							>
-								<h2
-									style={{
-										margin: 0,
-										fontSize: 16.5,
-										fontWeight: 700,
-										color: "var(--fg-emphasis)",
-										letterSpacing: "-0.01em",
-									}}
-								>
-									{t("mediaStage.sourceTranscript")}
-								</h2>
-								<button
-									type="button"
-									title={t("mediaStage.close")}
-									aria-label={t("mediaStage.close")}
-									onClick={() => setDetailOpen(false)}
-									style={{
-										width: 26,
-										height: 26,
-										display: "grid",
-										placeItems: "center",
-										borderRadius: 8,
-										color: "var(--muted)",
-										background: "transparent",
-										border: 0,
-										cursor: "pointer",
-										flexShrink: 0,
-									}}
-								>
-									<X size={15} />
-								</button>
-							</div>
+								<Plus size={14} />
+								{t("mediaStage.addToProject")}
+							</button>
+							<button
+								type="button"
+								className={styles.mediaDetailSecondary}
+								onClick={() => void lib.addToTimeline(selectedRecording)}
+								data-testid="media-detail-add-to-timeline"
+							>
+								<Plus size={14} />
+								{t("mediaStage.addToTimeline")}
+							</button>
+						</div>
+					) : null}
+
+					{detailOpen && selected ? (
+						<div className={styles.mediaDetail} data-testid="media-detail">
+							<DetailHeader
+								title={t("mediaStage.sourceTranscript")}
+								closeLabel={t("mediaStage.close")}
+								onClose={() => setDetailOpen(false)}
+							/>
 							<div
 								style={{
 									fontSize: 12,
@@ -304,7 +499,7 @@ export function MediaStage({
 									textOverflow: "ellipsis",
 								}}
 							>
-								{selected.label || basename(selected.originalPath)}
+								{selectedName}
 							</div>
 							<button
 								type="button"
@@ -532,6 +727,18 @@ export function MediaStage({
 					) : null}
 				</div>
 			</div>
+			<MediaDropZone
+				visible={dragging}
+				hover={dropHover}
+				label={t("mediaStage.dropToTimeline")}
+				onHover={setDropHover}
+				onDrop={(data) => {
+					setDragging(false);
+					setDropHover(false);
+					dropOnTimeline(data);
+				}}
+			/>
+			<DeleteRecordingDialog lib={lib} />
 		</div>
 	);
 }

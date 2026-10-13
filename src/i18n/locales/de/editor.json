@@ -175,7 +175,7 @@
 		"openProjectFirst": "Öffne zuerst ein Projekt",
 		"couldNotAddAsset": "Asset konnte nicht hinzugefügt werden",
 		"searchPlaceholder": "Medien durchsuchen…",
-		"dragHint": "Zieh einen Clip auf die Timeline unten, um ihn hinzuzufügen",
+		"dragHint": "Zieh eine Karte auf die Leiste, die unten erscheint, um sie zur Timeline hinzuzufügen",
 		"emptyHint": "Noch keine Medien — importiere eine Aufnahme, um loszulegen.",
 		"importMedia": "Medien importieren",
 		"added": "{{label}} hinzugefügt",
@@ -230,7 +230,10 @@
 		"redactRescanNothing": "Nothing changed: the automatic blurs are already up to date.",
 		"redactRescanDone": "Automatic blurs updated: {{added}} added, {{removed}} replaced. Undo with Ctrl+Z.",
 		"transcribeGuest": "Transcribe the computer sound too (call guest)",
-		"transcribeGuestHint": "For a take with separate voice and computer tracks: transcribes both and marks who said each word. Off: only your microphone is transcribed."
+		"transcribeGuestHint": "For a take with separate voice and computer tracks: transcribes both and marks who said each word. Off: only your microphone is transcribed.",
+		"dropToTimeline": "Hier ablegen, um sie zur Timeline hinzuzufügen",
+		"notInProject": "Diese Aufnahme ist noch nicht im geöffneten Projekt.",
+		"addToProject": "Zum Projekt hinzufügen"
 	},
 	"exportDialog": {
 		"title": "Export",
@@ -667,13 +670,14 @@
 		"deleteConfirm": "In den Papierkorb verschieben",
 		"errors": {
 			"busy": "Diese Aufnahme wird noch aufgenommen oder abgeschlossen. Versuche es gleich noch einmal.",
-			"inUse": "Ein anderes Programm hat diese Aufnahme geöffnet. Schließe es und versuche es erneut.",
+			"inUse": "Ein anderes Programm (der Datei-Explorer, ein Player oder der Virenschutz) hat diese Aufnahme noch geöffnet. Schließe es und versuche es erneut: Es wurde nichts gelöscht.",
 			"invalidName": "Dieser Name kann nicht für einen Ordner verwendet werden.",
 			"trashFailed": "Die Aufnahme konnte nicht in den Papierkorb verschoben werden. Es wurde nichts gelöscht.",
 			"notFound": "Diese Aufnahme ist nicht mehr im Ordner.",
 			"openFailed": "Diese Aufnahme konnte nicht geöffnet werden.",
 			"generic": "Bei dieser Aufnahme ist etwas schiefgelaufen."
-		}
+		},
+		"folderLabel": "Ordner: {{folder}}"
 	},
 	"takeName": {
 		"title": "Aufnahme benennen",

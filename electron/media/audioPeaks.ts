@@ -5,6 +5,7 @@ import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { app } from "electron";
 import { createInactivityTimer } from "./inactivityTimer";
+import { trackFileReader } from "./takeFileHolders";
 
 /**
  * Waveform peaks for the timeline, computed in the main process with ffmpeg.
@@ -174,6 +175,7 @@ function probeAudioStreams(
 			killSignal: "SIGKILL",
 			signal,
 		});
+		trackFileReader(child, filePath);
 		child.stderr.on("data", (c: Buffer) => {
 			listing += c.toString();
 		});
@@ -296,6 +298,7 @@ export async function decodePeaks(
 		],
 		{ stdio: ["ignore", "pipe", "pipe"] },
 	);
+	trackFileReader(child, filePath);
 
 	return new Promise<Float32Array>((resolve, reject) => {
 		let stderr = "";

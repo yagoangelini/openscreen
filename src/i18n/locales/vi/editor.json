@@ -175,7 +175,7 @@
 		"openProjectFirst": "Hãy mở một dự án trước",
 		"couldNotAddAsset": "Không thể thêm tệp",
 		"searchPlaceholder": "Tìm kiếm media…",
-		"dragHint": "Kéo một clip vào dòng thời gian bên dưới để thêm",
+		"dragHint": "Kéo một thẻ xuống dải hiện ra bên dưới để thêm vào dòng thời gian",
 		"emptyHint": "Chưa có media nào — nhập một bản ghi để bắt đầu.",
 		"importMedia": "Nhập media",
 		"added": "Đã thêm {{label}}",
@@ -230,7 +230,10 @@
 		"redactRescanNothing": "Nothing changed: the automatic blurs are already up to date.",
 		"redactRescanDone": "Automatic blurs updated: {{added}} added, {{removed}} replaced. Undo with Ctrl+Z.",
 		"transcribeGuest": "Transcribe the computer sound too (call guest)",
-		"transcribeGuestHint": "For a take with separate voice and computer tracks: transcribes both and marks who said each word. Off: only your microphone is transcribed."
+		"transcribeGuestHint": "For a take with separate voice and computer tracks: transcribes both and marks who said each word. Off: only your microphone is transcribed.",
+		"dropToTimeline": "Thả vào đây để thêm vào dòng thời gian",
+		"notInProject": "Bản ghi này chưa có trong dự án đang mở.",
+		"addToProject": "Thêm vào dự án"
 	},
 	"exportDialog": {
 		"title": "Xuất",
@@ -667,13 +670,14 @@
 		"deleteConfirm": "Chuyển vào Thùng rác",
 		"errors": {
 			"busy": "Bản ghi này vẫn đang được ghi hoặc hoàn tất. Hãy thử lại sau giây lát.",
-			"inUse": "Một chương trình khác đang mở bản ghi này. Hãy đóng nó rồi thử lại.",
+			"inUse": "Một chương trình khác (File Explorer, trình phát hoặc phần mềm diệt virus) vẫn đang mở bản ghi này. Hãy đóng nó rồi thử lại: không có gì bị xóa.",
 			"invalidName": "Không thể dùng tên này cho thư mục.",
 			"trashFailed": "Không thể chuyển bản ghi vào Thùng rác. Không có gì bị xóa.",
 			"notFound": "Bản ghi này không còn trong thư mục.",
 			"openFailed": "Không thể mở bản ghi này.",
 			"generic": "Đã xảy ra lỗi với bản ghi này."
-		}
+		},
+		"folderLabel": "Thư mục: {{folder}}"
 	},
 	"takeName": {
 		"title": "Đặt tên cho bản ghi",

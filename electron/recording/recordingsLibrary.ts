@@ -441,26 +441,74 @@ export async function trashRecording(
 	key: unknown,
 	guards: LibraryGuards,
 	trashItem: (target: string) => Promise<void>,
-	attempts = 8,
+	options: TrashOptions = {},
 ): Promise<ResolvedRecording> {
 	const recording = await resolveRecording(root, key);
 	await assertNotBusy(recording, guards);
+	await options.release?.(recording);
+	const rename = options.rename ?? fs.rename;
 	const targets = recording.folderPath ? [recording.folderPath] : recording.files;
+	const trashAttempts = options.trashAttempts ?? 3;
 	for (const target of targets) {
 		for (let attempt = 0; ; attempt++) {
+			// Throws "in-use" when something still holds it after the backoff: the bin is never
+			// asked then, so the shell has nothing to prompt about.
+			await waitUntilMovable(target, options.attempts, rename);
 			try {
 				await trashItem(target);
 				break;
 			} catch (error) {
-				if (attempt + 1 >= attempts) {
+				if (attempt + 1 >= trashAttempts) {
 					throw new LibraryError(
 						"trash-failed",
 						error instanceof Error ? error.message : String(error),
 					);
 				}
-				await new Promise((resolve) => setTimeout(resolve, Math.min(800, 25 * 2 ** attempt)));
+				await new Promise((resolve) => setTimeout(resolve, 200 * (attempt + 1)));
 			}
 		}
 	}
 	return recording;
+}
+
+export interface TrashOptions {
+	/** Lets go of whatever this process still holds in the take (`releaseTakeFiles`). */
+	release?: (recording: ResolvedRecording) => Promise<void>;
+	rename?: (from: string, to: string) => Promise<void>;
+	/** How many times to try the move probe (backoff 25 ms doubling, at most 800 ms). */
+	attempts?: number;
+	/** How many times to ask the bin, each after a fresh probe. */
+	trashAttempts?: number;
+}
+
+/** Where the move probe parks a target for an instant: hidden from the listing (a dot). */
+function probeName(target: string): string {
+	return path.join(path.dirname(target), `.deleting-${Date.now()}-${path.basename(target)}`);
+}
+
+/**
+ * Waits until nothing holds `target` open, by moving it aside and straight back. On Windows
+ * a folder (or file) cannot be renamed while any handle is open in it, whatever the sharing,
+ * so a move that succeeds means the bin can take it now. Asking the bin while a handle is
+ * open is what must never happen: when that handle shares delete access, the shell answers
+ * with its own "Folder Access Denied" prompt (Electron sets FOFX_SHOWELEVATIONPROMPT, which
+ * overrides its no-UI flags) and then fails anyway.
+ */
+export async function waitUntilMovable(
+	target: string,
+	attempts = 10,
+	rename: (from: string, to: string) => Promise<void> = fs.rename,
+): Promise<void> {
+	const aside = probeName(target);
+	await renameWithBackoff(target, aside, attempts, rename);
+	try {
+		await renameWithBackoff(aside, target, attempts, rename);
+	} catch (error) {
+		throw new LibraryError(
+			"in-use",
+			`The recording was moved to ${aside} and could not be moved back: ${
+				error instanceof Error ? error.message : String(error)
+			}`,
+		);
+	}
 }

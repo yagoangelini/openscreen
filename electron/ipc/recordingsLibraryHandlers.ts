@@ -10,6 +10,7 @@ import { moveCachedPeaks } from "../media/audioPeaks";
 import { rewriteRegistryPaths } from "../media/mediaLinksRegistry";
 import { getRecordingPreview } from "../media/recordingPreview";
 import { moveCachedScreenActivity } from "../media/screenActivity";
+import { releaseTakeFiles, takeFileTest } from "../media/takeFileHolders";
 import { rewritePendingTakePaths } from "../recording/pendingTakes";
 import {
 	LibraryError,
@@ -175,8 +176,23 @@ export function registerRecordingsLibraryHandlers(ipcMain: IpcMain, deps: Record
 
 	ipcMain.handle("recordings-library:trash", async (_, key: unknown) => {
 		try {
-			const removed = await trashRecording(deps.recordingsFolder(), key, deps.guards, (target) =>
-				shell.trashItem(target),
+			const removed = await trashRecording(
+				deps.recordingsFolder(),
+				key,
+				deps.guards,
+				(target) => shell.trashItem(target),
+				{
+					// Whatever this process still reads in the take (a scan, a thumbnail, a preview
+					// view nobody destroyed) is stopped first: the bin cannot take an open folder.
+					release: async (recording) => {
+						const released = await releaseTakeFiles(
+							takeFileTest(recording.folderPath, recording.files),
+						);
+						if (Object.keys(released).length > 0) {
+							console.info("[library] let go of the take before the bin", released);
+						}
+					},
+				},
 			);
 			console.info("[library] recording sent to the Recycle Bin", {
 				target: removed.folderPath ?? removed.files[0],

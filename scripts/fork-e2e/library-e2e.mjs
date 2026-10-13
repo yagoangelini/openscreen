@@ -17,6 +17,13 @@
 //      moves it back -> the preview returns;
 //   7. deletes A from the library while its project is open (the preview lets go first).
 // Both takes end in the Recycle Bin (that is what delete does); they are a few MB each.
+//
+// --scenario media-tab runs the Media tab pass instead (mediaTabFlow below): one named take,
+// Edit -> Media with no editor timeline and one card, details, drag to the drop strip, and a
+// delete of the open project's take while another process holds it (probes/hold.ps1): no
+// Windows prompt, an "in use" error, then the Recycle Bin once it lets go. The take ends in
+// the Recycle Bin. probes/*.ps1 read the instance from outside (Restart Manager, its dialogs,
+// the Recycle Bin) and never send it input.
 // Everything here is injected input into the instance's own windows, never OS input.
 import fs from "node:fs";
 import path from "node:path";
@@ -146,9 +153,251 @@ const mode = (page, label) =>
 const MEDIA = "Mídia|Media";
 const EDIT = "Editar|Edit";
 const card = (page, name) =>
-	page.locator("[data-testid=library-card]", {
-		has: page.locator("[data-testid=library-card-name]", { hasText: name }),
+	page.locator("[data-testid=media-card]", {
+		has: page.locator("[data-testid=media-card-name]", { hasText: name }),
 	});
+
+const finish = () => {
+	fs.writeFileSync(path.join(out, "results.json"), JSON.stringify(results, null, 2));
+	log(`${results.filter((r) => r.ok).length}/${results.length} passed`);
+	process.exit(results.every((r) => r.ok) ? 0 : 1);
+};
+
+// PowerShell probes of the instance (scripts/fork-e2e/probes): which processes hold a take's
+// files (Restart Manager), which file-operation dialogs the instance shows, and what the
+// Recycle Bin holds. Read-only, except `dialogs -Close`, which posts WM_CLOSE to a dialog of
+// the instance's own processes so a failing run never leaves one on screen.
+const probesDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "probes");
+const powershell = async (script, ...params) => {
+	const { execFile } = await import("node:child_process");
+	return new Promise((resolve) =>
+		execFile(
+			"powershell.exe",
+			[
+				"-NoProfile",
+				"-ExecutionPolicy",
+				"Bypass",
+				"-File",
+				path.join(probesDir, script),
+				...params,
+			],
+			{ windowsHide: true, timeout: 60_000 },
+			(error, stdout, stderr) => resolve(`${stdout}${error ? `\n${stderr}` : ""}`.trim()),
+		),
+	);
+};
+
+/**
+ * The Media tab with the open project's own take (the user's report of 13/10): record and
+ * name a take, go Edit -> Media, check the tab shows no editor timeline and one card for
+ * the take, then delete it from there -- it must land in the Recycle Bin, with no Windows
+ * prompt on the way.
+ */
+async function mediaTabFlow() {
+	const name = "Aula Mídia E2E";
+	const page = await recordTake(Number(option("seconds", "6")));
+	await page.fill("[data-testid=take-name-input]", name);
+	await page.keyboard.press("Enter");
+	await page.waitForSelector("[data-testid=preview]", { timeout: 60_000 });
+	await answerAutoZoom(page);
+	const folder = await until("the named folder", () => listRoot().find((n) => n === name));
+	const takeFolder = path.join(recordings, folder);
+	// Long enough for what a fresh take starts in the background (peaks, activity, OCR).
+	await wait(4000);
+	await mode(page, EDIT);
+	await page.waitForSelector("[data-testid=preview]", { timeout: 20_000 });
+	await wait(1500);
+	log("holders in Edit:\n", await powershell("holders.ps1", takeFolder));
+	// `--stop-at edit` leaves the take open in Edit, for poking at it by hand (diagnosis).
+	if (option("stop-at", "") === "edit") return;
+
+	await mode(page, MEDIA);
+	await page.waitForSelector("[data-testid=media-card]", {
+		timeout: 20_000,
+	});
+	await wait(2500);
+	await shot(page, "media-01-media-tab");
+	check(
+		"the Media tab shows no editor timeline",
+		(await page.locator("[data-testid=editor-timeline]").count()) === 0 &&
+			(await page.getByText(/Organizar clipes|Arrange clips/).count()) === 0,
+	);
+	const cards = page.locator("[data-testid=media-card]");
+	const names = await page.locator("[data-testid=media-card-name]").allInnerTexts();
+	check(
+		"one card for the take, under its name",
+		(await cards.count()) === 1 && names[0] === name && names.join(" | "),
+	);
+	check(
+		"the card shows the take's real thumbnail",
+		(await cards.first().locator("img").count()) === 1,
+	);
+	log("holders in Media:\n", await powershell("holders.ps1", takeFolder));
+
+	if ((await cards.count()) > 0) {
+		await cards.first().click();
+		const detail = await page
+			.waitForSelector("[data-testid=media-detail]", { timeout: 10_000 })
+			.catch(() => null);
+		await shot(page, "media-02-detail");
+		check("a click on the card opens its details", Boolean(detail));
+
+		// Drag to the timeline without a timeline on screen: the drop strip shows while the
+		// card is dragged (Chromium's HTML5 drag, driven by CDP mouse events in the page).
+		const clipsBefore = projectFiles().find((doc) => doc.project.title === name)?.timeline?.clips
+			?.length;
+		const source = await cards.first().locator("button").first().boundingBox();
+		await page.mouse.move(source.x + source.width / 2, source.y + 40);
+		await page.mouse.down();
+		await page.mouse.move(source.x + source.width / 2 + 30, source.y + 80, { steps: 5 });
+		const zone = await page
+			.waitForSelector("[data-testid=media-drop-zone]", { timeout: 5_000 })
+			.catch(() => null);
+		if (zone) {
+			const box = await zone.boundingBox();
+			await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 8 });
+			await shot(page, "media-02b-drop-strip");
+		}
+		await page.mouse.up();
+		const clipsAfter = await until(
+			"the dropped clip saved",
+			() =>
+				projectFiles().find((doc) => doc.project.title === name)?.timeline?.clips?.length >
+					(clipsBefore ?? 0) && projectFiles().find((doc) => doc.project.title === name),
+			10_000,
+		)
+			.then((doc) => doc.timeline.clips.length)
+			.catch(() => clipsBefore);
+		check(
+			"a card dragged to the drop strip lands on the timeline",
+			Boolean(zone) && clipsAfter > (clipsBefore ?? 0),
+			`${clipsBefore} -> ${clipsAfter} clips`,
+		);
+		await wait(1000);
+		check(
+			"the drop strip goes away after the drop",
+			(await page.locator("[data-testid=media-drop-zone]").count()) === 0,
+		);
+	}
+
+	const screenFile = fs.readdirSync(takeFolder).find((file) => /^recording-\d+\.mp4$/.test(file));
+
+	// 1. Another program keeps the take open for longer than the library waits: the bin is
+	//    never asked (so no prompt), the folder stays, and the user is told why.
+	const longHold = await holdFile(path.join(takeFolder, screenFile), 14);
+	const blocked = await deleteFromMedia(page, takeFolder, "media-03-delete-confirm");
+	check(
+		"held by another program: no Windows prompt",
+		blocked.dialogs.length === 0,
+		blocked.dialogs.join(" / "),
+	);
+	check("held by another program: the folder stays", listRoot().includes(folder));
+	const inUseToast = await page
+		.getByText(/ainda está com esta gravação aberta|still has this recording open/)
+		.first()
+		.waitFor({ timeout: 10_000 })
+		.then(() => true)
+		.catch(() => false);
+	await shot(page, "media-04-in-use-error");
+	check("held by another program: a clear error says so", inUseToast);
+	await longHold.done;
+
+	// 2. A program that lets go within a moment (an indexer, a scan): the library waits it out.
+	const shortHold = await holdFile(path.join(takeFolder, screenFile), 1.5);
+	const removed = await deleteFromMedia(page, takeFolder);
+	await shortHold.done;
+	check(
+		"no Windows prompt during the delete",
+		removed.dialogs.length === 0,
+		removed.dialogs.join(" / "),
+	);
+	check("the take's folder left the recordings folder", removed.gone);
+	const bin = await powershell("recycle-bin.ps1", recordings);
+	check(
+		"the take's folder is in the Recycle Bin",
+		bin.split(/\r?\n/).some((line) => line.trim() === folder),
+		bin,
+	);
+	await wait(1500);
+	await shot(page, "media-05-after-delete");
+	const project = projectFiles().find((doc) => doc.project.title === name);
+	check("the asset left the project", project?.assets.length === 0, `${project?.assets.length}`);
+	check(
+		"the Media tab is empty after the delete",
+		(await page.locator("[data-testid=media-card]").count()) === 0,
+	);
+}
+
+/** Holds `file` open from another process (hold.ps1) until `seconds` pass. */
+async function holdFile(file, seconds) {
+	const { spawn } = await import("node:child_process");
+	const child = spawn(
+		"powershell.exe",
+		[
+			"-NoProfile",
+			"-ExecutionPolicy",
+			"Bypass",
+			"-File",
+			path.join(probesDir, "hold.ps1"),
+			"-File",
+			file,
+			"-Seconds",
+			String(seconds),
+		],
+		{ windowsHide: true, stdio: ["ignore", "pipe", "pipe"] },
+	);
+	const done = new Promise((resolve) => child.once("close", resolve));
+	await new Promise((resolve) => {
+		child.stdout.on("data", (chunk) => {
+			if (String(chunk).includes("holding")) resolve();
+		});
+		child.once("close", resolve);
+	});
+	log(`holding ${path.basename(file)} for ${seconds} s`);
+	return { done };
+}
+
+/**
+ * Deletes the Media tab's only card through its confirm dialog, watching for a Windows
+ * prompt of the instance all along (closed at once if one shows). Resolves once the folder
+ * is gone or the library answered (its card is no longer being worked on).
+ */
+async function deleteFromMedia(page, takeFolder, shotName) {
+	const card = page.locator("[data-testid=media-card]").first();
+	await card.locator("[data-testid=library-delete]").click();
+	await page.waitForSelector("[data-testid=library-delete-dialog]");
+	if (shotName) await shot(page, shotName);
+	await page.click("[data-testid=library-delete-confirm]");
+	const dialogs = [];
+	const started = Date.now();
+	let gone = false;
+	await until(
+		"the delete answered",
+		async () => {
+			const open = await powershell("dialogs.ps1", profile, "-Close");
+			if (!/^no dialogs/.test(open)) {
+				dialogs.push(open);
+				log("dialog:", open, "\nholders:\n", await powershell("holders.ps1", takeFolder));
+			}
+			gone = !fs.existsSync(takeFolder);
+			if (gone) return true;
+			// The card's delete button is enabled again once the library answered.
+			const busy = await card
+				.locator("[data-testid=library-delete]")
+				.isDisabled()
+				.catch(() => false);
+			return Date.now() - started > 1500 && !busy;
+		},
+		40_000,
+	).catch((error) => log(String(error)));
+	log(`delete answered after ${Date.now() - started} ms; folder ${gone ? "gone" : "still there"}`);
+	return { dialogs, gone };
+}
+
+if (option("scenario", "library") === "media-tab") {
+	await mediaTabFlow();
+	finish();
+}
 
 // 1. Take A, named in the dialog.
 let editor = await recordTake(5);
@@ -181,7 +430,7 @@ check(
 
 // 2. Rename A from the Media tab, while the open project uses it.
 await mode(editor, MEDIA);
-await editor.waitForSelector("[data-testid=library-card]", { timeout: 20_000 });
+await editor.waitForSelector("[data-testid=media-card]", { timeout: 20_000 });
 await wait(2500);
 await shot(editor, "03-media-tab-library");
 await card(editor, "Aula E2E- Teams").locator("[data-testid=library-rename]").click();

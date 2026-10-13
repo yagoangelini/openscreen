@@ -11,6 +11,7 @@ import {
 	takeFolderName,
 	takeFolderNameForFile,
 	trashRecording,
+	waitUntilMovable,
 } from "./recordingsLibrary";
 
 let root: string;
@@ -333,10 +334,92 @@ describe("trashRecording", () => {
 				async () => {
 					throw new Error("no recycle bin");
 				},
-				2,
+				{ trashAttempts: 2 },
 			),
 		);
 		expect(result).toBe("trash-failed");
 		expect(await fs.readdir(root)).toContain("recording-23");
+	});
+
+	it("lets the take go first, then never asks the bin while something still holds it", async () => {
+		await nestedTake(24);
+		const order: string[] = [];
+		// Windows refuses to move a folder with a file open in it: the probe fails every time.
+		const held = async () => {
+			order.push("probe");
+			throw Object.assign(new Error("EPERM: operation not permitted"), { code: "EPERM" });
+		};
+		const result = await code(
+			trashRecording(
+				root,
+				"folder:recording-24",
+				NO_GUARDS,
+				async () => {
+					order.push("bin");
+				},
+				{
+					release: async () => {
+						order.push("release");
+					},
+					rename: held,
+					attempts: 3,
+				},
+			),
+		);
+		expect(result).toBe("in-use");
+		expect(order).toEqual(["release", "probe", "probe", "probe"]);
+		expect(await fs.readdir(root)).toEqual(["recording-24"]);
+	});
+
+	it("waits out a short hold, then sends the folder under its own name", async () => {
+		await nestedTake(25, "Aula curta");
+		let refusals = 2;
+		const rename = async (from: string, to: string) => {
+			if (refusals-- > 0) {
+				throw Object.assign(new Error("EBUSY"), { code: "EBUSY" });
+			}
+			await fs.rename(from, to);
+		};
+		const trashed: string[] = [];
+		await trashRecording(
+			root,
+			"folder:Aula curta",
+			NO_GUARDS,
+			async (target) => {
+				trashed.push(target);
+				expect(await fs.readdir(root)).toEqual(["Aula curta"]);
+			},
+			{ rename, attempts: 4 },
+		);
+		expect(trashed).toEqual([path.join(root, "Aula curta")]);
+	});
+
+	it("probes each file of a flat take before the bin gets it", async () => {
+		await flatTake(26);
+		const probed: string[] = [];
+		const rename = async (from: string, to: string) => {
+			if (!path.basename(from).startsWith(".")) probed.push(path.basename(from));
+			await fs.rename(from, to);
+		};
+		const trashed: string[] = [];
+		await trashRecording(
+			root,
+			"flat:recording-26",
+			NO_GUARDS,
+			async (target) => {
+				trashed.push(path.basename(target));
+			},
+			{ rename },
+		);
+		expect(probed.sort()).toEqual(trashed.sort());
+		expect(trashed.length).toBeGreaterThan(1);
+	});
+});
+
+describe("waitUntilMovable", () => {
+	it("leaves the target where it was", async () => {
+		await nestedTake(27, "Fica");
+		await waitUntilMovable(path.join(root, "Fica"));
+		expect(await fs.readdir(root)).toEqual(["Fica"]);
 	});
 });
