@@ -168,7 +168,28 @@ const DECLARED: WritePath[] = [
 	// "Speed up the picked ones" under Auto-enhance > Speed up waits: the user ticked which.
 	w("src/components/ai-edition/v4/V4Timeline.tsx", "applyWaitSpeedUps", "save", "gesture"),
 	// "Apply to this project's transcripts" under the glossary: the user clicked it.
-	w("src/components/ai-edition/v4/MediaStage.tsx", "applyGlossaryToTranscripts", "save", "gesture"),
+	w(
+		"src/components/ai-edition/v4/ProjectTranscriptionSettings.tsx",
+		"applyGlossaryToTranscripts",
+		"save",
+		"gesture",
+	),
+	// A project's own transcription setting in the Media panel, changed or reset to the default.
+	w(
+		"src/components/ai-edition/v4/ProjectTranscriptionSettings.tsx",
+		"writeProjectOverrides",
+		"save",
+		"gesture",
+	),
+	// "Salvar como padrão" on one of them: the project goes back to following the default.
+	w(
+		"src/components/ai-edition/v4/ProjectTranscriptionSettings.tsx",
+		"promoteProjectOverride",
+		"save",
+		"gesture",
+	),
+	// "Aplicar ao projeto aberto" in the defaults dialog: the user clicked it.
+	w("src/components/ai-edition/defaults/DefaultsDialog.tsx", "applyToProject", "save", "gesture"),
 	// Renaming the project from the title field.
 	w("src/components/ai-edition/NewEditorShell.tsx", "handleRenameProject", "save", "gesture"),
 	// Ctrl+S / File > Save.

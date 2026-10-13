@@ -42,6 +42,12 @@ const ProviderSettingsDialog = lazy(() =>
 	})),
 );
 
+const DefaultsSettingsDialog = lazy(() =>
+	import("./components/ai-edition/defaults/DefaultsDialog").then((module) => ({
+		default: module.DefaultsSettingsDialog,
+	})),
+);
+
 /** The recording extras' transparent windows (electron/recordingExtras/extrasWindows.ts). */
 const RECORDING_EXTRAS_WINDOWS = new Set(["drawing-overlay", "drawing-toolbar", "self-view"]);
 
@@ -169,6 +175,7 @@ export default function App() {
 								<VideoEditorEntry />
 								<ShortcutsConfigDialog />
 								<ProviderSettingsDialog />
+								<DefaultsSettingsDialog />
 							</Suspense>
 						</EditorDialogsProvider>
 					</ShortcutsProvider>
