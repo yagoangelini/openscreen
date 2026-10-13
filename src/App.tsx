@@ -6,6 +6,7 @@ import { installBrowserShims } from "./native/browserShim";
 installBrowserShims();
 
 import { CountdownOverlay } from "./components/launch/CountdownOverlay.tsx";
+import { HudToaster } from "./components/launch/HudToaster";
 import { LaunchWindow } from "./components/launch/LaunchWindow";
 import { NotesWindow } from "./components/launch/NotesWindow.tsx";
 import { SourceSelector } from "./components/launch/SourceSelector";
@@ -186,7 +187,8 @@ export default function App() {
 	return (
 		<TooltipProvider>
 			{showNotes ? <NotesWindow /> : content}
-			<Toaster />
+			{/* The HUD's toasts close by themselves and stay clickable through its click-through window. */}
+			{windowType === "hud-overlay" && !showNotes ? <HudToaster /> : <Toaster />}
 		</TooltipProvider>
 	);
 }
