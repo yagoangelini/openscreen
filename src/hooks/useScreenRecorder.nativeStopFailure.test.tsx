@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { persistentToast } from "@/lib/hudNotices";
 
 vi.mock("@/contexts/I18nContext", () => ({
 	useScopedT: () => (key: string) => key,
@@ -98,9 +99,11 @@ describe("useScreenRecorder native Windows stop failure", () => {
 		await pressStop(view);
 
 		expect(view.result.current.recording).toBe(false);
-		expect(toast.error).toHaveBeenCalledWith("recording.stopFailed", {
-			description: "Timed out waiting for native Windows capture to stop.",
-		});
+		expect(toast.error).toHaveBeenCalledWith(
+			"recording.stopFailed",
+			// Kept on the HUD until closed: the take was lost.
+			persistentToast({ description: "Timed out waiting for native Windows capture to stop." }),
+		);
 		expect(view.result.current.saving).toBe(false);
 		// The failure must not be mistaken for a successful recording.
 		expect(api.switchToEditor).not.toHaveBeenCalled();
@@ -121,9 +124,11 @@ describe("useScreenRecorder native Windows stop failure", () => {
 		await pressStop(view);
 
 		expect(view.result.current.recording).toBe(false);
-		expect(toast.error).toHaveBeenCalledWith("recording.stopFailed", {
-			description: "IPC channel closed",
-		});
+		expect(toast.error).toHaveBeenCalledWith(
+			"recording.stopFailed",
+			// Kept on the HUD until closed: the take was lost.
+			persistentToast({ description: "IPC channel closed" }),
+		);
 	});
 
 	it("still opens the editor when the stop succeeds", async () => {

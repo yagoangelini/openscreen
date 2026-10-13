@@ -167,3 +167,33 @@ export function computeHudTooltipClearance(
 	const inset = side === "top" ? trigger.top - bar.top : bar.right - trigger.right;
 	return Math.max(0, Math.round(inset));
 }
+
+export interface HudResizeInput {
+	/** What the window was last given. */
+	allocated: HudSize;
+	required: HudSize;
+	granted: HudSize;
+	orientationChanged: boolean;
+}
+
+/**
+ * Whether the HUD window has to be resized for what it shows now.
+ *
+ * Grow the moment the content stops fitting. Shrink only once the content has fallen a
+ * whole reserve below what was granted: that asymmetry is the hysteresis, so the bar can
+ * grow into its reserve (recording controls, a longer source name) and back out again
+ * without a single native resize, while a one-off bad reading (an unstyled first paint in
+ * dev, say) can't leave the overlay permanently oversized. A notice short enough to fit
+ * the reserve never resizes the window; one that grew it shrinks it back when it closes,
+ * because the window then sits more than a reserve above what is needed.
+ */
+export function hudNeedsResize(input: HudResizeInput): boolean {
+	const { allocated, required, granted } = input;
+	return (
+		input.orientationChanged ||
+		required.width > allocated.width ||
+		required.height > allocated.height ||
+		granted.width + HUD_GROWTH_RESERVE < allocated.width ||
+		granted.height + HUD_GROWTH_RESERVE < allocated.height
+	);
+}
