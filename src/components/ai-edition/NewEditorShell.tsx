@@ -77,6 +77,7 @@ import {
 	importPendingRecording,
 	maybeSaveFreshRecordingAutoZooms,
 	prefetchFreshRecordingTelemetry,
+	resumeFreshRecordingCameraLayout,
 } from "./recordingImport";
 import { TranscriptAutoZoomDialog } from "./TranscriptAutoZoomDialog";
 import { AddAudioLayerDialog } from "./v4/AddAudioLayerDialog";
@@ -151,6 +152,8 @@ export async function runLoadedMetadataWrite(
 	deps: {
 		/** Defaults to the real auto-zoom pass; injected in tests. */
 		autoZoom?: (document: AxcutDocument) => Promise<unknown>;
+		/** Defaults to writing a fresh take's pending camera pieces; injected in tests. */
+		cameraLayout?: (document: AxcutDocument) => Promise<unknown>;
 		saveTimeoutMs?: number;
 	} = {},
 ): Promise<void> {
@@ -195,7 +198,12 @@ export async function runLoadedMetadataWrite(
 	// A document with no assets has no take to suggest zooms for. The auto-zoom pass
 	// would refuse it anyway; not calling it keeps "nothing to do" meaning nothing.
 	if (settled.assets.length === 0) return;
-	await (deps.autoZoom ?? maybeSaveFreshRecordingAutoZooms)(settled);
+	// A fresh take whose length came after the import stopped waiting for it gets its
+	// "Rosto / Tela + câmera" pieces now, ahead of the zooms that plan around them.
+	await (deps.cameraLayout ?? resumeFreshRecordingCameraLayout)(settled);
+	const latest = useProjectStore.getState().document;
+	if (!latest || latest.project.id !== originatingProjectId) return;
+	await (deps.autoZoom ?? maybeSaveFreshRecordingAutoZooms)(latest);
 }
 
 export function NewEditorShell() {

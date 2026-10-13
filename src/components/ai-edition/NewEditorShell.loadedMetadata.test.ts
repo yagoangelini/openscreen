@@ -81,6 +81,27 @@ describe("runLoadedMetadataWrite", () => {
 		expect(useProjectStore.getState().document?.timeline.clips).toHaveLength(1);
 	});
 
+	// A take whose length came late gets its "Rosto" pieces here; the zooms that plan
+	// around them come after, from the document those pieces left.
+	it("writes a fresh take's pending camera pieces before asking for the zooms", async () => {
+		const saveDocument = settlingSave();
+		useProjectStore.setState({ saveDocument });
+		const order: string[] = [];
+		const cameraLayout = vi.fn(async (document: AxcutDocument) => {
+			order.push("camera");
+			useProjectStore.setState({ document: { ...document, cameraSegments: [] } });
+		});
+		const autoZoom = vi.fn(async () => {
+			order.push("zoom");
+		});
+
+		await runLoadedMetadataWrite(51.392, "asset_1", PROJECT, { autoZoom, cameraLayout });
+
+		expect(cameraLayout).toHaveBeenCalledWith(saveDocument.mock.calls[0][0]);
+		expect(order).toEqual(["camera", "zoom"]);
+		expect(autoZoom).toHaveBeenCalledWith(useProjectStore.getState().document);
+	});
+
 	// THE reason the save is bounded. `saveDocument` awaits the bridge with no
 	// deadline of its own and never rejects, so a main process that stops answering
 	// leaves this step pending for the life of the renderer — and every edit queued

@@ -75,8 +75,12 @@ let transcriptOfferTakePath: string | null = null;
  * The take whose "Rosto / Tela + câmera" pieces are still to be written. Its automatic zooms
  * wait for them: a "face" span shows no screen, so they are planned around it
  * (`collectAutoZoomSuggestionsForDocument`), and that needs the pieces on the document first.
+ *
+ * Kept, with the take's project, while the take's length is still unknown: the pieces need it,
+ * and the `loadedmetadata` write that brings it asks for them (`resumeFreshRecordingCameraLayout`).
  */
 let pendingFreshRecordingCameraLayoutPath: string | null = null;
+let pendingFreshRecordingCameraLayoutProjectId: string | null = null;
 
 export function markFreshRecordingAutoZoomPending(assetPath: string): void {
 	pendingFreshRecordingAutoZoom = true;
@@ -142,6 +146,8 @@ export function consumeFreshRecordingAutoZoomPending(): boolean {
 	freshRecordingAutoZoomSaveChain = Promise.resolve();
 	freshTelemetryPrefetch = null;
 	freshActivityPrefetch = null;
+	pendingFreshRecordingCameraLayoutPath = null;
+	pendingFreshRecordingCameraLayoutProjectId = null;
 	return was;
 }
 
@@ -625,7 +631,8 @@ export async function rescanAutoRedactions(
 }
 
 export type FreshRecordingCameraLayoutDeps = {
-	/** How long to wait for the take's real length before giving up. Tests shorten it. */
+	/** How long to wait here for the take's real length before leaving the pieces to the
+	 *  `loadedmetadata` write that brings it. Tests shorten it. */
 	probeWaitMs?: number;
 	saveTimeoutMs?: number;
 	waitTimeoutMs?: number;
@@ -643,6 +650,11 @@ export type FreshRecordingCameraLayoutDeps = {
  * placeholder length is not lost; not over an edit that landed meanwhile; never over camera
  * pieces already on the document. The fresh take's automatic zooms wait for it (see
  * `pendingFreshRecordingCameraLayoutPath`) and are asked for again when it is done.
+ *
+ * A length that takes longer than `probeWaitMs` does not cost the take its pieces: this pass
+ * stops looking, and the `loadedmetadata` write writes them when the length lands
+ * (`resumeFreshRecordingCameraLayout`). Giving up there left a take whose preview reported its
+ * length ~12 minutes late with no pieces, and with zooms planned over the face.
  */
 export async function applyFreshRecordingCameraLayout(
 	screenPath: string,
@@ -650,21 +662,24 @@ export async function applyFreshRecordingCameraLayout(
 ): Promise<number> {
 	const first = useProjectStore.getState().document;
 	if (!first?.assets.find((a) => a.originalPath === screenPath)?.cameraLayout) return 0;
+	const projectId = first.project.id;
 	// Set before the first await: the zoom pass must not slip in ahead of the pieces.
 	pendingFreshRecordingCameraLayoutPath = screenPath;
+	pendingFreshRecordingCameraLayoutProjectId = projectId;
+	let awaitingLength = false;
 	try {
 		const deadline = Date.now() + (deps.probeWaitMs ?? 60_000);
 		for (let attempt = 0; attempt < 3; ) {
 			if ((await waitForDocumentSaves(deps.waitTimeoutMs)) === "timeout") return 0;
 			const latest = useProjectStore.getState().document;
 			const asset = latest?.assets.find((a) => a.originalPath === screenPath);
-			if (!latest || !asset?.cameraLayout) return 0;
+			if (!latest || latest.project.id !== projectId || !asset?.cameraLayout) return 0;
 			if (readCameraSegments(latest).length > 0) return 0;
-			if (
-				latest.timeline.clips.length === 0 ||
-				latest.timeline.clips.some((clip) => clipAwaitsProbedDuration(clip, asset.id))
-			) {
-				if (Date.now() > deadline) return 0;
+			if (!hasProbedLength(latest, asset.id)) {
+				if (Date.now() > deadline) {
+					awaitingLength = true;
+					return 0;
+				}
 				await new Promise((resolve) => setTimeout(resolve, 250));
 				continue;
 			}
@@ -689,14 +704,44 @@ export async function applyFreshRecordingCameraLayout(
 		}
 		return 0;
 	} finally {
-		if (pendingFreshRecordingCameraLayoutPath === screenPath) {
-			pendingFreshRecordingCameraLayoutPath = null;
-		}
-		const document = useProjectStore.getState().document;
-		if (document && pendingFreshRecordingAutoZoom) {
-			void (deps.autoZoom ?? maybeSaveFreshRecordingAutoZooms)(document);
+		// Still waiting for the length: the pieces stay pending, and the zooms with them.
+		if (!awaitingLength) {
+			if (pendingFreshRecordingCameraLayoutPath === screenPath) {
+				pendingFreshRecordingCameraLayoutPath = null;
+				pendingFreshRecordingCameraLayoutProjectId = null;
+			}
+			const document = useProjectStore.getState().document;
+			if (document && pendingFreshRecordingAutoZoom) {
+				void (deps.autoZoom ?? maybeSaveFreshRecordingAutoZooms)(document);
+			}
 		}
 	}
+}
+
+/** The take's clips have their real length: there are clips, and none still waits for it. */
+function hasProbedLength(document: AxcutDocument, assetId: string): boolean {
+	const clips = document.timeline.clips;
+	return clips.length > 0 && !clips.some((clip) => clipAwaitsProbedDuration(clip, assetId));
+}
+
+/**
+ * The camera pieces of a fresh take whose length arrived after the import stopped waiting for
+ * it, called by the `loadedmetadata` write once it has folded the length in. Nothing unless
+ * `document` is that take's project and the length is in. Its caller asks for the zooms next,
+ * so this does not.
+ */
+export async function resumeFreshRecordingCameraLayout(
+	document: AxcutDocument,
+	deps: FreshRecordingCameraLayoutDeps = {},
+): Promise<number> {
+	const screenPath = pendingFreshRecordingCameraLayoutPath;
+	if (!screenPath || pendingFreshRecordingCameraLayoutProjectId !== document.project.id) return 0;
+	const asset = document.assets.find((a) => a.originalPath === screenPath);
+	if (!asset || !hasProbedLength(document, asset.id)) return 0;
+	return applyFreshRecordingCameraLayout(screenPath, {
+		autoZoom: async () => undefined,
+		...deps,
+	});
 }
 
 export async function importPendingRecording(

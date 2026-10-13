@@ -7,6 +7,11 @@ import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
 import { undo } from "@/lib/ai-edition/store/undo";
 import { clearHistory, past } from "@/lib/ai-edition/store/undoStack";
 import {
+	parseRecordingLayout,
+	type RecordingLayoutFile,
+	recordingLayoutOnAsset,
+} from "@/lib/recordingLayout";
+import {
 	applyFreshRecordingCameraLayout,
 	applyFreshRecordingRedactions,
 	applyPendingFreshRecordingAutoZooms,
@@ -16,6 +21,7 @@ import {
 	maybeSaveFreshRecordingAutoZooms,
 	prefetchFreshRecordingTelemetry,
 	rescanAutoRedactions,
+	resumeFreshRecordingCameraLayout,
 } from "./recordingImport";
 
 // The first describe stubs the store actions, so the bridge is never reached
@@ -597,6 +603,101 @@ describe("fresh-recording camera layout ('Rosto / Tela + câmera')", () => {
 		// ...and none once they are in: there is no screen to zoom into there.
 		const live = useProjectStore.getState().document as AxcutDocument;
 		expect((await applyPendingFreshRecordingAutoZooms(live, zoomDeps)).zoomRanges).toEqual([]);
+		useProjectStore.setState({ saveDocument: realActions.saveDocument });
+	});
+
+	it("still writes the pieces when the take's length is measured long after the import", async () => {
+		// recording-1791836816491.mp4.layout.json, as the HUD wrote it: the screen, "Rosto" from
+		// 4768 ms, the screen again from 12120 ms. Its preview took ~12 minutes to report the
+		// 51.392 s length; the pass had given up after its minute, so the project kept
+		// `cameraLayout` with `cameraSegments: []` and its zooms were planned over the face.
+		const sidecar = {
+			version: 1,
+			initial: "screen",
+			switches: [
+				{ atMs: 4768, layout: "face" },
+				{ atMs: 12120, layout: "screen" },
+			],
+		};
+		const cameraLayout = recordingLayoutOnAsset(
+			parseRecordingLayout(sidecar) as RecordingLayoutFile,
+		);
+		const measured = documentWithClip(51.392);
+		const withLayout = (document: AxcutDocument): AxcutDocument => ({
+			...document,
+			assets: document.assets.map((asset) => ({ ...asset, cameraLayout })),
+		});
+		// What the import leaves until the preview reports a length: the asset, no clips.
+		const imported = withLayout({
+			...measured,
+			assets: measured.assets.map(({ durationSec: _unmeasured, ...asset }) => asset),
+			timeline: { ...measured.timeline, clips: [] },
+		});
+		const saveDocument = vi.fn(async (next: AxcutDocument) => {
+			useProjectStore.setState({ document: next });
+			return true;
+		});
+		useProjectStore.setState({ document: imported, saveDocument });
+		markFreshRecordingAutoZoomPending(RECORDING_PATH);
+		const autoZoom = vi.fn(async () => undefined);
+
+		expect(
+			await applyFreshRecordingCameraLayout(RECORDING_PATH, {
+				probeWaitMs: 20,
+				waitTimeoutMs: 50,
+				autoZoom,
+			}),
+		).toBe(0);
+		// Not given up: the zooms keep waiting for the pieces.
+		expect(saveDocument).not.toHaveBeenCalled();
+		expect(autoZoom).not.toHaveBeenCalled();
+		const zoomDeps = {
+			enabled: true,
+			getTelemetry: async () => clickAt(8000, 0.43, 0.925),
+			createId: (prefix: string) => `${prefix}_test`,
+		};
+		const lengthIn = withLayout(measured);
+		useProjectStore.setState({ document: lengthIn });
+		expect((await applyPendingFreshRecordingAutoZooms(lengthIn, zoomDeps)).zoomRanges).toEqual([]);
+
+		// The `loadedmetadata` write folds the length in, then this runs.
+		expect(await resumeFreshRecordingCameraLayout(lengthIn, { waitTimeoutMs: 50 })).toBe(1);
+		expect(saveDocument).toHaveBeenCalledWith(expect.anything(), { history: true });
+		expect(useProjectStore.getState().document?.cameraSegments).toEqual([
+			expect.objectContaining({
+				startMs: 4768,
+				endMs: 12120,
+				clipId: "clip_1",
+				mode: "fullscreen",
+				origin: "system",
+			}),
+		]);
+		// Once only, and the zooms are free to plan, around the face.
+		expect(await resumeFreshRecordingCameraLayout(lengthIn, { waitTimeoutMs: 50 })).toBe(0);
+		const live = useProjectStore.getState().document as AxcutDocument;
+		expect((await applyPendingFreshRecordingAutoZooms(live, zoomDeps)).zoomRanges).toEqual([]);
+		useProjectStore.setState({ saveDocument: realActions.saveDocument });
+	});
+
+	it("resumes nothing for another project, or before the take's length is in", async () => {
+		const saveDocument = vi.fn(async () => true);
+		const start = withFaceIntro(documentWithClip());
+		const unmeasured: AxcutDocument = {
+			...start,
+			timeline: { ...start.timeline, clips: [] },
+		};
+		useProjectStore.setState({ document: unmeasured, saveDocument });
+		expect(
+			await applyFreshRecordingCameraLayout(RECORDING_PATH, { probeWaitMs: 20, waitTimeoutMs: 50 }),
+		).toBe(0);
+		expect(await resumeFreshRecordingCameraLayout(unmeasured, { waitTimeoutMs: 50 })).toBe(0);
+		const elsewhere: AxcutDocument = {
+			...start,
+			project: { ...start.project, id: "p_other" },
+		};
+		useProjectStore.setState({ document: elsewhere });
+		expect(await resumeFreshRecordingCameraLayout(elsewhere, { waitTimeoutMs: 50 })).toBe(0);
+		expect(saveDocument).not.toHaveBeenCalled();
 		useProjectStore.setState({ saveDocument: realActions.saveDocument });
 	});
 
