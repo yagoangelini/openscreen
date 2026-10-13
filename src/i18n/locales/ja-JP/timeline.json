@@ -39,7 +39,9 @@
 		"cameraTrack": "カメラ",
 		"cameraPip": "PiP",
 		"cameraHidden": "カメラなし",
-		"scrollKey": "Scroll"
+		"scrollKey": "Scroll",
+		"dragKey": "ドラッグ",
+		"noSnap": "スナップなし"
 	},
 	"trails": {
 		"zoomIn": "ズームイン：ズームの開始まで画面が拡大していきます",
@@ -148,5 +150,13 @@
 		"lookAllHint": "ここでの変更は、独自の見た目を持つ区間も含め、すべての区間に適用されます。それらも新しい値になります。",
 		"lookRestore": "既定の見た目に戻す",
 		"ownLook": "独自の見た目"
+	},
+	"snap": {
+		"playhead": "再生ヘッド",
+		"clip": "クリップの端",
+		"start": "タイムラインの先頭",
+		"end": "タイムラインの末尾",
+		"edge": "項目の端",
+		"marker": "マーカー"
 	}
 }

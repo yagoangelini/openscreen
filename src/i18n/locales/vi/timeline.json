@@ -39,7 +39,9 @@
 		"cameraTrack": "Camera",
 		"cameraPip": "PiP",
 		"cameraHidden": "Không camera",
-		"scrollKey": "Scroll"
+		"scrollKey": "Scroll",
+		"dragKey": "Kéo",
+		"noSnap": "Không bám dính"
 	},
 	"trails": {
 		"zoomIn": "Phóng to: khung hình phóng to dần cho đến khi bắt đầu thu phóng",
@@ -148,5 +150,13 @@
 		"lookAllHint": "Thay đổi ở đây áp dụng cho mọi đoạn, kể cả các đoạn có giao diện riêng: chúng cũng nhận giá trị mới.",
 		"lookRestore": "Khôi phục giao diện mặc định",
 		"ownLook": "Giao diện riêng"
+	},
+	"snap": {
+		"playhead": "Đầu phát",
+		"clip": "Cạnh clip",
+		"start": "Đầu dòng thời gian",
+		"end": "Cuối dòng thời gian",
+		"edge": "Cạnh mục",
+		"marker": "Điểm đánh dấu"
 	}
 }

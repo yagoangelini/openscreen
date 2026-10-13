@@ -73,6 +73,16 @@ import {
 	setTimelineScale,
 } from "@/lib/ai-edition/timeline/newRegionDuration";
 import { ventilateSpanAcrossClips } from "@/lib/ai-edition/timeline/region-ventilation";
+import {
+	buildSnapTargets,
+	landedOn,
+	type SnapHit,
+	type SnapTargetKind,
+	snapEdge,
+	snapRadiusSec,
+	snapSpan,
+	watchAltDuringDrag,
+} from "@/lib/ai-edition/timeline/snap";
 import { coalesceRegionsForRuler } from "@/lib/ai-edition/timeline/timelineMap";
 import {
 	coalescedTrimGroups,
@@ -165,8 +175,7 @@ const PILL_HANDLE_OUT_PX = PILL_HANDLE_PX + PILL_MOVE_GAP_PX;
  *  overflow — the lane's colour already says which kind it is, and the title
  *  attribute still gives the value on hover. */
 const PILL_CONTENT_MIN_PX = 34;
-/** Edge-snap radius while dragging a pill, in screen px. */
-const PILL_SNAP_PX = 8;
+// The edge-snap radius every drag below uses is SNAP_RADIUS_PX in timeline/snap.ts.
 // One audio pill's height, the vertical step between stacked rows, and lane padding
 // are defined in audioTracks.ts and imported above.
 // The size a newly created pill aims for (PILL_CREATE_PX) lives in
@@ -281,11 +290,28 @@ interface RulerTick {
 	major: boolean;
 }
 
+/** What a drag's edge is locked onto right now: drawn as the guide line (or the lit playhead)
+ *  plus a chip at the pointer. */
+interface SnapCue {
+	sec: number;
+	kind: SnapTargetKind;
+	x: number;
+	y: number;
+}
+
+/** Owner ids of one lane element and the times of its edges — what the other drags snap to. */
+interface SnapEdgeSource {
+	owners: readonly string[];
+	sec: number;
+}
+
 interface PlayheadOverlayProps {
 	/** Full timeline length in seconds — the denominator for the playhead's percentage. */
 	totalSec: number;
 	/** Live scrub position, when a drag is in flight. Takes precedence over the store. */
 	overrideTimeSec: number | null;
+	/** A dragged edge is locked onto the playhead: it lights up to say so. */
+	snapped?: boolean;
 	canvasStyle: React.CSSProperties;
 	onPointerDown: (e: ReactPointerEvent) => void;
 	playheadRef?: React.MutableRefObject<HTMLDivElement | null>;
@@ -310,6 +336,7 @@ interface PlayheadOverlayProps {
 const PlayheadOverlay = memo(function PlayheadOverlay({
 	totalSec,
 	overrideTimeSec,
+	snapped = false,
 	canvasStyle,
 	onPointerDown,
 	playheadRef,
@@ -319,7 +346,13 @@ const PlayheadOverlay = memo(function PlayheadOverlay({
 	return (
 		<div className={styles.tlPlayheadLayer} aria-hidden>
 			<div className={styles.tlCanvas} style={canvasStyle}>
-				<div ref={playheadRef} className={styles.tlPlayhead} style={{ left: `${pct}%` }}>
+				<div
+					ref={playheadRef}
+					className={styles.tlPlayhead}
+					data-snapped={snapped || undefined}
+					data-testid="timeline-playhead"
+					style={{ left: `${pct}%` }}
+				>
 					<span
 						className={styles.tlPlayheadHead}
 						style={{ pointerEvents: "auto", cursor: "grab" }}
@@ -677,7 +710,11 @@ export function V4Timeline({
 	// on a wide window crams into an unreadable smear on a narrow one.
 	const [viewportWidthPx, setViewportWidthPx] = useState(0);
 	const [dragOver, setDragOver] = useState(false);
-	const [snapPct, setSnapPct] = useState<number | null>(null);
+	const [snapCue, setSnapCue] = useState<SnapCue | null>(null);
+	// Every lane element's edges, refreshed on each render and read when a drag starts. A ref
+	// rather than a dependency: the pill lists are rebuilt on every render, and the drag
+	// callbacks would otherwise be too, busting the memoised audio pills they are handed to.
+	const snapEdgesRef = useRef<SnapEdgeSource[]>([]);
 	// Live clip-reorder drag: the dragged clip follows the pointer directly
 	// (pointerDeltaX, no transition) while every clip between its origin and
 	// live target slides sideways by the dragged clip's own width+gap (with
@@ -827,6 +864,27 @@ export function V4Timeline({
 		label: formatSec(g.end - g.start),
 		sourceIds: g.ids,
 	}));
+
+	// What a drag can lock onto (see timeline/snap.ts): the playhead first, then clip
+	// boundaries, the timeline's ends, the other elements' edges and the markers. Built at every
+	// pointer move, so a playhead that moves under a drag (playback) is followed. `exclude` is
+	// the dragged element's own ids: an edge is never its own magnet.
+	const snapTargetsFor = useCallback(
+		(exclude: readonly string[]) =>
+			buildSnapTargets({
+				playheadSec: useProjectStore.getState().currentTimeSec,
+				totalSec: total,
+				clipBoundariesSec: clips.flatMap((c) => [c.timelineStartSec, c.timelineEndSec]),
+				edgesSec: snapEdgesRef.current
+					.filter((edge) => !edge.owners.some((owner) => exclude.includes(owner)))
+					.map((edge) => edge.sec),
+				markersSec: markerSecs,
+			}),
+		[total, clips, markerSecs],
+	);
+	const showSnapCue = useCallback((hit: SnapHit | null, x: number, y: number) => {
+		setSnapCue(hit ? { sec: hit.sec, kind: hit.target.kind, x, y } : null);
+	}, []);
 
 	// Ruler ticks are chosen from what is actually ON SCREEN, not from the clip
 	// length: the canvas is widened by 1/navSpan, so the same recording shows one
@@ -1011,34 +1069,14 @@ export function V4Timeline({
 			// to `setTrimEntries` as `dropIds` so a shrinking span deletes the entries
 			// it no longer needs.
 			const trimOwned: string[] = [...pill.sourceIds];
-			// Snap targets: clip boundaries + timeline ends. Within PILL_SNAP_PX of
-			// one on screen, an edge snaps and a vertical guide is shown.
-			// The radius is in PIXELS: as a fraction of total (it was 1.2%) it was a
-			// 21-second magnet on a 30-minute project, so a pill dragged anywhere near
-			// a junction jumped to it however far you zoomed in to place it precisely.
-			const snapTargets = [
-				0,
-				total,
-				...clips.map((c) => c.timelineStartSec),
-				...clips.map((c) => c.timelineEndSec),
-			];
-			// 0 = no snapping at all while the panel is unmeasured (first paint):
-			// better to drop the edge exactly where it was released than to move it
-			// by a radius computed from a width we do not have.
-			const snapThresh = pxPerSec > 0 ? PILL_SNAP_PX / pxPerSec : 0;
-			const snap = (v: number): number => {
-				let best = v;
-				let bestD = snapThresh;
-				for (const t of snapTargets) {
-					const d = Math.abs(t - v);
-					if (d < bestD) {
-						bestD = d;
-						best = t;
-					}
-				}
-				setSnapPct(best === v ? null : (best / total) * 100);
-				return best;
-			};
+			// The magnet (timeline/snap.ts). The radius is in PIXELS: as a fraction of total (it
+			// was 1.2%) it was a 21-second magnet on a 30-minute project, so a pill dragged
+			// anywhere near a junction jumped to it however far you zoomed in to place it.
+			const snapRadius = snapRadiusSec(pxPerSec);
+			let pointerX = startX;
+			let pointerY = e.clientY;
+			let free = e.altKey;
+			let moved = false;
 			const apply = async (start: number, end: number): Promise<void> => {
 				const s = Math.max(0, Math.min(end - MIN_REGION_SEC, start));
 				const en = Math.min(total, Math.max(s + MIN_REGION_SEC, end));
@@ -1067,26 +1105,58 @@ export function V4Timeline({
 					await tl.setTrimEntries(entries, dropIds);
 				}
 			};
-			const move = (ev: PointerEvent) => {
-				const dxSec = ((ev.clientX - startX) / r.width) * total;
+			const place = () => {
+				const dxSec = ((pointerX - startX) / r.width) * total;
+				const targets = snapTargetsFor(pill.sourceIds);
 				let ns = pill.start;
 				let ne = pill.end;
+				let hit: SnapHit | null = null;
 				if (dragMode === "move") {
-					ns = Math.max(0, Math.min(total - dur, snap(pill.start + dxSec)));
-					ne = ns + dur;
+					const rawStart = pill.start + dxSec;
+					const snapped = snapSpan(rawStart, rawStart + dur, targets, snapRadius, free);
+					// The locked edge takes the target's value as is, and the other edge follows by
+					// the length: `rawStart + delta` could miss the target by a float's last bit.
+					if (snapped.hit && snapped.edge === "end") {
+						ne = snapped.hit.sec;
+						ns = ne - dur;
+					} else {
+						ns = snapped.hit ? snapped.hit.sec : rawStart;
+						ne = ns + dur;
+					}
+					if (ns < 0 || ns > total - dur) {
+						ns = Math.max(0, Math.min(total - dur, ns));
+						ne = ns + dur;
+					}
+					hit = landedOn(snapped.hit, snapped.edge === "end" ? ne : ns);
 				} else if (dragMode === "l") {
-					ns = Math.max(0, Math.min(pill.end - MIN_REGION_SEC, snap(pill.start + dxSec)));
-					ne = pill.end;
+					const snapped = snapEdge(pill.start + dxSec, targets, snapRadius, free);
+					ns = Math.max(0, Math.min(pill.end - MIN_REGION_SEC, snapped.sec));
+					hit = landedOn(snapped.hit, ns);
 				} else {
-					ns = pill.start;
-					ne = Math.min(total, Math.max(pill.start + MIN_REGION_SEC, snap(pill.end + dxSec)));
+					const snapped = snapEdge(pill.end + dxSec, targets, snapRadius, free);
+					ne = Math.min(total, Math.max(pill.start + MIN_REGION_SEC, snapped.sec));
+					hit = landedOn(snapped.hit, ne);
 				}
+				showSnapCue(hit, pointerX, pointerY);
 				const nextState = { id: pill.id, kind: pill.kind, start: ns, end: ne };
 				activePillDragRef.current = nextState;
 				setActivePillDrag(nextState);
 			};
+			const move = (ev: PointerEvent) => {
+				pointerX = ev.clientX;
+				pointerY = ev.clientY;
+				free = ev.altKey;
+				moved = true;
+				place();
+			};
+			// Alt pressed or let go without moving the pointer re-places the edge at once.
+			const stopWatchingAlt = watchAltDuringDrag((altKey) => {
+				free = altKey;
+				if (moved) place();
+			});
 			const up = () => {
-				setSnapPct(null);
+				stopWatchingAlt();
+				setSnapCue(null);
 				window.removeEventListener("pointermove", move);
 				window.removeEventListener("pointerup", up);
 				const finalDrag = activePillDragRef.current;
@@ -1105,7 +1175,7 @@ export function V4Timeline({
 			window.addEventListener("pointermove", move);
 			window.addEventListener("pointerup", up);
 		},
-		[tl, selectPill, total, clips, pxPerSec],
+		[tl, selectPill, total, clips, pxPerSec, snapTargetsFor, showSnapCue],
 	);
 
 	// Live preview geometry for an audio track being dragged (issue #350), the
@@ -1132,6 +1202,26 @@ export function V4Timeline({
 	// not the live drag geometry: a pill that changed rows halfway through a drag
 	// would jump out from under the pointer.
 	const audioPills = useMemo(() => collapseTracksToPills(tl.audioTracks), [tl.audioTracks]);
+	// The edges every drag can snap to, as the lanes draw them (stored geometry, not a drag in
+	// flight). Owners are every id a drag may be keyed by, so the dragged element can be left
+	// out whichever of them it carries.
+	snapEdgesRef.current = [
+		...[...annPills, ...speedPills, ...trimPills, ...zoomPills].flatMap((p) => [
+			{ owners: p.sourceIds, sec: p.start },
+			{ owners: p.sourceIds, sec: p.end },
+		]),
+		...tl.cameraPieces.flatMap((piece) => {
+			const owners = [piece.key, ...piece.ids];
+			return [
+				{ owners, sec: piece.startMs / 1000 },
+				{ owners, sec: piece.endMs / 1000 },
+			];
+		}),
+		...audioPills.flatMap((track) => [
+			{ owners: [track.id], sec: track.startMs / 1000 },
+			{ owners: [track.id], sec: track.endMs / 1000 },
+		]),
+	];
 	// One row per KIND, and the packer unchanged INSIDE each kind (issue #560). Placement
 	// now clamps same-kind pills apart, so intra-kind packing is the legacy escape hatch —
 	// it keeps a document written before that rule legible instead of stacking its pills on
@@ -1219,29 +1309,14 @@ export function V4Timeline({
 				: sourceLen > 0
 					? sourceLen
 					: origTrimEnd;
-			// Snap the moving edge to clip boundaries and the timeline ends, same PILL_SNAP_PX
-			// magnet the region pills use.
-			const snapTargets = [
-				0,
-				total,
-				...clips.map((c) => c.timelineStartSec),
-				...clips.map((c) => c.timelineEndSec),
-			];
-			const snapThresh = pxPerSec > 0 ? PILL_SNAP_PX / pxPerSec : 0;
-			const snap = (v: number): number => {
-				let best = v;
-				let bestD = snapThresh;
-				for (const target of snapTargets) {
-					const d = Math.abs(target - v);
-					if (d < bestD) {
-						bestD = d;
-						best = target;
-					}
-				}
-				setSnapPct(best === v ? null : (best / total) * 100);
-				return best;
-			};
-			const move = (ev: PointerEvent) => {
+			// The moving edge snaps with the same magnet the region pills use (timeline/snap.ts).
+			// Alt held at the pointer-down on the body is the slip above, decided once; Alt held
+			// after that, or on an edge, is the magnet's bypass like on every other lane.
+			const snapRadius = snapRadiusSec(pxPerSec);
+			const owners = [track.id];
+			let free = e.altKey;
+			let lastMove: { clientX: number; clientY: number } | null = null;
+			const place = (ev: { clientX: number; clientY: number }) => {
 				if (slipping) {
 					const nextOffsetMs = slipAudioOffsetMs(
 						track.offsetMs,
@@ -1270,37 +1345,62 @@ export function V4Timeline({
 					return;
 				}
 				const dxSec = ((ev.clientX - startX) / r.width) * total;
+				const targets = snapTargetsFor(owners);
 				let ns = origStart;
 				let nts = origTrimStart;
 				let nte = origTrimEnd;
+				let hit: SnapHit | null = null;
 				if (mode === "move") {
 					// Cap so the whole track lands by `total`: no pill past 100%, and the
 					// export (which truncates at the programme end) matches what's shown.
-					const upper = Math.max(0, total - (origTrimEnd - origTrimStart));
-					ns = Math.min(Math.max(0, snap(origStart + dxSec)), upper);
+					const len = origTrimEnd - origTrimStart;
+					const upper = Math.max(0, total - len);
+					const rawStart = origStart + dxSec;
+					const snapped = snapSpan(rawStart, rawStart + len, targets, snapRadius, free);
+					const wanted = snapped.hit
+						? snapped.edge === "end"
+							? snapped.hit.sec - len
+							: snapped.hit.sec
+						: rawStart;
+					ns = Math.min(Math.max(0, wanted), upper);
+					hit = landedOn(snapped.hit, snapped.edge === "end" ? ns + len : ns);
 				} else if (mode === "l") {
 					// The left edge can't cross the right one, and can't reveal more head
 					// than the source has (trimStart floors at 0 → head floors at
 					// origStart - origTrimStart).
 					const rightEdge = origStart + (origTrimEnd - origTrimStart);
 					const lowerLeft = Math.max(0, origStart - origTrimStart);
-					let newLeft = snap(origStart + dxSec);
-					newLeft = Math.min(Math.max(newLeft, lowerLeft), rightEdge - MIN_REGION_SEC);
+					const snapped = snapEdge(origStart + dxSec, targets, snapRadius, free);
+					const newLeft = Math.min(Math.max(snapped.sec, lowerLeft), rightEdge - MIN_REGION_SEC);
+					hit = landedOn(snapped.hit, newLeft);
 					ns = newLeft;
 					nts = origTrimStart + (newLeft - origStart);
 					nte = origTrimEnd;
 				} else {
 					// Right edge: move the out-point, head fixed. Snap on the timeline
 					// position of the edge, then map back to a source out-point.
-					const snappedRight = snap(origStart + (origTrimEnd - origTrimStart) + dxSec);
-					const newTrimEnd = origTrimStart + (snappedRight - origStart);
+					const snapped = snapEdge(
+						origStart + (origTrimEnd - origTrimStart) + dxSec,
+						targets,
+						snapRadius,
+						free,
+					);
+					const newTrimEnd = origTrimStart + (snapped.sec - origStart);
 					// Cap the out-point at the source length AND the programme end (`total`).
 					nte = Math.min(
 						Math.max(newTrimEnd, origTrimStart + MIN_REGION_SEC),
 						maxEnd,
 						origTrimStart + Math.max(0, total - origStart),
 					);
+					// The cap is in source time; compare in ms, the grid the placement is written on.
+					hit =
+						snapped.hit &&
+						Math.round((origStart + (nte - origTrimStart)) * 1000) ===
+							Math.round(snapped.hit.sec * 1000)
+							? snapped.hit
+							: null;
 				}
+				showSnapCue(hit, ev.clientX, ev.clientY);
 				// The readout answers "where am I in the file", which is the one thing the
 				// pill cannot show: its edges stop at the content, but nothing said where
 				// that content was.
@@ -1317,8 +1417,20 @@ export function V4Timeline({
 				audioDragRef.current = next;
 				setAudioDrag(next);
 			};
+			const move = (ev: PointerEvent) => {
+				lastMove = { clientX: ev.clientX, clientY: ev.clientY };
+				// A slip already spent its Alt at the pointer-down.
+				if (!slipping) free = ev.altKey;
+				place(lastMove);
+			};
+			const stopWatchingAlt = watchAltDuringDrag((altKey) => {
+				if (slipping) return;
+				free = altKey;
+				if (lastMove) place(lastMove);
+			});
 			const up = () => {
-				setSnapPct(null);
+				stopWatchingAlt();
+				setSnapCue(null);
 				setAudioDragTip(null);
 				window.removeEventListener("pointermove", move);
 				window.removeEventListener("pointerup", up);
@@ -1350,7 +1462,7 @@ export function V4Timeline({
 		// navSpan: the slip rate is derived from the VISIBLE width, so a zoom that
 		// leaves `total` alone still changes it. Left out, the rate froze at whatever
 		// the zoom was when the callback was last built.
-		[tl, total, clips, pxPerSec, navSpan],
+		[tl, total, pxPerSec, navSpan, snapTargetsFor, showSnapCue],
 	);
 
 	const startNavDrag = useCallback(
@@ -1906,7 +2018,14 @@ export function V4Timeline({
 			<PictureInPicture2 size={12} />
 		);
 	const startCameraEdgeDrag = useCallback(
-		(e: ReactPointerEvent, leftKey: string, minMs: number, maxMs: number, fromMs: number) => {
+		(
+			e: ReactPointerEvent,
+			leftKey: string,
+			rightKey: string,
+			minMs: number,
+			maxMs: number,
+			fromMs: number,
+		) => {
 			if (e.button !== 0) return;
 			e.preventDefault();
 			e.stopPropagation();
@@ -1914,27 +2033,33 @@ export function V4Timeline({
 			if (!el || maxMs < minMs) return;
 			const r = el.getBoundingClientRect();
 			const startX = e.clientX;
-			// Same magnet as the pills: clip junctions, in screen pixels.
-			const snapTargets = clips.map((c) => c.timelineStartSec * 1000);
-			const snapThreshMs = pxPerSec > 0 ? (PILL_SNAP_PX / pxPerSec) * 1000 : 0;
-			const move = (ev: PointerEvent) => {
-				const wanted = fromMs + ((ev.clientX - startX) / r.width) * total * 1000;
-				let atMs = wanted;
-				let best = snapThreshMs;
-				for (const target of snapTargets) {
-					if (Math.abs(target - wanted) < best) {
-						best = Math.abs(target - wanted);
-						atMs = target;
-					}
-				}
-				atMs = Math.min(maxMs, Math.max(minMs, atMs));
-				setSnapPct(atMs === wanted ? null : (atMs / 1000 / total) * 100);
+			// Same magnet as the pills (timeline/snap.ts). The two pieces this edge separates are
+			// left out: the edge itself is one of their edges.
+			const snapRadius = snapRadiusSec(pxPerSec);
+			const owners = [leftKey, rightKey];
+			let free = e.altKey;
+			let lastMove: { clientX: number; clientY: number } | null = null;
+			const place = (ev: { clientX: number; clientY: number }) => {
+				const wantedSec = (fromMs + ((ev.clientX - startX) / r.width) * total * 1000) / 1000;
+				const snapped = snapEdge(wantedSec, snapTargetsFor(owners), snapRadius, free);
+				const atMs = Math.min(maxMs, Math.max(minMs, snapped.sec * 1000));
+				showSnapCue(landedOn(snapped.hit, atMs / 1000), ev.clientX, ev.clientY);
 				const next = { leftKey, atMs };
 				cameraEdgeDragRef.current = next;
 				setCameraEdgeDrag(next);
 			};
+			const move = (ev: PointerEvent) => {
+				lastMove = { clientX: ev.clientX, clientY: ev.clientY };
+				free = ev.altKey;
+				place(lastMove);
+			};
+			const stopWatchingAlt = watchAltDuringDrag((altKey) => {
+				free = altKey;
+				if (lastMove) place(lastMove);
+			});
 			const up = () => {
-				setSnapPct(null);
+				stopWatchingAlt();
+				setSnapCue(null);
 				window.removeEventListener("pointermove", move);
 				window.removeEventListener("pointerup", up);
 				const final = cameraEdgeDragRef.current;
@@ -1953,7 +2078,7 @@ export function V4Timeline({
 			window.addEventListener("pointermove", move);
 			window.addEventListener("pointerup", up);
 		},
-		[tl, total, clips, pxPerSec],
+		[tl, total, pxPerSec, snapTargetsFor, showSnapCue],
 	);
 	const renderCameraTrack = () => {
 		const stored = tl.cameraPieces;
@@ -2062,6 +2187,7 @@ export function V4Timeline({
 										startCameraEdgeDrag(
 											e,
 											piece.key,
+											next.key,
 											piece.startMs + MIN_CAMERA_PIECE_MS,
 											next.endMs - MIN_CAMERA_PIECE_MS,
 											piece.endMs,
@@ -2642,6 +2768,14 @@ export function V4Timeline({
 								<span className={styles.tlKbd}>Ctrl+{t("labels.scrollKey")}</span>{" "}
 								{t("labels.zoom")}
 							</span>
+							{/* Every drag snaps (timeline/snap.ts); the modifier that turns it off is
+							    never discoverable on its own, so it is taught here. */}
+							<span className={styles.tlHint}>
+								<span className={styles.tlKbd}>
+									{isMac ? "Option" : "Alt"}+{t("labels.dragKey")}
+								</span>{" "}
+								{t("labels.noSnap")}
+							</span>
 						</div>
 					</>
 				) : null}
@@ -2684,8 +2818,16 @@ export function V4Timeline({
 
 				<div ref={tracksRef} className={styles.tlTracks} onPointerDown={startScrub}>
 					<div ref={canvasRef} className={styles.tlCanvas} style={canvasStyle}>
-						{snapPct !== null ? (
-							<div aria-hidden className={styles.tlSnapGuide} style={{ left: `${snapPct}%` }} />
+						{/* A lock on the playhead lights the playhead itself (below) instead: a second
+						    line drawn on top of it would hide the one thing the user aimed at. */}
+						{snapCue && snapCue.kind !== "playhead" ? (
+							<div
+								aria-hidden
+								data-testid="timeline-snap-guide"
+								data-snap-kind={snapCue.kind}
+								className={styles.tlSnapGuide}
+								style={{ left: `${pctAt(snapCue.sec)}%` }}
+							/>
 						) : null}
 
 						{showLanes ? (
@@ -2982,6 +3124,7 @@ export function V4Timeline({
 					<PlayheadOverlay
 						totalSec={total}
 						overrideTimeSec={scrubbingTimeSec}
+						snapped={snapCue?.kind === "playhead"}
 						canvasStyle={canvasStyle}
 						onPointerDown={startScrub}
 						playheadRef={playheadElRef}
@@ -3030,6 +3173,21 @@ export function V4Timeline({
 				<div className={styles.tlDragTip} style={{ left: audioDragTip.x, top: audioDragTip.y }}>
 					{formatSec(audioDragTip.inSec)} → {formatSec(audioDragTip.outSec)}
 					{audioDragTip.durationSec > 0 ? ` / ${formatSec(audioDragTip.durationSec)}` : ""}
+				</div>
+			) : null}
+			{/* What the dragged edge is locked onto, and where: at the root for the same reason
+			    as the crop readout. Below the pointer, so it never covers that readout. */}
+			{snapCue ? (
+				<div
+					className={styles.tlSnapTip}
+					data-testid="timeline-snap-tip"
+					data-snap-kind={snapCue.kind}
+					style={{ left: snapCue.x, top: snapCue.y }}
+				>
+					{t(
+						`snap.${snapCue.kind === "bound" ? (snapCue.sec <= 0 ? "start" : "end") : snapCue.kind}`,
+					)}{" "}
+					· {formatSec(snapCue.sec)}
 				</div>
 			) : null}
 			{trackReset.menu}

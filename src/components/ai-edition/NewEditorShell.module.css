@@ -2282,6 +2282,14 @@ textarea.control {
 	box-shadow: 0 0 8px var(--playhead-glow);
 	pointer-events: none;
 }
+/* A trim grip locked onto the dialog's playhead: it lights up, like the timeline's. */
+.editClipPlayhead[data-snapped] {
+	width: 3px;
+	margin-left: -1.5px;
+	box-shadow:
+		0 0 0 1px color-mix(in oklch, var(--playhead) 55%, transparent),
+		0 0 12px var(--playhead);
+}
 
 /* ─── AI provider settings (axcut parity) ────────────────────────── */
 

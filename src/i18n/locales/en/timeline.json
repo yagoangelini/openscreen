@@ -39,7 +39,9 @@
 		"cameraTrack": "Camera",
 		"cameraPip": "PiP",
 		"cameraHidden": "No camera",
-		"scrollKey": "Scroll"
+		"scrollKey": "Scroll",
+		"dragKey": "Drag",
+		"noSnap": "No snapping"
 	},
 	"trails": {
 		"zoomIn": "Zoom-in: the view moves in until the zoom starts",
@@ -148,5 +150,13 @@
 		"lookAllHint": "Changes here apply to every piece, including pieces with a look of their own: they take the new value too.",
 		"lookRestore": "Restore default look",
 		"ownLook": "Own look"
+	},
+	"snap": {
+		"playhead": "Playhead",
+		"clip": "Clip edge",
+		"start": "Timeline start",
+		"end": "Timeline end",
+		"edge": "Item edge",
+		"marker": "Marker"
 	}
 }

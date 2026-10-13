@@ -2260,6 +2260,40 @@
 	pointer-events: none;
 	z-index: 14;
 }
+/* A dragged edge locked onto the playhead: the playhead itself lights up (wider, with a ring
+   of light) rather than a second line being drawn on top of it. */
+.tlPlayhead[data-snapped] {
+	width: 3px;
+	margin-left: -0.5px;
+	box-shadow:
+		0 0 0 1px color-mix(in oklch, var(--playhead) 55%, transparent),
+		0 0 14px var(--playhead),
+		0 0 18px var(--playhead-glow);
+}
+.tlPlayhead[data-snapped] .tlPlayheadHead {
+	transform: translate(-50%, -100%) scale(1.15);
+	transform-origin: 50% 100%;
+}
+/* What the edge is locked onto, under the pointer (the crop readout sits above it). */
+.tlSnapTip {
+	position: fixed;
+	z-index: 1200;
+	transform: translate(-50%, 22px);
+	padding: 2px 7px;
+	border-radius: 6px;
+	border: 1px solid var(--border-hi);
+	background: var(--bg);
+	color: var(--fg-2);
+	font-size: 11.5px;
+	font-weight: 500;
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+	pointer-events: none;
+}
+.tlSnapTip[data-snap-kind="playhead"] {
+	color: var(--fg);
+	border-color: var(--playhead);
+}
 
 /* ── Voiceover recorder ──────────────────────────────────────────────────
    Deliberately NOT a modal. The whole point of a voiceover is narrating to
