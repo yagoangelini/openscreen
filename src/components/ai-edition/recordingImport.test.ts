@@ -2,6 +2,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { CursorTelemetryPoint } from "@/components/video-editor/types";
 import { replaceTimeline as replaceTimelineOp } from "@/lib/ai-edition/document/timeline";
+import { registerTakeNamePrompt } from "@/lib/ai-edition/freshTakeName";
 import { type AxcutDocument, createEmptyDocument } from "@/lib/ai-edition/schema";
 import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
 import { undo } from "@/lib/ai-edition/store/undo";
@@ -153,6 +154,30 @@ describe("importPendingRecording", () => {
 		expect(createProject).toHaveBeenCalledTimes(1);
 		expect(addAsset).toHaveBeenCalledWith("C:\\recordings\\recording-1.mp4", "recording-1.mp4");
 		expect(api.setCurrentRecordingSession).toHaveBeenCalledWith(null);
+	});
+
+	// The Media tab and the timeline show the asset's label: a named take is labelled with its
+	// name, not with the `recording-<id>.mp4` its files keep.
+	it("labels a named take's asset with the take's name", async () => {
+		const api = stubElectronApi("C:\\recordings\\recording-1\\recording-1.mp4") as ReturnType<
+			typeof stubElectronApi
+		> & { nameFreshTake?: unknown };
+		api.nameFreshTake = vi.fn(async () => ({
+			success: true,
+			name: "Aula 1",
+			session: {
+				screenVideoPath: "C:\\recordings\\Aula 1\\recording-1.mp4",
+				createdAt: 0,
+				cursorCaptureMode: "editable-overlay",
+			},
+		}));
+		const unregister = registerTakeNamePrompt((request) => request.resolve("Aula 1"));
+		try {
+			await expect(importPendingRecording()).resolves.toBe(true);
+		} finally {
+			unregister();
+		}
+		expect(addAsset).toHaveBeenCalledWith("C:\\recordings\\Aula 1\\recording-1.mp4", "Aula 1");
 	});
 
 	// The regression: the editor window is destroyed and recreated on every open,

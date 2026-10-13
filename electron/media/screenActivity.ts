@@ -13,6 +13,7 @@ import {
 	ScreenActivityRecorder,
 } from "../../src/lib/ai-edition/timeline/screenActivity";
 import { resolveFfmpeg } from "./audioPeaks";
+import { trackFileReader } from "./takeFileHolders";
 
 /**
  * Where a take's screen changed, for the automatic zooms (`screenActivity.ts` in the renderer
@@ -111,6 +112,7 @@ function decode(ffmpeg: string, videoPath: string, timeoutMs: number): Promise<S
 			windowsHide: true,
 		});
 		runningScans.add(child);
+		trackFileReader(child, videoPath);
 		try {
 			// The preview and the user come first, as for the OCR.
 			if (child.pid) os.setPriority(child.pid, os.constants.priority.PRIORITY_BELOW_NORMAL);

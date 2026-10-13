@@ -175,7 +175,7 @@
 		"openProjectFirst": "Önce bir proje açın",
 		"couldNotAddAsset": "Öğe eklenemedi",
 		"searchPlaceholder": "Medya ara…",
-		"dragHint": "Eklemek için bir klibi aşağıdaki zaman çizelgesine sürükleyin",
+		"dragHint": "Zaman çizelgesine eklemek için bir kartı aşağıda beliren şeride sürükleyin",
 		"emptyHint": "Henüz medya yok — başlamak için bir kayıt içe aktarın.",
 		"importMedia": "Medya içe aktar",
 		"added": "{{label}} eklendi",
@@ -230,7 +230,10 @@
 		"redactRescanNothing": "Nothing changed: the automatic blurs are already up to date.",
 		"redactRescanDone": "Automatic blurs updated: {{added}} added, {{removed}} replaced. Undo with Ctrl+Z.",
 		"transcribeGuest": "Transcribe the computer sound too (call guest)",
-		"transcribeGuestHint": "For a take with separate voice and computer tracks: transcribes both and marks who said each word. Off: only your microphone is transcribed."
+		"transcribeGuestHint": "For a take with separate voice and computer tracks: transcribes both and marks who said each word. Off: only your microphone is transcribed.",
+		"dropToTimeline": "Zaman çizelgesine eklemek için buraya bırakın",
+		"notInProject": "Bu kayıt henüz açık projede değil.",
+		"addToProject": "Projeye ekle"
 	},
 	"exportDialog": {
 		"title": "Dışa Aktar",
@@ -667,13 +670,14 @@
 		"deleteConfirm": "Geri Dönüşüm Kutusu’na taşı",
 		"errors": {
 			"busy": "Bu kayıt hâlâ kaydediliyor veya tamamlanıyor. Birazdan yeniden deneyin.",
-			"inUse": "Bu kaydı başka bir program açık tutuyor. Kapatıp yeniden deneyin.",
+			"inUse": "Başka bir program (Dosya Gezgini, bir oynatıcı veya virüsten koruma) bu kaydı hâlâ açık tutuyor. Kapatıp yeniden deneyin: hiçbir şey silinmedi.",
 			"invalidName": "Bu ad bir klasör için kullanılamaz.",
 			"trashFailed": "Kayıt Geri Dönüşüm Kutusu’na taşınamadı. Hiçbir şey silinmedi.",
 			"notFound": "Bu kayıt artık klasörde değil.",
 			"openFailed": "Bu kayıt açılamadı.",
 			"generic": "Bu kayıtta bir şeyler ters gitti."
-		}
+		},
+		"folderLabel": "Klasör: {{folder}}"
 	},
 	"takeName": {
 		"title": "Bu kayda bir ad verin",

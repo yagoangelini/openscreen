@@ -175,7 +175,7 @@
 		"openProjectFirst": "先にプロジェクトを開いてください",
 		"couldNotAddAsset": "アセットを追加できませんでした",
 		"searchPlaceholder": "メディアを検索…",
-		"dragHint": "クリップを下のタイムラインにドラッグして追加します",
+		"dragHint": "カードを下に表示される帯までドラッグすると、タイムラインに追加できます",
 		"emptyHint": "まだメディアがありません — 録画をインポートして開始してください。",
 		"importMedia": "メディアをインポート",
 		"added": "{{label}} を追加しました",
@@ -230,7 +230,10 @@
 		"redactRescanNothing": "Nothing changed: the automatic blurs are already up to date.",
 		"redactRescanDone": "Automatic blurs updated: {{added}} added, {{removed}} replaced. Undo with Ctrl+Z.",
 		"transcribeGuest": "Transcribe the computer sound too (call guest)",
-		"transcribeGuestHint": "For a take with separate voice and computer tracks: transcribes both and marks who said each word. Off: only your microphone is transcribed."
+		"transcribeGuestHint": "For a take with separate voice and computer tracks: transcribes both and marks who said each word. Off: only your microphone is transcribed.",
+		"dropToTimeline": "ここにドロップしてタイムラインに追加",
+		"notInProject": "この録画はまだ開いているプロジェクトにありません。",
+		"addToProject": "プロジェクトに追加"
 	},
 	"exportDialog": {
 		"title": "エクスポート",
@@ -667,13 +670,14 @@
 		"deleteConfirm": "ごみ箱に移動",
 		"errors": {
 			"busy": "この録画はまだ録画中か、仕上げ処理中です。少し待ってからもう一度お試しください。",
-			"inUse": "別のプログラムがこの録画を開いています。閉じてからもう一度お試しください。",
+			"inUse": "別のプログラム（エクスプローラー、プレーヤー、ウイルス対策ソフトなど）がこの録画をまだ開いています。閉じてからもう一度お試しください。何も削除されていません。",
 			"invalidName": "その名前はフォルダーに使えません。",
 			"trashFailed": "録画をごみ箱に移動できませんでした。何も削除されていません。",
 			"notFound": "この録画はもうフォルダーにありません。",
 			"openFailed": "この録画を開けませんでした。",
 			"generic": "この録画で問題が発生しました。"
-		}
+		},
+		"folderLabel": "フォルダー: {{folder}}"
 	},
 	"takeName": {
 		"title": "録画に名前を付ける",

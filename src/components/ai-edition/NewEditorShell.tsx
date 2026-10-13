@@ -1661,8 +1661,11 @@ export function NewEditorShell() {
 	const missingMedia = useMissingMedia();
 	const mediaReleased = useMediaRelease((s) => s.released > 0);
 	const mediaBlocked = hasProject && (!missingMedia.checked || missingMedia.missing.length > 0);
-	const showTimeline = mode !== "rec" && !mediaBlocked && !mediaReleased;
-	const timelineRow = mode === "media" ? "188px" : `${timelineHeightPx}px`;
+	// The timeline is the Edit tab's. The Media tab used to keep a short one (the "Arrange clips"
+	// strip and the clip lane), which read as the editor's timeline left behind; ordering clips
+	// stays in Edit, and a card dragged on Media drops on a strip of its own (MediaDropZone).
+	const showTimeline = mode === "edit" && !mediaBlocked && !mediaReleased;
+	const timelineRow = `${timelineHeightPx}px`;
 	const bodyColumns = mode === "edit" && chatOpen ? `${chatWidthPx}px 1fr` : "1fr";
 
 	// Drag the chat/stage divider (col-resize) or the timeline's top edge
@@ -1909,6 +1912,7 @@ export function NewEditorShell() {
 			{/* Timeline footer (hidden in Rec mode) — rebuilt from the v4 design. */}
 			{showTimeline ? (
 				<div
+					data-testid="editor-timeline"
 					style={{
 						position: "relative",
 						gridRow: 3,
@@ -1917,19 +1921,17 @@ export function NewEditorShell() {
 						borderTop: "1px solid var(--shell-rule)",
 					}}
 				>
-					{mode !== "media" ? (
-						<div
-							className={v4.timelineResizeHandle}
-							role="separator"
-							aria-orientation="horizontal"
-							aria-label={te("shell.resizeTimeline")}
-							onPointerDown={startTimelineResize}
-						/>
-					) : null}
+					<div
+						className={v4.timelineResizeHandle}
+						role="separator"
+						aria-orientation="horizontal"
+						aria-label={te("shell.resizeTimeline")}
+						onPointerDown={startTimelineResize}
+					/>
 					<V4Timeline
 						tl={tl}
 						setCurrentTime={handleSeek}
-						variant={mode === "media" ? "media" : "edit"}
+						variant="edit"
 						onDropAsset={handleDropAsset}
 						videoSources={videoSources}
 						playing={playing}

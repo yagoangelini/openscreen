@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import os from "node:os";
 import { join } from "node:path";
 import { app } from "electron";
+import { trackFileReader } from "../media/takeFileHolders";
 
 /**
  * Runs `ocr-scan.exe` over a recording: the text on screen, read by Windows' own
@@ -96,6 +97,7 @@ export function runOcrScan(
 			windowsHide: true,
 		});
 		track(child);
+		trackFileReader(child, videoPath);
 		try {
 			// BELOW_NORMAL: the preview and the user come first.
 			if (child.pid) os.setPriority(child.pid, os.constants.priority.PRIORITY_BELOW_NORMAL);
@@ -178,6 +180,7 @@ export function runFrameChangeScan(
 			windowsHide: true,
 		});
 		track(child);
+		trackFileReader(child, videoPath);
 		try {
 			// Like the OCR: the preview and the user come first.
 			if (child.pid) os.setPriority(child.pid, os.constants.priority.PRIORITY_BELOW_NORMAL);

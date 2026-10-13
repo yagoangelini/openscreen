@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { app } from "electron";
 import { resolveFfmpeg } from "./audioPeaks";
+import { trackFileReader } from "./takeFileHolders";
 
 /**
  * The duration and a small thumbnail of a recording, for the library in the Media tab.
@@ -57,7 +58,7 @@ async function slot<T>(work: () => Promise<T>): Promise<T> {
 	}
 }
 
-function runFfmpeg(ffmpeg: string, args: string[]): Promise<string> {
+function runFfmpeg(ffmpeg: string, args: string[], videoPath: string): Promise<string> {
 	return new Promise((resolve) => {
 		let listing = "";
 		const child = spawn(ffmpeg, args, {
@@ -66,6 +67,7 @@ function runFfmpeg(ffmpeg: string, args: string[]): Promise<string> {
 			timeout: RUN_TIMEOUT_MS,
 			killSignal: "SIGKILL",
 		});
+		trackFileReader(child, videoPath);
 		try {
 			if (child.pid) os.setPriority(child.pid, os.constants.priority.PRIORITY_BELOW_NORMAL);
 		} catch {
@@ -132,10 +134,10 @@ async function computePreview(videoPath: string, key: string): Promise<Recording
 			thumbPath,
 		];
 		// A second in, past a black first frame; a take shorter than that gets its first one.
-		const listing = await runFfmpeg(ffmpeg, frameArgs(1));
+		const listing = await runFfmpeg(ffmpeg, frameArgs(1), videoPath);
 		let thumb = await readFile(thumbPath).catch(() => null);
 		if (!thumb || thumb.length === 0) {
-			await runFfmpeg(ffmpeg, frameArgs(null));
+			await runFfmpeg(ffmpeg, frameArgs(null), videoPath);
 			thumb = await readFile(thumbPath).catch(() => null);
 		}
 		const durationSec = parseFfmpegDuration(listing);

@@ -175,7 +175,7 @@
 		"openProjectFirst": "Apri prima un progetto",
 		"couldNotAddAsset": "Impossibile aggiungere il file",
 		"searchPlaceholder": "Cerca media…",
-		"dragHint": "Trascina una clip sulla timeline qui sotto per aggiungerla",
+		"dragHint": "Trascina una scheda sulla striscia che compare in basso per aggiungerla alla timeline",
 		"emptyHint": "Nessun media ancora — importa una registrazione per iniziare.",
 		"importMedia": "Importa media",
 		"added": "{{label}} aggiunto",
@@ -230,7 +230,10 @@
 		"redactRescanNothing": "Nothing changed: the automatic blurs are already up to date.",
 		"redactRescanDone": "Automatic blurs updated: {{added}} added, {{removed}} replaced. Undo with Ctrl+Z.",
 		"transcribeGuest": "Transcribe the computer sound too (call guest)",
-		"transcribeGuestHint": "For a take with separate voice and computer tracks: transcribes both and marks who said each word. Off: only your microphone is transcribed."
+		"transcribeGuestHint": "For a take with separate voice and computer tracks: transcribes both and marks who said each word. Off: only your microphone is transcribed.",
+		"dropToTimeline": "Rilascia qui per aggiungerla alla timeline",
+		"notInProject": "Questa registrazione non è ancora nel progetto aperto.",
+		"addToProject": "Aggiungi al progetto"
 	},
 	"exportDialog": {
 		"title": "Esporta",
@@ -667,13 +670,14 @@
 		"deleteConfirm": "Sposta nel Cestino",
 		"errors": {
 			"busy": "Questa registrazione è ancora in corso o in finalizzazione. Riprova tra poco.",
-			"inUse": "Un altro programma ha aperto questa registrazione. Chiudilo e riprova.",
+			"inUse": "Un altro programma (Esplora file, un lettore o l'antivirus) ha ancora aperta questa registrazione. Chiudilo e riprova: non è stato eliminato nulla.",
 			"invalidName": "Questo nome non si può usare per una cartella.",
 			"trashFailed": "Non è stato possibile spostare la registrazione nel Cestino. Non è stato eliminato nulla.",
 			"notFound": "Questa registrazione non è più nella cartella.",
 			"openFailed": "Impossibile aprire questa registrazione.",
 			"generic": "Qualcosa è andato storto con questa registrazione."
-		}
+		},
+		"folderLabel": "Cartella: {{folder}}"
 	},
 	"takeName": {
 		"title": "Dai un nome a questa registrazione",

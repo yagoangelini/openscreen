@@ -785,7 +785,10 @@ export async function importPendingRecording(
 	const cursorCaptureMode = result.success ? result.session?.cursorCaptureMode : undefined;
 	const warning = result.success ? result.warning : undefined;
 
-	const label = screenPath.split(/[\\/]/).pop() || toastText("editor", "projectNames.asset");
+	// The take's name, as the Media tab and the timeline show it: its files keep their
+	// `recording-<id>` names, which say nothing to the user.
+	const label =
+		named?.title || screenPath.split(/[\\/]/).pop() || toastText("editor", "projectNames.asset");
 	await useProjectStore.getState().createProject(
 		named?.title ??
 			toastText("editor", "projectNames.recording", {

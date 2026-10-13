@@ -22,6 +22,7 @@
 import { spawn } from "node:child_process";
 import { mediaClockAudioArgs, resolveFfmpeg } from "../media/audioPeaks";
 import { createInactivityTimer } from "../media/inactivityTimer";
+import { trackFileReader } from "../media/takeFileHolders";
 import { STT_MEDIA_UNREADABLE, STT_NATIVE_EXTRACTION_UNAVAILABLE } from "./transcriptionContract";
 
 /** What whisper.cpp wants, and what `decodePeaks` already asks ffmpeg for. */
@@ -107,6 +108,7 @@ export async function extractMono16kPcm(
 		],
 		{ stdio: ["ignore", "pipe", "pipe"] },
 	);
+	trackFileReader(child, filePath);
 
 	return new Promise<Float32Array>((resolve, reject) => {
 		const chunks: Float32Array[] = [];

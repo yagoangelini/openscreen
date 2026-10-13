@@ -175,7 +175,7 @@
 		"openProjectFirst": "Nejprve otevřete projekt",
 		"couldNotAddAsset": "Nepodařilo se přidat médium",
 		"searchPlaceholder": "Hledat média…",
-		"dragHint": "Přetáhněte klip na níže uvedenou časovou osu pro přidání",
+		"dragHint": "Přetáhněte kartu na pruh, který se objeví dole, a přidáte ji na časovou osu",
 		"emptyHint": "Zatím žádná média. Importujte nahrávku pro začátek.",
 		"importMedia": "Importovat média",
 		"added": "Přidáno {{label}}",
@@ -230,7 +230,10 @@
 		"redactRescanNothing": "Nothing changed: the automatic blurs are already up to date.",
 		"redactRescanDone": "Automatic blurs updated: {{added}} added, {{removed}} replaced. Undo with Ctrl+Z.",
 		"transcribeGuest": "Transcribe the computer sound too (call guest)",
-		"transcribeGuestHint": "For a take with separate voice and computer tracks: transcribes both and marks who said each word. Off: only your microphone is transcribed."
+		"transcribeGuestHint": "For a take with separate voice and computer tracks: transcribes both and marks who said each word. Off: only your microphone is transcribed.",
+		"dropToTimeline": "Pusťte sem a přidáte ji na časovou osu",
+		"notInProject": "Tato nahrávka zatím není v otevřeném projektu.",
+		"addToProject": "Přidat do projektu"
 	},
 	"exportDialog": {
 		"title": "Export",
@@ -667,13 +670,14 @@
 		"deleteConfirm": "Přesunout do koše",
 		"errors": {
 			"busy": "Tato nahrávka se ještě nahrává nebo dokončuje. Zkuste to za chvíli znovu.",
-			"inUse": "Tuto nahrávku má otevřenou jiný program. Zavřete ho a zkuste to znovu.",
+			"inUse": "Jiný program (Průzkumník souborů, přehrávač nebo antivirus) má tuto nahrávku stále otevřenou. Zavřete ho a zkuste to znovu: nic nebylo smazáno.",
 			"invalidName": "Tento název nelze použít pro složku.",
 			"trashFailed": "Nahrávku se nepodařilo přesunout do koše. Nic nebylo smazáno.",
 			"notFound": "Tato nahrávka už ve složce není.",
 			"openFailed": "Tuto nahrávku se nepodařilo otevřít.",
 			"generic": "S touto nahrávkou se něco pokazilo."
-		}
+		},
+		"folderLabel": "Složka: {{folder}}"
 	},
 	"takeName": {
 		"title": "Pojmenujte tuto nahrávku",

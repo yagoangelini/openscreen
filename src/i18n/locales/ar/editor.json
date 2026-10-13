@@ -175,7 +175,7 @@
 		"openProjectFirst": "افتح مشروعًا أولاً",
 		"couldNotAddAsset": "تعذّرت إضافة الملف",
 		"searchPlaceholder": "بحث في الوسائط...",
-		"dragHint": "اسحب مقطعًا إلى المخطط الزمني أدناه لإضافته",
+		"dragHint": "اسحب بطاقة إلى الشريط الذي يظهر في الأسفل لإضافتها إلى المخطط الزمني",
 		"emptyHint": "لا توجد وسائط بعد — استورد تسجيلاً للبدء.",
 		"importMedia": "استيراد وسائط",
 		"added": "تمت إضافة {{label}}",
@@ -230,7 +230,10 @@
 		"redactRescanNothing": "Nothing changed: the automatic blurs are already up to date.",
 		"redactRescanDone": "Automatic blurs updated: {{added}} added, {{removed}} replaced. Undo with Ctrl+Z.",
 		"transcribeGuest": "Transcribe the computer sound too (call guest)",
-		"transcribeGuestHint": "For a take with separate voice and computer tracks: transcribes both and marks who said each word. Off: only your microphone is transcribed."
+		"transcribeGuestHint": "For a take with separate voice and computer tracks: transcribes both and marks who said each word. Off: only your microphone is transcribed.",
+		"dropToTimeline": "أفلتها هنا لإضافتها إلى المخطط الزمني",
+		"notInProject": "هذا التسجيل ليس في المشروع المفتوح بعد.",
+		"addToProject": "إضافة إلى المشروع"
 	},
 	"exportDialog": {
 		"title": "تصدير",
@@ -667,13 +670,14 @@
 		"deleteConfirm": "نقل إلى سلة المحذوفات",
 		"errors": {
 			"busy": "لا يزال هذا التسجيل قيد التسجيل أو الإنهاء. حاول مرة أخرى بعد قليل.",
-			"inUse": "برنامج آخر يفتح هذا التسجيل. أغلقه وحاول مرة أخرى.",
+			"inUse": "لا يزال برنامج آخر (مستكشف الملفات أو مشغّل أو برنامج مكافحة الفيروسات) يفتح هذا التسجيل. أغلقه وحاول مرة أخرى: لم يُحذف شيء.",
 			"invalidName": "لا يمكن استخدام هذا الاسم لمجلد.",
 			"trashFailed": "تعذّر نقل التسجيل إلى سلة المحذوفات. لم يُحذف أي شيء.",
 			"notFound": "لم يعد هذا التسجيل في المجلد.",
 			"openFailed": "تعذّر فتح هذا التسجيل.",
 			"generic": "حدث خطأ ما في هذا التسجيل."
-		}
+		},
+		"folderLabel": "المجلد: {{folder}}"
 	},
 	"takeName": {
 		"title": "سمِّ هذا التسجيل",

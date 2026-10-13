@@ -175,7 +175,7 @@
 		"openProjectFirst": "Abre un proyecto primero",
 		"couldNotAddAsset": "No se pudo añadir el archivo",
 		"searchPlaceholder": "Buscar contenido…",
-		"dragHint": "Arrastra un clip a la línea de tiempo de abajo para añadirlo",
+		"dragHint": "Arrastra una tarjeta a la franja que aparece abajo para añadirla a la línea de tiempo",
 		"emptyHint": "Aún no hay contenido — importa una grabación para empezar.",
 		"importMedia": "Importar contenido",
 		"added": "{{label}} añadido",
@@ -230,7 +230,10 @@
 		"redactRescanNothing": "Nothing changed: the automatic blurs are already up to date.",
 		"redactRescanDone": "Automatic blurs updated: {{added}} added, {{removed}} replaced. Undo with Ctrl+Z.",
 		"transcribeGuest": "Transcribe the computer sound too (call guest)",
-		"transcribeGuestHint": "For a take with separate voice and computer tracks: transcribes both and marks who said each word. Off: only your microphone is transcribed."
+		"transcribeGuestHint": "For a take with separate voice and computer tracks: transcribes both and marks who said each word. Off: only your microphone is transcribed.",
+		"dropToTimeline": "Suelta aquí para añadirla a la línea de tiempo",
+		"notInProject": "Esta grabación todavía no está en el proyecto abierto.",
+		"addToProject": "Añadir al proyecto"
 	},
 	"exportDialog": {
 		"title": "Exportar",
@@ -667,13 +670,14 @@
 		"deleteConfirm": "Mover a la Papelera de reciclaje",
 		"errors": {
 			"busy": "Esta grabación todavía se está grabando o finalizando. Vuelve a intentarlo en un momento.",
-			"inUse": "Otro programa tiene esta grabación abierta. Ciérralo y vuelve a intentarlo.",
+			"inUse": "Otro programa (el Explorador de archivos, un reproductor o el antivirus) todavía tiene esta grabación abierta. Ciérralo y vuelve a intentarlo: no se borró nada.",
 			"invalidName": "Ese nombre no se puede usar para una carpeta.",
 			"trashFailed": "La grabación no pudo ir a la Papelera de reciclaje. No se eliminó nada.",
 			"notFound": "Esta grabación ya no está en la carpeta.",
 			"openFailed": "No se pudo abrir esta grabación.",
 			"generic": "Algo salió mal con esta grabación."
-		}
+		},
+		"folderLabel": "Carpeta: {{folder}}"
 	},
 	"takeName": {
 		"title": "Ponle nombre a esta grabación",

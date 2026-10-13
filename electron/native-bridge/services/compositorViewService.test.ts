@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CURSOR_THEMES, DEFAULT_CURSOR_SPRITES } from "../../../src/lib/cursor/cursorThemes";
 import type { CompositorViewAddon, GifExportStats } from "../../native/compositor-view/addon";
 import {
+	absolutePathsIn,
 	buildCandidatePaths,
 	CompositorViewService,
 	ffmpegSharedBinCandidates,
@@ -833,5 +834,50 @@ describe("resolveSceneAssetPaths", () => {
 		const out = resolved({ background: { kind: "image", path: "/wallpapers/absent.jpg" } });
 
 		expect(out.background.path).toBe("/wallpapers/absent.jpg");
+	});
+});
+
+describe("preview views of a take", () => {
+	it("knows which views were handed a take's files, until they are destroyed", () => {
+		let next = 0;
+		const service = new CompositorViewService({
+			addon: {
+				createView: () => ++next,
+				setActiveClip: vi.fn(),
+				setScene: vi.fn(),
+				destroyView: vi.fn(),
+				stopSharedFrames: vi.fn(),
+			} as unknown as CompositorViewAddon,
+		});
+		const rect = { x: 0, y: 0, width: 10, height: 10 };
+		const a = service.createView(rect, { screenPath: "/rec/Aula/recording-1.mp4" });
+		const b = service.createView(rect, { screenPath: "/rec/Outra/recording-2.mp4" });
+		service.setActiveClip(
+			b,
+			"/rec/Outra/recording-2.mp4",
+			"/rec/Aula/recording-1-webcam.mp4",
+			0,
+			0,
+			0,
+		);
+		const inAula = (file: string) => file.startsWith("/rec/Aula/");
+		expect(service.viewsUsing(inAula)).toEqual([a, b]);
+		service.destroyView(a);
+		expect(service.viewsUsing(inAula)).toEqual([b]);
+	});
+
+	it("reads the absolute paths out of a scene", () => {
+		const scene = JSON.stringify({
+			audio: { stems: [{ path: "C:\\rec\\Aula\\recording-1.mic.wav" }, { path: "relative.wav" }] },
+			cursor: "/rec/Aula/recording-1.cursor.json",
+			share: "\\\\server\\take.mp4",
+			gain: 1,
+		});
+		expect(absolutePathsIn(scene)).toEqual([
+			"C:\\rec\\Aula\\recording-1.mic.wav",
+			"/rec/Aula/recording-1.cursor.json",
+			"\\\\server\\take.mp4",
+		]);
+		expect(absolutePathsIn("not json")).toEqual([]);
 	});
 });

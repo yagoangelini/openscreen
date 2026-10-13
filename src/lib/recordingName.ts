@@ -68,3 +68,19 @@ export function uniqueRecordingName(
 		if (!used.has(fold(candidate))) return candidate;
 	}
 }
+
+/**
+ * Whether `label` is one the app gave a take's video by itself -- its file name
+ * (`recording-<id>.mp4`, what takes were labelled before they had names) or the name of
+ * the folder it was in -- as opposed to one the user typed. Only those follow the take when
+ * it is renamed from the library.
+ */
+export function isAutomaticLabel(
+	label: string | undefined,
+	filePath: string,
+	folderName?: string | null,
+): boolean {
+	if (!label) return true;
+	const fileName = filePath.split(/[\\/]/).pop() ?? filePath;
+	return label === fileName || (Boolean(folderName) && label === folderName);
+}

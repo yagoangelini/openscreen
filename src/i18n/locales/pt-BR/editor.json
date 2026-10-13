@@ -175,7 +175,7 @@
 		"openProjectFirst": "Abra um projeto primeiro",
 		"couldNotAddAsset": "Não foi possível adicionar o arquivo",
 		"searchPlaceholder": "Pesquisar mídia…",
-		"dragHint": "Arraste um clipe para a linha do tempo abaixo para adicioná-lo",
+		"dragHint": "Arraste um card para a faixa que aparece embaixo para pô-lo na linha do tempo",
 		"emptyHint": "Ainda não há mídia — importe uma gravação para começar.",
 		"importMedia": "Importar mídia",
 		"added": "{{label}} adicionado",
@@ -230,7 +230,10 @@
 		"redactRescanNothing": "Nada mudou: os desfoques automáticos já estão em dia.",
 		"redactRescanDone": "Desfoques automáticos atualizados: {{added}} novos, {{removed}} trocados. Desfaça com Ctrl+Z.",
 		"transcribeGuest": "Transcrever também o som do computador (convidado)",
-		"transcribeGuestHint": "Para um take com voz e som do computador separados: transcreve os dois e marca quem disse cada palavra. Desligado: só o seu microfone é transcrito."
+		"transcribeGuestHint": "Para um take com voz e som do computador separados: transcreve os dois e marca quem disse cada palavra. Desligado: só o seu microfone é transcrito.",
+		"dropToTimeline": "Solte aqui para pôr na linha do tempo",
+		"notInProject": "Esta gravação ainda não está no projeto aberto.",
+		"addToProject": "Adicionar ao projeto"
 	},
 	"exportDialog": {
 		"title": "Exportar",
@@ -667,13 +670,14 @@
 		"deleteConfirm": "Mover para a Lixeira",
 		"errors": {
 			"busy": "Esta gravação ainda está sendo gravada ou finalizada. Tente de novo daqui a pouco.",
-			"inUse": "Outro programa está com esta gravação aberta. Feche-o e tente de novo.",
+			"inUse": "Outro programa (o Explorador, um player ou o antivírus) ainda está com esta gravação aberta. Feche-o e tente de novo: nada foi apagado.",
 			"invalidName": "Esse nome não pode ser usado numa pasta.",
 			"trashFailed": "A gravação não foi para a Lixeira. Nada foi apagado.",
 			"notFound": "Esta gravação não está mais na pasta.",
 			"openFailed": "Não deu para abrir esta gravação.",
 			"generic": "Algo deu errado com esta gravação."
-		}
+		},
+		"folderLabel": "Pasta: {{folder}}"
 	},
 	"takeName": {
 		"title": "Dê um nome à gravação",

@@ -4,6 +4,7 @@ import { useProjectStore } from "./projectStore";
 import {
 	assetsUsingFiles,
 	documentUsesFiles,
+	relabelMovedAssets,
 	rewriteOpenProjectMedia,
 	useMediaRelease,
 	withMediaReleased,
@@ -75,6 +76,38 @@ describe("rewriteOpenProjectMedia", () => {
 		useProjectStore.setState({ document: doc("C:\\elsewhere") });
 		expect(await rewriteOpenProjectMedia(moves)).toBe(false);
 		expect(save).not.toHaveBeenCalled();
+	});
+});
+
+describe("relabelMovedAssets", () => {
+	const labelled = (label: string) => {
+		const base = doc(FROM);
+		return { ...base, assets: [{ ...base.assets[0], label }] };
+	};
+	const rename = { from: "recording-1", to: "Aula 1" };
+
+	it("gives an automatic label the take's new name", () => {
+		for (const label of ["recording-1.mp4", "recording-1", ""]) {
+			expect(relabelMovedAssets(labelled(label), moves, rename).assets[0].label).toBe("Aula 1");
+		}
+	});
+
+	it("keeps a label the user typed, and the document when nothing changes", () => {
+		const typed = labelled("Minha abertura");
+		expect(relabelMovedAssets(typed, moves, rename)).toBe(typed);
+		expect(relabelMovedAssets(labelled("recording-1.mp4"), moves)).toEqual(
+			labelled("recording-1.mp4"),
+		);
+		const elsewhere = doc("C:\\elsewhere");
+		expect(relabelMovedAssets(elsewhere, moves, rename)).toBe(elsewhere);
+	});
+
+	it("is applied by the open-project rewrite, history included", async () => {
+		useProjectStore.setState({ document: labelled("recording-1.mp4") });
+		pushHistory({ projectId: "proj_1", doc: labelled("recording-1.mp4") });
+		expect(await rewriteOpenProjectMedia(moves, rename)).toBe(true);
+		expect(useProjectStore.getState().document?.assets[0].label).toBe("Aula 1");
+		expect((past[0].doc as AxcutDocument).assets[0].label).toBe("Aula 1");
 	});
 });
 

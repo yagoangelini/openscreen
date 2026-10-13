@@ -235,4 +235,21 @@ describe("NewEditorShell timeline height", () => {
 
 		expect(root.style.gridTemplateRows).toBe(`58px 1fr ${DEFAULT_TIMELINE_HEIGHT_PX}px`);
 	});
+
+	it("shows no editor timeline on the Media tab, and brings it back on Edit", () => {
+		const { container, getAllByRole } = renderShell();
+		const root = container.firstElementChild as HTMLElement;
+		const tab = (label: RegExp) =>
+			getAllByRole("tab").find((el) => label.test(el.textContent ?? ""));
+		act(() => {
+			fireEvent.click(tab(/media/i) as HTMLElement);
+		});
+		expect(container.querySelector('[data-testid="editor-timeline"]')).toBeNull();
+		expect(root.style.gridTemplateRows).toBe("58px 1fr 0px");
+		act(() => {
+			fireEvent.click(tab(/edit/i) as HTMLElement);
+		});
+		expect(container.querySelector('[data-testid="editor-timeline"]')).not.toBeNull();
+		expect(root.style.gridTemplateRows).toBe(`58px 1fr ${DEFAULT_TIMELINE_HEIGHT_PX}px`);
+	});
 });

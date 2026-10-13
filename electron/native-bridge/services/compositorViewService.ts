@@ -495,11 +495,34 @@ function tryLoadAddon(candidates: string[]): CompositorViewAddon | null {
 	return null;
 }
 
+/** Every string in a scene that looks like an absolute file path (stems, camera, cursor). */
+export function absolutePathsIn(sceneJson: string): string[] {
+	const found: string[] = [];
+	const walk = (value: unknown) => {
+		if (typeof value === "string") {
+			if (/^(?:[a-zA-Z]:[\\/]|\\\\|\/)/.test(value)) found.push(value);
+		} else if (Array.isArray(value)) {
+			for (const item of value) walk(item);
+		} else if (value && typeof value === "object") {
+			for (const item of Object.values(value)) walk(item);
+		}
+	};
+	try {
+		walk(JSON.parse(sceneJson));
+	} catch {
+		// Not JSON: nothing to note.
+	}
+	return found;
+}
+
 export class CompositorViewService {
 	private readonly options: CompositorViewServiceOptions;
 	private readonly rects = new Map<number, CompositorViewRect>();
 	/** Views whose frames go out as shared GPU textures rather than RAM pixels. */
 	private readonly sharedViews = new Set<number>();
+	/** The media files each view was handed (screen, camera, cursor, the scene's stems), so a
+	 *  view still decoding a take can be found and let go before that take is recycled. */
+	private readonly viewFiles = new Map<number, Set<string>>();
 	private addon: CompositorViewAddon | null = null;
 	private loadAttempted = false;
 	private syntheticIdCounter = 0;
@@ -652,6 +675,7 @@ export class CompositorViewService {
 		}
 		const id = addon.createView(rect, paths?.screenPath, paths?.webcamPath, paths?.cursorPath);
 		this.rects.set(id, rect);
+		this.noteFiles(id, [paths?.screenPath, paths?.webcamPath, paths?.cursorPath]);
 		this.shareFrames(addon, id);
 		return id;
 	}
@@ -798,6 +822,20 @@ export class CompositorViewService {
 			return;
 		}
 		addon.setScene(id, resolveSceneAssetPaths(sceneJson));
+		this.noteFiles(id, absolutePathsIn(sceneJson));
+	}
+
+	private noteFiles(id: number, files: ReadonlyArray<string | undefined | null>): void {
+		const known = this.viewFiles.get(id) ?? new Set<string>();
+		for (const file of files) if (typeof file === "string" && file) known.add(file);
+		this.viewFiles.set(id, known);
+	}
+
+	/** The views that were handed any file `isUsed` accepts. */
+	viewsUsing(isUsed: (file: string) => boolean): number[] {
+		return [...this.viewFiles]
+			.filter(([, files]) => [...files].some((file) => isUsed(file)))
+			.map(([id]) => id);
 	}
 
 	setActiveClip(
@@ -813,12 +851,14 @@ export class CompositorViewService {
 			return;
 		}
 		addon.setActiveClip(id, screenPath, webcamPath, webcamOffsetSec, clipIndex, sourceTimeSec);
+		this.noteFiles(id, [screenPath, webcamPath]);
 	}
 
 	destroyView(id: number): void {
 		const addon = this.ensureAddon();
 		this.rects.delete(id);
 		this.sharedViews.delete(id);
+		this.viewFiles.delete(id);
 		if (!addon) {
 			return;
 		}

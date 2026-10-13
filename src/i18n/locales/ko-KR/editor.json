@@ -175,7 +175,7 @@
 		"openProjectFirst": "먼저 프로젝트를 여세요",
 		"couldNotAddAsset": "자산을 추가할 수 없습니다",
 		"searchPlaceholder": "미디어 검색…",
-		"dragHint": "클립을 아래 타임라인으로 드래그하여 추가하세요",
+		"dragHint": "카드를 아래에 나타나는 띠로 드래그하면 타임라인에 추가됩니다",
 		"emptyHint": "아직 미디어가 없습니다 — 녹화 파일을 가져와서 시작하세요.",
 		"importMedia": "미디어 가져오기",
 		"added": "{{label}} 추가됨",
@@ -230,7 +230,10 @@
 		"redactRescanNothing": "Nothing changed: the automatic blurs are already up to date.",
 		"redactRescanDone": "Automatic blurs updated: {{added}} added, {{removed}} replaced. Undo with Ctrl+Z.",
 		"transcribeGuest": "Transcribe the computer sound too (call guest)",
-		"transcribeGuestHint": "For a take with separate voice and computer tracks: transcribes both and marks who said each word. Off: only your microphone is transcribed."
+		"transcribeGuestHint": "For a take with separate voice and computer tracks: transcribes both and marks who said each word. Off: only your microphone is transcribed.",
+		"dropToTimeline": "여기에 놓으면 타임라인에 추가됩니다",
+		"notInProject": "이 녹화는 아직 열린 프로젝트에 없습니다.",
+		"addToProject": "프로젝트에 추가"
 	},
 	"exportDialog": {
 		"title": "내보내기",
@@ -667,13 +670,14 @@
 		"deleteConfirm": "휴지통으로 이동",
 		"errors": {
 			"busy": "이 녹화는 아직 녹화 중이거나 마무리 중입니다. 잠시 후 다시 시도하세요.",
-			"inUse": "다른 프로그램이 이 녹화를 열고 있습니다. 닫은 후 다시 시도하세요.",
+			"inUse": "다른 프로그램(파일 탐색기, 플레이어 또는 백신)이 아직 이 녹화를 열고 있습니다. 닫은 후 다시 시도하세요. 아무것도 삭제되지 않았습니다.",
 			"invalidName": "이 이름은 폴더에 사용할 수 없습니다.",
 			"trashFailed": "녹화를 휴지통으로 옮기지 못했습니다. 아무것도 삭제되지 않았습니다.",
 			"notFound": "이 녹화가 더 이상 폴더에 없습니다.",
 			"openFailed": "이 녹화를 열 수 없습니다.",
 			"generic": "이 녹화에 문제가 생겼습니다."
-		}
+		},
+		"folderLabel": "폴더: {{folder}}"
 	},
 	"takeName": {
 		"title": "녹화 이름 지정",
