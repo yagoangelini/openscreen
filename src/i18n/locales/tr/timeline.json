@@ -39,7 +39,9 @@
 		"cameraTrack": "Kamera",
 		"cameraPip": "PiP",
 		"cameraHidden": "Kamera yok",
-		"scrollKey": "Scroll"
+		"scrollKey": "Scroll",
+		"dragKey": "Sürükle",
+		"noSnap": "Yapışmadan"
 	},
 	"trails": {
 		"zoomIn": "Yakınlaşma: görüntü, yakınlaştırma başlayana kadar yaklaşır",
@@ -148,5 +150,13 @@
 		"lookAllHint": "Buradaki değişiklikler, kendi görünümü olanlar dahil tüm parçalara uygulanır: onlar da yeni değeri alır.",
 		"lookRestore": "Varsayılan görünümü geri yükle",
 		"ownLook": "Kendi görünümü"
+	},
+	"snap": {
+		"playhead": "Oynatma kafası",
+		"clip": "Klip kenarı",
+		"start": "Zaman çizelgesi başı",
+		"end": "Zaman çizelgesi sonu",
+		"edge": "Öğe kenarı",
+		"marker": "İşaretçi"
 	}
 }

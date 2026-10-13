@@ -346,6 +346,48 @@ describe("EditClipModal playhead for framing the crop", () => {
 		expect(videoTime).toBe(50);
 	});
 
+	// The timeline's magnet (timeline/snap.ts), on this dialog's clock: 8 px is 0.8 s here.
+	it("locks a trim grip onto the playhead, lights it, and lets Alt bypass it", () => {
+		const onApply = vi.fn();
+		renderWithI18n(
+			<EditClipModal
+				open
+				onClose={vi.fn()}
+				clip={CLIP}
+				assetMeta={ASSET}
+				videoSources={[{ id: "asset_1", src: "file:///rec.mp4", label: "rec" }]}
+				onApply={onApply}
+			/>,
+		);
+		drag(screen.getByTestId("edit-clip-trim-track"), 503.7, 503.7);
+		const end = screen.getByRole("button", { name: "Adjust clip end" });
+		// 105 s − 548 px = 50.2 s: 0.17 s short of the playhead at 50.37 s.
+		fireEvent.pointerDown(end, { clientX: 0 });
+		act(() => {
+			window.dispatchEvent(new MouseEvent("pointermove", { clientX: -548 }));
+		});
+		expect(screen.getByTestId("edit-clip-playhead")).toHaveAttribute("data-snapped", "true");
+		act(() => {
+			window.dispatchEvent(new MouseEvent("pointerup"));
+		});
+		expect(screen.getByTestId("edit-clip-playhead")).not.toHaveAttribute("data-snapped");
+		fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+		// Exactly the playhead, as the scrub put it (a float, 50.370000000000005), not near it.
+		expect(onApply).toHaveBeenLastCalledWith(20, (503.7 / 1550) * 155, undefined);
+
+		// With Alt held, a gesture that would lock lands where the pointer let go.
+		fireEvent.pointerDown(end, { clientX: 0, altKey: true });
+		act(() => {
+			window.dispatchEvent(new MouseEvent("pointermove", { clientX: 2, altKey: true }));
+		});
+		expect(screen.getByTestId("edit-clip-playhead")).not.toHaveAttribute("data-snapped");
+		act(() => {
+			window.dispatchEvent(new MouseEvent("pointerup"));
+		});
+		fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+		expect(onApply.mock.lastCall?.[1]).toBeCloseTo(50.57, 9);
+	});
+
 	it("is not an edit: Apply stays off and the backdrop still closes", () => {
 		const { onClose } = renderWithVideo();
 		drag(screen.getByTestId("edit-clip-trim-track"), 500, 800);

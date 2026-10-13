@@ -39,7 +39,9 @@
 		"cameraTrack": "攝影機",
 		"cameraPip": "子母畫面",
 		"cameraHidden": "無攝影機",
-		"scrollKey": "Scroll"
+		"scrollKey": "Scroll",
+		"dragKey": "拖曳",
+		"noSnap": "不吸附"
 	},
 	"trails": {
 		"zoomIn": "放大過程：畫面在縮放開始前逐漸放大",
@@ -148,5 +150,13 @@
 		"lookAllHint": "此處的變更適用於所有片段，包括有獨立外觀的片段：它們也會採用新值。",
 		"lookRestore": "還原預設外觀",
 		"ownLook": "自有外觀"
+	},
+	"snap": {
+		"playhead": "播放頭",
+		"clip": "片段邊緣",
+		"start": "時間軸開頭",
+		"end": "時間軸結尾",
+		"edge": "元素邊緣",
+		"marker": "標記"
 	}
 }

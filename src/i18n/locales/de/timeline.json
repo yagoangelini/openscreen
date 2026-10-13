@@ -39,7 +39,9 @@
 		"cameraTrack": "Kamera",
 		"cameraPip": "PiP",
 		"cameraHidden": "Keine Kamera",
-		"scrollKey": "Scroll"
+		"scrollKey": "Scroll",
+		"dragKey": "Ziehen",
+		"noSnap": "Ohne Einrasten"
 	},
 	"trails": {
 		"zoomIn": "Hineinzoomen: Die Ansicht zoomt bis zum Beginn des Zooms hinein",
@@ -148,5 +150,13 @@
 		"lookAllHint": "Änderungen hier gelten für alle Abschnitte, auch für die mit eigenem Aussehen: Sie übernehmen ebenfalls den neuen Wert.",
 		"lookRestore": "Standard-Aussehen wiederherstellen",
 		"ownLook": "Eigenes Aussehen"
+	},
+	"snap": {
+		"playhead": "Abspielkopf",
+		"clip": "Clipkante",
+		"start": "Anfang der Zeitleiste",
+		"end": "Ende der Zeitleiste",
+		"edge": "Elementkante",
+		"marker": "Markierung"
 	}
 }

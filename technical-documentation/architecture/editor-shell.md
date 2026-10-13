@@ -144,8 +144,22 @@ switches on it is checked below. Each path has been verified on this branch.
    duration in disguise: it scales with the recording, so a `1.5%` minimum pill
    width was a 27-second pill on a 30-minute project, and a flex `gap` used as a
    clip separator displaced every clip after it. See `pillAffordance`,
-   `PILL_SNAP_PX` and `CLIP_GUTTER_PX`, and the invariants in
+   `SNAP_RADIUS_PX` and `CLIP_GUTTER_PX`, and the invariants in
    `V4Timeline.geometry.test.tsx`.
+
+   **Every drag snaps through one module**, `src/lib/ai-edition/timeline/snap.ts`:
+   an edge (or, for a move, either edge of the span) within `SNAP_RADIUS_PX` (8 px,
+   turned into seconds by `snapRadiusSec(pxPerSec)`) of a target locks onto it
+   exactly and lets go past the radius. The playhead always wins; then the nearest
+   of clip boundaries, the timeline ends, the edges of every other lane element
+   and the markers. Alt (Option) held bypasses it, also when pressed mid-drag
+   (`watchAltDuringDrag`, which also keeps a lone Alt from toggling the hidden
+   menu bar). A new lane adds its edges to `snapEdgesRef` (with every id a drag
+   may be keyed by as `owners`, so a dragged element is never its own magnet) and
+   calls `snapEdge` / `snapSpan` with `snapTargetsFor(ownIds)` in its move
+   handler, then `showSnapCue(landedOn(hit, finalSec), x, y)` so the cue only
+   claims a lock the clamps kept. Tests: `snap.test.ts` (math and the source
+   mapping), `V4Timeline.snap.test.tsx` (each lane).
 5. **Inspector selection pane** — `src/components/ai-edition/v4/FloatingInspector.tsx`.
    The `SelectionPane` (`:444`) is the kind-switch site, not the facets; add
    an `if (selection.kind === "xxx") { ... }` branch alongside `:513, :612,
