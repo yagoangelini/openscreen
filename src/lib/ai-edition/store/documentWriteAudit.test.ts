@@ -134,6 +134,9 @@ const DECLARED: WritePath[] = [
 	// Planning the automatic zooms again, with the transcript when there is one: the auto-zoom
 	// settings, the transcript pane and the dialog after a recording all call it. One undo step.
 	w("src/components/ai-edition/autoZoomReplan.ts", "replanAutoZooms", "save", "gesture"),
+	// "Restaurar" (a track, or the whole project), after its confirmation dialog. One undo step
+	// for everything it puts back.
+	w("src/components/ai-edition/projectReset.ts", "runProjectReset", "save", "gesture"),
 	// The privacy blurs the OCR pass suggests for a freshly imported recording. Undoable
 	// for the same reason as the auto-zooms below: a suggestion the user may reject.
 	// The camera pieces a fresh take's "Rosto / Tela + câmera" switches make (the HUD's layout

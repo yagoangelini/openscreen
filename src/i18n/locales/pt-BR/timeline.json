@@ -145,7 +145,7 @@
 		"lookScopePiece": "Este trecho",
 		"lookScopeAll": "Todos os trechos",
 		"lookPieceHint": "As mudanças aqui valem só para este trecho. A câmera vai até essa aparência e volta com uma transição suave.",
-		"lookAllHint": "As mudanças aqui valem para todos os trechos que não têm aparência própria.",
+		"lookAllHint": "As mudanças aqui valem para todos os trechos, inclusive os que têm aparência própria: eles também passam a usar o novo valor.",
 		"lookRestore": "Restaurar padrão",
 		"ownLook": "Aparência própria"
 	}

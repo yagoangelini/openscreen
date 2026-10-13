@@ -8,6 +8,7 @@ import { createId } from "../document/ids";
 import { type Interval, replaceTimeline as replaceTimelineOp } from "../document/timeline";
 import { type AxcutAsset, type AxcutDocument, createAudioTrack, documentSchema } from "../schema";
 import { probeAudioDuration, probeVideoDimensions } from "../timeline/duration";
+import { type HistoryLabel, inferHistoryLabel } from "./historyLabels";
 import { clearHistory, currentWriteEpoch, pushHistory } from "./undoStack";
 
 let documentSavesInFlight = 0;
@@ -126,6 +127,12 @@ export interface DocumentWriteOptions {
 	 * ordinary edit wants.
 	 */
 	historyBase?: AxcutDocument | null;
+	/**
+	 * What the history menu calls this step. Optional: left out, the label is read off the
+	 * change itself (`inferHistoryLabel`). Name it where a diff cannot tell what happened --
+	 * an agent turn, a reset, a cleanup that touches several lanes at once.
+	 */
+	historyLabel?: HistoryLabel;
 }
 
 export interface ProjectState {
@@ -262,7 +269,11 @@ function recordHistory(
 ) {
 	if (!opts.history) return;
 	if (!prev || prev === next) return;
-	pushHistory({ projectId: prev.project.id, doc: structuredClone(prev) });
+	pushHistory({
+		projectId: prev.project.id,
+		doc: structuredClone(prev),
+		label: opts.historyLabel ?? inferHistoryLabel(prev, next),
+	});
 }
 
 export const useProjectStore = create<ProjectState>((set, get) => ({

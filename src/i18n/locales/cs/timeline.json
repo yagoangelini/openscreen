@@ -145,7 +145,7 @@
 		"lookScopePiece": "Tento úsek",
 		"lookScopeAll": "Všechny úseky",
 		"lookPieceHint": "Změny zde platí jen pro tento úsek. Kamera do jeho vzhledu plynule přejde a zase se vrátí.",
-		"lookAllHint": "Změny zde platí pro všechny úseky bez vlastního vzhledu.",
+		"lookAllHint": "Změny zde platí pro všechny úseky, včetně těch s vlastním vzhledem: i ty převezmou novou hodnotu.",
 		"lookRestore": "Obnovit výchozí vzhled",
 		"ownLook": "Vlastní vzhled"
 	}

@@ -72,6 +72,7 @@ import {
 	type UnsavedChoice,
 } from "./Modals";
 import { Preview } from "./Preview";
+import { ProjectResetDialog } from "./ProjectResetDialog";
 import {
 	freshRecordingTranscriptOffer,
 	importPendingRecording,
@@ -322,7 +323,7 @@ export function NewEditorShell() {
 	// edit the user just undid came back. `history: false` is load-bearing — a
 	// recording save here would push the restored document straight back onto the
 	// stack and clear the redo the undo had just created.
-	const { runUndo, runRedo } = useUndoRedoShortcuts(() => {
+	const { runUndo, runRedo, runUndoSteps, runRedoSteps } = useUndoRedoShortcuts(() => {
 		const doc = useProjectStore.getState().document;
 		if (doc) void useProjectStore.getState().saveDocument(doc, { history: false });
 	});
@@ -809,7 +810,7 @@ export function NewEditorShell() {
 					toast.info(te("speechCleanup.nothingLeft"));
 					return;
 				}
-				const saved = await saveDocument(next, { history: true });
+				const saved = await saveDocument(next, { history: true, historyLabel: "speechCleanup" });
 				if (saved) {
 					toast.success(
 						te("speechCleanup.applied", {
@@ -1757,6 +1758,8 @@ export function NewEditorShell() {
 					checkForUpdates: handleCheckForUpdates,
 					undo: runUndo,
 					redo: runRedo,
+					undoSteps: runUndoSteps,
+					redoSteps: runRedoSteps,
 				}}
 			/>
 
@@ -1959,6 +1962,7 @@ export function NewEditorShell() {
 					setEditClipTarget(null);
 				}}
 			/>
+			<ProjectResetDialog />
 			<UnsavedChangesModal
 				open={unsavedPrompt !== null}
 				onClose={() => {

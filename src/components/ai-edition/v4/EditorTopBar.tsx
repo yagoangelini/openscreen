@@ -10,6 +10,7 @@ import {
 	PanelLeft,
 	Redo2,
 	RefreshCw,
+	RotateCcw,
 	Save,
 	Sparkles,
 	Star,
@@ -23,10 +24,14 @@ import { useI18n, useScopedT } from "@/contexts/I18nContext";
 import { useShortcuts } from "@/contexts/ShortcutsContext";
 import { useTheme } from "@/hooks/useTheme";
 import { getAvailableLocales, getLocaleName } from "@/i18n/loader";
+import { PROJECT_RESET_SCOPES } from "@/lib/ai-edition/document/projectReset";
+import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
 import { moveMenuFocus } from "@/lib/menuKeyboard";
 import { formatFirstFixedBinding } from "@/lib/shortcuts";
+import { requestProjectReset } from "../projectReset";
 import { StylePresetsMenu } from "../StylePresetsMenu";
 import styles from "./EditorShellV4.module.css";
+import { HistoryButton } from "./HistoryMenu";
 
 export type EditorMode = "media" | "edit" | "rec";
 
@@ -43,6 +48,9 @@ export interface TopBarActions {
 	checkForUpdates: () => void;
 	undo: () => void;
 	redo: () => void;
+	/** The history menu's jump (right-click on the arrows). Absent, the arrows only step. */
+	undoSteps?: (steps: number) => void;
+	redoSteps?: (steps: number) => void;
 }
 
 interface EditorTopBarProps {
@@ -143,37 +151,26 @@ export function EditorTopBar({
 			    cursor — so its entry sits in the bar, reachable from every pane and mode,
 			    rather than in any one pane's header. */}
 			{/* Always mounted, disabled when there is nothing to step to: the bar keeps its width
-			    and the pair reads as the history it is. Same handlers as Ctrl+Z / Ctrl+Shift+Z. */}
-			{/* `aria-disabled`, not `disabled`: a natively disabled button takes no pointer events,
-			    so the tooltip could never open on it. The click does nothing while it is set. */}
-			<Tooltip
-				content={tShortcuts("fixedActions.undo")}
+			    and the pair reads as the history it is. Same handlers as Ctrl+Z / Ctrl+Shift+Z;
+			    a right-click lists the steps behind each (HistoryMenu.tsx). */}
+			<HistoryButton
+				kind="undo"
+				enabled={canUndo}
+				label={tShortcuts("fixedActions.undo")}
 				shortcut={formatFirstFixedBinding("undo", isMac)}
-			>
-				<button
-					type="button"
-					className={styles.iconBtn}
-					aria-label={tShortcuts("fixedActions.undo")}
-					aria-disabled={!canUndo || undefined}
-					onClick={canUndo ? actions.undo : undefined}
-				>
-					<Undo2 size={16} />
-				</button>
-			</Tooltip>
-			<Tooltip
-				content={tShortcuts("fixedActions.redo")}
+				icon={<Undo2 size={16} />}
+				onStep={actions.undo}
+				onJump={actions.undoSteps}
+			/>
+			<HistoryButton
+				kind="redo"
+				enabled={canRedo}
+				label={tShortcuts("fixedActions.redo")}
 				shortcut={formatFirstFixedBinding("redo", isMac)}
-			>
-				<button
-					type="button"
-					className={styles.iconBtn}
-					aria-label={tShortcuts("fixedActions.redo")}
-					aria-disabled={!canRedo || undefined}
-					onClick={canRedo ? actions.redo : undefined}
-				>
-					<Redo2 size={16} />
-				</button>
-			</Tooltip>
+				icon={<Redo2 size={16} />}
+				onStep={actions.redo}
+				onJump={actions.redoSteps}
+			/>
 			<StylePresetsMenu />
 			<button
 				type="button"
@@ -289,6 +286,9 @@ function AppMenu({ actions }: { actions: TopBarActions }) {
 	// The language list unfolds inside the menu rather than in a second popover: the menu is
 	// anchored inline for the no-drag reason above, and a nested surface would need the same.
 	const [languagesOpen, setLanguagesOpen] = useState(false);
+	// The resets unfold the same way, and only with a project open.
+	const [resetsOpen, setResetsOpen] = useState(false);
+	const hasProject = useProjectStore((s) => s.document !== null);
 	const [version, setVersion] = useState<string | null>(null);
 	const [canUpdate, setCanUpdate] = useState(false);
 	const ref = useRef<HTMLDivElement | null>(null);
@@ -328,7 +328,10 @@ function AppMenu({ actions }: { actions: TopBarActions }) {
 	}, [open]);
 
 	useEffect(() => {
-		if (!open) setLanguagesOpen(false);
+		if (!open) {
+			setLanguagesOpen(false);
+			setResetsOpen(false);
+		}
 	}, [open]);
 
 	useEffect(() => {
@@ -483,6 +486,45 @@ function AppMenu({ actions }: { actions: TopBarActions }) {
 								</button>
 							))}
 						</div>
+					) : null}
+					{hasProject ? (
+						<>
+							<div className={styles.appMenuSep} aria-hidden />
+							{/* Back to what the recording's import made: a track, or the whole project.
+							    Each asks first (ProjectResetDialog) and is one Ctrl+Z. */}
+							<button
+								type="button"
+								role="menuitem"
+								className={styles.appMenuRow}
+								aria-expanded={resetsOpen}
+								data-testid="app-menu-resets"
+								onClick={() => setResetsOpen((v) => !v)}
+							>
+								<RotateCcw size={15} />
+								{tEditor("projectReset.menu")}
+								<ChevronDown size={14} className={styles.appMenuChevron} aria-hidden />
+							</button>
+							{resetsOpen ? (
+								<div
+									className={styles.appMenuSub}
+									role="group"
+									aria-label={tEditor("projectReset.menu")}
+								>
+									{PROJECT_RESET_SCOPES.map((scope) => (
+										<button
+											key={scope}
+											type="button"
+											role="menuitem"
+											className={styles.appMenuRow}
+											data-testid={`app-menu-reset-${scope}`}
+											onClick={run(() => requestProjectReset(scope))}
+										>
+											{tEditor(`projectReset.${scope}.menu`)}
+										</button>
+									))}
+								</div>
+							) : null}
+						</>
 					) : null}
 					<div className={styles.appMenuSep} aria-hidden />
 					{/* Only the PERMANENT half of the veto is applied here. A Store/Flathub/Snap/Nix
