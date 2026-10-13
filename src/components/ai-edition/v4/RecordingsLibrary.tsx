@@ -344,7 +344,6 @@ export function RecordingsLibrary({
 										}}
 									>
 										<input
-											// biome-ignore lint/a11y/noAutofocus: the field the user just asked for
 											autoFocus
 											value={renaming.value}
 											maxLength={200}

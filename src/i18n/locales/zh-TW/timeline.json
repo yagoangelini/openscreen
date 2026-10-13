@@ -145,7 +145,7 @@
 		"lookScopePiece": "此片段",
 		"lookScopeAll": "所有片段",
 		"lookPieceHint": "此處的變更只作用於此片段。攝影機會平滑過渡到它的外觀，然後再回來。",
-		"lookAllHint": "此處的變更作用於所有沒有自己外觀的片段。",
+		"lookAllHint": "此處的變更適用於所有片段，包括有獨立外觀的片段：它們也會採用新值。",
 		"lookRestore": "還原預設外觀",
 		"ownLook": "自有外觀"
 	}

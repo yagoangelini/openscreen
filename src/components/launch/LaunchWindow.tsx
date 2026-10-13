@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import { useI18n, useScopedT } from "@/contexts/I18nContext";
 import { getAvailableLocales, getLocaleName } from "@/i18n/loader";
 import { offersEditableCursor } from "@/lib/editableCursorAvailability";
+import { isHudInteractiveTarget } from "@/lib/hudNotices";
 import { canTurnMicrophoneOn } from "@/lib/microphoneAvailability";
 import { sourceDisplayName } from "@/lib/sourceDisplayName";
 import { loadUserPreferences, saveUserPreferences } from "@/lib/userPreferences";
@@ -55,9 +56,9 @@ import {
 	computeHudPopoverMaxHeight,
 	computeHudWindowSize,
 	HUD_BAR_BOTTOM,
-	HUD_GROWTH_RESERVE,
 	HUD_POPOVER_GAP,
 	HUD_STACK_GAP,
+	hudNeedsResize,
 } from "./hudGeometry";
 import styles from "./LaunchWindow.module.css";
 
@@ -432,6 +433,11 @@ export function LaunchWindow() {
 		const noticeHeight = noticeEl
 			? noticeEl.getBoundingClientRect().height || noticeEl.scrollHeight
 			: 0;
+		// Toasts sit just above the bar (HudToaster), so they never cover its controls.
+		document.documentElement.style.setProperty(
+			"--hud-toast-bottom",
+			`${Math.round(HUD_BAR_BOTTOM + barHeight + HUD_POPOVER_GAP)}px`,
+		);
 
 		// The two floating surfaces get their own CSS caps (a 470px-tall language
 		// list would look absurd), but the *window* always reserves room for the
@@ -459,18 +465,13 @@ export function LaunchWindow() {
 		// A different orientation is a different shape entirely (wide-short vs
 		// narrow-tall), so the previous allocation says nothing useful.
 		const orientationChanged = allocated.orientation !== trayLayout;
-		// Grow the moment the content stops fitting. Shrink only once the content
-		// has fallen a whole reserve below what was granted — that asymmetry is the
-		// hysteresis: the bar can grow into its reserve (recording controls, a
-		// longer source name) and back out again without a single native resize,
-		// while a one-off bad reading (an unstyled first paint in dev, say) can't
-		// leave the overlay permanently oversized.
-		const needsResize =
-			orientationChanged ||
-			required.width > allocated.width ||
-			required.height > allocated.height ||
-			granted.width + HUD_GROWTH_RESERVE < allocated.width ||
-			granted.height + HUD_GROWTH_RESERVE < allocated.height;
+		// Grow at once, shrink with hysteresis (see hudNeedsResize).
+		const needsResize = hudNeedsResize({
+			allocated,
+			required,
+			granted,
+			orientationChanged,
+		});
 
 		// The main process keeps this rect on screen, not the window: the window is
 		// mostly transparent reserve, and clamping it would strand the bar at the
@@ -620,7 +621,7 @@ export function LaunchWindow() {
 	// and they are reliable by then — the window is receiving real input again.
 	useEffect(() => {
 		return window.electronAPI?.onHudOverlayCursor?.((x, y) => {
-			if (document.elementFromPoint(x, y)?.closest("[data-hud-interactive='true']")) {
+			if (isHudInteractiveTarget(document.elementFromPoint(x, y))) {
 				setHudMouseEventsEnabled(true);
 			}
 		});
@@ -944,7 +945,8 @@ export function LaunchWindow() {
 			selfViewCameraId,
 		);
 	}, [isWindowsHud, webcamEnabled, selfViewCameraId]);
-	// "Seu microfone parece mudo": a badge on the mic and a toast that stays until signal returns.
+	// "Seu microfone parece mudo": a badge on the mic that stays until signal returns, and a toast
+	// that closes after 3 s like every HUD toast (the badge is the lasting sign).
 	useEffect(() => {
 		return window.recordingExtrasAPI?.onMicSilent((silent) => {
 			setMicSilent(silent);
@@ -952,7 +954,6 @@ export function LaunchWindow() {
 				toast.error(t("micSilent.title"), {
 					id: MIC_SILENT_TOAST_ID,
 					description: t("micSilent.description"),
-					duration: Number.POSITIVE_INFINITY,
 				});
 			} else {
 				toast.dismiss(MIC_SILENT_TOAST_ID);
@@ -1205,9 +1206,7 @@ export function LaunchWindow() {
 			// The pointer is captured by the drag handle anyway; skip the DOM walk.
 			if (isDraggingHudRef.current) return;
 			const target = event.target as HTMLElement | null;
-			setHudMouseEventsEnabled(
-				isPopoverOpen || Boolean(target?.closest("[data-hud-interactive='true']")),
-			);
+			setHudMouseEventsEnabled(isPopoverOpen || isHudInteractiveTarget(target));
 		},
 		[isPopoverOpen, setHudMouseEventsEnabled],
 	);

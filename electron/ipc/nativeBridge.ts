@@ -577,7 +577,10 @@ export function registerNativeBridgeHandlers(context: NativeBridgeContext) {
 						case "document.create":
 							return createSuccessResponse(
 								requestId,
-								await aiEditionService.create(request.payload?.title),
+								await aiEditionService.create(
+									request.payload?.title,
+									request.payload?.editorDefaults,
+								),
 							);
 						case "document.save":
 							return createSuccessResponse(

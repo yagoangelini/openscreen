@@ -489,6 +489,54 @@ export function cameraSegmentsFromRecordingLayout(
 	return { segments: out, ids };
 }
 
+/**
+ * The camera track as the take(s) recorded it: for every recording with a "Rosto / Tela +
+ * câmera" log (`asset.cameraLayout`), the pieces `cameraSegmentsFromRecordingLayout` makes --
+ * the very function the import writes them with -- on an otherwise empty track. No piece keeps
+ * a look of its own. What "Restaurar trilha da câmera" writes; an empty track for a project
+ * whose recordings logged no switch (the default picture-in-picture everywhere).
+ */
+export function cameraSegmentsFromRecordedLayouts(
+	document: Pick<AxcutDocument, "assets" | "timeline">,
+): AxcutCameraSegment[] {
+	let out: AxcutCameraSegment[] = [];
+	for (const asset of document.assets) {
+		if (!asset.cameraLayout) continue;
+		out = cameraSegmentsFromRecordingLayout(
+			out,
+			document.timeline.clips,
+			asset.id,
+			asset.cameraLayout,
+		).segments;
+	}
+	return out;
+}
+
+/**
+ * "Todos os trechos": a look change meant for every piece. The keys it sets stop being
+ * overridden on every piece that had its own value for them, so each piece ends up showing the
+ * new global value; the keys it does not touch keep their overrides (a piece with its own size
+ * keeps it when only the mirror changes for all). The same array when no piece overrode them.
+ */
+export function clearCameraLookKeys(
+	segments: readonly AxcutCameraSegment[],
+	keys: readonly string[],
+): AxcutCameraSegment[] {
+	const drop = new Set(keys);
+	let changed = false;
+	const out = segments.map((segment) => {
+		const own = normalizeCameraLook(segment.overrides);
+		if (!own || !Object.keys(own).some((key) => drop.has(key))) return segment;
+		changed = true;
+		const kept: Record<string, unknown> = {};
+		for (const [key, value] of Object.entries(own)) if (!drop.has(key)) kept[key] = value;
+		const { overrides: _old, ...rest } = segment;
+		const overrides = normalizeCameraLook(kept as CameraLook);
+		return overrides ? { ...rest, overrides } : rest;
+	});
+	return changed ? out : (segments as AxcutCameraSegment[]);
+}
+
 /** Put a piece back to the default: its stored fragments go, and the gap left is an
  *  implicit picture-in-picture piece. An implicit piece is already there. */
 export function removeCameraPiece(

@@ -142,6 +142,9 @@ const DECLARED: WritePath[] = [
 	// Planning the automatic zooms again, with the transcript when there is one: the auto-zoom
 	// settings, the transcript pane and the dialog after a recording all call it. One undo step.
 	w("src/components/ai-edition/autoZoomReplan.ts", "replanAutoZooms", "save", "gesture"),
+	// "Restaurar" (a track, or the whole project), after its confirmation dialog. One undo step
+	// for everything it puts back.
+	w("src/components/ai-edition/projectReset.ts", "runProjectReset", "save", "gesture"),
 	// The privacy blurs the OCR pass suggests for a freshly imported recording. Undoable
 	// for the same reason as the auto-zooms below: a suggestion the user may reject.
 	// The camera pieces a fresh take's "Rosto / Tela + câmera" switches make (the HUD's layout
@@ -176,7 +179,28 @@ const DECLARED: WritePath[] = [
 	// "Speed up the picked ones" under Auto-enhance > Speed up waits: the user ticked which.
 	w("src/components/ai-edition/v4/V4Timeline.tsx", "applyWaitSpeedUps", "save", "gesture"),
 	// "Apply to this project's transcripts" under the glossary: the user clicked it.
-	w("src/components/ai-edition/v4/MediaStage.tsx", "applyGlossaryToTranscripts", "save", "gesture"),
+	w(
+		"src/components/ai-edition/v4/ProjectTranscriptionSettings.tsx",
+		"applyGlossaryToTranscripts",
+		"save",
+		"gesture",
+	),
+	// A project's own transcription setting in the Media panel, changed or reset to the default.
+	w(
+		"src/components/ai-edition/v4/ProjectTranscriptionSettings.tsx",
+		"writeProjectOverrides",
+		"save",
+		"gesture",
+	),
+	// "Salvar como padrão" on one of them: the project goes back to following the default.
+	w(
+		"src/components/ai-edition/v4/ProjectTranscriptionSettings.tsx",
+		"promoteProjectOverride",
+		"save",
+		"gesture",
+	),
+	// "Aplicar ao projeto aberto" in the defaults dialog: the user clicked it.
+	w("src/components/ai-edition/defaults/DefaultsDialog.tsx", "applyToProject", "save", "gesture"),
 	// Renaming the project from the title field.
 	w("src/components/ai-edition/NewEditorShell.tsx", "handleRenameProject", "save", "gesture"),
 	// Ctrl+S / File > Save.

@@ -145,7 +145,7 @@
 		"lookScopePiece": "Este fragmento",
 		"lookScopeAll": "Todos los fragmentos",
 		"lookPieceHint": "Los cambios aquí solo se aplican a este fragmento. La cámara pasa a su aspecto y vuelve con una transición suave.",
-		"lookAllHint": "Los cambios aquí se aplican a todos los fragmentos sin aspecto propio.",
+		"lookAllHint": "Los cambios aquí se aplican a todos los tramos, incluidos los que tienen un aspecto propio: también toman el nuevo valor.",
 		"lookRestore": "Restablecer aspecto",
 		"ownLook": "Aspecto propio"
 	}

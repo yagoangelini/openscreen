@@ -35,7 +35,13 @@ export async function applyAgentDocumentIfCurrent(
 	// `setState` by design, could not take it back off. A rejected agent edit left a
 	// phantom Ctrl+Z step and a cleared `future` for something that never happened.
 	store.setDocument(parsed, { history: false });
-	if (await store.saveDocument(parsed, { history: true, historyBase: previous })) {
+	if (
+		await store.saveDocument(parsed, {
+			history: true,
+			historyBase: previous,
+			historyLabel: "agentTurn",
+		})
+	) {
 		return "applied";
 	}
 

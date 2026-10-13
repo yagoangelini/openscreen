@@ -12,6 +12,7 @@ import {
 	HUD_POPOVER_MAX_HEIGHT,
 	HUD_POPOVER_MIN_HEIGHT,
 	HUD_STACK_WIDTH,
+	hudNeedsResize,
 } from "./hudGeometry";
 
 const SCREEN = 1080;
@@ -130,5 +131,27 @@ describe("computeHudBarMaxHeight", () => {
 		expect(max + HUD_BAR_BOTTOM + HUD_POPOVER_GAP + HUD_POPOVER_MIN_HEIGHT).toBeLessThanOrEqual(
 			SCREEN,
 		);
+	});
+});
+
+describe("hudNeedsResize", () => {
+	// A HUD notice measures about 130 px (title, two lines, buttons); the reserve is 120.
+	const plain = size(900, 52);
+	const withNotice = size(900, 52, 130);
+	const resize = (allocated: { width: number; height: number }, now: typeof plain) =>
+		hudNeedsResize({ allocated, ...now, orientationChanged: false });
+
+	it("grows the window when a notice that does not fit the reserve opens", () => {
+		expect(resize(plain.granted, withNotice)).toBe(true);
+	});
+
+	it("shrinks it back once that notice closes", () => {
+		expect(resize(withNotice.granted, plain)).toBe(true);
+	});
+
+	it("leaves the window alone for a notice short enough to fit the reserve", () => {
+		const short = size(900, 52, 60);
+		expect(resize(plain.granted, short)).toBe(false);
+		expect(resize(plain.granted, plain)).toBe(false);
 	});
 });

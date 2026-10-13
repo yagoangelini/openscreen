@@ -21,6 +21,10 @@ import type { SttWhisperModelPreference } from "../../electron/stt/transcription
 
 const PREFS_KEY = "openscreen_user_preferences";
 
+/** The MP4 frame rates the export dialog offers. */
+export const EXPORT_FPS_OPTIONS = [24, 30, 60] as const;
+export type ExportFps = (typeof EXPORT_FPS_OPTIONS)[number];
+
 /** What the automatic zooms of a new recording follow: asked each time, or a remembered answer. */
 export type AutoZoomAfterRecording = "ask" | "transcript" | "cursor";
 
@@ -33,6 +37,8 @@ export interface UserPreferences {
 	exportQuality: ExportQuality;
 	/** Default export format */
 	exportFormat: ExportFormat;
+	/** Default MP4 frame rate of the export dialog. */
+	exportFps: ExportFps;
 	/** Folder used for the most recent successful export, if any */
 	exportFolder: string | null;
 	/** Folder of the most recently opened project, if any */
@@ -98,6 +104,7 @@ export const DEFAULT_PREFS: UserPreferences = {
 	aspectRatio: DEFAULT_EDITOR_LAYOUT_SETTINGS.aspectRatio,
 	exportQuality: DEFAULT_EXPORT_SETTINGS.quality,
 	exportFormat: DEFAULT_EXPORT_SETTINGS.format,
+	exportFps: 60,
 	exportFolder: null,
 	projectFolder: null,
 	trayLayout: "horizontal",
@@ -207,6 +214,7 @@ export function loadUserPreferences(): UserPreferences {
 		exportQuality:
 			raw.exportQuality === "medium" ||
 			raw.exportQuality === "good" ||
+			raw.exportQuality === "high" ||
 			raw.exportQuality === "source"
 				? (raw.exportQuality as ExportQuality)
 				: DEFAULT_PREFS.exportQuality,
@@ -214,6 +222,9 @@ export function loadUserPreferences(): UserPreferences {
 			raw.exportFormat === "gif" || raw.exportFormat === "mp4"
 				? (raw.exportFormat as ExportFormat)
 				: DEFAULT_PREFS.exportFormat,
+		exportFps: (EXPORT_FPS_OPTIONS as readonly unknown[]).includes(raw.exportFps)
+			? (raw.exportFps as ExportFps)
+			: DEFAULT_PREFS.exportFps,
 		exportFolder:
 			typeof raw.exportFolder === "string" && raw.exportFolder.length > 0
 				? raw.exportFolder

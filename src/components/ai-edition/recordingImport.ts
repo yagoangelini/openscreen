@@ -24,6 +24,7 @@ import {
 import { createId } from "@/lib/ai-edition/document/ids";
 import { clipAwaitsProbedDuration } from "@/lib/ai-edition/document/timeline";
 import { nameFreshTake } from "@/lib/ai-edition/freshTakeName";
+import { resolveProjectTranscriptionSettings } from "@/lib/ai-edition/projectTranscriptionSettings";
 import {
 	AUTO_REDACT_SOURCE,
 	parseOcrScan,
@@ -50,7 +51,6 @@ import {
 	getTelemetryWithFramePopups,
 } from "@/lib/ai-edition/timeline/framePopups";
 import type { ScreenActivity } from "@/lib/ai-edition/timeline/screenActivity";
-import { loadUserPreferences } from "@/lib/userPreferences";
 import { nativeBridgeClient } from "@/native/client";
 
 // Fresh recordings used to get cursor-dwell zooms on load (legacy editor
@@ -234,7 +234,9 @@ export type ApplyFreshRecordingAutoZoomsDeps = {
  * A deadline that expires says only "no answer yet", which reads as ON like every other
  * unreadable answer.
  */
-async function readAutoZoomPref(timeoutMs = DOCUMENT_SAVES_WAIT_TIMEOUT_MS): Promise<boolean> {
+export async function readAutoZoomPref(
+	timeoutMs = DOCUMENT_SAVES_WAIT_TIMEOUT_MS,
+): Promise<boolean> {
 	try {
 		const read = (async () => {
 			const prefs = await window.electronAPI?.getRecordingPrefs?.();
@@ -524,7 +526,10 @@ export async function applyFreshRecordingRedactions(
 	}
 	const spans = trackDetections(
 		parsed,
-		parseSensitiveTerms(deps.terms ?? loadUserPreferences().autoRedactTerms),
+		parseSensitiveTerms(
+			deps.terms ??
+				resolveProjectTranscriptionSettings(useProjectStore.getState().document).autoRedactTerms,
+		),
 	);
 	if (spans.length === 0) return 0;
 
@@ -579,7 +584,10 @@ export async function rescanAutoRedactions(
 ): Promise<AutoRedactionRescan> {
 	const scan =
 		deps.scan ?? ((videoPath: string) => window.electronAPI?.scanRecordingText?.(videoPath));
-	const terms = parseSensitiveTerms(deps.terms ?? loadUserPreferences().autoRedactTerms);
+	const terms = parseSensitiveTerms(
+		deps.terms ??
+			resolveProjectTranscriptionSettings(useProjectStore.getState().document).autoRedactTerms,
+	);
 	const outcome: AutoRedactionRescan = {
 		scanned: 0,
 		failed: 0,
@@ -761,7 +769,8 @@ export async function importPendingRecording(
 			if (enabled) void prefetchFreshRecordingTelemetry();
 		});
 	}
-	if (loadUserPreferences().autoRedact) {
+	// The project the take lands in decides: its own switch, else the default.
+	if (resolveProjectTranscriptionSettings(useProjectStore.getState().document).autoRedact) {
 		void applyFreshRecordingRedactions(screenPath, { onScanIssue: onRedactionIssue }).then(
 			(count) => {
 				if (count > 0) onRedacted?.(count);

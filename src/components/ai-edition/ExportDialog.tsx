@@ -38,7 +38,7 @@ import {
 import { calculateMp4ExportSettings, wouldUpscale } from "@/lib/exporter/mp4ExportSettings";
 import { outputFrameCount } from "@/lib/exporter/outputFrameCount";
 import { exportBaseName } from "@/lib/exportFileName";
-import { loadUserPreferences, saveUserPreferences } from "@/lib/userPreferences";
+import { type ExportFps, loadUserPreferences, saveUserPreferences } from "@/lib/userPreferences";
 import {
 	cancelExportNative,
 	exportGifNative,
@@ -181,9 +181,10 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 	// No usable GPU: the export still applies every effect (output is identical), it
 	// just runs on the software encoder and takes minutes instead of seconds.
 	const cpuCompositor = useIsCpuCompositor();
-	const [format, setFormat] = useState<ExportFormat>("mp4");
-	const [quality, setQuality] = useState<ExportQuality>("good");
-	const [fps, setFps] = useState<24 | 30 | 60>(60);
+	// Each open starts from the export defaults ("Padrões"); a pick here is for this export.
+	const [format, setFormat] = useState<ExportFormat>(() => loadUserPreferences().exportFormat);
+	const [quality, setQuality] = useState<ExportQuality>(() => loadUserPreferences().exportQuality);
+	const [fps, setFps] = useState<ExportFps>(() => loadUserPreferences().exportFps);
 	const [gifFrameRate, setGifFrameRate] = useState<GifFrameRate>(15);
 	const [gifSize, setGifSize] = useState<GifSizePreset>("medium");
 	const [gifLoop, setGifLoop] = useState(true);
@@ -304,6 +305,15 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 		const even = (n: number) => Math.max(2, Math.round(n * scale) & ~1);
 		return { width: even(source.width), height: even(source.height) };
 	};
+
+	useEffect(() => {
+		if (open) {
+			const prefs = loadUserPreferences();
+			setFormat(prefs.exportFormat);
+			setQuality(prefs.exportQuality);
+			setFps(prefs.exportFps);
+		}
+	}, [open]);
 
 	useEffect(() => {
 		if (!open) {
