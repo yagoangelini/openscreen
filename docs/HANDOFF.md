@@ -31,7 +31,7 @@ As decisões e o porquê de cada fase estão em [`PLANO-FORK.md`](PLANO-FORK.md)
 
 ## Estado atual
 
-`main` do fork = **v2.7.0**, publicada e marcada como Latest. Desde a 2.1.0 o fork contém o **OpenScreen 2.0** do upstream (veja "Sincronizar com o upstream" abaixo). O histórico do fork, em ordem:
+`main` do fork = **v2.7.1**, publicada e marcada como Latest. Desde a 2.1.0 o fork contém o **OpenScreen 2.0** do upstream (veja "Sincronizar com o upstream" abaixo). O histórico do fork, em ordem:
 
 | Versão | Como entrou | Conteúdo |
 |---|---|---|
@@ -50,6 +50,7 @@ As decisões e o porquê de cada fase estão em [`PLANO-FORK.md`](PLANO-FORK.md)
 | 2.5.0 | PRs yagoangelini/openscreen#23 a #31 | identidade do fork (Yago Angelini) e assinatura autoassinada, parada instantânea e início na hora, transcrição turbo pt-BR com vocabulário M365/IA, correções do E2E da 2.4.0, Limpar fala, quem fala, palavras sensíveis próprias, aprovar e desfazer respostas da IA, desenhar na tela, janela da câmera, aviso de mic mudo, destaque e passos, Melhorar a voz, câmera 3D |
 | 2.6.0 | PRs yagoangelini/openscreen#35 a #37 | auto-zoom diretor (lê a tela: menus por hover, diálogos, trocas de página; pan entre áreas, seguir o ponteiro) e cursor sem atraso (suavização de fase zero, relógio pelo primeiro quadro, leitura 4× mais rápida) |
 | 2.7.0 | PRs yagoangelini/openscreen#39 a #48 | gravação na hora (contagem 5 s, câmera em paralelo), parar no aperto sem o clique, Rosto/Tela no aperto, primeiros quadros limpos, pedaços da câmera na importação, biblioteca de gravações (subpasta por take, nome ao terminar, renomear e excluir), Padrões globais, avisos do HUD e prévia da câmera, Todos os trechos, Restaurar e histórico do desfazer |
+| 2.7.1 | PRs yagoangelini/openscreen#50 a #52 | ímã na timeline (agulha, cortes, bordas; Alt solta), aba Mídia (excluir o take aberto sem prompt do Windows, sem timeline, um card por gravação) |
 
 **O que a 1.16.0 trouxe:**
 
