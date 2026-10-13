@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { folderMoveMapper } from "../../src/lib/mediaPathRewrite";
 import {
 	clearPendingTake,
 	collectRecoverableTakes,
@@ -9,6 +10,7 @@ import {
 	RECOVERABLE_TAKE_MIN_BYTES,
 	readPendingTakes,
 	recordPendingTake,
+	rewritePendingTakePaths,
 	settlePendingTakeHandOff,
 } from "./pendingTakes";
 
@@ -128,5 +130,30 @@ describe("the hand-off to the editor", () => {
 		await recordPendingTake(dir, { screenVideoPath: screen, createdAt: 8 });
 		await settlePendingTakeHandOff(dir, null, null);
 		expect(await readPendingTakes(dir)).toHaveLength(1);
+	});
+});
+
+describe("rewritePendingTakePaths", () => {
+	it("follows a take whose folder was renamed, and leaves the others", async () => {
+		const from = path.join(dir, "recording-1");
+		const to = path.join(dir, "Aula 1");
+		await recordPendingTake(dir, {
+			screenVideoPath: path.join(from, "recording-1.mp4"),
+			webcamVideoPath: path.join(from, "recording-1-webcam.mp4"),
+			createdAt: 1,
+		});
+		await recordPendingTake(dir, {
+			screenVideoPath: path.join(dir, "recording-2.mp4"),
+			createdAt: 2,
+		});
+		await rewritePendingTakePaths(dir, folderMoveMapper(from, to));
+		expect(await readPendingTakes(dir)).toEqual([
+			{
+				screenVideoPath: path.join(to, "recording-1.mp4"),
+				webcamVideoPath: path.join(to, "recording-1-webcam.mp4"),
+				createdAt: 1,
+			},
+			{ screenVideoPath: path.join(dir, "recording-2.mp4"), createdAt: 2 },
+		]);
 	});
 });

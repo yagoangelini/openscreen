@@ -27,6 +27,7 @@ import {
 } from "../TranscriptionStatus";
 import styles from "./EditorShellV4.module.css";
 import { ProjectTranscriptionSettings } from "./ProjectTranscriptionSettings";
+import { RecordingsLibrary } from "./RecordingsLibrary";
 
 const ASSET_MIME = "application/x-axcut-asset";
 const THUMB_GRADIENTS = [
@@ -72,8 +73,11 @@ export async function addSelectedAssetToTimeline(
 
 export function MediaStage({
 	onAddToTimeline,
+	onShowEditor,
 }: {
 	onAddToTimeline: (assetId: string) => Promise<void>;
+	/** Back to the editor, after the library opened a recording. */
+	onShowEditor?: () => void;
 }) {
 	const t = useScopedT("editor");
 	const { locale } = useI18n();
@@ -240,6 +244,11 @@ export function MediaStage({
 							<Plus size={14} />
 							{t("mediaStage.importMedia")}
 						</button>
+						<RecordingsLibrary
+							query={query}
+							onAddToTimeline={onAddToTimeline}
+							onShowEditor={onShowEditor}
+						/>
 					</div>
 
 					{detailOpen && selected ? (

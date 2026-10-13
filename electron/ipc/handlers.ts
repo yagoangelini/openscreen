@@ -1,6 +1,6 @@
 import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 import { EventEmitter } from "node:events";
-import { constants as fsConstants } from "node:fs";
+import { constants as fsConstants, mkdirSync } from "node:fs";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -165,9 +165,11 @@ import { runFrameChangeScan, runOcrScan } from "../recording/ocrScan";
 import {
 	clearPendingTake,
 	collectRecoverableTakes,
+	readPendingTakes,
 	recordPendingTake,
 	settlePendingTakeHandOff,
 } from "../recording/pendingTakes";
+import { takeFolderName, takeFolderNameForFile } from "../recording/recordingsLibrary";
 import { removeEmptyCaptureOutput } from "../recording/removeEmptyCaptureOutput";
 import { TakeCameraLayoutLog, takeMediaTimeMs } from "../recording/takeCameraLayout";
 import { TakeOwnership } from "../recording/takeOwnership";
@@ -200,6 +202,7 @@ import { registerNativeBridgeHandlers } from "./nativeBridge";
 import { createNativeMacMidCaptureErrorWatch } from "./nativeMacMidCaptureErrorWatch";
 import { registerRecordingPrefsHandlers } from "./recordingPrefs";
 import { RecordingStreamRegistry, registerRecordingStreamHandlers } from "./recordingStream";
+import { registerRecordingsLibraryHandlers } from "./recordingsLibraryHandlers";
 import { type SelectSourceContext, selectSourceWithOwnership } from "./selectSourceOwnership";
 
 const PROJECT_FILE_EXTENSION = "openscreen";
@@ -284,6 +287,15 @@ export function defaultCaptureOutputDir(): string {
 
 function applyCaptureOutputDir(folder: string | null | undefined) {
 	captureOutputDir = folder && path.isAbsolute(folder) ? folder : defaultCaptureOutputDir();
+}
+
+/**
+ * The folder a take is written into: one per take, inside the recordings folder, holding
+ * all its files. The user names it once the take ends (`name-fresh-take`), and the Media
+ * tab lists it (`recordingsLibraryHandlers.ts`).
+ */
+function takeOutputDir(recordingId: number): string {
+	return path.join(currentCaptureOutputDir(), takeFolderName(recordingId));
 }
 
 function isInRecordingDirs(filePath: string): boolean {
@@ -578,7 +590,14 @@ function resolveRecordingOutputPath(fileName: string): string {
 		throw new Error("Recording file name must not contain path segments");
 	}
 
-	return path.join(currentCaptureOutputDir(), parsedPath.base);
+	// A take's files (`recording-<id>.webm`, `recording-<id>-webcam.webm`) go into its own
+	// folder, like the native helpers' do; anything else stays at the top.
+	const takeFolder = takeFolderNameForFile(parsedPath.base);
+	const dir = takeFolder
+		? path.join(currentCaptureOutputDir(), takeFolder)
+		: currentCaptureOutputDir();
+	mkdirSync(dir, { recursive: true });
+	return path.join(dir, parsedPath.base);
 }
 
 function isValidDurationMs(value: number | undefined): value is number {
@@ -997,6 +1016,23 @@ async function salvageNativeWindowsFragmentedCapture(screenVideoPath: string | n
 }
 
 /**
+ * A take cancelled before it was a take leaves its folder empty, and the folder goes with
+ * it. Only a `recording-<id>` folder directly in the recordings folder, and only if empty
+ * (`rmdir` refuses anything else), so nothing the user put there can go.
+ */
+async function removeEmptyTakeFolder(filePath: string | null | undefined) {
+	if (!filePath) return;
+	const dir = path.dirname(path.resolve(filePath));
+	if (
+		path.dirname(dir).toLowerCase() !== path.resolve(currentCaptureOutputDir()).toLowerCase() ||
+		!/^recording-d+$/.test(path.basename(dir))
+	) {
+		return;
+	}
+	await fs.rmdir(dir).catch(() => undefined);
+}
+
+/**
  * Best-effort removal of the files a failed or discarded native Windows capture
  * left behind. Each removal is isolated: a helper that outlived its kill still
  * holds the MP4 open on Windows, and an EBUSY there must not mask why we were
@@ -1059,6 +1095,7 @@ async function removeNativeWindowsCaptureOutputs(
 		}
 	}
 	await removeCheckpointIfVideoGone();
+	await removeEmptyTakeFolder(screenVideoPath ?? webcamVideoPath);
 }
 let nativeMacCaptureProcess: ChildProcessWithoutNullStreams | null = null;
 /**
@@ -2990,13 +3027,13 @@ export function registerIpcHandlers(
 						? request.recordingId
 						: Date.now();
 				const outputPath = path.join(
-					currentCaptureOutputDir(),
+					takeOutputDir(recordingId),
 					`${RECORDING_FILE_PREFIX}${recordingId}.mp4`,
 				);
 				const cursorCaptureMode =
 					normalizeCursorCaptureMode(request?.cursor?.mode) ?? "editable-overlay";
 
-				await fs.mkdir(currentCaptureOutputDir(), { recursive: true });
+				await fs.mkdir(takeOutputDir(recordingId), { recursive: true });
 
 				const session = new LinuxNativeCaptureSession({
 					outputPath,
@@ -3070,13 +3107,13 @@ export function registerIpcHandlers(
 						? request.recordingId
 						: Date.now();
 				outputPath = path.join(
-					currentCaptureOutputDir(),
+					takeOutputDir(recordingId),
 					`${RECORDING_FILE_PREFIX}${recordingId}.mp4`,
 				);
 				const cursorCaptureMode =
 					normalizeCursorCaptureMode(request?.cursor?.mode) ?? "editable-overlay";
 
-				await fs.mkdir(currentCaptureOutputDir(), { recursive: true });
+				await fs.mkdir(takeOutputDir(recordingId), { recursive: true });
 
 				// A session prepared before the countdown, if there was one. Taking
 				// it here rather than requiring it is what keeps every caller
@@ -3180,13 +3217,14 @@ export function registerIpcHandlers(
 			if (discard) {
 				session.discard();
 				const discarded = path.join(
-					currentCaptureOutputDir(),
+					takeOutputDir(recordingId),
 					`${RECORDING_FILE_PREFIX}${recordingId}.mp4`,
 				);
 				await Promise.all([
 					fs.rm(discarded, { force: true }),
 					fs.rm(`${discarded}.cursor.json`, { force: true }),
 				]);
+				await removeEmptyTakeFolder(discarded);
 				return { success: true, discarded: true };
 			}
 
@@ -3311,11 +3349,11 @@ export function registerIpcHandlers(
 						? request.recordingId
 						: Date.now();
 				const outputPath = path.join(
-					currentCaptureOutputDir(),
+					takeOutputDir(recordingId),
 					`${RECORDING_FILE_PREFIX}${recordingId}.mp4`,
 				);
 				const webcamOutputPath = path.join(
-					currentCaptureOutputDir(),
+					takeOutputDir(recordingId),
 					`${RECORDING_FILE_PREFIX}${recordingId}-webcam.mp4`,
 				);
 				const sourceDisplay =
@@ -3420,7 +3458,7 @@ export function registerIpcHandlers(
 					outputPath,
 				});
 
-				await fs.mkdir(currentCaptureOutputDir(), { recursive: true });
+				await fs.mkdir(takeOutputDir(recordingId), { recursive: true });
 				nativeWindowsCaptureOutput = "";
 				nativeWindowsCaptureTargetPath = outputPath;
 				nativeWindowsCaptureWebcamTargetPath = request.webcam.enabled ? webcamOutputPath : null;
@@ -3693,6 +3731,7 @@ export function registerIpcHandlers(
 					if (screenPath) {
 						await clearPendingTake(RECORDINGS_DIR, screenPath).catch(() => undefined);
 					}
+					await removeEmptyTakeFolder(screenPath ?? webcamPath);
 					return { success: false, cancelled: true };
 				}
 				return { success: false, error: String(error) };
@@ -3735,7 +3774,7 @@ export function registerIpcHandlers(
 					? request.recordingId
 					: Date.now();
 			const outputPath = path.join(
-				currentCaptureOutputDir(),
+				takeOutputDir(recordingId),
 				`${RECORDING_FILE_PREFIX}${recordingId}.mp4`,
 			);
 			const cursorCaptureMode =
@@ -3817,7 +3856,7 @@ export function registerIpcHandlers(
 				outputs: {
 					screenPath: outputPath,
 					manifestPath: path.join(
-						currentCaptureOutputDir(),
+						takeOutputDir(recordingId),
 						`${RECORDING_FILE_PREFIX}${recordingId}${RECORDING_SESSION_SUFFIX}`,
 					),
 				},
@@ -3833,7 +3872,7 @@ export function registerIpcHandlers(
 				outputPath,
 			});
 
-			await fs.mkdir(currentCaptureOutputDir(), { recursive: true });
+			await fs.mkdir(takeOutputDir(recordingId), { recursive: true });
 			nativeMacCaptureOutput = "";
 			nativeMacCaptureTargetPath = outputPath;
 			nativeMacCaptureRecordingId = recordingId;
@@ -4632,6 +4671,7 @@ export function registerIpcHandlers(
 						fs.rm(target, { force: true }),
 					),
 				);
+				await removeEmptyTakeFolder(preferredPath);
 				if (!stopResult.ok) {
 					console.warn("[native-sck] discarded a take whose stop did not complete", {
 						reason: stopResult.reason,
@@ -6235,6 +6275,51 @@ export function registerIpcHandlers(
 		nativeWindowsMarkersMs.push(Math.max(0, Math.round(mediaMs)));
 		return nativeWindowsMarkersMs.length;
 	};
+
+	// The recordings library in the Media tab, and the name asked for after a take.
+	registerRecordingsLibraryHandlers(ipcMain, {
+		recordingsFolder: currentCaptureOutputDir,
+		guards: {
+			// The take being recorded or stopped right now, on any platform.
+			activeTakePaths: () => {
+				const paths = [
+					nativeWindowsCaptureTargetPath,
+					nativeWindowsCaptureWebcamTargetPath,
+					nativeMacCaptureTargetPath,
+				].filter((value): value is string => Boolean(value));
+				for (const id of [
+					nativeWindowsCaptureRecordingId,
+					nativeMacCaptureRecordingId,
+					linuxNativeCaptureRecordingId,
+				]) {
+					if (typeof id === "number") {
+						paths.push(path.join(takeOutputDir(id), `${RECORDING_FILE_PREFIX}${id}.mp4`));
+					}
+				}
+				return paths;
+			},
+			// Recorded at the start of every take, cleared once it is in a saved project: a take
+			// still listed is being finalized, handed to the editor, or waiting to be recovered.
+			pendingTakePaths: async () =>
+				(await readPendingTakes(RECORDINGS_DIR)).flatMap((take) =>
+					take.webcamVideoPath
+						? [take.screenVideoPath, take.webcamVideoPath]
+						: [take.screenVideoPath],
+				),
+		},
+		documents: aiEditionDocuments,
+		journalDir: () => RECORDINGS_DIR,
+		registryDir: () => DEFAULT_RECORDINGS_DIR,
+		currentSession: () => currentRecordingSession,
+		setCurrentSession: (session) => setCurrentRecordingSessionState(session),
+		takeSettled: async () => {
+			await nativeWindowsStopPromise?.catch(() => undefined);
+			await Promise.race([
+				nativeWindowsHelperExit ?? Promise.resolve(),
+				new Promise((resolve) => setTimeout(resolve, 4_000)),
+			]);
+		},
+	});
 
 	return {
 		addRecordingMarker,

@@ -23,6 +23,7 @@ import {
 } from "@/lib/ai-edition/document/cameraSegments";
 import { createId } from "@/lib/ai-edition/document/ids";
 import { clipAwaitsProbedDuration } from "@/lib/ai-edition/document/timeline";
+import { nameFreshTake } from "@/lib/ai-edition/freshTakeName";
 import { resolveProjectTranscriptionSettings } from "@/lib/ai-edition/projectTranscriptionSettings";
 import {
 	AUTO_REDACT_SOURCE,
@@ -723,16 +724,28 @@ export async function importPendingRecording(
 	if (!api) return false;
 
 	const result = await api.getCurrentRecordingSession();
-	const screenPath = result.success ? result.session?.screenVideoPath : undefined;
+	// The take's name first, while nothing has its files open: it renames the take's folder,
+	// and everything below works on the renamed paths (see freshTakeName.ts).
+	const named =
+		result.success && result.session
+			? await nameFreshTake(result.session, (reason) => {
+					console.warn("[recording] the take could not be renamed:", reason);
+					onWarning?.(toastText("editor", "takeName.renameFailed"));
+				})
+			: null;
+	const screenPath =
+		named?.session.screenVideoPath ??
+		(result.success ? result.session?.screenVideoPath : undefined);
 	if (!screenPath) return false;
 	const cursorCaptureMode = result.success ? result.session?.cursorCaptureMode : undefined;
 	const warning = result.success ? result.warning : undefined;
 
 	const label = screenPath.split(/[\\/]/).pop() || toastText("editor", "projectNames.asset");
 	await useProjectStore.getState().createProject(
-		toastText("editor", "projectNames.recording", {
-			date: formatDateTime(new Date(), currentLocale()),
-		}),
+		named?.title ??
+			toastText("editor", "projectNames.recording", {
+				date: formatDateTime(new Date(), currentLocale()),
+			}),
 	);
 	await useProjectStore.getState().addAsset(screenPath, label);
 	// Before the zoom hand-off below, so the zooms wait for the "face" spans to be pieces.

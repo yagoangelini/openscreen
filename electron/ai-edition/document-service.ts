@@ -35,6 +35,11 @@ import {
 	stylePresetLegacyEditor,
 } from "../../src/lib/ai-edition/stylePresets";
 import {
+	collectMediaPaths,
+	type PathMapper,
+	rewriteMediaPaths,
+} from "../../src/lib/mediaPathRewrite";
+import {
 	parseRecordingLayout,
 	RECORDING_LAYOUT_SUFFIX,
 	type RecordingLayoutOnAsset,
@@ -692,6 +697,56 @@ export class DocumentService {
 			},
 		};
 		return this.saveProject(next);
+	}
+
+	/**
+	 * A recording moved (renamed in the library): every project file pointing into it is
+	 * rewritten to the new paths, each inside its own project queue, so the rewrite never
+	 * lands between a read and a save of that project. Works on the raw JSON, whatever its
+	 * schema version, and writes only the projects that changed. Returns their ids.
+	 *
+	 * The editor rewrites the document it holds open itself (it would otherwise save the
+	 * old paths straight back over this); see `rewriteOpenProjectMedia` in the renderer.
+	 */
+	async rewriteMediaPaths(mapper: PathMapper): Promise<string[]> {
+		await this.ensureProjectsDir();
+		const ids = (await fs.readdir(this.projectsRoot))
+			.filter((name) => name.endsWith(PROJECT_FILE_EXTENSION))
+			.map((name) => name.slice(0, -PROJECT_FILE_EXTENSION.length));
+		const changed: string[] = [];
+		for (const projectId of ids) {
+			this.touch(projectId);
+			await this.enqueue(projectId, async () => {
+				let raw: unknown;
+				try {
+					raw = JSON.parse(await fs.readFile(this.fileFor(projectId), "utf8"));
+				} catch {
+					return;
+				}
+				const result = rewriteMediaPaths(raw, mapper);
+				if (result.changed === 0) return;
+				// writeProjectNow names the file after the document's own id.
+				if ((result.value as { project?: { id?: unknown } })?.project?.id !== projectId) return;
+				await this.writeProjectNow(result.value as AxcutDocument);
+				changed.push(projectId);
+			});
+		}
+		return changed;
+	}
+
+	/**
+	 * Every project with the absolute paths it points at, for "which projects use this
+	 * recording" in the library. Read raw, unrelinked: a listing, not an open.
+	 */
+	async listProjectMediaPaths(): Promise<
+		Array<{ id: string; title: string; updatedAt: string; paths: string[] }>
+	> {
+		return (await this.readAllProjects()).map((doc) => ({
+			id: doc.project.id,
+			title: doc.project.title,
+			updatedAt: doc.project.updatedAt,
+			paths: collectMediaPaths(doc.assets),
+		}));
 	}
 
 	/**

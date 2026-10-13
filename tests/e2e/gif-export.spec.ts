@@ -158,6 +158,13 @@ async function exportFromLoadedVideo(
 		// imported into the project, so waiting for it to be enabled doubles as the
 		// "editor finished loading" gate. `exact` keeps it off the dialog's own
 		// "Export MP4" / "Export GIF" button.
+		// A finished take asks for its name before it is imported (TakeNameDialog): keep the
+		// prefilled one.
+		await editorWindow
+			.getByTestId("take-name-save")
+			.click({ timeout: 15_000 })
+			.catch(() => undefined);
+
 		const openExport = editorWindow.getByRole("button", { name: "Export", exact: true });
 		await expect(openExport).toBeEnabled({ timeout: 30_000 });
 		await openExport.click();

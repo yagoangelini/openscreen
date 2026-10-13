@@ -77,6 +77,16 @@ export function popFuture(): Snapshot | undefined {
 	return futureStack.pop();
 }
 
+/**
+ * Rewrite every document on both stacks in place -- for a recording whose files moved
+ * (renamed in the library): an undo must not bring back paths that no longer exist.
+ */
+export function mapHistory(map: (doc: unknown) => unknown) {
+	for (const stack of [pastStack, futureStack]) {
+		for (const snapshot of stack) snapshot.doc = map(snapshot.doc);
+	}
+}
+
 export function clearHistory() {
 	pastStack.length = 0;
 	futureStack.length = 0;

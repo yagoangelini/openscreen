@@ -13,6 +13,7 @@ import {
 	factoryStylePresetAppearance,
 	stylePresetAppearanceFromSettings,
 } from "../../src/lib/ai-edition/stylePresetsEditor";
+import { folderMoveMapper } from "../../src/lib/mediaPathRewrite";
 import { registerMediaLinks } from "../media/mediaLinksRegistry";
 import { DocumentNotFoundError, DocumentService, ProjectFileError } from "./document-service";
 
@@ -1072,6 +1073,65 @@ describe("DocumentService", () => {
 				service.storedProjectId(path.join(tempDir, "sub", "proj_a.openscreen")),
 			).toBeUndefined();
 			expect(service.storedProjectId(path.join(tempDir, "proj_a.json"))).toBeUndefined();
+		});
+	});
+
+	describe("rewriteMediaPaths (a recording renamed in the library)", () => {
+		it("rewrites every project pointing into the moved folder, and only those", async () => {
+			const from = path.join(mediaDir, "recording-1");
+			const to = path.join(mediaDir, "Aula 1");
+			await fs.mkdir(from, { recursive: true });
+			const video = path.join(from, "recording-1.mp4");
+			await fs.writeFile(video, "x");
+			const other = path.join(mediaDir, "other.mp4");
+			await fs.writeFile(other, "y");
+
+			const a = await service.createProject("A");
+			await service.addAsset(a.project.id, { path: video });
+			const withStems = await service.getProject(a.project.id);
+			await service.saveProject({
+				...withStems,
+				assets: withStems.assets.map((asset) => ({
+					...asset,
+					cameraTrack: {
+						sourcePath: path.join(from, "recording-1-webcam.mp4"),
+						startMs: 0,
+						offsetMs: 0,
+						visible: true,
+					},
+					audioStems: {
+						voicePath: path.join(from, "recording-1.voice.m4a"),
+						systemPath: path.join(from, "recording-1.system.m4a"),
+					},
+				})),
+			});
+			const b = await service.createProject("B");
+			await service.addAsset(b.project.id, { path: other });
+			const before = await fs.readFile(path.join(tempDir, `${b.project.id}.openscreen`), "utf8");
+
+			await fs.rename(from, to);
+			const changed = await service.rewriteMediaPaths(folderMoveMapper(from, to));
+
+			expect(changed).toEqual([a.project.id]);
+			const doc = await service.getProject(a.project.id);
+			expect(doc.assets[0].originalPath).toBe(path.join(to, "recording-1.mp4"));
+			expect(doc.assets[0].cameraTrack?.sourcePath).toBe(path.join(to, "recording-1-webcam.mp4"));
+			expect(doc.assets[0].audioStems).toEqual({
+				voicePath: path.join(to, "recording-1.voice.m4a"),
+				systemPath: path.join(to, "recording-1.system.m4a"),
+			});
+			expect(await fs.readFile(path.join(tempDir, `${b.project.id}.openscreen`), "utf8")).toBe(
+				before,
+			);
+		});
+
+		it("lists the paths each project uses", async () => {
+			const video = path.join(mediaDir, "v.mp4");
+			await fs.writeFile(video, "x");
+			const a = await service.createProject("A");
+			await service.addAsset(a.project.id, { path: video });
+			const listed = await service.listProjectMediaPaths();
+			expect(listed).toEqual([expect.objectContaining({ id: a.project.id, paths: [video] })]);
 		});
 	});
 });

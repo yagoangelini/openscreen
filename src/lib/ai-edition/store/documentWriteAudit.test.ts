@@ -119,6 +119,14 @@ const DECLARED: WritePath[] = [
 		"gesture",
 	),
 
+	// The missing-media panel: "Locate..." repoints the project at the file the user picked,
+	// and "Remove from the project" drops a missing camera. Both are the user's answer.
+	w("src/components/ai-edition/MissingMediaPanel.tsx", "locate", "save", "gesture"),
+	w("src/components/ai-edition/MissingMediaPanel.tsx", "remove", "save", "gesture"),
+	// A recording renamed in the library: the open project follows its files. Not an edit of
+	// the project, and the undo stacks are repointed with it (mapHistory).
+	w("src/lib/ai-edition/store/recordingMedia.ts", "rewriteOpenProjectMedia", "save", "automatic"),
+
 	// The project's names and terms for Whisper (#1023), saved when the field loses focus.
 	w("src/components/ai-edition/v4/MediaStage.tsx", "MediaStage", "save", "gesture"),
 
