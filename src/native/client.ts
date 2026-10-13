@@ -193,11 +193,11 @@ export const nativeBridgeClient = {
 				action: "document.get",
 				payload: { projectId },
 			}),
-		create: (title?: string) =>
+		create: (title?: string, editorDefaults?: Record<string, unknown> | null) =>
 			requireNativeBridgeData<AiEditionDocumentResult>({
 				domain: "aiEdition",
 				action: "document.create",
-				payload: { title },
+				payload: { title, editorDefaults },
 			}),
 		save: (document: unknown) =>
 			requireNativeBridgeData<AiEditionDocumentResult>({

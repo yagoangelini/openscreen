@@ -12,8 +12,8 @@ import {
 	transcribeSourceFileToSegments,
 } from "@/lib/captioning";
 import type { SttRendererStatus } from "@/lib/captioning/transcribe";
-import { loadUserPreferences } from "@/lib/userPreferences";
 import { STT_NATIVE_EXTRACTION_UNAVAILABLE } from "../../../../electron/stt/transcriptionContract";
+import { resolveProjectTranscriptionSettings } from "../projectTranscriptionSettings";
 import type { AxcutDocument, AxcutTranscript, AxcutTranscriptSegment, AxcutWord } from "../schema";
 import { buildTranscriptionPrompt } from "../transcription/vocabulary";
 
@@ -68,8 +68,9 @@ export async function transcribeAsset(
 	const forcedLanguage =
 		options.language && options.language !== "auto" ? options.language : undefined;
 	// The standing terms (Microsoft 365 and AI by default) and the project's names and
-	// terms ride along on every run, background or manual.
-	const prefs = loadUserPreferences();
+	// terms ride along on every run, background or manual. The project's own settings over the
+	// global defaults (`projectTranscriptionSettings.ts`).
+	const prefs = resolveProjectTranscriptionSettings(document);
 	const prompt = buildTranscriptionPrompt(
 		document.project.vocabulary,
 		prefs.transcriptionVocabulary,

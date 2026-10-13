@@ -1,25 +1,17 @@
 import { ArrowDown, Film, Plus, RotateCw, Search, X } from "lucide-react";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Tooltip } from "@/components/ui/tooltip";
 import { useI18n, useScopedT } from "@/contexts/I18nContext";
-import type {
-	AxcutAsset,
-	AxcutDocument,
-	AxcutTranscript,
-	TranscriptLanguageCode,
-} from "@/lib/ai-edition/schema";
+import { resolveProjectTranscriptionSettings } from "@/lib/ai-edition/projectTranscriptionSettings";
+import type { AxcutAsset, AxcutDocument, AxcutTranscript } from "@/lib/ai-edition/schema";
 import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
 import {
 	useAssetTranscriptions,
 	useTranscriptionStore,
 } from "@/lib/ai-edition/store/transcriptionStore";
 import { formatSeconds } from "@/lib/ai-edition/timeline/format";
-import { applyGlossary, parseGlossary } from "@/lib/ai-edition/transcription/glossary";
-import {
-	languageLabel,
-	sortedLanguageOptions,
-} from "@/lib/ai-edition/transcription/languageLabels";
+import { languageLabel } from "@/lib/ai-edition/transcription/languageLabels";
 import {
 	type AssetTranscriptionStatus,
 	type AssetTranscriptionView,
@@ -27,24 +19,14 @@ import {
 	transcriptHasSpeech,
 	transcriptionFailureHintKey,
 } from "@/lib/ai-edition/transcription/status";
-import { DEFAULT_VOCABULARY } from "@/lib/ai-edition/transcription/vocabulary";
-import {
-	effectiveTranscriptionLanguage,
-	loadUserPreferences,
-	saveUserPreferences,
-} from "@/lib/userPreferences";
 import { formatBytes } from "@/utils/formatBytes";
-import {
-	STT_WHISPER_MODEL_BYTES,
-	type SttWhisperModelPreference,
-} from "../../../../electron/stt/transcriptionContract";
-import { rescanAutoRedactions } from "../recordingImport";
 import {
 	TranscriptionProgressBar,
 	TranscriptionStatusDot,
 	useTranscriptionLabel,
 } from "../TranscriptionStatus";
 import styles from "./EditorShellV4.module.css";
+import { ProjectTranscriptionSettings } from "./ProjectTranscriptionSettings";
 
 const ASSET_MIME = "application/x-axcut-asset";
 const THUMB_GRADIENTS = [
@@ -94,63 +76,6 @@ export function MediaStage({
 	onAddToTimeline: (assetId: string) => Promise<void>;
 }) {
 	const t = useScopedT("editor");
-	const [autoTranscribe, setAutoTranscribe] = useState(() => loadUserPreferences().autoTranscribe);
-	const [autoRedact, setAutoRedact] = useState(() => loadUserPreferences().autoRedact);
-	const [redactTerms, setRedactTerms] = useState(() => loadUserPreferences().autoRedactTerms);
-	const [rescanning, setRescanning] = useState(false);
-	const [transcribeGuest, setTranscribeGuest] = useState(
-		() => loadUserPreferences().transcribeGuestAudio,
-	);
-	// "Procurar de novo": the OCR over the project's recordings again, with the sensitive words
-	// as they are now, replacing the automatic blurs (never the user's own) in one undoable edit.
-	const rescanRedactions = useCallback(async () => {
-		saveUserPreferences({ autoRedactTerms: redactTerms });
-		setRescanning(true);
-		try {
-			const result = await rescanAutoRedactions({ terms: redactTerms });
-			if (result.scanned === 0) {
-				toast.error(t("mediaStage.redactRescanFailed"));
-			} else if (result.removed === 0 && result.added === 0) {
-				toast.info(t("mediaStage.redactRescanNothing"));
-			} else if (result.saved) {
-				toast.success(
-					t("mediaStage.redactRescanDone", { added: result.added, removed: result.removed }),
-				);
-			}
-		} finally {
-			setRescanning(false);
-		}
-	}, [redactTerms, t]);
-	const [glossary, setGlossary] = useState(() => loadUserPreferences().glossary);
-	const [standingTerms, setStandingTerms] = useState(
-		() => loadUserPreferences().transcriptionVocabulary,
-	);
-	const [model, setModel] = useState<SttWhisperModelPreference>(
-		() => loadUserPreferences().transcriptionModel,
-	);
-	// The glossary runs on each new transcript by itself; this puts the transcripts the
-	// project already has right too, after the list was edited. One undoable edit, and
-	// the words the user corrected by hand are theirs, so it never touches them.
-	const applyGlossaryToTranscripts = useCallback(async () => {
-		saveUserPreferences({ glossary });
-		const current = useProjectStore.getState().document;
-		if (!current) return;
-		const entries = parseGlossary(glossary);
-		let replaced = 0;
-		const transcripts = current.transcripts.map((transcript) => {
-			const result = applyGlossary(transcript, entries, { keepEditedWords: true });
-			replaced += result.replaced;
-			return result.transcript;
-		});
-		if (replaced === 0) {
-			toast.info(t("mediaStage.glossaryNothingToFix"));
-			return;
-		}
-		const saved = await useProjectStore
-			.getState()
-			.saveDocument({ ...current, transcripts }, { history: true });
-		if (saved) toast.success(t("mediaStage.glossaryApplied", { count: replaced }));
-	}, [glossary, t]);
 	const { locale } = useI18n();
 	const projectId = useProjectStore((s) => s.projectId);
 	const document = useProjectStore((s) => s.document);
@@ -167,14 +92,6 @@ export function MediaStage({
 	const [busy, setBusy] = useState(false);
 	const [selectedId, setSelectedId] = useState<string | null>(null);
 	const [detailOpen, setDetailOpen] = useState(false);
-	// Starts on the default language (Portuguese while the app speaks it); a pick here
-	// becomes the default for every later run too.
-	const [lang, setLang] = useState<TranscriptLanguageCode>(() => effectiveTranscriptionLanguage());
-	const regenLanguageOptions = useMemo(
-		() => sortedLanguageOptions(locale, t("mediaStage.auto")),
-		[locale, t],
-	);
-
 	// Video only — this stage arranges clips. Imported audio (issue #350) is a
 	// timeline overlay added from the timeline toolbar, not a clip, so it never
 	// appears in this list.
@@ -522,309 +439,55 @@ export function MediaStage({
 								/>
 							</label>
 
+							{/* The project's transcription and privacy settings, over the global defaults. */}
 							<div style={{ marginBottom: 12 }}>
-								<div
-									style={{
-										fontSize: 12.5,
-										fontWeight: 600,
-										color: "var(--fg-2)",
-										marginBottom: 6,
-									}}
-								>
-									{t("mediaStage.regenerateAs")}
-								</div>
-								<div style={{ display: "flex", gap: 8 }}>
-									<select
-										value={lang}
-										onChange={(e) => {
-											const next = e.target.value as TranscriptLanguageCode;
-											setLang(next);
-											saveUserPreferences({ transcriptionLanguage: next });
-										}}
-										style={{
-											flex: 1,
-											minWidth: 0,
-											height: 36,
-											padding: "0 10px",
-											borderRadius: 9,
-											border: "1px solid var(--border)",
-											background: "var(--surface-2)",
-											color: "var(--fg)",
-											fontSize: 12.5,
-											fontWeight: 500,
-											outline: "none",
-										}}
-									>
-										{regenLanguageOptions.map(({ code, label }) => (
-											<option key={code} value={code}>
-												{label}
-											</option>
-										))}
-									</select>
-									{/* A bare refresh icon beside a language list: the tip says what it redoes. */}
-									<Tooltip content={t("mediaStage.regenerateTip")}>
-										<button
-											type="button"
-											aria-label={t("mediaStage.regenerate")}
-											// `aria-disabled`, not `disabled`: a natively disabled button cannot take focus or
-											// open its tooltip. It does nothing while a transcription runs.
-											aria-disabled={selectedBusy || undefined}
-											onClick={
-												selectedBusy
-													? undefined
-													: async () => {
-															// Clicking here blurs the terms field, whose save is still in
-															// flight: the run must read the terms it just saved, so a failed
-															// save (already toasted) runs nothing.
-															const saving = vocabularySave.current;
-															vocabularySave.current = undefined;
-															if ((await saving) === false) return;
-															void requestTranscription(selected.id, lang);
-														}
-											}
-											style={{
-												width: 36,
-												height: 36,
-												flexShrink: 0,
-												display: "grid",
-												placeItems: "center",
-												borderRadius: 9,
-												color: "var(--fg-2)",
-												background: "var(--surface-2)",
-												border: "1px solid var(--border)",
-												cursor: selectedBusy ? "not-allowed" : "pointer",
-												opacity: selectedBusy ? 0.6 : 1,
-											}}
-										>
-											<RotateCw size={14} className={selectedBusy ? "animate-spin" : undefined} />
-										</button>
-									</Tooltip>
-								</div>
-								<label style={{ display: "block", marginTop: 10 }}>
-									<span
-										style={{
-											display: "block",
-											fontSize: 12.5,
-											fontWeight: 600,
-											color: "var(--fg-2)",
-											marginBottom: 6,
-										}}
-									>
-										{t("mediaStage.model")}
-									</span>
-									<select
-										data-testid="media-stage-model"
-										value={model}
-										title={t("mediaStage.modelHint")}
-										onChange={(e) => {
-											const next = e.target.value as SttWhisperModelPreference;
-											setModel(next);
-											saveUserPreferences({ transcriptionModel: next });
-										}}
-										style={{
-											width: "100%",
-											height: 36,
-											padding: "0 10px",
-											borderRadius: 9,
-											border: "1px solid var(--border)",
-											background: "var(--surface-2)",
-											color: "var(--fg)",
-											fontSize: 12.5,
-											fontWeight: 500,
-											outline: "none",
-										}}
-									>
-										<option value="auto">{t("mediaStage.modelAuto")}</option>
-										<option value="large-v3-turbo">
-											{t("mediaStage.modelTurbo", {
-												size: formatBytes(STT_WHISPER_MODEL_BYTES["large-v3-turbo"]),
-											})}
-										</option>
-										<option value="small">
-											{t("mediaStage.modelSmall", {
-												size: formatBytes(STT_WHISPER_MODEL_BYTES.small),
-											})}
-										</option>
-									</select>
-								</label>
-								<label
-									style={{
-										display: "flex",
-										alignItems: "center",
-										gap: 8,
-										marginTop: 10,
-										fontSize: 12.5,
-										color: "var(--fg-2)",
-										cursor: "pointer",
-									}}
-								>
-									<input
-										type="checkbox"
-										data-testid="media-stage-auto-transcribe"
-										checked={autoTranscribe}
-										onChange={(event) => {
-											const enabled = event.target.checked;
-											setAutoTranscribe(enabled);
-											saveUserPreferences({ autoTranscribe: enabled });
-										}}
-									/>
-									{t("mediaStage.autoTranscribe")}
-								</label>
-								<label
-									style={{
-										display: "flex",
-										alignItems: "center",
-										gap: 8,
-										marginTop: 6,
-										fontSize: 12.5,
-										color: "var(--fg-2)",
-										cursor: "pointer",
-									}}
-									title={t("mediaStage.transcribeGuestHint")}
-								>
-									<input
-										type="checkbox"
-										data-testid="media-stage-transcribe-guest"
-										checked={transcribeGuest}
-										onChange={(event) => {
-											const enabled = event.target.checked;
-											setTranscribeGuest(enabled);
-											saveUserPreferences({ transcribeGuestAudio: enabled });
-										}}
-									/>
-									{t("mediaStage.transcribeGuest")}
-								</label>
-								<label
-									style={{
-										display: "flex",
-										alignItems: "center",
-										gap: 8,
-										marginTop: 6,
-										fontSize: 12.5,
-										color: "var(--fg-2)",
-										cursor: "pointer",
-									}}
-									title={t("mediaStage.autoRedactHint")}
-								>
-									<input
-										type="checkbox"
-										data-testid="media-stage-auto-redact"
-										checked={autoRedact}
-										onChange={(event) => {
-											const enabled = event.target.checked;
-											setAutoRedact(enabled);
-											saveUserPreferences({ autoRedact: enabled });
-										}}
-									/>
-									{t("mediaStage.autoRedact")}
-								</label>
-								<details style={{ marginTop: 8, fontSize: 12.5, color: "var(--fg-2)" }}>
-									<summary style={{ cursor: "pointer" }}>{t("mediaStage.redactTerms")}</summary>
-									<p style={{ margin: "6px 0", color: "var(--muted)" }}>
-										{t("mediaStage.redactTermsHint")}
-									</p>
-									<textarea
-										data-testid="media-stage-redact-terms"
-										value={redactTerms}
-										spellCheck={false}
-										rows={4}
-										placeholder={t("mediaStage.redactTermsPlaceholder")}
-										onChange={(event) => setRedactTerms(event.target.value)}
-										onBlur={() => saveUserPreferences({ autoRedactTerms: redactTerms })}
-										style={{
-											width: "100%",
-											resize: "vertical",
-											padding: "8px 10px",
-											borderRadius: 9,
-											border: "1px solid var(--border)",
-											background: "var(--surface-2)",
-											color: "var(--fg)",
-											font: "500 12px var(--font-mono)",
-										}}
-									/>
-									<button
-										type="button"
-										className={styles.ghostBtn}
-										data-testid="media-stage-redact-rescan"
-										title={t("mediaStage.redactRescanHint")}
-										disabled={rescanning || (document?.timeline.clips.length ?? 0) === 0}
-										onClick={() => void rescanRedactions()}
-										style={{ marginTop: 6 }}
-									>
-										{rescanning ? t("mediaStage.redactRescanning") : t("mediaStage.redactRescan")}
-									</button>
-								</details>
-								<details style={{ marginTop: 8, fontSize: 12.5, color: "var(--fg-2)" }}>
-									<summary style={{ cursor: "pointer" }}>{t("mediaStage.standingTerms")}</summary>
-									<p style={{ margin: "6px 0", color: "var(--muted)" }}>
-										{t("mediaStage.standingTermsHint")}
-									</p>
-									<textarea
-										data-testid="media-stage-standing-terms"
-										value={standingTerms}
-										spellCheck={false}
-										rows={5}
-										onChange={(event) => setStandingTerms(event.target.value)}
-										onBlur={() => saveUserPreferences({ transcriptionVocabulary: standingTerms })}
-										style={{
-											width: "100%",
-											resize: "vertical",
-											padding: "8px 10px",
-											borderRadius: 9,
-											border: "1px solid var(--border)",
-											background: "var(--surface-2)",
-											color: "var(--fg)",
-											font: "500 12px var(--font-mono)",
-										}}
-									/>
-									<button
-										type="button"
-										className={styles.ghostBtn}
-										data-testid="media-stage-standing-terms-reset"
-										disabled={standingTerms === DEFAULT_VOCABULARY}
-										onClick={() => {
-											setStandingTerms(DEFAULT_VOCABULARY);
-											saveUserPreferences({ transcriptionVocabulary: DEFAULT_VOCABULARY });
-										}}
-										style={{ marginTop: 6 }}
-									>
-										{t("mediaStage.standingTermsReset")}
-									</button>
-								</details>
-								<details style={{ marginTop: 8, fontSize: 12.5, color: "var(--fg-2)" }}>
-									<summary style={{ cursor: "pointer" }}>{t("mediaStage.glossary")}</summary>
-									<p style={{ margin: "6px 0", color: "var(--muted)" }}>
-										{t("mediaStage.glossaryHint")}
-									</p>
-									<textarea
-										data-testid="media-stage-glossary"
-										value={glossary}
-										spellCheck={false}
-										rows={8}
-										onChange={(event) => setGlossary(event.target.value)}
-										onBlur={() => saveUserPreferences({ glossary })}
-										style={{
-											width: "100%",
-											resize: "vertical",
-											padding: "8px 10px",
-											borderRadius: 9,
-											border: "1px solid var(--border)",
-											background: "var(--surface-2)",
-											color: "var(--fg)",
-											font: "500 12px var(--font-mono)",
-										}}
-									/>
-									<button
-										type="button"
-										className={styles.ghostBtn}
-										data-testid="media-stage-glossary-apply"
-										disabled={(document?.transcripts.length ?? 0) === 0}
-										onClick={() => void applyGlossaryToTranscripts()}
-										style={{ marginTop: 6 }}
-									>
-										{t("mediaStage.glossaryApply")}
-									</button>
-								</details>
+								<ProjectTranscriptionSettings
+									languageAction={
+										<Tooltip content={t("mediaStage.regenerateTip")}>
+											<button
+												type="button"
+												aria-label={t("mediaStage.regenerate")}
+												// `aria-disabled`, not `disabled`: a natively disabled button cannot take focus or
+												// open its tooltip. It does nothing while a transcription runs.
+												aria-disabled={selectedBusy || undefined}
+												onClick={
+													selectedBusy
+														? undefined
+														: async () => {
+																// Clicking here blurs the terms field, whose save is still in
+																// flight: the run must read the terms it just saved, so a failed
+																// save (already toasted) runs nothing.
+																const saving = vocabularySave.current;
+																vocabularySave.current = undefined;
+																if ((await saving) === false) return;
+																// The project's language: its own, else the default.
+																void requestTranscription(
+																	selected.id,
+																	resolveProjectTranscriptionSettings(
+																		useProjectStore.getState().document,
+																	).transcriptionLanguage,
+																);
+															}
+												}
+												style={{
+													width: 36,
+													height: 36,
+													flexShrink: 0,
+													display: "grid",
+													placeItems: "center",
+													borderRadius: 9,
+													color: "var(--fg-2)",
+													background: "var(--surface-2)",
+													border: "1px solid var(--border)",
+													cursor: selectedBusy ? "not-allowed" : "pointer",
+													opacity: selectedBusy ? 0.6 : 1,
+												}}
+											>
+												<RotateCw size={14} className={selectedBusy ? "animate-spin" : undefined} />
+											</button>
+										</Tooltip>
+									}
+								/>
 							</div>
 
 							<div

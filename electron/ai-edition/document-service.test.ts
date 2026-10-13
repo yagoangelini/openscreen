@@ -112,6 +112,44 @@ describe("DocumentService", () => {
 				});
 			});
 
+			it("starts a new project from the user's defaults, copied, not the last project", async () => {
+				await editedProject(22, "2026-03-01T00:00:00.000Z");
+				const defaults: Record<string, unknown> = {
+					cursorSize: 2.6,
+					aspectRatio: "9:16",
+					cropRegion: { x: 0.5, y: 0, width: 0.5, height: 1 },
+				};
+				const doc = await service.createProject("Next", defaults);
+				const settings = getEditorSettings(doc);
+				expect(settings.cursor.size).toBe(2.6);
+				expect(settings.aspectRatio).toBe("9:16");
+				// Not the latest project's padding: the defaults decide now.
+				expect(settings.padding).toBe(DEFAULT_EDITOR_SETTINGS.padding);
+				// Footage never travels in a default.
+				expect(settings.cropRegion).toEqual(DEFAULT_EDITOR_SETTINGS.cropRegion);
+				expect(settings.cursor.showKeystrokes).toBe(true);
+				// A copy: changing the defaults afterwards cannot reach the saved project.
+				defaults.cursorSize = 5;
+				const reread = await service.getProject(doc.project.id);
+				expect(getEditorSettings(reread).cursor.size).toBe(2.6);
+			});
+
+			it("treats empty defaults as none saved", async () => {
+				await editedProject(22, "2026-03-01T00:00:00.000Z");
+				const settings = getEditorSettings(await service.createProject("Next", {}));
+				expect(settings.padding).toBe(22);
+			});
+
+			it("puts the preset marked for new projects over the defaults' look", async () => {
+				const withPreset = new DocumentService(tempDir, mediaDir, undefined, async () => PRESET);
+				const settings = getEditorSettings(
+					await withPreset.createProject("Next", { padding: 40, autoZoom: { maxScale: 1.6 } }),
+				);
+				expect(settings.padding).toBe(PRESET.padding);
+				// What the preset does not carry still comes from the defaults.
+				expect(settings.autoZoom.maxScale).toBe(1.6);
+			});
+
 			it("falls back to the last project when the marked preset is gone or unreadable", async () => {
 				await editedProject(22, "2026-03-01T00:00:00.000Z");
 				vi.spyOn(console, "warn").mockImplementation(() => undefined);

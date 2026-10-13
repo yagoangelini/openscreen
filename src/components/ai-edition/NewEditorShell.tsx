@@ -1753,6 +1753,7 @@ export function NewEditorShell() {
 					renameProject: handleRenameProject,
 					toggleChat: () => setChatOpen((v) => !v),
 					openProviderSettings: () => openDialog("providers"),
+					openDefaults: () => openDialog("defaults"),
 					showAbout: handleShowAbout,
 					checkForUpdates: handleCheckForUpdates,
 					undo: runUndo,

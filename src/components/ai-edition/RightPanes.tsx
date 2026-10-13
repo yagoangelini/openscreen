@@ -86,7 +86,7 @@ import {
 } from "@/lib/ai-edition/store/editorSettings";
 import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
 import { useCaptions } from "@/lib/ai-edition/store/useCaptions";
-import { useEditorSettings } from "@/lib/ai-edition/store/useEditorSettings";
+import { useEditorDocument, useEditorSettings } from "@/lib/ai-edition/store/useEditorSettings";
 import type { useTimeline } from "@/lib/ai-edition/store/useTimeline";
 import {
 	buildAggregatedSections,
@@ -401,7 +401,10 @@ const WALLPAPER_MOTION_LABEL_KEYS: Record<WallpaperMotion, string> = {
 // the upload custom flow.
 function BackgroundSection() {
 	const ts = useScopedT("settings");
-	const { settings, set, setLive, commit, hasDocument } = useEditorSettings();
+	const { settings, set, setLive, commit, hasDocument, editingDefaults } = useEditorSettings();
+	// Live edits reach the native preview, which shows the open project, only while these
+	// controls edit that project (not the global defaults).
+	const nativeLive = () => !editingDefaults && isNativeCompositorActive();
 	const { pick: handlePickFile, input: fileInput } = useWallpaperFileInput((dataUrl) =>
 		set({ wallpaper: dataUrl }),
 	);
@@ -418,6 +421,7 @@ function BackgroundSection() {
 				onChange={(url) => void set({ wallpaper: url })}
 				onLiveChange={(url) => setLive({ wallpaper: url })}
 				onCommit={commit}
+				updateNativeBackground={!editingDefaults}
 				onPickFile={handlePickFile}
 			/>
 			{fileInput}
@@ -453,7 +457,7 @@ function BackgroundSection() {
 					disabled={!hasDocument}
 					onChange={(v) => {
 						setLive({ backgroundBlur: v / 100 });
-						if (isNativeCompositorActive()) {
+						if (nativeLive()) {
 							setNativeParam("backgroundBlur", v / 100);
 						}
 					}}
@@ -2474,8 +2478,11 @@ const FRAME_THEME_LABEL_KEYS: Record<FrameTheme, string> = {
  */
 export function VideoEffectsPane() {
 	const ts = useScopedT("settings");
-	const { settings, set, setLive, commit, hasDocument } = useEditorSettings();
-	const document = useProjectStore((s) => s.document);
+	const { settings, set, setLive, commit, hasDocument, editingDefaults } = useEditorSettings();
+	const document = useEditorDocument();
+	// Live edits reach the native preview, which shows the open project, only while these
+	// controls edit that project (not the global defaults).
+	const nativeLive = () => !editingDefaults && isNativeCompositorActive();
 
 	// The footage's own shapes for the Original row, the one most clips are in first.
 	const nativeFormats = useMemo(() => (document ? collectNativeFormats(document) : []), [document]);
@@ -2681,7 +2688,7 @@ export function VideoEffectsPane() {
 				!hasDocument,
 				(shadowIntensity) => {
 					void set({ shadowIntensity });
-					if (isNativeCompositorActive()) setNativeParam("shadow", shadowIntensity);
+					if (nativeLive()) setNativeParam("shadow", shadowIntensity);
 				},
 			)}
 			<div className={styles.sliderGrid}>
@@ -2698,7 +2705,7 @@ export function VideoEffectsPane() {
 						// Roundness is left as stored: at 0 the scene squares the corners, and the
 						// value is back when the padding is (`buildSceneDescription`).
 						setLive({ padding: v });
-						if (isNativeCompositorActive()) {
+						if (nativeLive()) {
 							setNativeParam("padding", v / 100);
 						}
 					}}
@@ -2727,7 +2734,7 @@ export function VideoEffectsPane() {
 							onChange={(v) => {
 								const px = v / roundnessScale;
 								setLive({ borderRadius: px });
-								if (isNativeCompositorActive()) {
+								if (nativeLive()) {
 									setNativeParam("roundness", px / NATIVE_SCREEN_BASE_RADIUS_PX);
 								}
 							}}
@@ -2752,7 +2759,7 @@ export function VideoEffectsPane() {
 					disabled={!hasDocument}
 					onChange={(v) => {
 						setLive({ motionBlurAmount: v / 100 });
-						if (isNativeCompositorActive()) {
+						if (nativeLive()) {
 							setNativeParam("motionBlur", v / 100);
 						}
 					}}
@@ -3097,11 +3104,11 @@ export function CameraLookControls({
 export function LayoutPane() {
 	const canSegmentCamera = useCanSegmentCamera();
 	const ts = useScopedT("settings");
-	const { settings, set, setLive, commit, hasDocument } = useEditorSettings();
+	const { settings, set, setLive, commit, hasDocument, editingDefaults } = useEditorSettings();
 	const { pick: handlePickWebcamWallpaper, input: webcamWallpaperInput } = useWallpaperFileInput(
 		(dataUrl) => set({ webcamWallpaper: dataUrl }),
 	);
-	const document = useProjectStore((s) => s.document);
+	const document = useEditorDocument();
 	// A project can hold clips with no camera attached at all (plain imports or a
 	// recording made without a webcam). Keep the saved camera preference for later, but
 	// make the disabled control describe whether this project has any camera at all.
@@ -3115,9 +3122,12 @@ export function LayoutPane() {
 	//
 	// Memoised because the pane subscribes to the whole document, and `setLive` during a
 	// slider drag replaces it every frame — this scan is O(clips x assets).
+	// The defaults have no footage, and are exactly what a project with a camera will get.
 	const hasAnyCamera = useMemo(
-		() => (document ? hasAnyClipWithCamera(document.assets, document.timeline.clips) : false),
-		[document],
+		() =>
+			editingDefaults ||
+			(document ? hasAnyClipWithCamera(document.assets, document.timeline.clips) : false),
+		[document, editingDefaults],
 	);
 	const effectiveLayoutPreset = resolveWebcamLayoutPreset(
 		settings.webcamLayoutPreset,
@@ -3209,7 +3219,7 @@ export function LayoutPane() {
 				values={settings}
 				isPip={isPip}
 				disabled={layoutControlsDisabled}
-				pushNativeParams
+				pushNativeParams={!editingDefaults}
 				onSet={(patch) => void set(patch)}
 				onSetLive={setLive}
 				onCommit={() => void commit()}
@@ -3638,56 +3648,59 @@ function WebcamFraming({
 
 export function AudioPane() {
 	const ts = useScopedT("settings");
-	const { settings, set, setLive, commit, hasDocument } = useEditorSettings();
+	const { settings, set, setLive, commit, hasDocument, editingDefaults } = useEditorSettings();
 	// Two more sliders when a take was recorded with its voice and computer sound apart.
 	const hasStems = useProjectStore((s) => Boolean(s.document?.assets.some((a) => a.audioStems)));
 	return (
 		<Pane title={ts("audio.title")} icon={<AudioLines size={16} />} helpText={ts("audio.help")}>
-			<div className={styles.sliderGrid}>
-				<SliderCell
-					label={ts("audio.outputGain")}
-					value={settings.audioGainDb}
-					min={-AUDIO_GAIN_DB_LIMIT}
-					max={AUDIO_GAIN_DB_LIMIT}
-					defaultValue={0}
-					step={0.5}
-					decimals={1}
-					suffix=" dB"
-					disabled={!hasDocument}
-					onChange={(value) => setLive({ audioGainDb: value })}
-					onCommit={() => void commit()}
-				/>
-				{hasStems ? (
-					<>
-						<SliderCell
-							label={ts("audio.voiceGain")}
-							value={settings.voiceGainDb}
-							min={-AUDIO_GAIN_DB_LIMIT}
-							max={AUDIO_GAIN_DB_LIMIT}
-							defaultValue={0}
-							step={0.5}
-							decimals={1}
-							suffix=" dB"
-							disabled={!hasDocument}
-							onChange={(value) => setLive({ voiceGainDb: value })}
-							onCommit={() => void commit()}
-						/>
-						<SliderCell
-							label={ts("audio.systemGain")}
-							value={settings.systemGainDb}
-							min={-AUDIO_GAIN_DB_LIMIT}
-							max={AUDIO_GAIN_DB_LIMIT}
-							defaultValue={0}
-							step={0.5}
-							decimals={1}
-							suffix=" dB"
-							disabled={!hasDocument}
-							onChange={(value) => setLive({ systemGainDb: value })}
-							onCommit={() => void commit()}
-						/>
-					</>
-				) : null}
-			</div>
+			{/* The volumes belong to one recording's sound, so they are no default. */}
+			{editingDefaults ? null : (
+				<div className={styles.sliderGrid}>
+					<SliderCell
+						label={ts("audio.outputGain")}
+						value={settings.audioGainDb}
+						min={-AUDIO_GAIN_DB_LIMIT}
+						max={AUDIO_GAIN_DB_LIMIT}
+						defaultValue={0}
+						step={0.5}
+						decimals={1}
+						suffix=" dB"
+						disabled={!hasDocument}
+						onChange={(value) => setLive({ audioGainDb: value })}
+						onCommit={() => void commit()}
+					/>
+					{hasStems ? (
+						<>
+							<SliderCell
+								label={ts("audio.voiceGain")}
+								value={settings.voiceGainDb}
+								min={-AUDIO_GAIN_DB_LIMIT}
+								max={AUDIO_GAIN_DB_LIMIT}
+								defaultValue={0}
+								step={0.5}
+								decimals={1}
+								suffix=" dB"
+								disabled={!hasDocument}
+								onChange={(value) => setLive({ voiceGainDb: value })}
+								onCommit={() => void commit()}
+							/>
+							<SliderCell
+								label={ts("audio.systemGain")}
+								value={settings.systemGainDb}
+								min={-AUDIO_GAIN_DB_LIMIT}
+								max={AUDIO_GAIN_DB_LIMIT}
+								defaultValue={0}
+								step={0.5}
+								decimals={1}
+								suffix=" dB"
+								disabled={!hasDocument}
+								onChange={(value) => setLive({ systemGainDb: value })}
+								onCommit={() => void commit()}
+							/>
+						</>
+					) : null}
+				</div>
+			)}
 			{/* On-device noise reduction and gentle EQ on the voice (the voice stem, or the take's
 			    own track without one), the same in the preview and the export. */}
 			<div className={styles.paneRow}>
@@ -3716,14 +3729,16 @@ export function AudioPane() {
 					/>
 				</div>
 			) : null}
-			<button
-				type="button"
-				className={styles.secondaryBtn}
-				disabled={!hasDocument}
-				onClick={() => void set({ audioGainDb: 0, voiceGainDb: 0, systemGainDb: 0 })}
-			>
-				{ts("audio.reset")}
-			</button>
+			{editingDefaults ? null : (
+				<button
+					type="button"
+					className={styles.secondaryBtn}
+					disabled={!hasDocument}
+					onClick={() => void set({ audioGainDb: 0, voiceGainDb: 0, systemGainDb: 0 })}
+				>
+					{ts("audio.reset")}
+				</button>
+			)}
 		</Pane>
 	);
 }
@@ -3933,7 +3948,10 @@ function safeAssetUrl(relativePath: string): string {
 
 export function CursorPane() {
 	const ts = useScopedT("settings");
-	const { settings, set, setLive, commit, hasDocument } = useEditorSettings();
+	const { settings, set, setLive, commit, hasDocument, editingDefaults } = useEditorSettings();
+	// Live edits reach the native preview, which shows the open project, only while these
+	// controls edit that project (not the global defaults).
+	const nativeLive = () => !editingDefaults && isNativeCompositorActive();
 
 	// Push cursor settings into the native compositor (initial + on view activation); the
 	// handlers below push diffs live. Sizes are sent as direct scales (1 = fixture default).
@@ -3992,7 +4010,7 @@ export function CursorPane() {
 					disabled={!hasDocument}
 					onChange={(v) => {
 						void set({ cursor: { show: v } });
-						if (isNativeCompositorActive()) {
+						if (nativeLive()) {
 							setNativeParam("cursorShow", v);
 						}
 					}}
@@ -4007,7 +4025,7 @@ export function CursorPane() {
 					disabled={!hasDocument || !settings.cursorShow}
 					onChange={(v) => {
 						void set({ cursorAutoHide: v });
-						if (isNativeCompositorActive()) {
+						if (nativeLive()) {
 							setNativeParam("cursorAutoHide", v);
 						}
 					}}
@@ -4056,7 +4074,7 @@ export function CursorPane() {
 							disabled={!hasDocument}
 							onChange={(v) => {
 								void set({ cursor: { model3d: v } });
-								if (isNativeCompositorActive()) {
+								if (nativeLive()) {
 									setNativeParam("cursorModel3d", v);
 								}
 							}}
@@ -4143,7 +4161,7 @@ export function CursorPane() {
 					disabled={!hasDocument}
 					onChange={(v) => {
 						setLive({ cursor: { size: v } });
-						if (isNativeCompositorActive()) setNativeParam("cursorSize", v);
+						if (nativeLive()) setNativeParam("cursorSize", v);
 					}}
 					onCommit={() => void commit()}
 				/>
@@ -4157,7 +4175,7 @@ export function CursorPane() {
 					disabled={!hasDocument}
 					onChange={(v) => {
 						setLive({ cursor: { smoothing: v / 100 } });
-						if (isNativeCompositorActive()) {
+						if (nativeLive()) {
 							setNativeParam("cursorSmoothing", v / 100);
 						}
 					}}
@@ -4173,7 +4191,7 @@ export function CursorPane() {
 					disabled={!hasDocument}
 					onChange={(v) => {
 						setLive({ cursor: { motionBlur: v / 100 } });
-						if (isNativeCompositorActive()) {
+						if (nativeLive()) {
 							setNativeParam("cursorMotionBlur", v / 100);
 						}
 					}}
@@ -4187,7 +4205,7 @@ export function CursorPane() {
 				!hasDocument,
 				(clickBounce) => {
 					void set({ cursor: { clickBounce } });
-					if (isNativeCompositorActive()) setNativeParam("cursorClickBounce", clickBounce);
+					if (nativeLive()) setNativeParam("cursorClickBounce", clickBounce);
 				},
 			)}
 			{/* What the screen does on the click the bounce animates, so right under it. A hidden
