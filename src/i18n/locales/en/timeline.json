@@ -145,7 +145,7 @@
 		"lookScopePiece": "This piece",
 		"lookScopeAll": "All pieces",
 		"lookPieceHint": "Changes here apply to this piece only. The camera moves smoothly into its look and back.",
-		"lookAllHint": "Changes here apply to every piece without a look of its own.",
+		"lookAllHint": "Changes here apply to every piece, including pieces with a look of their own: they take the new value too.",
 		"lookRestore": "Restore default look",
 		"ownLook": "Own look"
 	}

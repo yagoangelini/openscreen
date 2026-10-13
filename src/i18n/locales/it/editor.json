@@ -640,6 +640,87 @@
 		"onlyYou": "Only your voice was found in the transcript.",
 		"labelled": "Speakers labelled: {{mic}} word(s) yours, {{system}} from the guest."
 	},
+	"history": {
+		"undoTitle": "Undo back to",
+		"redoTitle": "Redo up to",
+		"listHint": "right-click for the history",
+		"more": "{{count}} older steps not listed",
+		"labels": {
+			"edit": "Edit",
+			"agentTurn": "AI reply",
+			"renameProject": "Rename project",
+			"addClip": "Add clip",
+			"splitClip": "Split clip",
+			"removeClip": "Remove clip",
+			"editClip": "Edit clip",
+			"addTrim": "Cut section",
+			"removeTrim": "Restore cut section",
+			"editTrim": "Adjust cut",
+			"speed": "Change speed",
+			"addZoom": "Add zoom",
+			"removeZoom": "Remove zoom",
+			"moveZoom": "Move zoom",
+			"editZoom": "Edit zoom",
+			"autoZooms": "Automatic zooms",
+			"addAnnotation": "Add annotation",
+			"removeAnnotation": "Remove annotation",
+			"moveAnnotation": "Move annotation",
+			"editAnnotation": "Edit annotation",
+			"camera": "Edit camera track",
+			"splitCamera": "Split camera",
+			"cameraLook": "Camera piece look",
+			"cameraLookAll": "Camera look on all pieces",
+			"audio": "Edit audio",
+			"mute": "Mute section",
+			"transcript": "Edit transcript",
+			"settings": "Change settings",
+			"media": "Edit media",
+			"speechCleanup": "Clean up speech",
+			"clearTimeline": "Clear timeline",
+			"resetCamera": "Restore camera track",
+			"resetVideo": "Restore video track",
+			"resetZooms": "Restore zooms",
+			"resetAnnotations": "Restore annotations",
+			"resetAll": "Restore everything"
+		}
+	},
+	"projectReset": {
+		"menu": "Restore",
+		"confirm": "Restore",
+		"working": "Restoring…",
+		"failed": "Could not restore. Nothing was changed.",
+		"undoHint": "One Ctrl+Z puts everything back the way it is now.",
+		"camera": {
+			"menu": "Restore camera track",
+			"title": "Restore the camera track?",
+			"body": "The camera pieces go back to how the recording logged them (Face / Screen + camera). Splits, modes and each piece's own look are removed.",
+			"done": "Camera track restored. Ctrl+Z undoes it."
+		},
+		"video": {
+			"menu": "Restore video track",
+			"title": "Restore the video track?",
+			"body": "The recording comes back whole, as imported: cuts, trims, speed changes, splits, crops and inserted words are removed. Zooms, annotations and camera pieces stay on the same footage.",
+			"done": "Video track restored. Ctrl+Z undoes it."
+		},
+		"zooms": {
+			"menu": "Restore zooms",
+			"title": "Restore the zooms?",
+			"body": "Every zoom is removed, and the automatic zooms are planned again as after recording (with the transcript, if there is one).",
+			"done": "Zooms restored. Ctrl+Z undoes it."
+		},
+		"annotations": {
+			"menu": "Restore annotations",
+			"title": "Restore the annotations?",
+			"body": "Text, arrows, highlights, steps and blurs you drew are removed. The automatic privacy blurs stay.",
+			"done": "Annotations restored. Ctrl+Z undoes it."
+		},
+		"all": {
+			"menu": "Restore everything",
+			"title": "Restore the whole project?",
+			"body": "The project goes back to how it was right after importing the recording: video, camera, zooms (planned again), annotations, imported audio and muted sections. The transcript, the media and the look (layout, background, cursor, captions style, volumes) are kept.",
+			"done": "Project restored. Ctrl+Z undoes it."
+		}
+	},
 	"projectSettings": {
 		"intro": "These settings follow your Defaults. What you change here applies to this project only.",
 		"openDefaults": "Open Defaults",

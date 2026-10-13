@@ -14,9 +14,12 @@
 import { useCallback, useEffect, useRef } from "react";
 import { isModalOpen } from "../modalGuard";
 import type { AxcutDocument } from "../schema";
+import type { HistoryLabel } from "./historyLabels";
 import { useProjectStore } from "./projectStore";
 import {
 	clearHistory,
+	future,
+	past,
 	popFuture,
 	popPast,
 	pushFuture,
@@ -42,32 +45,82 @@ function restore(doc: unknown) {
 	}));
 }
 
-export function undo(): boolean {
-	const prev = popPast();
-	if (!prev) return false;
+/**
+ * Step back `steps` entries at once (the history menu's "go back to here"), as ONE restore:
+ * every entry walked past moves to `future` with its label, so redo can replay them one by
+ * one or all together, and the screen and the persist that follows see only the last state.
+ * Fewer entries than asked is fine: it stops at the oldest. Returns whether anything moved.
+ */
+export function undo(steps = 1): boolean {
 	const state = useProjectStore.getState();
-	if (!state.projectId || state.projectId !== prev.projectId) {
-		clearHistory();
-		return false;
+	let current: unknown = state.document;
+	let moved = 0;
+	for (let i = 0; i < Math.max(1, Math.floor(steps)); i++) {
+		const prev = popPast();
+		if (!prev) break;
+		if (!state.projectId || state.projectId !== prev.projectId) {
+			clearHistory();
+			return false;
+		}
+		// The entry leaving `past` named the edit between it and `current`: redoing it is
+		// what the new `future` entry stands for.
+		if (current) {
+			pushFuture({ projectId: prev.projectId, doc: structuredClone(current), label: prev.label });
+		}
+		current = prev.doc;
+		moved += 1;
 	}
-	const doc = state.document;
-	if (doc) pushFuture({ projectId: prev.projectId, doc: structuredClone(doc) });
-	restore(prev.doc);
+	if (moved === 0) return false;
+	restore(current);
 	return true;
 }
 
-export function redo(): boolean {
-	const next = popFuture();
-	if (!next) return false;
+/** The mirror of `undo(steps)`: replay `steps` undone entries as one restore. */
+export function redo(steps = 1): boolean {
 	const state = useProjectStore.getState();
-	if (!state.projectId || state.projectId !== next.projectId) {
-		clearHistory();
-		return false;
+	let current: unknown = state.document;
+	let moved = 0;
+	for (let i = 0; i < Math.max(1, Math.floor(steps)); i++) {
+		const next = popFuture();
+		if (!next) break;
+		if (!state.projectId || state.projectId !== next.projectId) {
+			clearHistory();
+			return false;
+		}
+		if (current) {
+			pushPast({ projectId: next.projectId, doc: structuredClone(current), label: next.label });
+		}
+		current = next.doc;
+		moved += 1;
 	}
-	const doc = state.document;
-	if (doc) pushPast({ projectId: doc.project.id, doc: structuredClone(doc) });
-	restore(next.doc);
+	if (moved === 0) return false;
+	restore(current);
 	return true;
+}
+
+/** One row of the history menu: what the step was, and how many steps away it is. */
+export interface HistoryEntry {
+	label: HistoryLabel;
+	/** 1 for the step one Ctrl+Z (or one redo) takes, 2 for the one behind it, and so on. */
+	steps: number;
+}
+
+/**
+ * The history as the menus list it, nearest first: `undo` the steps Ctrl+Z walks back
+ * through, `redo` the ones redo replays. Only the open project's; an entry without a label
+ * (recorded before labels existed in this session) reads as a plain edit.
+ */
+export function historyEntries(): { undo: HistoryEntry[]; redo: HistoryEntry[] } {
+	const projectId = useProjectStore.getState().projectId;
+	const list = (stack: typeof past): HistoryEntry[] => {
+		const out: HistoryEntry[] = [];
+		for (let i = stack.length - 1; i >= 0; i--) {
+			if (stack[i].projectId !== projectId) break;
+			out.push({ label: stack[i].label ?? "edit", steps: stack.length - i });
+		}
+		return out;
+	};
+	return { undo: list(past), redo: list(future) };
 }
 
 /**
@@ -106,6 +159,9 @@ export interface UndoRedoHandlers {
 	 */
 	runUndo: () => void;
 	runRedo: () => void;
+	/** The history menu's jump: undo (or redo) `steps` entries in one step, then persist. */
+	runUndoSteps: (steps: number) => void;
+	runRedoSteps: (steps: number) => void;
 }
 
 export function useUndoRedoShortcuts(onAfter: () => void): UndoRedoHandlers {
@@ -169,5 +225,16 @@ export function useUndoRedoShortcuts(onAfter: () => void): UndoRedoHandlers {
 		if (redo()) onAfterRef.current();
 	}, []);
 
-	return { runUndo, runRedo };
+	// No text-field rule: the menu is a button's, so focus is never in a field when it runs.
+	const runUndoSteps = useCallback((steps: number) => {
+		if (isModalOpen()) return;
+		if (undo(steps)) onAfterRef.current();
+	}, []);
+
+	const runRedoSteps = useCallback((steps: number) => {
+		if (isModalOpen()) return;
+		if (redo(steps)) onAfterRef.current();
+	}, []);
+
+	return { runUndo, runRedo, runUndoSteps, runRedoSteps };
 }

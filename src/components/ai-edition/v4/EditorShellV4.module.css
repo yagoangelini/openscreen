@@ -2340,3 +2340,31 @@
 	border-radius: 999px;
 	background: var(--danger);
 }
+
+/* The undo / redo history list (HistoryMenu.tsx): under its arrow, right-aligned so it stays in
+   the window from the right half of the bar, and scrolling past a screenful. */
+.historyMenu {
+	left: auto;
+	right: 0;
+	min-width: 220px;
+	max-width: min(360px, calc(100vw - 24px));
+	max-height: min(420px, calc(100vh - 90px));
+	overflow-y: auto;
+	scrollbar-width: thin;
+}
+.historyMenuTitle {
+	padding: 6px 9px 4px;
+	color: var(--muted);
+	font: 600 11px var(--font-body);
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+}
+.historyMenuLabel {
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.historyMenuMore {
+	padding: 6px 9px;
+	color: var(--muted);
+	font: 500 11.5px var(--font-body);
+}

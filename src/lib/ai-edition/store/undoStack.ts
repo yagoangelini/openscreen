@@ -24,9 +24,16 @@
 // is `push`. The exported `past` / `future` are `readonly` views, and every
 // mutation is a named function the audit can count call sites of.
 
-export type Snapshot = { projectId: string; doc: unknown };
+import type { HistoryLabel } from "./historyLabels";
 
-const MAX_HISTORY = 50;
+/**
+ * One step of history: the document to go back (or forward) to, and what the step between it
+ * and the document beside it was, for the history menu. On `past` the label names the edit an
+ * undo reverts; on `future`, the edit a redo replays. Undo and redo carry it across.
+ */
+export type Snapshot = { projectId: string; doc: unknown; label?: HistoryLabel };
+
+export const MAX_HISTORY = 50;
 
 const pastStack: Snapshot[] = [];
 const futureStack: Snapshot[] = [];

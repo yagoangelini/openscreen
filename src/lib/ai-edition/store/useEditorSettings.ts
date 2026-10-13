@@ -14,6 +14,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef } from "react";
 import { refitFrameAnnotations } from "../annotations/placement";
+import { clearCameraLookKeys, readCameraSegments } from "../document/cameraSegments";
 import { resolveAspectRatioValue } from "../document/outputFormat";
 import type { AxcutDocument } from "../schema";
 import {
@@ -22,6 +23,7 @@ import {
 	getEditorSettings,
 	patchEditorSettings,
 } from "./editorSettings";
+import type { HistoryLabel } from "./historyLabels";
 import { useProjectStore } from "./projectStore";
 
 /**
@@ -42,6 +44,33 @@ export function applySettingsPatch(doc: AxcutDocument, patch: EditorSettingsPatc
 	);
 	return annotations === next.annotations ? next : { ...next, annotations };
 }
+
+/**
+ * `applySettingsPatch` for "Todos os trechos" (a camera piece's look, scope "all pieces"): the
+ * global camera setting changes AND every piece that had its own value for that setting drops
+ * it, in the same write, so every piece ends up showing the new value. The settings a patch
+ * does not name keep each piece's own (`clearCameraLookKeys`).
+ */
+export function applyCameraLookToAllPieces(
+	doc: AxcutDocument,
+	patch: EditorSettingsPatch,
+): AxcutDocument {
+	const next = applySettingsPatch(doc, patch);
+	const segments = readCameraSegments(next);
+	const cleared = clearCameraLookKeys(segments, Object.keys(patch));
+	return cleared === segments ? next : { ...next, cameraSegments: cleared };
+}
+
+/** What a caller can change about how the hook writes. Keep the object stable (module scope):
+ *  the callbacks depend on it. */
+export interface EditorSettingsWriteOptions {
+	/** How a patch becomes the next document. `applySettingsPatch` by default. */
+	transform?: (doc: AxcutDocument, patch: EditorSettingsPatch) => AxcutDocument;
+	/** The name of the undo step, for the history menu. Read off the change by default. */
+	historyLabel?: HistoryLabel;
+}
+
+const DEFAULT_WRITE_OPTIONS: EditorSettingsWriteOptions = {};
 
 export interface UseEditorSettingsResult {
 	settings: EditorSettingsSnapshot;
@@ -73,10 +102,15 @@ export interface EditorSettingsSource extends UseEditorSettingsResult {
 
 export const EditorSettingsSourceContext = createContext<EditorSettingsSource | null>(null);
 
-/** The open project's settings, or those of the source the panes are rendered in. */
-export function useEditorSettings(): UseEditorSettingsResult {
+/**
+ * The open project's settings, or those of the source the panes are rendered in. The write
+ * options only apply to the project: the defaults have no camera pieces or history.
+ */
+export function useEditorSettings(
+	writeOptions: EditorSettingsWriteOptions = DEFAULT_WRITE_OPTIONS,
+): UseEditorSettingsResult {
 	const source = useContext(EditorSettingsSourceContext);
-	const project = useProjectEditorSettings();
+	const project = useProjectEditorSettings(writeOptions);
 	return source ?? project;
 }
 
@@ -90,7 +124,11 @@ export function useEditorDocument(): AxcutDocument | null {
 	return source ? source.document : document;
 }
 
-function useProjectEditorSettings(): UseEditorSettingsResult {
+function useProjectEditorSettings(
+	writeOptions: EditorSettingsWriteOptions,
+): UseEditorSettingsResult {
+	const transform = writeOptions.transform ?? applySettingsPatch;
+	const historyLabel = writeOptions.historyLabel;
 	const document = useProjectStore((s) => s.document);
 	const projectId = useProjectStore((s) => s.projectId);
 	const setDocument = useProjectStore((s) => s.setDocument);
@@ -104,14 +142,14 @@ function useProjectEditorSettings(): UseEditorSettingsResult {
 		async (patch: EditorSettingsPatch) => {
 			const doc = useProjectStore.getState().document;
 			if (!doc) return false;
-			const next = applySettingsPatch(doc, patch);
+			const next = transform(doc, patch);
 			// The optimistic write is not the edit — the save is. Only the one that can
 			// fail records, and it names `doc` as what Ctrl+Z returns to because by then
 			// the store already holds `next`.
 			setDocument(next, { history: false });
-			return saveDocument(next, { history: true, historyBase: doc });
+			return saveDocument(next, { history: true, historyBase: doc, historyLabel });
 		},
-		[setDocument, saveDocument],
+		[setDocument, saveDocument, transform, historyLabel],
 	);
 
 	// The document this hook's own last `setLive` produced. A slider drag fires one
@@ -157,12 +195,12 @@ function useProjectEditorSettings(): UseEditorSettingsResult {
 		(patch: EditorSettingsPatch) => {
 			const doc = useProjectStore.getState().document;
 			if (!doc) return;
-			const next = applySettingsPatch(doc, patch);
+			const next = transform(doc, patch);
 			if (liveDocRef.current !== doc) liveBaseRef.current = doc;
 			setDocument(next, { history: false });
 			liveDocRef.current = next;
 		},
-		[setDocument],
+		[setDocument, transform],
 	);
 
 	const commit = useCallback(async () => {
@@ -180,8 +218,8 @@ function useProjectEditorSettings(): UseEditorSettingsResult {
 		const base = liveDocRef.current === doc ? liveBaseRef.current : null;
 		liveBaseRef.current = null;
 		liveDocRef.current = null;
-		await saveDocument(doc, { history: true, historyBase: base });
-	}, [saveDocument]);
+		await saveDocument(doc, { history: true, historyBase: base, historyLabel });
+	}, [saveDocument, historyLabel]);
 
 	return { settings, hasDocument, set, setLive, commit };
 }

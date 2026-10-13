@@ -233,7 +233,9 @@ export type ApplyFreshRecordingAutoZoomsDeps = {
  * A deadline that expires says only "no answer yet", which reads as ON like every other
  * unreadable answer.
  */
-async function readAutoZoomPref(timeoutMs = DOCUMENT_SAVES_WAIT_TIMEOUT_MS): Promise<boolean> {
+export async function readAutoZoomPref(
+	timeoutMs = DOCUMENT_SAVES_WAIT_TIMEOUT_MS,
+): Promise<boolean> {
 	try {
 		const read = (async () => {
 			const prefs = await window.electronAPI?.getRecordingPrefs?.();

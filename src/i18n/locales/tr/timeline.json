@@ -145,7 +145,7 @@
 		"lookScopePiece": "Bu parça",
 		"lookScopeAll": "Tüm parçalar",
 		"lookPieceHint": "Buradaki değişiklikler yalnızca bu parçaya uygulanır. Kamera bu görünüme yumuşakça geçer ve geri döner.",
-		"lookAllHint": "Buradaki değişiklikler kendi görünümü olmayan tüm parçalara uygulanır.",
+		"lookAllHint": "Buradaki değişiklikler, kendi görünümü olanlar dahil tüm parçalara uygulanır: onlar da yeni değeri alır.",
 		"lookRestore": "Varsayılan görünümü geri yükle",
 		"ownLook": "Kendi görünümü"
 	}

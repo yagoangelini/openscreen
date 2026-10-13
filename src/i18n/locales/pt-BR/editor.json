@@ -640,6 +640,87 @@
 		"onlyYou": "Só a sua voz aparece na transcrição.",
 		"labelled": "Falas marcadas: {{mic}} palavra(s) suas, {{system}} do convidado."
 	},
+	"history": {
+		"undoTitle": "Desfazer até",
+		"redoTitle": "Refazer até",
+		"listHint": "botão direito mostra o histórico",
+		"more": "Mais {{count}} passos antigos fora da lista",
+		"labels": {
+			"edit": "Edição",
+			"agentTurn": "Resposta da IA",
+			"renameProject": "Renomear projeto",
+			"addClip": "Adicionar clipe",
+			"splitClip": "Dividir clipe",
+			"removeClip": "Remover clipe",
+			"editClip": "Editar clipe",
+			"addTrim": "Cortar trecho",
+			"removeTrim": "Restaurar trecho cortado",
+			"editTrim": "Ajustar corte",
+			"speed": "Mudar velocidade",
+			"addZoom": "Adicionar zoom",
+			"removeZoom": "Remover zoom",
+			"moveZoom": "Mover zoom",
+			"editZoom": "Editar zoom",
+			"autoZooms": "Zooms automáticos",
+			"addAnnotation": "Adicionar anotação",
+			"removeAnnotation": "Remover anotação",
+			"moveAnnotation": "Mover anotação",
+			"editAnnotation": "Editar anotação",
+			"camera": "Editar trilha da câmera",
+			"splitCamera": "Dividir câmera",
+			"cameraLook": "Aparência do trecho",
+			"cameraLookAll": "Aparência da câmera em todos os trechos",
+			"audio": "Editar áudio",
+			"mute": "Silenciar trecho",
+			"transcript": "Editar transcrição",
+			"settings": "Mudar ajustes",
+			"media": "Editar mídia",
+			"speechCleanup": "Limpar fala",
+			"clearTimeline": "Limpar timeline",
+			"resetCamera": "Restaurar trilha da câmera",
+			"resetVideo": "Restaurar trilha de vídeo",
+			"resetZooms": "Restaurar zooms",
+			"resetAnnotations": "Restaurar anotações",
+			"resetAll": "Restaurar tudo"
+		}
+	},
+	"projectReset": {
+		"menu": "Restaurar",
+		"confirm": "Restaurar",
+		"working": "Restaurando…",
+		"failed": "Não deu para restaurar. Nada foi alterado.",
+		"undoHint": "Um Ctrl+Z volta tudo a como está agora.",
+		"camera": {
+			"menu": "Restaurar trilha da câmera",
+			"title": "Restaurar a trilha da câmera?",
+			"body": "Os trechos da câmera voltam a ser os que a gravação registrou (Rosto / Tela + câmera). Divisões, modos e a aparência própria de cada trecho saem.",
+			"done": "Trilha da câmera restaurada. Ctrl+Z desfaz."
+		},
+		"video": {
+			"menu": "Restaurar trilha de vídeo",
+			"title": "Restaurar a trilha de vídeo?",
+			"body": "A gravação volta inteira, como foi importada: cortes, trims, mudanças de velocidade, divisões, recortes e palavras inseridas saem. Zooms, anotações e trechos da câmera ficam no mesmo ponto da gravação.",
+			"done": "Trilha de vídeo restaurada. Ctrl+Z desfaz."
+		},
+		"zooms": {
+			"menu": "Restaurar zooms",
+			"title": "Restaurar os zooms?",
+			"body": "Todos os zooms saem, e os automáticos são planejados de novo como depois de gravar (com a transcrição, se houver).",
+			"done": "Zooms restaurados. Ctrl+Z desfaz."
+		},
+		"annotations": {
+			"menu": "Restaurar anotações",
+			"title": "Restaurar as anotações?",
+			"body": "Textos, setas, destaques, passos e desfoques que você desenhou saem. Os desfoques automáticos de privacidade ficam.",
+			"done": "Anotações restauradas. Ctrl+Z desfaz."
+		},
+		"all": {
+			"menu": "Restaurar tudo",
+			"title": "Restaurar o projeto inteiro?",
+			"body": "O projeto volta a como estava logo depois de importar a gravação: vídeo, câmera, zooms (planejados de novo), anotações, áudios importados e trechos silenciados. A transcrição, as mídias e a aparência (layout, fundo, cursor, estilo das legendas, volumes) ficam.",
+			"done": "Projeto restaurado. Ctrl+Z desfaz."
+		}
+	},
 	"projectSettings": {
 		"intro": "Estes ajustes seguem os seus Padrões. O que você mudar aqui vale só para este projeto.",
 		"openDefaults": "Abrir Padrões",
