@@ -39,7 +39,9 @@
 		"cameraTrack": "摄像头",
 		"cameraPip": "画中画",
 		"cameraHidden": "无摄像头",
-		"scrollKey": "Scroll"
+		"scrollKey": "Scroll",
+		"dragKey": "拖动",
+		"noSnap": "不吸附"
 	},
 	"trails": {
 		"zoomIn": "放大过程：画面在缩放开始前逐渐放大",
@@ -148,5 +150,13 @@
 		"lookAllHint": "此处的更改适用于所有片段，包括有独立外观的片段：它们也会采用新值。",
 		"lookRestore": "恢复默认外观",
 		"ownLook": "自有外观"
+	},
+	"snap": {
+		"playhead": "播放头",
+		"clip": "片段边缘",
+		"start": "时间线开头",
+		"end": "时间线结尾",
+		"edge": "元素边缘",
+		"marker": "标记"
 	}
 }

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { type AxcutDocument, createEmptyDocument } from "../schema";
+import { replacePillSpan } from "../timeline/timelineMap";
 import { inferHistoryLabel } from "./historyLabels";
 
 const base = (): AxcutDocument => ({
@@ -132,5 +133,21 @@ describe("inferHistoryLabel", () => {
 				cameraSegments: [{ ...seg("f", 4000, 7000), mode: "fullscreen" }],
 			}),
 		).toBe("camera");
+	});
+	it("names an edge snapped onto the playhead a move of that region, in one step", () => {
+		// The timeline magnet only changes WHERE an edge lands: the write is the same
+		// replacePillSpan a free drag makes, read back the same way.
+		const doc = { ...base(), zoomRanges: [zoom("z1", 1000)] };
+		const playheadMs = 4567.891;
+		const zoomRanges = replacePillSpan(
+			doc.zoomRanges,
+			"z1",
+			1000,
+			playheadMs,
+			doc.timeline.clips,
+			() => "z1b",
+		) as AxcutDocument["zoomRanges"];
+		expect(zoomRanges.map((z) => z.endMs)).toEqual([Math.round(playheadMs)]);
+		expect(inferHistoryLabel(doc, { ...doc, zoomRanges })).toBe("moveZoom");
 	});
 });

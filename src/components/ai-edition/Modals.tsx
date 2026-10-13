@@ -13,6 +13,13 @@ import { formatDate } from "@/i18n/format";
 import { currentLocale } from "@/i18n/toastText";
 import type { AxcutClip } from "@/lib/ai-edition/schema";
 import { formatSeconds } from "@/lib/ai-edition/timeline/format";
+import {
+	buildSnapTargets,
+	landedOn,
+	snapEdge,
+	snapRadiusSec,
+	watchAltDuringDrag,
+} from "@/lib/ai-edition/timeline/snap";
 import { cropDraftFromRegion, cropDraftToPct, previewBoxStyle } from "./cropDraft";
 import styles from "./NewEditorShell.module.css";
 import { ChoiceRow } from "./RightPanes";
@@ -678,6 +685,8 @@ export function EditClipModal({
 	const [draftStart, setDraftStart] = useState(0);
 	const [draftEnd, setDraftEnd] = useState(0);
 	const [activeEdge, setActiveEdge] = useState<"start" | "end" | null>(null);
+	// A grip locked onto the playhead while it is dragged (timeline/snap.ts): the playhead lights.
+	const [gripOnPlayhead, setGripOnPlayhead] = useState(false);
 
 	// Crop draft — percentages (0-100), same shape/units CropModal used to
 	// keep locally before it was folded in here.
@@ -801,26 +810,45 @@ export function EditClipModal({
 		const startDraftStart = draftStart;
 		const startDraftEnd = draftEnd;
 		setActiveEdge(edge);
-		const move = (moveEvent: PointerEvent) => {
-			const deltaSec = ((moveEvent.clientX - startClientX) / widthPx) * sourceDurationSec;
+		// The same magnet as the timeline's, on this dialog's own (source) clock: the playhead first,
+		// then the two ends of the recording. The playhead is the one at the grab: a grip that
+		// crosses it pushes it along, and a magnet that followed would never let go.
+		const targets = buildSnapTargets({ playheadSec, totalSec: sourceDurationSec });
+		const radius = snapRadiusSec(widthPx / sourceDurationSec);
+		let free = event.altKey;
+		let lastX: number | null = null;
+		const place = (clientX: number) => {
+			const deltaSec = ((clientX - startClientX) / widthPx) * sourceDurationSec;
+			const wanted = (edge === "start" ? startDraftStart : startDraftEnd) + deltaSec;
+			const snapped = snapEdge(wanted, targets, radius, free);
 			// A trim that crosses the playhead pushes it along, so it never leaves the kept range.
 			if (edge === "start") {
-				const next = Math.min(Math.max(startDraftStart + deltaSec, 0), startDraftEnd - 0.05);
+				const next = Math.min(Math.max(snapped.sec, 0), startDraftEnd - 0.05);
+				setGripOnPlayhead(landedOn(snapped.hit, next)?.target.kind === "playhead");
 				setDraftStart(next);
 				setPlayheadSec((p) => Math.max(p, next));
 			} else {
-				const next = Math.max(
-					Math.min(startDraftEnd + deltaSec, sourceDurationSec),
-					startDraftStart + 0.05,
-				);
+				const next = Math.max(Math.min(snapped.sec, sourceDurationSec), startDraftStart + 0.05);
+				setGripOnPlayhead(landedOn(snapped.hit, next)?.target.kind === "playhead");
 				setDraftEnd(next);
 				setPlayheadSec((p) => Math.min(p, next));
 			}
 		};
+		const move = (moveEvent: PointerEvent) => {
+			lastX = moveEvent.clientX;
+			free = moveEvent.altKey;
+			place(lastX);
+		};
+		const stopWatchingAlt = watchAltDuringDrag((altKey) => {
+			free = altKey;
+			if (lastX !== null) place(lastX);
+		});
 		const end = () => {
+			stopWatchingAlt();
 			window.removeEventListener("pointermove", move);
 			window.removeEventListener("pointerup", end);
 			setActiveEdge(null);
+			setGripOnPlayhead(false);
 		};
 		window.addEventListener("pointermove", move);
 		window.addEventListener("pointerup", end, { once: true });
@@ -1171,6 +1199,7 @@ export function EditClipModal({
 					<div
 						className={styles.editClipPlayhead}
 						data-testid="edit-clip-playhead"
+						data-snapped={gripOnPlayhead || undefined}
 						style={{ left: `${(playheadSec / sourceDurationSec) * 100}%` }}
 					/>
 				</div>

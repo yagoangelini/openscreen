@@ -39,7 +39,9 @@
 		"cameraTrack": "Kamera",
 		"cameraPip": "PiP",
 		"cameraHidden": "Bez kamery",
-		"scrollKey": "Scroll"
+		"scrollKey": "Scroll",
+		"dragKey": "Táhnout",
+		"noSnap": "Bez přichytávání"
 	},
 	"trails": {
 		"zoomIn": "Najetí: pohled se přibližuje až do začátku přiblížení",
@@ -148,5 +150,13 @@
 		"lookAllHint": "Změny zde platí pro všechny úseky, včetně těch s vlastním vzhledem: i ty převezmou novou hodnotu.",
 		"lookRestore": "Obnovit výchozí vzhled",
 		"ownLook": "Vlastní vzhled"
+	},
+	"snap": {
+		"playhead": "Přehrávací hlava",
+		"clip": "Okraj klipu",
+		"start": "Začátek časové osy",
+		"end": "Konec časové osy",
+		"edge": "Okraj prvku",
+		"marker": "Značka"
 	}
 }

@@ -39,7 +39,9 @@
 		"cameraTrack": "Câmera",
 		"cameraPip": "PiP",
 		"cameraHidden": "Sem câmera",
-		"scrollKey": "Roda do mouse"
+		"scrollKey": "Roda do mouse",
+		"dragKey": "Arrastar",
+		"noSnap": "Sem ímã"
 	},
 	"trails": {
 		"zoomIn": "Aproximação: a visão se aproxima até o início do zoom",
@@ -148,5 +150,13 @@
 		"lookAllHint": "As mudanças aqui valem para todos os trechos, inclusive os que têm aparência própria: eles também passam a usar o novo valor.",
 		"lookRestore": "Restaurar padrão",
 		"ownLook": "Aparência própria"
+	},
+	"snap": {
+		"playhead": "Cursor de reprodução",
+		"clip": "Borda do clipe",
+		"start": "Início da linha do tempo",
+		"end": "Fim da linha do tempo",
+		"edge": "Borda de item",
+		"marker": "Marcador"
 	}
 }
