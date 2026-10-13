@@ -51,5 +51,7 @@ describe.skipIf(!ffmpeg)("getScreenActivity (real ffmpeg)", () => {
 		expect(box.y).toBeCloseTo(0, 1);
 		expect(box.width).toBeCloseTo(200 / 640, 1);
 		expect(box.height).toBeCloseTo(0.5, 1);
-	});
+		// Two real ffmpeg runs, the scan one below normal priority: under a full suite they outlast
+		// the default 5 s.
+	}, 30_000);
 });
