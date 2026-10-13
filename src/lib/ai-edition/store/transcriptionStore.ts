@@ -26,9 +26,10 @@ import { useEffect, useMemo } from "react";
 import { toast } from "sonner";
 import { create } from "zustand";
 import { toastText as translateToast } from "@/i18n/toastText";
-import { effectiveTranscriptionLanguage, loadUserPreferences } from "@/lib/userPreferences";
+import { loadUserPreferences } from "@/lib/userPreferences";
 import { transcribeAsset } from "../document/transcribe";
 import { carryOverWordEdits, withTranscript } from "../document/transcript";
+import { resolveProjectTranscriptionSettings } from "../projectTranscriptionSettings";
 import type { AxcutDocument } from "../schema";
 import { applyGlossary, parseGlossary } from "../transcription/glossary";
 import { labelTranscriptFromStems } from "../transcription/speakerStems";
@@ -155,7 +156,7 @@ export const useTranscriptionStore = create<TranscriptionState>((set, get) => ({
 				if (!assetCanCarrySpeech(document, asset.id)) continue;
 				patch()[asset.id] = {
 					status: "queued",
-					language: effectiveTranscriptionLanguage(),
+					language: resolveProjectTranscriptionSettings(document).transcriptionLanguage,
 					manual: false,
 				};
 			}
@@ -167,7 +168,12 @@ export const useTranscriptionStore = create<TranscriptionState>((set, get) => ({
 		}
 	},
 
-	request(assetId, language = effectiveTranscriptionLanguage()) {
+	request(
+		assetId,
+		language = resolveProjectTranscriptionSettings(
+			useProjectStore.getState().document,
+		).transcriptionLanguage,
+	) {
 		// A manual run can be the first thing that happens in a project (the
 		// auto pass is off without a local engine), so adopt the loaded project
 		// before queueing — `runJob` refuses to write into a document the queue
@@ -457,7 +463,8 @@ async function runJob(assetId: string, job: TranscriptionJob): Promise<void> {
 		// The glossary first, so a correction the user made by hand still wins over it.
 		const corrected = applyGlossary(
 			labelled?.transcript ?? transcript,
-			parseGlossary(loadUserPreferences().glossary),
+			// The project's glossary: the default one plus the project's own lines.
+			parseGlossary(resolveProjectTranscriptionSettings(current).glossary),
 		);
 		const merged = carryOverWordEdits(
 			current.transcripts.find((t) => t.assetId === assetId),

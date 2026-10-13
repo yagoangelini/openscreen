@@ -145,7 +145,7 @@
 		"lookScopePiece": "Questo pezzo",
 		"lookScopeAll": "Tutti i pezzi",
 		"lookPieceHint": "Le modifiche qui valgono solo per questo pezzo. La camera passa al suo aspetto e torna indietro con una transizione morbida.",
-		"lookAllHint": "Le modifiche qui valgono per tutti i pezzi senza un aspetto proprio.",
+		"lookAllHint": "Le modifiche qui valgono per tutti i tratti, anche quelli con un aspetto proprio: prendono anch'essi il nuovo valore.",
 		"lookRestore": "Ripristina aspetto predefinito",
 		"ownLook": "Aspetto proprio"
 	}

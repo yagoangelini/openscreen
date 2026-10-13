@@ -1,6 +1,6 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { app } from "electron";
@@ -68,12 +68,30 @@ export function screenActivityArgs(videoPath: string): string[] {
 	];
 }
 
-async function cacheKey(filePath: string): Promise<string> {
-	const info = await stat(filePath);
+function cacheKeyFor(filePath: string, info: { size: number; mtimeMs: number }): string {
 	return createHash("sha1")
 		.update(`activity-v1:${filePath}:${info.size}:${info.mtimeMs}`)
 		.digest("hex")
 		.slice(0, 32);
+}
+
+async function cacheKey(filePath: string): Promise<string> {
+	return cacheKeyFor(filePath, await stat(filePath));
+}
+
+/** The take moved (renamed in the library): its cached scan follows it, like the peaks. */
+export async function moveCachedScreenActivity(fromPath: string, toPath: string): Promise<void> {
+	const dir = cacheDir();
+	if (!dir) return;
+	try {
+		const info = await stat(toPath);
+		await rename(
+			path.join(dir, `${cacheKeyFor(fromPath, info)}.json`),
+			path.join(dir, `${cacheKeyFor(toPath, info)}.json`),
+		);
+	} catch {
+		// Nothing cached: scanned again on demand.
+	}
 }
 
 function cacheDir(): string | null {

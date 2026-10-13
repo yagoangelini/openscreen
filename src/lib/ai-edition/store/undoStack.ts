@@ -24,9 +24,16 @@
 // is `push`. The exported `past` / `future` are `readonly` views, and every
 // mutation is a named function the audit can count call sites of.
 
-export type Snapshot = { projectId: string; doc: unknown };
+import type { HistoryLabel } from "./historyLabels";
 
-const MAX_HISTORY = 50;
+/**
+ * One step of history: the document to go back (or forward) to, and what the step between it
+ * and the document beside it was, for the history menu. On `past` the label names the edit an
+ * undo reverts; on `future`, the edit a redo replays. Undo and redo carry it across.
+ */
+export type Snapshot = { projectId: string; doc: unknown; label?: HistoryLabel };
+
+export const MAX_HISTORY = 50;
 
 const pastStack: Snapshot[] = [];
 const futureStack: Snapshot[] = [];
@@ -68,6 +75,16 @@ export function popPast(): Snapshot | undefined {
 
 export function popFuture(): Snapshot | undefined {
 	return futureStack.pop();
+}
+
+/**
+ * Rewrite every document on both stacks in place -- for a recording whose files moved
+ * (renamed in the library): an undo must not bring back paths that no longer exist.
+ */
+export function mapHistory(map: (doc: unknown) => unknown) {
+	for (const stack of [pastStack, futureStack]) {
+		for (const snapshot of stack) snapshot.doc = map(snapshot.doc);
+	}
 }
 
 export function clearHistory() {

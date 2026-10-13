@@ -1126,6 +1126,39 @@ describe("LaunchWindow record button", () => {
 		}
 	});
 
+	// The low-disk toast's cross used to be dead: a toast is sonner's markup, not the HUD's,
+	// so the pushed cursor over it never handed input back and the click went through.
+	it("hands input back for the pushed cursor over a toast's close cross", async () => {
+		platformState.value = "win32";
+
+		renderLaunchWindow();
+
+		await waitFor(() => {
+			expect(window.electronAPI.setHudOverlayIgnoreMouseEvents).toHaveBeenLastCalledWith(true);
+		});
+		const list = document.createElement("ol");
+		list.setAttribute("data-sonner-toaster", "true");
+		list.innerHTML = `<li data-sonner-toast="" data-removed="false"><button data-close-button="true"></button></li>`;
+		document.body.appendChild(list);
+		const cross = list.querySelector("[data-close-button]");
+		const elementFromPoint = vi.fn((_x: number, _y: number): Element | null => cross);
+		Object.defineProperty(document, "elementFromPoint", {
+			value: elementFromPoint,
+			configurable: true,
+		});
+		const setIgnore = vi.mocked(window.electronAPI.setHudOverlayIgnoreMouseEvents);
+
+		try {
+			setIgnore.mockClear();
+			for (const listener of hudCursorListeners) listener(763, 560);
+			expect(elementFromPoint).toHaveBeenCalledWith(763, 560);
+			expect(setIgnore).toHaveBeenCalledWith(false);
+		} finally {
+			Reflect.deleteProperty(document, "elementFromPoint");
+			list.remove();
+		}
+	});
+
 	// The mount effect's cleanup used to send `ignore=false` straight down the
 	// bridge, bypassing the wrapper that owns `hudIgnoreMouseEventsRef`. That left
 	// the mirror claiming the HUD was click-through while the main process had just

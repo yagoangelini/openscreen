@@ -232,6 +232,37 @@ export function registerNativeBridgeHandlers(context: NativeBridgeContext) {
 		getCursorCapabilities: () => cursorService.getCapabilities(),
 	});
 	const compositorViewService = new CompositorViewService();
+	// The preview views each window created. A window that reloads or closes never runs the
+	// React cleanup that destroys its view, so the view -- and the take it decodes -- stayed
+	// open in this process until the app quit: on Windows that take could then not be renamed
+	// or deleted from the recordings library. Destroyed here with the window's page instead.
+	const viewsBySender = new Map<number, Set<number>>();
+	const trackView = (sender: Electron.WebContents, id: number) => {
+		let views = viewsBySender.get(sender.id);
+		if (!views) {
+			const owned = new Set<number>();
+			views = owned;
+			viewsBySender.set(sender.id, owned);
+			const release = () => {
+				for (const viewId of owned) {
+					try {
+						compositorViewService.destroyView(viewId);
+					} catch (error) {
+						console.warn("[native-bridge] could not destroy a leftover preview view:", error);
+					}
+				}
+				owned.clear();
+			};
+			sender.once("destroyed", () => {
+				release();
+				viewsBySender.delete(sender.id);
+			});
+			sender.on("did-start-navigation", (details) => {
+				if (details.isMainFrame && !details.isSameDocument) release();
+			});
+		}
+		views.add(id);
+	};
 	const aiEditionService = new AiEditionService({
 		documents: context.getAiEditionDocuments(),
 		deleteChatHistory: deleteProjectChat,
@@ -363,6 +394,7 @@ export function registerNativeBridgeHandlers(context: NativeBridgeContext) {
 								webcamPath: request.payload.webcamPath,
 								cursorPath: request.payload.cursorPath,
 							});
+							if (typeof id === "number" && id >= 0) trackView(event.sender, id);
 							return createSuccessResponse(requestId, { id });
 						}
 						case "probeBackend":
@@ -428,6 +460,7 @@ export function registerNativeBridgeHandlers(context: NativeBridgeContext) {
 							);
 							return createSuccessResponse(requestId, { ok: true });
 						case "destroyView":
+							viewsBySender.get(event.sender.id)?.delete(request.payload.id);
 							compositorViewService.destroyView(request.payload.id);
 							return createSuccessResponse(requestId, { ok: true });
 						case "exportMulti": {
@@ -544,7 +577,10 @@ export function registerNativeBridgeHandlers(context: NativeBridgeContext) {
 						case "document.create":
 							return createSuccessResponse(
 								requestId,
-								await aiEditionService.create(request.payload?.title),
+								await aiEditionService.create(
+									request.payload?.title,
+									request.payload?.editorDefaults,
+								),
 							);
 						case "document.save":
 							return createSuccessResponse(

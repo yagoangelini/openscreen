@@ -1303,7 +1303,10 @@ function joinable(left: AxcutClip, right: AxcutClip): boolean {
 /** Move every row anchored to an absorbed clip onto the one that swallowed it. A trim, a
  *  zoom, an annotation and an audio take all name a clip the same way, and an id that no
  *  longer exists has to stop being named. */
-function reanchorRows(document: AxcutDocument, absorbed: Map<string, string>): AxcutDocument {
+export function reanchorRows(
+	document: AxcutDocument,
+	absorbed: Map<string, string>,
+): AxcutDocument {
 	const relabel = <T extends StoredRegion>(regions: T[]): T[] =>
 		regions.map((region) =>
 			hasCompleteClipAnchor(region) && absorbed.has(region.clipId)

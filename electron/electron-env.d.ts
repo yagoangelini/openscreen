@@ -104,6 +104,53 @@ interface Window {
 		) => Promise<import("./media/screenActivity").ScreenActivityResult>;
 		/** OCR over a take, for the privacy blur: `ocr-scan.exe`'s NDJSON. Windows only. */
 		scanRecordingText?: (videoPath: string) => Promise<import("./recording/ocrScan").OcrScanResult>;
+		/** Every recording in the recordings folder, for the Media tab. */
+		recordingsLibraryList?: () => Promise<
+			import("./ipc/recordingsLibraryHandlers").LibraryAnswer<
+				import("./ipc/recordingsLibraryHandlers").LibraryListing
+			>
+		>;
+		/** Duration and thumbnail of one recording (cached). */
+		recordingsLibraryPreview?: (
+			key: string,
+		) => Promise<
+			import("./ipc/recordingsLibraryHandlers").LibraryAnswer<
+				import("./media/recordingPreview").RecordingPreview
+			>
+		>;
+		/** Renames the recording's folder; `moves` is every file, old path and new. */
+		recordingsLibraryRename?: (
+			key: string,
+			name: string,
+		) => Promise<
+			import("./ipc/recordingsLibraryHandlers").LibraryAnswer<{
+				name: string;
+				folderPath: string;
+				moves: Array<[string, string]>;
+				changedProjectIds: string[];
+			}>
+		>;
+		/** Sends the recording's folder (or a flat take's files) to the Recycle Bin. */
+		recordingsLibraryTrash?: (key: string) => Promise<
+			import("./ipc/recordingsLibraryHandlers").LibraryAnswer<{
+				files: string[];
+				folderPath: string | null;
+			}>
+		>;
+		recordingsLibraryReveal?: (key: string) => Promise<{ success: boolean }>;
+		/** Watch the recordings folder while this window wants to know (true) or not (false). */
+		recordingsLibraryWatch?: (on: boolean) => Promise<{ success: boolean }>;
+		onRecordingsLibraryChanged?: (callback: () => void) => () => void;
+		/** Which of these files exist. */
+		mediaFilesExist?: (paths: string[]) => Promise<{ success: boolean; exists: boolean[] }>;
+		/** Names the take waiting for the editor: renames its folder before it is opened. */
+		nameFreshTake?: (name: string) => Promise<
+			import("./ipc/recordingsLibraryHandlers").LibraryAnswer<{
+				session: import("../src/lib/recordingSession").RecordingSession;
+				renamed: boolean;
+				name?: string;
+			}>
+		>;
 		chooseRecordingsFolder: () => Promise<{ canceled: true } | { canceled: false; folder: string }>;
 		openRecordingsFolder: () => Promise<{ success: boolean }>;
 		/** The pause shortcut, pressed while another app had focus. Returns an unsubscribe. */

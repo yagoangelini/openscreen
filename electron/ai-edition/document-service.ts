@@ -17,8 +17,11 @@ import { removeClip } from "../../src/lib/ai-edition/document/timeline";
 import {
 	appShortcutCombos,
 	keystrokesFromCursorSamples,
-	SHOW_KEYSTROKES_KEY,
 } from "../../src/lib/ai-edition/keystrokes";
+import {
+	composeNewProjectEditor,
+	pickEditorDefaults,
+} from "../../src/lib/ai-edition/newProjectDefaults";
 import {
 	type AxcutAsset,
 	type AxcutDocument,
@@ -31,6 +34,11 @@ import {
 	type StylePresetAppearance,
 	stylePresetLegacyEditor,
 } from "../../src/lib/ai-edition/stylePresets";
+import {
+	collectMediaPaths,
+	type PathMapper,
+	rewriteMediaPaths,
+} from "../../src/lib/mediaPathRewrite";
 import {
 	parseRecordingLayout,
 	RECORDING_LAYOUT_SUFFIX,
@@ -407,17 +415,20 @@ export class DocumentService {
 		return backup;
 	}
 
-	/**
-	 * The look a new project starts from, as `legacyEditor` fields: the preset marked for new
-	 * projects, else the most recently edited project's look, else nothing (factory defaults).
-	 * Never the format — a new project keeps Auto — and never anything tied to footage.
-	 */
-	private async newProjectLook(): Promise<Record<string, unknown> | null> {
+	/** The look of the preset marked for new projects, as `legacyEditor` fields, if any. */
+	private async newProjectPresetLook(): Promise<Record<string, unknown> | null> {
 		const preset = await this.newProjectPreset?.().catch((error) => {
 			console.warn("[ai-edition] could not read the preset for new projects:", error);
 			return null;
 		});
-		if (preset) return stylePresetLegacyEditor(preset);
+		return preset ? stylePresetLegacyEditor(preset) : null;
+	}
+
+	/**
+	 * The most recently edited project's look, as `legacyEditor` fields: what a new project
+	 * copies while the user has saved no defaults. Never anything tied to footage.
+	 */
+	private async latestProjectLook(): Promise<Record<string, unknown> | null> {
 		const latest = (await this.readAllProjects()).reduce<AxcutDocument | null>(
 			(best, doc) => (!best || doc.project.updatedAt > best.project.updatedAt ? doc : best),
 			null,
@@ -524,18 +535,31 @@ export class DocumentService {
 		}
 	}
 
-	async createProject(title: string): Promise<AxcutDocument> {
+	/**
+	 * `editorDefaults`: the user's global defaults ("Padrões", `newProjectDefaults.ts`), sent by
+	 * the editor; null or absent while none are saved, and from the CLI and MCP callers.
+	 */
+	async createProject(
+		title: string,
+		editorDefaults?: Record<string, unknown> | null,
+	): Promise<AxcutDocument> {
 		await this.ensureProjectsDir();
 		const projectId = createId("proj");
 		// Every new project comes through here — the New dialog, the empty state and a finished
-		// recording alike — so this is the one place it takes the user's look.
-		// The fork's factory choices for a new project, under whatever look it inherits:
-		// the shortcuts pressed while recording show on screen, and every click gets a
-		// ring (2026-10-09). A look that says otherwise wins.
-		const look = await this.newProjectLook();
+		// recording alike — so this is the one place it takes the user's defaults and look. The
+		// values are COPIED: a later change to the defaults never touches this project again.
+		const defaults = editorDefaults ? pickEditorDefaults(editorDefaults) : {};
+		const hasDefaults = Object.keys(defaults).length > 0;
+		const presetLook = await this.newProjectPresetLook();
+		const legacyEditor = composeNewProjectEditor({
+			defaults: hasDefaults ? defaults : null,
+			presetLook,
+			// A preset holds a whole look, so the latest project's would be covered anyway.
+			latestLook: hasDefaults || presetLook ? null : await this.latestProjectLook(),
+		});
 		const doc: AxcutDocument = {
 			...createEmptyDocument({ projectId, title: title?.trim() || "Untitled Project" }),
-			legacyEditor: { [SHOW_KEYSTROKES_KEY]: true, cursorClickRing: true, ...(look ?? {}) },
+			legacyEditor,
 		};
 		await this.writeProject(doc);
 		return doc;
@@ -695,6 +719,56 @@ export class DocumentService {
 			},
 		};
 		return this.saveProject(next);
+	}
+
+	/**
+	 * A recording moved (renamed in the library): every project file pointing into it is
+	 * rewritten to the new paths, each inside its own project queue, so the rewrite never
+	 * lands between a read and a save of that project. Works on the raw JSON, whatever its
+	 * schema version, and writes only the projects that changed. Returns their ids.
+	 *
+	 * The editor rewrites the document it holds open itself (it would otherwise save the
+	 * old paths straight back over this); see `rewriteOpenProjectMedia` in the renderer.
+	 */
+	async rewriteMediaPaths(mapper: PathMapper): Promise<string[]> {
+		await this.ensureProjectsDir();
+		const ids = (await fs.readdir(this.projectsRoot))
+			.filter((name) => name.endsWith(PROJECT_FILE_EXTENSION))
+			.map((name) => name.slice(0, -PROJECT_FILE_EXTENSION.length));
+		const changed: string[] = [];
+		for (const projectId of ids) {
+			this.touch(projectId);
+			await this.enqueue(projectId, async () => {
+				let raw: unknown;
+				try {
+					raw = JSON.parse(await fs.readFile(this.fileFor(projectId), "utf8"));
+				} catch {
+					return;
+				}
+				const result = rewriteMediaPaths(raw, mapper);
+				if (result.changed === 0) return;
+				// writeProjectNow names the file after the document's own id.
+				if ((result.value as { project?: { id?: unknown } })?.project?.id !== projectId) return;
+				await this.writeProjectNow(result.value as AxcutDocument);
+				changed.push(projectId);
+			});
+		}
+		return changed;
+	}
+
+	/**
+	 * Every project with the absolute paths it points at, for "which projects use this
+	 * recording" in the library. Read raw, unrelinked: a listing, not an open.
+	 */
+	async listProjectMediaPaths(): Promise<
+		Array<{ id: string; title: string; updatedAt: string; paths: string[] }>
+	> {
+		return (await this.readAllProjects()).map((doc) => ({
+			id: doc.project.id,
+			title: doc.project.title,
+			updatedAt: doc.project.updatedAt,
+			paths: collectMediaPaths(doc.assets),
+		}));
 	}
 
 	/**

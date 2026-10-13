@@ -45,8 +45,9 @@ const editorSettings = vi.hoisted(() => ({ cursorShow: true, autoFocusAll: false
 vi.mock("@/lib/ai-edition/store/useEditorSettings", async (importOriginal) => {
 	const actual = await importOriginal<typeof import("@/lib/ai-edition/store/useEditorSettings")>();
 	return {
-		useEditorSettings: () => {
-			const result = actual.useEditorSettings();
+		...actual,
+		useEditorSettings: (...args: Parameters<typeof actual.useEditorSettings>) => {
+			const result = actual.useEditorSettings(...args);
 			return {
 				...result,
 				settings: { ...result.settings, ...editorSettings },

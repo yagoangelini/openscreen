@@ -23,6 +23,8 @@ import {
 } from "@/lib/ai-edition/document/cameraSegments";
 import { createId } from "@/lib/ai-edition/document/ids";
 import { clipAwaitsProbedDuration } from "@/lib/ai-edition/document/timeline";
+import { nameFreshTake } from "@/lib/ai-edition/freshTakeName";
+import { resolveProjectTranscriptionSettings } from "@/lib/ai-edition/projectTranscriptionSettings";
 import {
 	AUTO_REDACT_SOURCE,
 	parseOcrScan,
@@ -49,7 +51,6 @@ import {
 	getTelemetryWithFramePopups,
 } from "@/lib/ai-edition/timeline/framePopups";
 import type { ScreenActivity } from "@/lib/ai-edition/timeline/screenActivity";
-import { loadUserPreferences } from "@/lib/userPreferences";
 import { nativeBridgeClient } from "@/native/client";
 
 // Fresh recordings used to get cursor-dwell zooms on load (legacy editor
@@ -233,7 +234,9 @@ export type ApplyFreshRecordingAutoZoomsDeps = {
  * A deadline that expires says only "no answer yet", which reads as ON like every other
  * unreadable answer.
  */
-async function readAutoZoomPref(timeoutMs = DOCUMENT_SAVES_WAIT_TIMEOUT_MS): Promise<boolean> {
+export async function readAutoZoomPref(
+	timeoutMs = DOCUMENT_SAVES_WAIT_TIMEOUT_MS,
+): Promise<boolean> {
 	try {
 		const read = (async () => {
 			const prefs = await window.electronAPI?.getRecordingPrefs?.();
@@ -523,7 +526,10 @@ export async function applyFreshRecordingRedactions(
 	}
 	const spans = trackDetections(
 		parsed,
-		parseSensitiveTerms(deps.terms ?? loadUserPreferences().autoRedactTerms),
+		parseSensitiveTerms(
+			deps.terms ??
+				resolveProjectTranscriptionSettings(useProjectStore.getState().document).autoRedactTerms,
+		),
 	);
 	if (spans.length === 0) return 0;
 
@@ -578,7 +584,10 @@ export async function rescanAutoRedactions(
 ): Promise<AutoRedactionRescan> {
 	const scan =
 		deps.scan ?? ((videoPath: string) => window.electronAPI?.scanRecordingText?.(videoPath));
-	const terms = parseSensitiveTerms(deps.terms ?? loadUserPreferences().autoRedactTerms);
+	const terms = parseSensitiveTerms(
+		deps.terms ??
+			resolveProjectTranscriptionSettings(useProjectStore.getState().document).autoRedactTerms,
+	);
 	const outcome: AutoRedactionRescan = {
 		scanned: 0,
 		failed: 0,
@@ -715,16 +724,28 @@ export async function importPendingRecording(
 	if (!api) return false;
 
 	const result = await api.getCurrentRecordingSession();
-	const screenPath = result.success ? result.session?.screenVideoPath : undefined;
+	// The take's name first, while nothing has its files open: it renames the take's folder,
+	// and everything below works on the renamed paths (see freshTakeName.ts).
+	const named =
+		result.success && result.session
+			? await nameFreshTake(result.session, (reason) => {
+					console.warn("[recording] the take could not be renamed:", reason);
+					onWarning?.(toastText("editor", "takeName.renameFailed"));
+				})
+			: null;
+	const screenPath =
+		named?.session.screenVideoPath ??
+		(result.success ? result.session?.screenVideoPath : undefined);
 	if (!screenPath) return false;
 	const cursorCaptureMode = result.success ? result.session?.cursorCaptureMode : undefined;
 	const warning = result.success ? result.warning : undefined;
 
 	const label = screenPath.split(/[\\/]/).pop() || toastText("editor", "projectNames.asset");
 	await useProjectStore.getState().createProject(
-		toastText("editor", "projectNames.recording", {
-			date: formatDateTime(new Date(), currentLocale()),
-		}),
+		named?.title ??
+			toastText("editor", "projectNames.recording", {
+				date: formatDateTime(new Date(), currentLocale()),
+			}),
 	);
 	await useProjectStore.getState().addAsset(screenPath, label);
 	// Before the zoom hand-off below, so the zooms wait for the "face" spans to be pieces.
@@ -748,7 +769,8 @@ export async function importPendingRecording(
 			if (enabled) void prefetchFreshRecordingTelemetry();
 		});
 	}
-	if (loadUserPreferences().autoRedact) {
+	// The project the take lands in decides: its own switch, else the default.
+	if (resolveProjectTranscriptionSettings(useProjectStore.getState().document).autoRedact) {
 		void applyFreshRecordingRedactions(screenPath, { onScanIssue: onRedactionIssue }).then(
 			(count) => {
 				if (count > 0) onRedacted?.(count);

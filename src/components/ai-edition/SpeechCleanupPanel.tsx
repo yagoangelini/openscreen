@@ -28,7 +28,7 @@ import {
 } from "@/lib/userPreferences";
 import styles from "./NewEditorShell.module.css";
 
-type CleanupPrefs = Pick<
+export type CleanupPrefs = Pick<
 	UserPreferences,
 	| "speechFillers"
 	| "speechContextualFillers"
@@ -37,7 +37,7 @@ type CleanupPrefs = Pick<
 	| "speechSilenceKeepSec"
 >;
 
-const DEFAULT_CLEANUP_PREFS: CleanupPrefs = {
+export const DEFAULT_CLEANUP_PREFS: CleanupPrefs = {
 	speechFillers: formatFillerList(DEFAULT_SPEECH_FILLERS),
 	speechContextualFillers: formatFillerList(DEFAULT_CONTEXTUAL_FILLERS),
 	speechCleanupAggressive: false,
@@ -45,7 +45,7 @@ const DEFAULT_CLEANUP_PREFS: CleanupPrefs = {
 	speechSilenceKeepSec: DEFAULT_SILENCE_KEEP_SEC,
 };
 
-function readCleanupPrefs(): CleanupPrefs {
+export function readCleanupPrefs(): CleanupPrefs {
 	const p = loadUserPreferences();
 	return {
 		speechFillers: p.speechFillers,
@@ -66,6 +66,102 @@ const fieldStyle = {
 	color: "var(--fg)",
 	font: "500 12px var(--font-mono)",
 } as const;
+
+/**
+ * "Palavras e regras": the lists and thresholds "Limpar fala" plans with. The panel shows them
+ * under its own fold; the global defaults dialog ("Padrões") shows the same controls.
+ */
+export function SpeechCleanupRules({
+	prefs,
+	onChange,
+}: {
+	prefs: CleanupPrefs;
+	onChange: (patch: Partial<CleanupPrefs>) => void;
+}) {
+	const ts = useScopedT("settings");
+	const update = onChange;
+	const numberField = (
+		key: "speechSilenceMinSec" | "speechSilenceKeepSec",
+		range: { min: number; max: number },
+		label: string,
+	) => (
+		<label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6 }}>
+			<span style={{ flex: 1 }}>{label}</span>
+			<input
+				type="number"
+				data-testid={`speech-cleanup-${key}`}
+				min={range.min}
+				max={range.max}
+				step={0.1}
+				value={prefs[key]}
+				onChange={(event) => {
+					const value = Number(event.target.value);
+					if (Number.isFinite(value) && value >= range.min && value <= range.max) {
+						update({ [key]: value });
+					}
+				}}
+				style={{ ...fieldStyle, width: 72, resize: undefined }}
+			/>
+		</label>
+	);
+
+	return (
+		<>
+			<label style={{ display: "block", marginTop: 6 }}>
+				{ts("transcript.cleanup.fillers")}
+				<textarea
+					data-testid="speech-cleanup-fillers"
+					value={prefs.speechFillers}
+					rows={3}
+					spellCheck={false}
+					onChange={(event) => update({ speechFillers: event.target.value })}
+					style={fieldStyle}
+				/>
+			</label>
+			<label style={{ display: "block", marginTop: 6 }}>
+				{ts("transcript.cleanup.contextual")}
+				<textarea
+					data-testid="speech-cleanup-contextual"
+					value={prefs.speechContextualFillers}
+					rows={3}
+					spellCheck={false}
+					onChange={(event) => update({ speechContextualFillers: event.target.value })}
+					style={fieldStyle}
+				/>
+			</label>
+			<span style={{ display: "block", color: "var(--muted)" }}>
+				{ts("transcript.cleanup.contextualHint")}
+			</span>
+			<label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6 }}>
+				<input
+					type="checkbox"
+					data-testid="speech-cleanup-aggressive"
+					checked={prefs.speechCleanupAggressive}
+					onChange={(event) => update({ speechCleanupAggressive: event.target.checked })}
+				/>
+				{ts("transcript.cleanup.aggressive")}
+			</label>
+			{numberField(
+				"speechSilenceMinSec",
+				SPEECH_SILENCE_MIN_RANGE,
+				ts("transcript.cleanup.silenceMin"),
+			)}
+			{numberField(
+				"speechSilenceKeepSec",
+				SPEECH_SILENCE_KEEP_RANGE,
+				ts("transcript.cleanup.silenceKeep"),
+			)}
+			<button
+				type="button"
+				className={styles.btn}
+				style={{ marginTop: 8 }}
+				onClick={() => update(DEFAULT_CLEANUP_PREFS)}
+			>
+				{ts("transcript.cleanup.restoreDefaults")}
+			</button>
+		</>
+	);
+}
 
 export function SpeechCleanupPanel({
 	onApply,
@@ -99,31 +195,6 @@ export function SpeechCleanupPanel({
 		setPrefs(next);
 		saveUserPreferences(patch);
 	};
-	const numberField = (
-		key: "speechSilenceMinSec" | "speechSilenceKeepSec",
-		range: { min: number; max: number },
-		label: string,
-	) => (
-		<label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6 }}>
-			<span style={{ flex: 1 }}>{label}</span>
-			<input
-				type="number"
-				data-testid={`speech-cleanup-${key}`}
-				min={range.min}
-				max={range.max}
-				step={0.1}
-				value={prefs[key]}
-				onChange={(event) => {
-					const value = Number(event.target.value);
-					if (Number.isFinite(value) && value >= range.min && value <= range.max) {
-						update({ [key]: value });
-					}
-				}}
-				style={{ ...fieldStyle, width: 72, resize: undefined }}
-			/>
-		</label>
-	);
-
 	const reasonLabel = (item: SpeechCleanupItem) => ts(`transcript.cleanup.reason.${item.reason}`);
 
 	return (
@@ -133,58 +204,7 @@ export function SpeechCleanupPanel({
 			</p>
 			<details style={{ font: "400 12px/1.5 var(--font-body)", color: "var(--fg-2)" }}>
 				<summary style={{ cursor: "pointer" }}>{ts("transcript.cleanup.settings")}</summary>
-				<label style={{ display: "block", marginTop: 6 }}>
-					{ts("transcript.cleanup.fillers")}
-					<textarea
-						data-testid="speech-cleanup-fillers"
-						value={prefs.speechFillers}
-						rows={3}
-						spellCheck={false}
-						onChange={(event) => update({ speechFillers: event.target.value })}
-						style={fieldStyle}
-					/>
-				</label>
-				<label style={{ display: "block", marginTop: 6 }}>
-					{ts("transcript.cleanup.contextual")}
-					<textarea
-						data-testid="speech-cleanup-contextual"
-						value={prefs.speechContextualFillers}
-						rows={3}
-						spellCheck={false}
-						onChange={(event) => update({ speechContextualFillers: event.target.value })}
-						style={fieldStyle}
-					/>
-				</label>
-				<span style={{ display: "block", color: "var(--muted)" }}>
-					{ts("transcript.cleanup.contextualHint")}
-				</span>
-				<label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6 }}>
-					<input
-						type="checkbox"
-						data-testid="speech-cleanup-aggressive"
-						checked={prefs.speechCleanupAggressive}
-						onChange={(event) => update({ speechCleanupAggressive: event.target.checked })}
-					/>
-					{ts("transcript.cleanup.aggressive")}
-				</label>
-				{numberField(
-					"speechSilenceMinSec",
-					SPEECH_SILENCE_MIN_RANGE,
-					ts("transcript.cleanup.silenceMin"),
-				)}
-				{numberField(
-					"speechSilenceKeepSec",
-					SPEECH_SILENCE_KEEP_RANGE,
-					ts("transcript.cleanup.silenceKeep"),
-				)}
-				<button
-					type="button"
-					className={styles.btn}
-					style={{ marginTop: 8 }}
-					onClick={() => update(DEFAULT_CLEANUP_PREFS)}
-				>
-					{ts("transcript.cleanup.restoreDefaults")}
-				</button>
+				<SpeechCleanupRules prefs={prefs} onChange={update} />
 			</details>
 
 			<div
