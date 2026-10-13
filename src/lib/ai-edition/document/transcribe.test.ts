@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { STT_NATIVE_EXTRACTION_UNAVAILABLE } from "../../../../electron/stt/transcriptionContract";
+import { withProjectOverrides } from "../projectTranscriptionSettings";
 import { type AxcutDocument, axcutSchemaVersion, transcriptSchema } from "../schema";
 import { DEFAULT_VOCABULARY } from "../transcription/vocabulary";
 import { transcribeAsset } from "./transcribe";
@@ -236,6 +237,24 @@ describe("transcribeAsset native extraction", () => {
 		});
 		expect(transcribeMock).toHaveBeenCalledWith("/tmp/demo.mp4", withPrompt);
 		expect(rendererMock).toHaveBeenCalledWith(expect.anything(), withPrompt);
+	});
+
+	it("runs with the project's own standing terms and model over the defaults", async () => {
+		const doc = withProjectOverrides(makeDoc(), {
+			transcriptionVocabulary: "Contoso, Fabrikam",
+			transcriptionModel: "small",
+		});
+		doc.project.vocabulary = "OpenScreen";
+		transcribeMock.mockResolvedValueOnce({
+			segments: [],
+			granularity: "word",
+			detectedLanguage: "pt",
+		});
+		await transcribeAsset(doc, "asset_1");
+		expect(transcribeMock).toHaveBeenCalledWith(
+			"/tmp/demo.mp4",
+			expect.objectContaining({ prompt: "Contoso, Fabrikam, OpenScreen", model: "small" }),
+		);
 	});
 
 	it("does NOT fall back on any other failure", async () => {

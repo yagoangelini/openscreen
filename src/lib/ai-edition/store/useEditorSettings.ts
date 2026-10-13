@@ -12,7 +12,7 @@
 // the patch through `applySettingsPatch`, and persists via the store. No
 // extra state, no caches — the document is the single source of truth.
 
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef } from "react";
 import { refitFrameAnnotations } from "../annotations/placement";
 import { clearCameraLookKeys, readCameraSegments } from "../document/cameraSegments";
 import { resolveAspectRatioValue } from "../document/outputFormat";
@@ -82,10 +82,50 @@ export interface UseEditorSettingsResult {
 	setLive: (patch: EditorSettingsPatch) => void;
 	/** Force-flush the current document to disk. */
 	commit: () => Promise<void>;
+	/**
+	 * True when the settings are not a project's but the global defaults ("Padrões"): the
+	 * panes then push nothing to the live preview, which shows the open project, and hide what
+	 * only makes sense for footage.
+	 */
+	editingDefaults?: boolean;
 }
 
+/**
+ * Another source of editor settings for the panes below it: the global defaults dialog
+ * renders the editor's own panes inside one, so the same controls edit the defaults instead of
+ * the open project. `document` is what the panes read for footage-dependent details.
+ */
+export interface EditorSettingsSource extends UseEditorSettingsResult {
+	document: AxcutDocument;
+	editingDefaults: true;
+}
+
+export const EditorSettingsSourceContext = createContext<EditorSettingsSource | null>(null);
+
+/**
+ * The open project's settings, or those of the source the panes are rendered in. The write
+ * options only apply to the project: the defaults have no camera pieces or history.
+ */
 export function useEditorSettings(
 	writeOptions: EditorSettingsWriteOptions = DEFAULT_WRITE_OPTIONS,
+): UseEditorSettingsResult {
+	const source = useContext(EditorSettingsSourceContext);
+	const project = useProjectEditorSettings(writeOptions);
+	return source ?? project;
+}
+
+/**
+ * The document the panes read footage-dependent details from (formats, cameras, stems,
+ * transcripts): the open project's, or the defaults' own empty one.
+ */
+export function useEditorDocument(): AxcutDocument | null {
+	const source = useContext(EditorSettingsSourceContext);
+	const document = useProjectStore((s) => s.document);
+	return source ? source.document : document;
+}
+
+function useProjectEditorSettings(
+	writeOptions: EditorSettingsWriteOptions,
 ): UseEditorSettingsResult {
 	const transform = writeOptions.transform ?? applySettingsPatch;
 	const historyLabel = writeOptions.historyLabel;

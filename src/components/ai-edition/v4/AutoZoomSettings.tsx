@@ -6,8 +6,7 @@
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useScopedT } from "@/contexts/I18nContext";
-import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
-import { useEditorSettings } from "@/lib/ai-edition/store/useEditorSettings";
+import { useEditorDocument, useEditorSettings } from "@/lib/ai-edition/store/useEditorSettings";
 import {
 	autoZoomsBehindTranscript,
 	transcriptSignature,
@@ -30,10 +29,10 @@ const PANE_BUTTON = `${shell.btn} ${shell.btnSecondary}`;
 
 export function AutoZoomSettings() {
 	const te = useScopedT("editor");
-	const { settings, set, setLive, commit } = useEditorSettings();
+	const { settings, set, setLive, commit, editingDefaults } = useEditorSettings();
 	const autoZoom = settings.autoZoom;
 	const [busy, setBusy] = useState(false);
-	const document = useProjectStore((s) => s.document);
+	const document = useEditorDocument();
 	const transcript = useMemo(
 		() =>
 			document
@@ -140,18 +139,28 @@ export function AutoZoomSettings() {
 					setAfterRecording(choice);
 				}}
 			/>
-			<p className={shell.hint}>
-				{te(
-					transcript.behind
-						? "autoZoom.transcriptBehind"
-						: transcript.has
-							? "autoZoom.followsTranscript"
-							: "autoZoom.replanHint",
-				)}
-			</p>
-			<button type="button" className={PANE_BUTTON} disabled={busy} onClick={() => void replan()}>
-				{te(transcript.has ? "autoZoom.replanWithTranscript" : "autoZoom.replan")}
-			</button>
+			{/* Planning again acts on a project's zooms; the defaults have none. */}
+			{editingDefaults ? null : (
+				<>
+					<p className={shell.hint}>
+						{te(
+							transcript.behind
+								? "autoZoom.transcriptBehind"
+								: transcript.has
+									? "autoZoom.followsTranscript"
+									: "autoZoom.replanHint",
+						)}
+					</p>
+					<button
+						type="button"
+						className={PANE_BUTTON}
+						disabled={busy}
+						onClick={() => void replan()}
+					>
+						{te(transcript.has ? "autoZoom.replanWithTranscript" : "autoZoom.replan")}
+					</button>
+				</>
+			)}
 		</div>
 	);
 }

@@ -122,9 +122,12 @@ export class AiEditionService {
 		}
 	}
 
-	async create(title?: string): Promise<AiEditionDocumentResult> {
+	async create(
+		title?: string,
+		editorDefaults?: Record<string, unknown> | null,
+	): Promise<AiEditionDocumentResult> {
 		try {
-			const document = await this.options.documents.createProject(title ?? "");
+			const document = await this.options.documents.createProject(title ?? "", editorDefaults);
 			return { success: true, document };
 		} catch (error) {
 			return {

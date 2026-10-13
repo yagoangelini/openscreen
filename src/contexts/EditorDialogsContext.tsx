@@ -22,7 +22,7 @@ import { createContext, type ReactNode, useContext, useMemo, useState } from "re
 // global shortcuts, which was only ever half an answer — this context knows about its own
 // dialogs and about no others (#434). `isModalOpen` (lib/ai-edition/modalGuard) is where that
 // question is asked now.
-export type EditorDialogSection = "providers";
+export type EditorDialogSection = "providers" | "defaults";
 
 interface EditorDialogsActions {
 	openDialog: (section: EditorDialogSection) => void;
@@ -46,6 +46,11 @@ export function useEditorDialogActions(): EditorDialogsActions {
 	const ctx = useContext(ActionsContext);
 	if (!ctx) throw new Error("useEditorDialogActions must be used within <EditorDialogsProvider>");
 	return ctx;
+}
+
+/** The actions, or null outside a provider: for a control that opens a dialog only when it can. */
+export function useOptionalEditorDialogActions(): EditorDialogsActions | null {
+	return useContext(ActionsContext);
 }
 
 export function EditorDialogsProvider({ children }: { children: ReactNode }) {
