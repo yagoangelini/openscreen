@@ -46,6 +46,7 @@ export const HISTORY_LABELS = [
 	"cameraLookAll",
 	"audio",
 	"mute",
+	"echo",
 	"transcript",
 	"settings",
 	"media",
@@ -123,6 +124,22 @@ function legacyWithout(doc: AxcutDocument, key: string): unknown {
 	return rest;
 }
 
+/** The "Remover eco do alto-falante" settings: its switch, its "Intensidade", the compensation. */
+const ECHO_KEYS: readonly string[] = ["echoCancel", "echoCancelStrength", "systemCompensation"];
+
+/** Whether the editor settings changed, and only in `ECHO_KEYS`. */
+function onlyEchoSettingsChanged(prev: AxcutDocument, next: AxcutDocument): boolean {
+	const before = (prev.legacyEditor ?? {}) as Record<string, unknown>;
+	const after = (next.legacyEditor ?? {}) as Record<string, unknown>;
+	let changed = false;
+	for (const key of new Set([...Object.keys(before), ...Object.keys(after)])) {
+		if (same(before[key], after[key])) continue;
+		if (!ECHO_KEYS.includes(key)) return false;
+		changed = true;
+	}
+	return changed;
+}
+
 function speedRegionsOf(doc: AxcutDocument): unknown {
 	return (doc.legacyEditor as Record<string, unknown> | null)?.speedRegions ?? [];
 }
@@ -183,7 +200,7 @@ export function inferHistoryLabel(prev: AxcutDocument, next: AxcutDocument): His
 		return "transcript";
 	}
 	if (!same(legacyWithout(prev, "speedRegions"), legacyWithout(next, "speedRegions"))) {
-		return "settings";
+		return onlyEchoSettingsChanged(prev, next) ? "echo" : "settings";
 	}
 	if (!same(prev.assets, next.assets)) return "media";
 	if (prev.project?.title !== next.project?.title) return "renameProject";

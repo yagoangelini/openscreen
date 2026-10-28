@@ -26,6 +26,7 @@ const BEHAVIOUR_KEYS = [
 	"voiceEnhance",
 	"voiceEnhanceStrength",
 	"echoCancel",
+	"echoCancelStrength",
 	"cursorShowKeystrokes",
 	"cursorClickRing",
 	"cursorSpotlight",

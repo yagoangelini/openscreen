@@ -19,7 +19,12 @@ import {
 	systemPreferences,
 } from "electron";
 import { DEFAULT_WEBCAM_QUALITY, type WebcamQualityId } from "../../src/hooks/webcamCaptureTarget";
-import type { EchoCancelReport, EchoCancelResult } from "../../src/lib/ai-edition/echoCancelReport";
+import {
+	type EchoCancelReport,
+	type EchoCancelResult,
+	type EchoCancelStrength,
+	isEchoCancelStrength,
+} from "../../src/lib/ai-edition/echoCancelReport";
 import {
 	type AxcutDocument,
 	isAxcutDocumentFile,
@@ -235,7 +240,8 @@ const ALLOWED_IMPORT_VIDEO_EXTENSIONS = new Set([
 const PREVIEW_AUDIO_DIR = path.join(app.getPath("temp"), "openscreen-preview-audio");
 /** Part of the echo-free voice's cache key: bump it when `echo_cancel.rs` changes its output. */
 // 2: the report carries the computer lane's compensation (echoPathGainDb, systemTruePeakDbfs).
-const ECHO_CANCEL_VERSION = 2;
+// 3: the near-end gate and the strengths (one file per strength), `gateClosedShare`.
+const ECHO_CANCEL_VERSION = 3;
 
 // See the save-recorded-voiceover handler: an upper bound on renderer-supplied
 // bytes written to disk, well past any plausible take.
@@ -5713,8 +5719,9 @@ export function registerIpcHandlers(
 	// "Remover eco do alto-falante": the take's voice stem with the speaker echo of its computer
 	// stem removed (`echo_cancel.rs`), for the preview AND the export (both read this file in
 	// place of the voice stem, so they cannot differ). Cached in `preview-audio` by both stems'
-	// sizes and mtimes; the canceller's report is cached beside it as JSON, also when it found no
-	// echo (then there is no WAV and the voice plays as recorded). One run per take at a time.
+	// sizes and mtimes and by the strength ("Intensidade"); the canceller's report is cached beside
+	// it as JSON, also when it found no echo (then there is no WAV and the voice plays as
+	// recorded). One run per take and strength at a time.
 	const echoCancelJobs = new Map<string, Promise<EchoCancelResult>>();
 	const enhancedVoiceJobs = new Map<string, Promise<string | null>>();
 	/** After a new file in the cache: the oldest go until it is under its cap, never the new one
@@ -5730,19 +5737,28 @@ export function registerIpcHandlers(
 	};
 	ipcMain.handle(
 		"prepare-echo-cancelled-voice",
-		async (_, voicePath: string, systemPath: string): Promise<EchoCancelResult> => {
+		async (
+			_,
+			voicePath: string,
+			systemPath: string,
+			strengthArg: unknown,
+		): Promise<EchoCancelResult> => {
 			try {
 				const voice = readableApprovedPath(voicePath);
 				const system = readableApprovedPath(systemPath);
 				if (!voice || !system) return { success: false, message: "File path is not approved" };
+				const strength: EchoCancelStrength = isEchoCancelStrength(strengthArg)
+					? strengthArg
+					: "normal";
 				const [voiceStat, systemStat] = await Promise.all([fs.stat(voice), fs.stat(system)]);
+				// Each strength is its own file: switching back and forth plays from the cache.
 				const base = path.join(
 					PREVIEW_AUDIO_DIR,
-					`${path.parse(voice).name}.echo-free.${ECHO_CANCEL_VERSION}.${voiceStat.size}-${Math.round(voiceStat.mtimeMs)}.${systemStat.size}-${Math.round(systemStat.mtimeMs)}`,
+					`${path.parse(voice).name}.echo-free.${ECHO_CANCEL_VERSION}-${strength}.${voiceStat.size}-${Math.round(voiceStat.mtimeMs)}.${systemStat.size}-${Math.round(systemStat.mtimeMs)}`,
 				);
 				let job = echoCancelJobs.get(base);
 				if (!job) {
-					job = runEchoCancel(voice, system, base);
+					job = runEchoCancel(voice, system, base, strength);
 					echoCancelJobs.set(base, job);
 					void job.finally(() => echoCancelJobs.delete(base)).catch(() => undefined);
 				}
@@ -5756,6 +5772,7 @@ export function registerIpcHandlers(
 		voice: string,
 		system: string,
 		base: string,
+		strength: EchoCancelStrength,
 	): Promise<EchoCancelResult> => {
 		const reportPath = `${base}.json`;
 		const wavPath = `${base}.wav`;
@@ -5770,7 +5787,7 @@ export function registerIpcHandlers(
 			// Not cached (or half-cached): run it.
 		}
 		await fs.mkdir(PREVIEW_AUDIO_DIR, { recursive: true });
-		const report = await loudnessService.cancelEchoFile(voice, system, wavPath);
+		const report = await loudnessService.cancelEchoFile(voice, system, wavPath, strength);
 		if (!report) return { success: false, message: "addon" };
 		await fs.writeFile(reportPath, JSON.stringify(report));
 		trimPreviewAudioCache((filePath) => filePath.startsWith(base));

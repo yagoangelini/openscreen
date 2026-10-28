@@ -1269,6 +1269,7 @@ pub struct CancelEchoTask {
     voice_path: String,
     system_path: String,
     output_path: String,
+    strength: String,
 }
 
 impl Task for CancelEchoTask {
@@ -1281,6 +1282,7 @@ impl Task for CancelEchoTask {
                 &self.voice_path,
                 &self.system_path,
                 &self.output_path,
+                openscreen_compositor::echo_cancel::Strength::parse(&self.strength),
             )
             .map_err(|error| Error::from_reason(format!("{error:#}")))?;
             serde_json::to_string(&report).map_err(|error| Error::from_reason(error.to_string()))
@@ -1296,14 +1298,21 @@ impl Task for CancelEchoTask {
 /// removed (`openscreen_compositor::echo_cancel`), written to `output_path` as a 16-bit stereo
 /// 48 kHz WAV aligned sample for sample with the stem. Resolves to the report as JSON
 /// (`EchoReport`); without a detected echo nothing is written and `detected` is false.
-/// `AsyncTask`: three passes over both stems, seconds on a long take.
+/// `AsyncTask`: three passes over both stems, seconds on a long take. `strength` is the
+/// "Intensidade" setting: `"gentle"`, `"normal"` (also anything else) or `"strong"`.
 #[napi]
 pub fn cancel_echo_file(
     voice_path: String,
     system_path: String,
     output_path: String,
+    strength: Option<String>,
 ) -> AsyncTask<CancelEchoTask> {
-    AsyncTask::new(CancelEchoTask { voice_path, system_path, output_path })
+    AsyncTask::new(CancelEchoTask {
+        voice_path,
+        system_path,
+        output_path,
+        strength: strength.unwrap_or_default(),
+    })
 }
 
 /// "Melhorar a voz" for the editor preview: `input_path`'s audio enhanced exactly as the export

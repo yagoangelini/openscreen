@@ -86,6 +86,21 @@ describe("inferHistoryLabel", () => {
 		expect(inferHistoryLabel(doc, next)).toBe("editClip");
 	});
 
+	it("names a change to the speaker-echo settings alone as such", () => {
+		const doc = { ...base(), legacyEditor: { padding: 10 } };
+		const withEcho = (fields: Record<string, unknown>) => ({
+			...doc,
+			legacyEditor: { ...doc.legacyEditor, ...fields },
+		});
+		expect(inferHistoryLabel(doc, withEcho({ echoCancelStrength: "strong" }))).toBe("echo");
+		expect(inferHistoryLabel(doc, withEcho({ echoCancel: false }))).toBe("echo");
+		expect(inferHistoryLabel(doc, withEcho({ systemCompensation: false }))).toBe("echo");
+		// Along with anything else, it is a settings change.
+		expect(inferHistoryLabel(doc, withEcho({ echoCancelStrength: "strong", padding: 30 }))).toBe(
+			"settings",
+		);
+	});
+
 	it("names settings, a rename, and falls back to a plain edit", () => {
 		const doc = base();
 		expect(inferHistoryLabel(doc, { ...doc, legacyEditor: { padding: 30 } })).toBe("settings");

@@ -82,6 +82,7 @@ import {
 	type EchoCancelState,
 	useEchoCancel,
 } from "@/lib/ai-edition/echoCancel";
+import { ECHO_CANCEL_STRENGTHS, type EchoCancelStrength } from "@/lib/ai-edition/echoCancelReport";
 import {
 	type AxcutAsset,
 	type AxcutAudioTrack,
@@ -3786,7 +3787,14 @@ function echoStatusText(
 	});
 }
 
-/** "Remover eco do alto-falante": the toggle and what the canceller found on this project. */
+const ECHO_STRENGTH_KEYS: Record<EchoCancelStrength, { label: string; tip: string }> = {
+	gentle: { label: "audio.echoStrengthGentle", tip: "audio.echoStrengthGentleTip" },
+	normal: { label: "audio.echoStrengthNormal", tip: "audio.echoStrengthNormalTip" },
+	strong: { label: "audio.echoStrengthStrong", tip: "audio.echoStrengthStrongTip" },
+};
+
+/** "Remover eco do alto-falante": the toggle, its "Intensidade", and what the canceller found on
+ *  this project at that strength. */
 function EchoCancelRow() {
 	const ts = useScopedT("settings");
 	const { settings, set, hasDocument, editingDefaults } = useEditorSettings();
@@ -3795,6 +3803,7 @@ function EchoCancelRow() {
 		take?.voicePath,
 		take?.systemPath,
 		settings.echoCancel && !editingDefaults,
+		settings.echoCancelStrength,
 	);
 	const status =
 		editingDefaults || !settings.echoCancel ? null : echoStatusText(ts, echo.state, echo.running);
@@ -3810,6 +3819,22 @@ function EchoCancelRow() {
 					onChange={(echoCancel) => void set({ echoCancel })}
 				/>
 			</div>
+			{settings.echoCancel ? (
+				<div className={`${styles.field} ${styles.fieldStack}`} data-testid="echo-cancel-strength">
+					<span className={styles.fieldLabel}>{ts("audio.echoStrength")}</span>
+					<ChoiceRow<EchoCancelStrength>
+						label={ts("audio.echoStrength")}
+						options={ECHO_CANCEL_STRENGTHS.map((strength) => ({
+							value: strength,
+							label: ts(ECHO_STRENGTH_KEYS[strength].label),
+							title: ts(ECHO_STRENGTH_KEYS[strength].tip),
+						}))}
+						value={settings.echoCancelStrength}
+						disabled={!hasDocument}
+						onChange={(echoCancelStrength) => void set({ echoCancelStrength })}
+					/>
+				</div>
+			) : null}
 			{status ? (
 				<p className={styles.framingHint} data-testid="echo-cancel-status">
 					{status}
@@ -3827,7 +3852,12 @@ function SystemCompensationRow() {
 	const ts = useScopedT("settings");
 	const { settings, set, hasDocument } = useEditorSettings();
 	const take = useFirstStemTake();
-	const echo = useEchoCancel(take?.voicePath, take?.systemPath, settings.echoCancel);
+	const echo = useEchoCancel(
+		take?.voicePath,
+		take?.systemPath,
+		settings.echoCancel,
+		settings.echoCancelStrength,
+	);
 	const report = echo.state?.report;
 	if (!settings.echoCancel || !echo.state?.path || !report?.detected) return null;
 	if (report.echoPathGainDb === undefined || report.systemTruePeakDbfs === undefined) return null;

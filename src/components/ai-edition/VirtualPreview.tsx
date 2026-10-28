@@ -713,6 +713,7 @@ export function VirtualPreview({
 		activeStems?.voicePath,
 		activeStems?.systemPath,
 		settings.echoCancel && Boolean(activeStems?.systemPath),
+		settings.echoCancelStrength,
 	);
 	const echoFreeVoicePath = settings.echoCancel ? echoCancel.state?.path : undefined;
 	// What "Melhorar a voz" enhances: the echo-free voice when there is one, as the export does.

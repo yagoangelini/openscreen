@@ -4,7 +4,7 @@
 // for the click samples. The preview plays the same file the export reads.
 
 import { useEffect, useState } from "react";
-import type { EchoCancelReport } from "./echoCancelReport";
+import type { EchoCancelReport, EchoCancelStrength } from "./echoCancelReport";
 import type { AxcutDocument } from "./schema";
 import { getEditorSettings } from "./store/editorSettings";
 
@@ -20,8 +20,9 @@ const settled = new Map<string, EchoCancelState>();
 const pending = new Map<string, Promise<EchoCancelState | null>>();
 const listeners = new Set<() => void>();
 
-function keyOf(voicePath: string, systemPath: string): string {
-	return `${voicePath}\n${systemPath}`;
+/** One answer per take AND strength: each strength is its own file. */
+function keyOf(voicePath: string, systemPath: string, strength: EchoCancelStrength): string {
+	return `${voicePath}\n${systemPath}\n${strength}`;
 }
 
 /** Most a compensation may add (Rust `MAX_SYSTEM_COMPENSATION_DB`). */
@@ -75,32 +76,48 @@ export function systemCompensationDb(
 	return clampSystemCompensationDb(report.echoPathGainDb, report.systemTruePeakDbfs);
 }
 
-/** What is known so far about a take's stems; undefined until the canceller has answered. */
+/** What is known so far about a take's stems at that strength; undefined until the canceller
+ *  has answered. */
 export function echoCancelState(
 	voicePath: string,
 	systemPath: string,
+	strength: EchoCancelStrength,
 ): EchoCancelState | undefined {
-	return settled.get(keyOf(voicePath, systemPath));
+	return settled.get(keyOf(voicePath, systemPath, strength));
 }
 
-/** The echo-free voice to read in place of `voicePath`, when one is ready. */
-export function echoFreeVoicePath(voicePath: string, systemPath: string): string | undefined {
-	return settled.get(keyOf(voicePath, systemPath))?.path;
+/**
+ * The echo-free voice to read in place of `voicePath`, when one is ready: at `strength`, or,
+ * without one (who spoke, `speakerStems.ts`, which only needs the echo out), at any strength
+ * already made, Normal first.
+ */
+export function echoFreeVoicePath(
+	voicePath: string,
+	systemPath: string,
+	strength?: EchoCancelStrength,
+): string | undefined {
+	if (strength) return settled.get(keyOf(voicePath, systemPath, strength))?.path;
+	for (const any of ["normal", "gentle", "strong"] as const) {
+		const path = settled.get(keyOf(voicePath, systemPath, any))?.path;
+		if (path) return path;
+	}
+	return undefined;
 }
 
-/** Runs (or joins) the canceller for one take. Null when it could not run. */
+/** Runs (or joins) the canceller for one take at one strength. Null when it could not run. */
 export function prepareEchoCancelledVoice(
 	voicePath: string,
 	systemPath: string,
+	strength: EchoCancelStrength,
 ): Promise<EchoCancelState | null> {
-	const key = keyOf(voicePath, systemPath);
+	const key = keyOf(voicePath, systemPath, strength);
 	const known = settled.get(key);
 	if (known) return Promise.resolve(known);
 	const running = pending.get(key);
 	if (running) return running;
 	const ask = window.electronAPI?.prepareEchoCancelledVoice;
 	if (!ask) return Promise.resolve(null);
-	const job = ask(voicePath, systemPath).then(
+	const job = ask(voicePath, systemPath, strength).then(
 		(result) => {
 			pending.delete(key);
 			if (!result.success) return null;
@@ -123,7 +140,8 @@ export function prepareEchoCancelledVoice(
  * canceller on. A take whose canceller fails exports with its voice as recorded.
  */
 export async function prepareEchoCancel(document: AxcutDocument): Promise<void> {
-	if (!getEditorSettings(document).echoCancel) return;
+	const settings = getEditorSettings(document);
+	if (!settings.echoCancel) return;
 	await Promise.all(
 		document.assets.flatMap((asset) =>
 			asset.audioStems
@@ -131,6 +149,7 @@ export async function prepareEchoCancel(document: AxcutDocument): Promise<void> 
 						prepareEchoCancelledVoice(
 							asset.audioStems.voicePath,
 							asset.audioStems.systemPath,
+							settings.echoCancelStrength,
 						).catch(() => null),
 					]
 				: [],
@@ -138,11 +157,13 @@ export async function prepareEchoCancel(document: AxcutDocument): Promise<void> 
 	);
 }
 
-/** A take's canceller state, run on demand while `enabled`, re-rendering when it lands. */
+/** A take's canceller state at `strength`, run on demand while `enabled`, re-rendering when it
+ *  lands. */
 export function useEchoCancel(
 	voicePath: string | undefined,
 	systemPath: string | undefined,
 	enabled: boolean,
+	strength: EchoCancelStrength,
 ): { state: EchoCancelState | undefined; running: boolean } {
 	const [, setTick] = useState(0);
 	useEffect(() => {
@@ -154,10 +175,12 @@ export function useEchoCancel(
 	}, []);
 	useEffect(() => {
 		if (!enabled || !voicePath || !systemPath) return;
-		void prepareEchoCancelledVoice(voicePath, systemPath).then(() => setTick((tick) => tick + 1));
-	}, [enabled, voicePath, systemPath]);
+		void prepareEchoCancelledVoice(voicePath, systemPath, strength).then(() =>
+			setTick((tick) => tick + 1),
+		);
+	}, [enabled, voicePath, systemPath, strength]);
 	if (!voicePath || !systemPath) return { state: undefined, running: false };
-	const key = keyOf(voicePath, systemPath);
+	const key = keyOf(voicePath, systemPath, strength);
 	return { state: settled.get(key), running: enabled && pending.has(key) };
 }
 
@@ -172,6 +195,7 @@ export function seedEchoCancelState(
 	voicePath: string,
 	systemPath: string,
 	state: EchoCancelState,
+	strength: EchoCancelStrength = "normal",
 ): void {
-	settled.set(keyOf(voicePath, systemPath), state);
+	settled.set(keyOf(voicePath, systemPath, strength), state);
 }

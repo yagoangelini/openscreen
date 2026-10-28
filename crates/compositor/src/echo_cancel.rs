@@ -8,7 +8,7 @@
 //! the recorder, so the echo can be modelled and subtracted after the fact — no capture-time
 //! processing, nothing changed in the recording itself.
 //!
-//! Three stages, all offline and in order:
+//! Four stages, all offline and in order:
 //!
 //! 1. **Bleed estimation** (`DelayTracker`, `fit_delay_line`). Both stems, mono and decimated to
 //!    16 kHz, are cross-correlated (GCC-PHAT) in windows of 4 s where the computer is playing. A
@@ -34,15 +34,38 @@
 //!    error power, over-estimated ×4 where the speakers are heard alone and ×1 where the user
 //!    talks too. The gain never goes under the microphone's own noise floor (no pumping room
 //!    tone), nor under −40 dB, and falls at most ~4 dB per frame.
+//! 4. **Near-end gate** (`NearEndGate`, "Silêncio quando só o outro fala"). On the take of 27/10
+//!    the speakers' own processing (Nahimic on the Realtek output, Intel's effects on the
+//!    microphone) compresses the echo by up to 10 dB with the playback level and changes its
+//!    phase, so the linear stage removes only ~7 dB and stage 3 leaves the guest's words some
+//!    15 dB under the guest — faint, and audible. The gate hears whether the user is talking by
+//!    spectral tilt, which no level change on the path moves: a laptop speaker plays next to
+//!    nothing under ~250 Hz, where a male voice has its fundamental (details on the struct).
+//!    Where they are not, every bin goes down to the microphone's noise floor; where they are,
+//!    stage 3 takes its double-talk setting. Offline, so it hears ahead: frames wait 80 ms in a
+//!    queue, the gate opens that far before the user's first detected frame and holds 300 ms
+//!    after their last. It learns its thresholds per take and stays open until it has (≈10 s of
+//!    the speakers alone and 3 s of the user alone), and for good on a take without a band the
+//!    speakers spare: there the canceller is stages 1–3, as in 2.8.0.
+//!
+//! The strengths ("Intensidade", `Strength`) share stages 1–3 and differ in the gate and in how
+//! hard stage 3 works while both talk: Suave closes the gate 6 dB at most and keeps 2.8.0's
+//! suppressor; Normal closes it to the noise floor and backs the suppressor off while the user
+//! talks (×0.5), for an untouched voice; Forte closes it too and pushes the suppressor (×3).
 //!
 //! Frames whose reference has been silent for the whole filter length are passed through
 //! untouched: a stretch where only the user talks comes out sample for sample as recorded.
 //! The first `WARM_UP_SEC` are run twice — once to train the filter, once for real — so the
 //! start of the take is cancelled as well as the rest.
 //!
-//! Measured (`docs/HANDOFF.md`, "Remover eco do alto-falante"): 16 s for the 22 min take in a
-//! release build; on its frames where the computer plays, the median level drop is 16–23 dB, and
-//! on its frames where only the user talks the level changes by −0.25 dB on average.
+//! Measured on the take of 27/10 (`docs/HANDOFF.md`, "Remover eco do alto-falante"; 15 s for
+//! the 22 min in a release build). Where only the guest plays (62–72 s, the guest at −19 dBFS),
+//! what is left of the echo: 2.8.0 −34.4 dBFS, Suave −40.2, Normal −68.0, Forte −69.3 (the
+//! microphone's floor is about −76). Where only the user talks: −0.15 dB (2.8.0) and −0.25 dB
+//! (Normal) on average. The user's real voice put over a real guest-only stretch at its natural
+//! level (7 dB over the echo): Normal keeps it at −0.74 dB (2.8.0: −0.88) and takes 60 ms of the
+//! 200 after an onset more than 3 dB down (2.8.0: 153 ms); Forte −1.53 dB, at a log-spectral
+//! distance of 5.0 dB from the voice against Normal's 2.7 and 2.8.0's 2.6.
 //!
 //! Pure Rust, MIT like the rest of the crate; its only dependency is `realfft` (MIT/Apache-2.0,
 //! already in the tree through `nnnoiseless`). `cancel_echo_file` writes the cleaned voice as a
@@ -124,6 +147,9 @@ pub struct EchoReport {
     /// The gain the "Áudio do sistema" lane gets once the echo is gone, so the guest is heard at
     /// the level the microphone heard them, once and clean (`system_compensation_db`).
     pub system_compensation_db: f64,
+    /// Share of the processed frames the near-end gate held closed (stage 4): where the computer
+    /// played and the user did not talk.
+    pub gate_closed_share: f64,
 }
 
 /// Most a compensation may add: past this a quiet stem is noise, not a guest.
@@ -536,6 +562,8 @@ struct Totals {
     gate_sum: f64,
     path_mic: f64,
     path_ref: f64,
+    gate_frames: usize,
+    gate_closed: f64,
 }
 
 /// The canceller's knobs. The defaults are what the app runs; tests may vary them.
@@ -557,11 +585,78 @@ pub struct Tuning {
     /// Filter length in frames, and how many of them come before the estimated delay.
     pub taps: usize,
     pub pre: usize,
+    /// The near-end gate (stage 4). Off, the canceller is stages 1–3 alone (2.8.0).
+    pub near_gate: bool,
+    /// The suppressor takes its double-talk setting wherever the gate hears the user (from its
+    /// lookahead to `PRESENCE_TAIL` frames after), instead of only where the coherence has
+    /// dropped (which lags their first syllable).
+    pub near_res: bool,
+    /// How far the gate closes, in dB under the suppressor's output: `f32::INFINITY` takes each
+    /// bin down to the microphone's noise floor.
+    pub near_depth_db: f32,
+    /// A band hears the user when it is this many dB over its noise floor ...
+    pub near_noise_db: f32,
+    /// ... and its share of the microphone's speech band is this many dB over the largest the
+    /// echo was seen to have (quantile `near_quantile` on frames of the speakers alone) ...
+    pub near_margin_db: f32,
+    pub near_quantile: f32,
+    /// ... in the one band, of those where the user's own share (median, on frames of them
+    /// alone) is at least `near_contrast_db` over the echo's median (bands the speakers barely
+    /// play), where it stands highest over the echo's quantile — at least
+    /// `near_separation_db` over it. Without one the gate stays open.
+    pub near_contrast_db: f32,
+    pub near_separation_db: f32,
+    /// Frames of the speakers alone and of the user alone before the gate trusts its thresholds
+    /// (~10 s and ~3 s); until then it stays open and the canceller is stages 1–3 alone.
+    pub near_calibration: (u32, u32),
+    /// A frame has the user when at least this share of the last `near_density_frames` passed
+    /// the band test (a voice is sustained, the echo's odd low burst is not).
+    pub near_density: f32,
+    pub near_density_frames: usize,
+    /// The bands (`GATE_BANDS` indices, from..to) that listen for the user.
+    pub near_bands: (usize, usize),
+    /// Frames (5.3 ms): opened this far ahead of the user's first detected frame, held open this
+    /// long after their last, with raised-cosine ramps this long.
+    pub near_look: usize,
+    pub near_hold: usize,
+    pub near_attack: usize,
+    pub near_release: usize,
 }
 
 impl Default for Tuning {
     fn default() -> Self {
-        Self {
+        Strength::Normal.tuning()
+    }
+}
+
+/// "Intensidade" in the Microfone panel. Stages 1–3 are the same for all three; they differ in
+/// how far the near-end gate closes, how readily it opens, and how hard the suppressor works
+/// while the user talks over the computer (`docs/HANDOFF.md`, "Remover eco do alto-falante").
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Strength {
+    /// Suave: the gate only lowers the echo where the user is silent, and opens at the faintest
+    /// sign of them.
+    Gentle,
+    /// Normal: the voice untouched; the echo gone where only the computer plays, a faint trace
+    /// left under the voice while both talk.
+    #[default]
+    Normal,
+    /// Forte: also suppresses hard while both talk, at some colour on the voice.
+    Strong,
+}
+
+impl Strength {
+    /// `"gentle"`, `"normal"` or `"strong"` (the editor setting); anything else is Normal.
+    pub fn parse(name: &str) -> Self {
+        match name {
+            "gentle" => Self::Gentle,
+            "strong" => Self::Strong,
+            _ => Self::Normal,
+        }
+    }
+
+    pub fn tuning(self) -> Tuning {
+        let base = Tuning {
             mu: 0.8,
             gate_lo: 0.45,
             gate_hi: 0.8,
@@ -571,14 +666,54 @@ impl Default for Tuning {
             floor: GAIN_FLOOR,
             taps: TAPS,
             pre: PRE_FRAMES,
+            near_gate: true,
+            near_res: true,
+            near_depth_db: f32::INFINITY,
+            near_noise_db: 10.0,
+            near_margin_db: 0.0,
+            near_quantile: 0.95,
+            near_contrast_db: 20.0,
+            near_separation_db: 0.0,
+            near_calibration: (1800, 560),
+            near_density: 0.3,
+            near_density_frames: 19,
+            near_bands: (1, 6),
+            near_look: 15,
+            near_hold: 56,
+            near_attack: 4,
+            near_release: 19,
+        };
+        match self {
+            Self::Gentle => Tuning {
+                near_res: false,
+                near_depth_db: 6.0,
+                near_look: 19,
+                near_hold: 94,
+                ..base
+            },
+            Self::Normal => Tuning {
+                over_double_talk: 0.5,
+                ..base
+            },
+            Self::Strong => Tuning {
+                over_double_talk: 3.0,
+                ..base
+            },
         }
     }
 }
 
 impl Tuning {
+    /// The preset of `AEC_STRENGTH` (Normal without it), with any `AEC_*` knob overriding it.
     #[cfg(test)]
     fn from_env() -> Self {
-        let d = Self::default();
+        let d = Strength::parse(&std::env::var("AEC_STRENGTH").unwrap_or_default()).tuning();
+        let u = |k: &str, x: usize| {
+            std::env::var(k)
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(x)
+        };
         let v = |k: &str, x: f32| {
             std::env::var(k)
                 .ok()
@@ -595,6 +730,25 @@ impl Tuning {
             floor: v("AEC_FLOOR", d.floor),
             taps: v("AEC_TAPS", d.taps as f32) as usize,
             pre: v("AEC_PRE", d.pre as f32) as usize,
+            near_gate: u("AEC_GATE", d.near_gate as usize) != 0,
+            near_res: u("AEC_NEARRES", d.near_res as usize) != 0,
+            near_depth_db: v("AEC_DEPTH", d.near_depth_db),
+            near_noise_db: v("AEC_NOISE", d.near_noise_db),
+            near_margin_db: v("AEC_MARGIN", d.near_margin_db),
+            near_quantile: v("AEC_Q", d.near_quantile),
+            near_contrast_db: v("AEC_CONTRAST", d.near_contrast_db),
+            near_separation_db: v("AEC_SEP", d.near_separation_db),
+            near_calibration: (
+                u("AEC_CAL_ECHO", d.near_calibration.0 as usize) as u32,
+                u("AEC_CAL_USER", d.near_calibration.1 as usize) as u32,
+            ),
+            near_density: v("AEC_DENS", d.near_density),
+            near_density_frames: u("AEC_DENSW", d.near_density_frames),
+            near_bands: (u("AEC_GB0", d.near_bands.0), u("AEC_GB1", d.near_bands.1)),
+            near_look: u("AEC_LOOK", d.near_look),
+            near_hold: u("AEC_HOLD", d.near_hold),
+            near_attack: u("AEC_ATTACK", d.near_attack),
+            near_release: u("AEC_RELEASE", d.near_release),
         }
     }
 }
@@ -604,7 +758,6 @@ struct Probe {
     buf: Vec<f32>,
     ola: Vec<f32>,
     out: Vec<f32>,
-    spec: Vec<Complex<f32>>,
 }
 
 /// The streaming canceller. Push the voice and the reference (mono, 48 kHz) in equal blocks;
@@ -616,6 +769,15 @@ pub struct EchoCanceller {
     taps: usize,
     pre: usize,
     window: Vec<f32>,
+    /// What the near-end gate listens to: the microphone's last `GATE_FRAME` samples through a
+    /// Hann window — twice the resolution of the canceller's frames and sidelobes 8 dB lower than
+    /// the sqrt-Hann's, so a guest's 200 Hz fundamental stays out of the band where a male voice
+    /// has its own.
+    gate_forward: Arc<dyn RealToComplex<f32>>,
+    gate_window: Vec<f32>,
+    gate_input: Vec<f32>,
+    gate_time: Vec<f32>,
+    spec_h: Vec<Complex<f32>>,
     forward: Arc<dyn RealToComplex<f32>>,
     inverse: Arc<dyn ComplexToReal<f32>>,
     // Reference re-timing.
@@ -648,12 +810,14 @@ pub struct EchoCanceller {
     gain: Vec<f32>,
     leak: f32,
     main_tap: usize,
+    /// The last processed frame's adaptation gate (1: the speakers alone).
+    coherence_gate: f32,
+    near: NearEndGate,
     totals: Totals,
     // Scratch.
     time: Vec<f32>,
     spec_d: Vec<Complex<f32>>,
     spec_x: Vec<Complex<f32>>,
-    spec_out: Vec<Complex<f32>>,
 }
 
 impl EchoCanceller {
@@ -667,6 +831,7 @@ impl EchoCanceller {
         let mut planner = RealFftPlanner::<f32>::new();
         let forward = planner.plan_fft_forward(FRAME);
         let inverse = planner.plan_fft_inverse(FRAME);
+        let gate_forward = planner.plan_fft_forward(GATE_FRAME);
         let zero = Complex::new(0.0f32, 0.0);
         Self {
             estimate,
@@ -675,9 +840,18 @@ impl EchoCanceller {
             taps,
             pre,
             window: sqrt_hann(),
+            gate_window: (0..GATE_FRAME)
+                .map(|i| {
+                    (0.5 - 0.5 * (std::f64::consts::TAU * i as f64 / GATE_FRAME as f64).cos())
+                        as f32
+                })
+                .collect(),
+            gate_input: vec![0.0; GATE_FRAME],
+            gate_time: vec![0.0; GATE_FRAME],
+            spec_h: gate_forward.make_output_vec(),
+            gate_forward,
             spec_d: forward.make_output_vec(),
             spec_x: forward.make_output_vec(),
-            spec_out: forward.make_output_vec(),
             forward,
             inverse,
             ref_ring: VecDeque::new(),
@@ -707,6 +881,8 @@ impl EchoCanceller {
             gain: vec![1.0; BINS],
             leak: 0.5,
             main_tap: pre,
+            coherence_gate: 0.0,
+            near: NearEndGate::new(),
             totals: Totals::default(),
             time: vec![0.0; FRAME],
         }
@@ -731,6 +907,8 @@ impl EchoCanceller {
         self.frames_seen = 0;
         self.gain.fill(1.0);
         self.s_ee.fill(0.0);
+        self.near.rewind();
+        self.gate_input.fill(0.0);
         self.totals = Totals::default();
     }
 
@@ -760,7 +938,6 @@ impl EchoCanceller {
                 buf: vec![0.0; PAD],
                 ola: vec![0.0; FRAME],
                 out: Vec::new(),
-                spec: self.forward.make_output_vec(),
             });
         }
         self.push_inner(mic, reference, Some(probe), out)
@@ -827,9 +1004,9 @@ impl EchoCanceller {
         }
     }
 
-    /// Samples finalised so far (frames processed × hop, minus the dropped head).
+    /// Samples finalised so far (frames emitted × hop, minus the dropped head).
     fn emitted_upto(&self) -> usize {
-        (self.frames_seen * HOP).saturating_sub(PAD)
+        (self.near.emitted * HOP).saturating_sub(PAD)
     }
 
     /// The reference at `n − retime(n)`, cubic (Catmull-Rom) between samples.
@@ -892,23 +1069,148 @@ impl EchoCanceller {
             self.silent_run = (self.silent_run + 1).min(self.taps + 1);
         }
 
-        if self.silent_run >= self.taps {
+        let bypass = self.silent_run >= self.taps;
+        let mut frame = self.near.take_frame();
+        frame.bypass = bypass;
+        if bypass {
             // Nothing the speakers played can be in this frame: the voice as recorded.
-            self.spec_out.copy_from_slice(&self.spec_d);
-            self.gain.fill(1.0);
+            frame.spec.copy_from_slice(&self.spec_d);
+            frame.coherence = -1.0;
             if mic_power > 3.2e-5 {
                 self.totals.voice_energy += mic_power as f64;
                 self.totals.voice_frames += 1;
             }
         } else {
             self.totals.processed += 1;
-            self.cancel(mic_power);
+            self.cancel(mic_power, &mut frame);
+            frame.coherence = self.coherence_gate;
+        }
+
+        if self.tuning.near_gate {
+            // The window ends where this frame does.
+            self.gate_input.copy_within(HOP.., 0);
+            self.gate_input[GATE_FRAME - HOP..].copy_from_slice(&self.mic_buf[FRAME - HOP..]);
+            for i in 0..GATE_FRAME {
+                self.gate_time[i] = self.gate_input[i] * self.gate_window[i];
+            }
+            let _ = self
+                .gate_forward
+                .process(&mut self.gate_time, &mut self.spec_h);
+        }
+
+        // Into the gate's queue, with the probe's spectrum taken now (its buffer moves on).
+        frame.near = self.tuning.near_gate
+            && self.near.detect(
+                &mut frame,
+                &self.spec_d,
+                &self.spec_h,
+                (!bypass).then_some(self.coherence_gate),
+                &self.tuning,
+            );
+        frame.probed = false;
+        if let Some(state) = self.probe.as_mut() {
+            for i in 0..FRAME {
+                self.time[i] = state.buf[i] * self.window[i];
+            }
+            let _ = self.forward.process(&mut self.time, &mut frame.probe);
+            frame.probed = true;
+            state.buf.drain(..HOP);
+        }
+        self.near.pending.push_back(frame);
+        let look = if self.tuning.near_gate {
+            self.tuning.near_look
+        } else {
+            0
+        };
+        if self.near.pending.len() > look {
+            self.emit(out);
+        }
+        self.mic_buf.drain(..HOP);
+        self.ref_buf.drain(..HOP);
+    }
+
+    /// The oldest queued frame, through the near-end gate, synthesised and overlap-added.
+    fn emit(&mut self, out: &mut Vec<f32>) {
+        let tuning = self.tuning;
+        let ((open, present), listening) = if tuning.near_gate {
+            self.near.learn(&tuning);
+            (self.near.opening(&tuning), self.near.listening(&tuning))
+        } else {
+            ((1.0, 0.0), false)
+        };
+        let Some(mut frame) = self.near.pending.pop_front() else {
+            return;
+        };
+        if frame.bypass {
+            frame.gain.fill(1.0);
+            self.gain.fill(1.0);
+        } else {
+            self.totals.gate_frames += 1;
+            self.totals.gate_closed += (1.0 - open) as f64;
+            // Residual echo suppression: hard where the speakers are heard alone, gentle where
+            // the user talks too (there an over-estimated echo would take the voice with it).
+            // Where the gate hears them, that is the user talking, whatever the coherence says.
+            let alone = if listening && tuning.near_res {
+                frame.coherence * (1.0 - present)
+            } else {
+                frame.coherence
+            };
+            let over = tuning.over_double_talk + (tuning.over - tuning.over_double_talk) * alone;
+            for k in 0..BINS {
+                let e = frame.spec[k];
+                self.s_ee[k] = 0.5 * self.s_ee[k] + 0.5 * e.norm_sqr();
+                let see = self.s_ee[k].max(1e-20);
+                let target = (1.0 - over * frame.residual[k] / see).clamp(tuning.floor, 1.0);
+                // Never below the microphone's own noise floor: suppressing the room tone along
+                // with the echo would make it breathe in and out with the computer's sound.
+                let target = target.max((frame.noise[k] / see).sqrt().min(1.0));
+                // Fall at most ~4.4 dB per frame (no chopped onsets), rise at once.
+                let g = target.max(self.gain[k] * 0.6);
+                self.gain[k] = g;
+                frame.gain[k] = g;
+                frame.spec[k] = e * g;
+            }
+        }
+        if open < 1.0 {
+            // Each bin no louder than the microphone's own noise floor (and, with a finite depth,
+            // no lower than that many dB under the suppressor's output), `open` of the way back.
+            let depth = if tuning.near_depth_db.is_finite() {
+                10f32.powf(-tuning.near_depth_db / 20.0)
+            } else {
+                0.0
+            };
+            let floor = &self.near.bin_floor.floor;
+            for k in 0..BINS {
+                let p = frame.spec[k].norm_sqr();
+                let target = NEAR_FLOOR_BIAS * floor[k];
+                let closed = if p > target {
+                    (target / p).sqrt().max(depth)
+                } else {
+                    1.0
+                };
+                let g = if open <= 0.0 {
+                    closed
+                } else {
+                    closed.powf(1.0 - open)
+                };
+                frame.spec[k] *= g;
+                frame.gain[k] *= g;
+            }
+        }
+        self.near.emitted += 1;
+        // The report's frames of the speakers alone: coherent, and not where the gate hears the
+        // user (the coherence lags their onsets, and there the suppressor backs off on purpose).
+        if !frame.bypass && frame.coherence > 0.8 && (!listening || present < 0.5) {
+            self.totals.echo_only_mic += frame.energy.0 as f64;
+            self.totals.echo_only_linear += frame.energy.1 as f64;
+            self.totals.echo_only_out +=
+                frame.spec.iter().map(|c| c.norm_sqr()).sum::<f32>() as f64;
         }
 
         // Synthesis and overlap-add.
-        self.spec_out[0].im = 0.0;
-        self.spec_out[BINS - 1].im = 0.0;
-        let _ = self.inverse.process(&mut self.spec_out, &mut self.time);
+        frame.spec[0].im = 0.0;
+        frame.spec[BINS - 1].im = 0.0;
+        let _ = self.inverse.process(&mut frame.spec, &mut self.time);
         // Overlap-added squared sqrt-Hann windows sum to FRAME / (2 HOP).
         let scale = (2 * HOP) as f32 / (FRAME * FRAME) as f32;
         for i in 0..FRAME {
@@ -917,34 +1219,27 @@ impl EchoCanceller {
         let drop = self.to_drop.min(HOP);
         self.to_drop -= drop;
         out.extend_from_slice(&self.ola[drop..HOP]);
-        if let Some(state) = self.probe.as_mut() {
-            for i in 0..FRAME {
-                self.time[i] = state.buf[i] * self.window[i];
-            }
-            let _ = self.forward.process(&mut self.time, &mut state.spec);
-            for (s, g) in state.spec.iter_mut().zip(&self.gain) {
+        if let (Some(state), true) = (self.probe.as_mut(), frame.probed) {
+            for (s, g) in frame.probe.iter_mut().zip(&frame.gain) {
                 *s *= *g;
             }
-            state.spec[0].im = 0.0;
-            state.spec[BINS - 1].im = 0.0;
-            let _ = self.inverse.process(&mut state.spec, &mut self.time);
+            frame.probe[0].im = 0.0;
+            frame.probe[BINS - 1].im = 0.0;
+            let _ = self.inverse.process(&mut frame.probe, &mut self.time);
             for i in 0..FRAME {
                 state.ola[i] += self.time[i] * self.window[i] * scale;
             }
             state.out.extend_from_slice(&state.ola[drop..HOP]);
             state.ola.copy_within(HOP.., 0);
             state.ola[FRAME - HOP..].fill(0.0);
-            state.buf.drain(..HOP);
         }
         self.ola.copy_within(HOP.., 0);
         self.ola[FRAME - HOP..].fill(0.0);
-        self.mic_buf.drain(..HOP);
-        self.ref_buf.drain(..HOP);
+        self.near.spare.push(frame);
     }
 
-    fn cancel(&mut self, mic_power: f32) {
+    fn cancel(&mut self, mic_power: f32, frame: &mut PendingFrame) {
         let zero = Complex::new(0.0f32, 0.0);
-        // Echo estimate.
         // Echo estimate.
         let mut echo = [zero; ADAPT_BINS];
         for j in 0..self.taps {
@@ -1016,6 +1311,7 @@ impl EchoCanceller {
         }
         self.adapted += gate;
         self.totals.gate_sum += gate as f64;
+        self.coherence_gate = gate;
 
         // NLMS update, per bin, normalised by the reference power over the filter's taps.
         // The reference power over the filter's span, per bin.
@@ -1090,25 +1386,16 @@ impl EchoCanceller {
             let ratio = (band_err / band_y).clamp(0.005, 1.0);
             self.leak = 0.95 * self.leak + 0.05 * ratio;
         }
-        // Hard on frames where the speakers are heard alone, gentle where the user talks too: there
-        // an over-estimated echo would take the voice with it.
-        let over = tuning.over_double_talk + (tuning.over - tuning.over_double_talk) * gate;
-        for k in 0..BINS {
-            let e = error[k];
-            self.s_ee[k] = 0.5 * self.s_ee[k] + 0.5 * e.norm_sqr();
-            let see = self.s_ee[k].max(1e-20);
-            let residual = over
-                * (self.leak * echo[k].norm_sqr())
-                    .max(self.leak_bins[k] * self.path_gain[k] * power[k]);
-            let target = (1.0 - residual / see).clamp(tuning.floor, 1.0);
-            // Never below the microphone's own noise floor: suppressing the room tone along
-            // with the echo would make it breathe in and out with the computer's sound.
-            let target = target.max((self.noise[k] / see).sqrt().min(1.0));
-            // Fall at most ~4.4 dB per frame (no chopped onsets), rise at once.
-            let g = target.max(self.gain[k] * 0.6);
-            self.gain[k] = g;
-            self.spec_out[k] = e * g;
+        // What the suppressor works from (it runs in `emit`, once the gate has heard ahead): the
+        // filter's error, the residual echo per bin — the larger of the filter's own estimate
+        // scaled by what it misses and the level model — and the microphone's noise floor.
+        frame.spec[..ADAPT_BINS].copy_from_slice(&error);
+        frame.spec[ADAPT_BINS..].copy_from_slice(&self.spec_d[ADAPT_BINS..]);
+        for k in 0..ADAPT_BINS {
+            frame.residual[k] = (self.leak * echo[k].norm_sqr())
+                .max(self.leak_bins[k] * self.path_gain[k] * power[k]);
         }
+        frame.noise.copy_from_slice(&self.noise);
 
         // Report.
         let linear: f32 = error.iter().map(|e| e.norm_sqr()).sum::<f32>()
@@ -1117,12 +1404,10 @@ impl EchoCanceller {
                 .map(|d| d.norm_sqr())
                 .sum::<f32>();
         let mic: f32 = self.spec_d.iter().map(|d| d.norm_sqr()).sum();
-        let after: f32 = self.spec_out.iter().map(|d| d.norm_sqr()).sum();
         let echo_power: f32 = echo.iter().map(|y| y.norm_sqr()).sum();
+        // Counted in `emit`, where the gate knows whether the user was there.
+        frame.energy = (mic, linear);
         if gate > 0.8 {
-            self.totals.echo_only_mic += mic as f64;
-            self.totals.echo_only_linear += linear as f64;
-            self.totals.echo_only_out += after as f64;
             // The echo path's gain: the microphone against the reference at the filter's main tap
             // (where most of the echo lives), K-weighted like a loudness meter (a laptop speaker
             // drops the bass a loudness meter still counts), over frames of speakers alone.
@@ -1198,6 +1483,11 @@ impl EchoCanceller {
             },
             system_true_peak_dbfs: 0.0,
             system_compensation_db: 0.0,
+            gate_closed_share: if t.gate_frames > 0 {
+                t.gate_closed / t.gate_frames as f64
+            } else {
+                0.0
+            },
         }
     }
 
@@ -1215,6 +1505,372 @@ impl EchoCanceller {
 const GAIN_FLOOR: f32 = 0.01;
 /// Frames of full adaptation (~2 s) before the double-talk detector stops trusting the reference.
 const BOOTSTRAP_FRAMES: f32 = 400.0;
+
+// --------------------------------------------------------------------------------------------
+// Stage 4: the near-end gate
+// --------------------------------------------------------------------------------------------
+
+/// The near-end gate's analysis frame (43 ms).
+const GATE_FRAME: usize = 2 * FRAME;
+/// Bands (edges in the canceller's 1024-point bins; twice that in the gate's) the near-end gate
+/// listens in: 0 to 4.8 kHz.
+const GATE_BANDS: [usize; 18] = [
+    0, 2, 4, 6, 8, 10, 13, 16, 20, 24, 29, 35, 42, 50, 60, 72, 86, 103,
+];
+const GATE_NB: usize = GATE_BANDS.len() - 1;
+/// The speech band a band's share is measured against: 281 Hz – 4.8 kHz.
+const GATE_SPEECH_FROM: usize = 3;
+/// Share histograms: 0.5 dB steps over ±80 dB.
+const LEAK_STEPS: usize = 320;
+/// Frames (53 ms) the user still counts as present after their last detected frame, for the
+/// suppressor (the gate itself holds longer).
+const PRESENCE_TAIL: usize = 10;
+/// The closed gate's target over the floor tracker's minimum (the minimum of a smoothed power
+/// sits under its mean).
+const NEAR_FLOOR_BIAS: f32 = 2.0;
+
+/// A noise floor per value: the minimum of its recursive mean (~50 ms) over the last `keep`
+/// blocks of `len` frames and the current one.
+struct FloorTracker {
+    len: usize,
+    keep: usize,
+    count: usize,
+    started: bool,
+    mean: Vec<f32>,
+    current: Vec<f32>,
+    blocks: VecDeque<Vec<f32>>,
+    blocks_min: Vec<f32>,
+    floor: Vec<f32>,
+}
+
+impl FloorTracker {
+    fn new(width: usize, len: usize, keep: usize) -> Self {
+        Self {
+            len,
+            keep,
+            count: 0,
+            started: false,
+            mean: vec![0.0; width],
+            current: vec![f32::INFINITY; width],
+            blocks: VecDeque::new(),
+            blocks_min: vec![f32::INFINITY; width],
+            floor: vec![0.0; width],
+        }
+    }
+
+    fn push(&mut self, values: impl Iterator<Item = f32>) {
+        for (i, v) in values.enumerate() {
+            let m = if self.started {
+                0.9 * self.mean[i] + 0.1 * v
+            } else {
+                v
+            };
+            self.mean[i] = m;
+            self.current[i] = self.current[i].min(m);
+            self.floor[i] = self.current[i].min(self.blocks_min[i]);
+        }
+        self.started = true;
+        self.count += 1;
+        if self.count == self.len {
+            self.count = 0;
+            let width = self.current.len();
+            let done = std::mem::replace(&mut self.current, vec![f32::INFINITY; width]);
+            self.blocks.push_back(done);
+            while self.blocks.len() > self.keep {
+                self.blocks.pop_front();
+            }
+            self.blocks_min.fill(f32::INFINITY);
+            for block in &self.blocks {
+                for (m, b) in self.blocks_min.iter_mut().zip(block) {
+                    *m = m.min(*b);
+                }
+            }
+        }
+    }
+}
+
+/// Adds each band's share of the speech band (dB, 0.5 dB steps) to a histogram.
+fn add_shares(hist: &mut [u32], band: &[f32; GATE_NB], speech: f32) {
+    for (b, v) in band.iter().enumerate() {
+        let db = 10.0 * (v / speech).max(1e-12).log10();
+        let step = ((db + 80.0) * 2.0).clamp(0.0, (LEAK_STEPS - 1) as f32) as usize;
+        hist[b * LEAK_STEPS + step] += 1;
+    }
+}
+
+/// Band `b`'s share (dB) at quantile `q` of a histogram of `frames` frames.
+fn share_quantile(hist: &[u32], b: usize, frames: u32, q: f32) -> f32 {
+    let want = (q.clamp(0.0, 1.0) * frames as f32) as u32;
+    let mut seen = 0u32;
+    for (i, c) in hist[b * LEAK_STEPS..(b + 1) * LEAK_STEPS]
+        .iter()
+        .enumerate()
+    {
+        seen += c;
+        if seen >= want {
+            return i as f32 * 0.5 + 0.5 - 80.0;
+        }
+    }
+    80.0
+}
+
+/// A frame waiting for its future: the suppressor's output and gains, the probe's spectrum.
+struct PendingFrame {
+    spec: Vec<Complex<f32>>,
+    gain: Vec<f32>,
+    probe: Vec<Complex<f32>>,
+    probed: bool,
+    bypass: bool,
+    near: bool,
+    /// The microphone per gate band, its speech band, whether that is well over its floor, and
+    /// the adaptation gate (negative on a bypassed frame).
+    bands: [f32; GATE_NB],
+    speech: f32,
+    loud: bool,
+    coherence: f32,
+    /// The suppressor's inputs: residual echo and noise floor per bin.
+    residual: Vec<f32>,
+    noise: Vec<f32>,
+    /// The microphone's energy and the linear filter's output energy, for the report.
+    energy: (f32, f32),
+}
+
+/// "Silêncio quando só o outro fala": where the computer plays and the user does not talk, what
+/// the suppressor leaves of the echo is taken down to the microphone's own noise floor.
+///
+/// The user is heard by spectral tilt, which no level change on the echo path moves: each band's
+/// share of the microphone's speech band is learned per take on frames of the speakers alone (a
+/// high quantile) and of the user alone (the median); a band whose share now stands over the
+/// echo's, and over its noise floor, has the user in it. Only bands where the user's share is far
+/// over the echo's count — a laptop speaker plays next to nothing under ~250 Hz, where a male
+/// voice has its fundamental: there the echo's share sits some 30 dB under the user's. A take
+/// without such a band (speakers with bass) keeps the gate open.
+/// Offline, so non-causal: frames wait `near_look` frames in a queue, and the gate opens that
+/// far ahead of the user's first detected frame (no clipped first syllable), holds `near_hold`
+/// after the last, and ramps both ways.
+struct NearEndGate {
+    pending: VecDeque<PendingFrame>,
+    spare: Vec<PendingFrame>,
+    band_floor: FloorTracker,
+    bin_floor: FloorTracker,
+    hist: Vec<u32>,
+    hist_frames: u32,
+    user_hist: Vec<u32>,
+    user_frames: u32,
+    share: [f32; GATE_NB],
+    usable: [bool; GATE_NB],
+    calibrated: bool,
+    emitted: usize,
+    last_near: Option<usize>,
+    /// The last frame not of the speakers alone.
+    last_unsure: Option<usize>,
+    /// The band test's last results, for the density test.
+    passed: VecDeque<bool>,
+}
+
+impl NearEndGate {
+    fn new() -> Self {
+        Self {
+            pending: VecDeque::new(),
+            spare: Vec::new(),
+            // Bands: 2 s (4 blocks of 0.5 s); bins, the closed target: 8 s.
+            band_floor: FloorTracker::new(GATE_NB, 94, 4),
+            bin_floor: FloorTracker::new(BINS, 375, 4),
+            hist: vec![0; GATE_NB * LEAK_STEPS],
+            hist_frames: 0,
+            user_hist: vec![0; GATE_NB * LEAK_STEPS],
+            user_frames: 0,
+            share: [0.0; GATE_NB],
+            usable: [false; GATE_NB],
+            calibrated: false,
+            emitted: 0,
+            last_near: None,
+            last_unsure: None,
+            passed: VecDeque::new(),
+        }
+    }
+
+    /// Back to the start of the take, keeping the floors and the leak learned.
+    fn rewind(&mut self) {
+        while let Some(frame) = self.pending.pop_front() {
+            self.spare.push(frame);
+        }
+        self.emitted = 0;
+        self.last_near = None;
+        self.last_unsure = None;
+        self.passed.clear();
+    }
+
+    fn take_frame(&mut self) -> PendingFrame {
+        self.spare.pop().unwrap_or_else(|| PendingFrame {
+            spec: vec![Complex::new(0.0, 0.0); BINS],
+            gain: vec![0.0; BINS],
+            probe: vec![Complex::new(0.0, 0.0); BINS],
+            probed: false,
+            bypass: false,
+            near: false,
+            bands: [0.0; GATE_NB],
+            speech: 0.0,
+            loud: false,
+            coherence: -1.0,
+            residual: vec![0.0; BINS],
+            noise: vec![0.0; BINS],
+            energy: (0.0, 0.0),
+        })
+    }
+
+    /// Whether `frame` has the user in it, its bands kept for `learn`. `coherence`: the
+    /// adaptation gate on a processed frame; none on a bypassed one (no echo possible: any usable
+    /// band over its floor).
+    fn detect(
+        &mut self,
+        frame: &mut PendingFrame,
+        mic: &[Complex<f32>],
+        mic_hann: &[Complex<f32>],
+        coherence: Option<f32>,
+        tuning: &Tuning,
+    ) -> bool {
+        self.bin_floor.push(mic.iter().map(|c| c.norm_sqr()));
+        for (b, v) in frame.bands.iter_mut().enumerate() {
+            *v = mic_hann[GATE_BANDS[b] * 2..GATE_BANDS[b + 1] * 2]
+                .iter()
+                .map(|c| c.norm_sqr())
+                .sum();
+        }
+        self.band_floor.push(frame.bands.iter().copied());
+        let band = &frame.bands;
+        let floor = &self.band_floor.floor;
+        let speech: f32 = band[GATE_SPEECH_FROM..].iter().sum();
+        let speech_floor: f32 = floor[GATE_SPEECH_FROM..].iter().sum();
+        frame.speech = speech;
+        frame.loud = speech > 10.0 * speech_floor && speech > 0.0;
+        let noise = 10f32.powf(tuning.near_noise_db / 10.0);
+        let (from, to) = (tuning.near_bands.0, tuning.near_bands.1.min(GATE_NB));
+        // Before calibration, or with no band the speakers spare: open.
+        if !self.calibrated || !(from..to).any(|b| self.usable[b]) {
+            return true;
+        }
+        let margin = 10f32.powf(tuning.near_margin_db / 10.0);
+        let pass = (from..to).any(|b| {
+            self.usable[b]
+                && band[b] > noise * floor[b]
+                && (coherence.is_none() || band[b] > margin * self.share[b] * speech)
+        });
+        self.passed.push_back(pass);
+        while self.passed.len() > tuning.near_density_frames.max(1) {
+            self.passed.pop_front();
+        }
+        let count = self.passed.iter().filter(|p| **p).count();
+        count as f32 >= tuning.near_density * tuning.near_density_frames.max(1) as f32
+    }
+
+    /// Learns the tilts from the oldest queued frame, now that the frames after it are known:
+    /// the user's from bypassed frames where the microphone is up, the echo's from frames of the
+    /// speakers alone with only the speakers for `near_look` frames either side (the coherence
+    /// lags the user's onsets and ends: frames right next to them are not the echo's).
+    fn learn(&mut self, tuning: &Tuning) {
+        let index = self.emitted;
+        let window = tuning.near_look.max(8);
+        let Some(front) = self.pending.front() else {
+            return;
+        };
+        if front.coherence <= 0.95 {
+            self.last_unsure = Some(index);
+        }
+        if !front.loud {
+            return;
+        }
+        if front.coherence < 0.0 {
+            add_shares(&mut self.user_hist, &front.bands, front.speech);
+            self.user_frames += 1;
+            return;
+        }
+        let sure_before = match self.last_unsure {
+            Some(last) => index - last > window,
+            None => true,
+        };
+        let sure_after = self
+            .pending
+            .iter()
+            .take(window + 1)
+            .all(|f| f.coherence > 0.95);
+        if !sure_before || !sure_after {
+            return;
+        }
+        add_shares(&mut self.hist, &front.bands, front.speech);
+        self.hist_frames += 1;
+        if self.hist_frames >= tuning.near_calibration.0
+            && self.user_frames >= tuning.near_calibration.1
+            && self.hist_frames % 64 == 0
+        {
+            let (from, to) = (tuning.near_bands.0, tuning.near_bands.1.min(GATE_NB));
+            let mut best: Option<(f32, usize)> = None;
+            for b in 0..GATE_NB {
+                let echo = share_quantile(&self.hist, b, self.hist_frames, tuning.near_quantile);
+                let echo_median = share_quantile(&self.hist, b, self.hist_frames, 0.5);
+                let user = share_quantile(&self.user_hist, b, self.user_frames, 0.5);
+                self.share[b] = 10f32.powf(echo / 10.0);
+                let separation = user - echo;
+                if (from..to).contains(&b)
+                    && user - echo_median >= tuning.near_contrast_db
+                    && separation >= tuning.near_separation_db
+                    && best.is_none_or(|(s, _)| separation > s)
+                {
+                    best = Some((separation, b));
+                }
+            }
+            self.usable = [false; GATE_NB];
+            if let Some((_, b)) = best {
+                self.usable[b] = true;
+            }
+            self.calibrated = true;
+        }
+    }
+
+    /// Whether the gate can hear the user in this take: calibrated, with a band the speakers
+    /// spare.
+    fn listening(&self, tuning: &Tuning) -> bool {
+        let (from, to) = (tuning.near_bands.0, tuning.near_bands.1.min(GATE_NB));
+        self.calibrated && (from..to).any(|b| self.usable[b])
+    }
+
+    /// How open the gate is for the oldest queued frame (1 open, 0 closed), and how present the
+    /// user is there (the same, with a `PRESENCE_TAIL` hold).
+    fn opening(&mut self, tuning: &Tuning) -> (f32, f32) {
+        let Some(front) = self.pending.front() else {
+            return (1.0, 0.0);
+        };
+        let index = self.emitted;
+        if front.near {
+            self.last_near = Some(index);
+        }
+        if front.bypass {
+            return (1.0, 1.0);
+        }
+        let ramp = |x: usize, len: usize| {
+            if x >= len {
+                1.0
+            } else {
+                0.5 - 0.5 * (std::f32::consts::PI * x as f32 / len as f32).cos()
+            }
+        };
+        let release = |hold: usize| match self.last_near {
+            Some(last) if index - last <= hold => 1.0,
+            Some(last) => 1.0 - ramp(index - last - hold, tuning.near_release),
+            None => 0.0,
+        };
+        let attack = match self.pending.iter().position(|f| f.near) {
+            Some(ahead) if ahead <= tuning.near_look => {
+                ramp(tuning.near_look - ahead, tuning.near_attack)
+            }
+            _ => 0.0,
+        };
+        (
+            release(tuning.near_hold).max(attack),
+            release(PRESENCE_TAIL.min(tuning.near_hold)).max(attack),
+        )
+    }
+}
 
 fn report_without_bleed(estimate: &BleedEstimate) -> EchoReport {
     EchoReport {
@@ -1326,7 +1982,12 @@ pub(crate) fn wav_header(file: &mut impl Write, samples: usize) -> std::io::Resu
 /// WAV of the voice stem's length, aligned sample for sample. Streams (three passes over the
 /// stems: estimate, warm-up, cancel); a long take is never held in memory. Without a bleed no
 /// file is written and the report says `detected: false`.
-pub fn cancel_echo_file(voice_path: &str, system_path: &str, output: &str) -> Result<EchoReport> {
+pub fn cancel_echo_file(
+    voice_path: &str,
+    system_path: &str,
+    output: &str,
+    strength: Strength,
+) -> Result<EchoReport> {
     let mut tracker = DelayTracker::new();
     let mut meter = TruePeakMeter::default();
     for_each_block(voice_path, system_path, None, |mic, reference, system| {
@@ -1337,7 +1998,7 @@ pub fn cancel_echo_file(voice_path: &str, system_path: &str, output: &str) -> Re
     if !estimate.detected {
         return Ok(report_without_bleed(&estimate));
     }
-    let mut canceller = EchoCanceller::new(estimate);
+    let mut canceller = EchoCanceller::with_tuning(estimate, strength.tuning());
     let mut scratch = Vec::new();
     for_each_block(
         voice_path,
@@ -1555,42 +2216,222 @@ mod tests {
             .map(|i| near[i] + echo[i] + 0.0005 * floor[i])
             .collect();
 
-        let (out, near_out, report) = run_with_probe(&mic, &far, &near);
-        assert!(report.detected, "{report:?}");
-        // The room's direct path is 0.5 (−6 dB) and its reflections add about 1.5 dB of energy:
-        // the measured echo path gain is that, within a couple of dB.
-        let expected = 10.0 * (0.25f64 * 1.4325).log10();
-        assert!(
-            (report.echo_path_gain_db - expected).abs() < 2.5,
-            "echo path {:.1} dB, expected {expected:.1}",
-            report.echo_path_gain_db
+        // No frame here has the user alone, so the near-end gate never calibrates: this is
+        // stages 1–3, and the strengths differ only in how hard the suppressor works in
+        // double-talk. Suave is 2.8.0's; Normal backs off further for the voice; Forte pushes.
+        for (strength, min_reduction, max_change) in [
+            (Strength::Gentle, 2.0, 1.0),
+            (Strength::Normal, 1.0, 1.0),
+            (Strength::Strong, 3.0, 2.0),
+        ] {
+            let (out, near_out, report) =
+                run_with_probe_tuned(&mic, &far, &near, strength.tuning());
+            assert!(report.detected, "{report:?}");
+            assert_eq!(report.gate_closed_share, 0.0, "{strength:?}");
+            // The room's direct path is 0.5 (−6 dB) and its reflections add about 1.5 dB of
+            // energy: the measured echo path gain is that, within a couple of dB.
+            let expected = 10.0 * (0.25f64 * 1.4325).log10();
+            assert!(
+                (report.echo_path_gain_db - expected).abs() < 2.5,
+                "echo path {:.1} dB, expected {expected:.1}",
+                report.echo_path_gain_db
+            );
+            assert_eq!(out.len(), mic.len());
+            assert_eq!(near_out.len(), mic.len());
+
+            // ERLE over the echo-only half (after the first 2 s).
+            let a = 2 * RATE;
+            let b = len / 2;
+            let erle = db(power(&mic[a..b]), power(&out[a..b]));
+            assert!(erle > 15.0, "{strength:?}: ERLE {erle:.1} dB, {report:?}");
+
+            // Double-talk half, split exactly: `near_out` is the near end through the same
+            // gains, and the output minus it is what is left of the echo.
+            let c = len / 2 + RATE;
+            let left: Vec<f32> = (c..len).map(|i| out[i] - near_out[i]).collect();
+            let echo_reduction = db(power(&echo[c..]), power(&left));
+            let kept_db = db(power(&near_out[c..]), power(&near[c..]));
+            eprintln!(
+                "{strength:?}: echo-only ERLE {erle:.1} dB; double-talk: echo reduced \
+                 {echo_reduction:.1} dB, near end kept at {kept_db:.2} dB"
+            );
+            assert!(
+                echo_reduction > min_reduction,
+                "{strength:?}: echo reduced only {echo_reduction:.1} dB during double-talk"
+            );
+            assert!(
+                kept_db.abs() < max_change,
+                "{strength:?}: near end changed by {kept_db:.2} dB"
+            );
+        }
+    }
+
+    /// Like `talker`, with a pitch that only drifts ±8 % around `f0` (the phase integrates it).
+    fn voiced(
+        len: usize,
+        seed: u32,
+        f0: f32,
+        period_ms: f32,
+        on_ms: f32,
+        phase_ms: f32,
+        level: f32,
+    ) -> Vec<f32> {
+        let n = noise(len, seed);
+        let mut lp = 0.0f32;
+        let mut phase = 0.0f64;
+        (0..len)
+            .map(|i| {
+                let t = i as f32 / RATE as f32;
+                let f = f0 as f64 * (1.0 + 0.08 * (t as f64 * 2.1 + seed as f64).sin());
+                phase = (phase + std::f64::consts::TAU * f / RATE as f64) % std::f64::consts::TAU;
+                lp = 0.7 * lp + 0.3 * n[i];
+                let ms = (t * 1000.0 + phase_ms) % period_ms;
+                if ms >= on_ms {
+                    return 0.0;
+                }
+                let env = (std::f32::consts::PI * ms / on_ms).sin();
+                let buzz: f32 = (1..10)
+                    .map(|h| ((h as f64 * phase).sin() / h as f64) as f32)
+                    .sum();
+                level * env * (0.6 * buzz + 0.8 * lp)
+            })
+            .collect()
+    }
+
+    /// A second-order high-pass (RBJ), for a laptop speaker that plays nothing low.
+    fn high_pass(x: &[f32], hz: f64) -> Vec<f32> {
+        let w = std::f64::consts::TAU * hz / RATE as f64;
+        let alpha = w.sin() / std::f64::consts::SQRT_2;
+        let (b0, b1, b2) = (
+            (1.0 + w.cos()) / 2.0,
+            -(1.0 + w.cos()),
+            (1.0 + w.cos()) / 2.0,
         );
-        assert_eq!(out.len(), mic.len());
-        assert_eq!(near_out.len(), mic.len());
+        let (a0, a1, a2) = (1.0 + alpha, -2.0 * w.cos(), 1.0 - alpha);
+        let (mut x1, mut x2, mut y1, mut y2) = (0.0f64, 0.0, 0.0, 0.0);
+        x.iter()
+            .map(|&v| {
+                let v = v as f64;
+                let y = (b0 * v + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2) / a0;
+                (x2, x1, y2, y1) = (x1, v, y1, y);
+                y as f32
+            })
+            .collect()
+    }
 
-        // ERLE over the echo-only half (after the first 2 s).
-        let a = 2 * RATE;
-        let b = len / 2;
-        let erle = db(power(&mic[a..b]), power(&out[a..b]));
-        eprintln!("echo-only ERLE {erle:.1} dB");
-        assert!(erle > 15.0, "ERLE {erle:.1} dB, {report:?}");
+    /// The near-end gate's proof. A laptop-like path (nothing under ~300 Hz), a far-end talker
+    /// alone for 14 s, the near end alone for 6 s (the computer silent: both tilts learned), then
+    /// 1.5 s turns: the speakers alone, then both. Where the speakers play alone the gate takes
+    /// the output down near the noise floor; where the user talks it opens ahead of them and their
+    /// voice comes through as stages 1–3 leave it.
+    #[test]
+    fn the_near_end_gate_silences_the_echo_alone_and_opens_for_the_user() {
+        let len = 34 * RATE;
+        let turn = RATE * 3 / 2;
+        let mut far = voiced(len, 7, 210.0, 400.0, 320.0, 0.0, 0.25);
+        let mut near = voiced(len, 11, 120.0, 700.0, 380.0, 90.0, 0.3);
+        let starts: Vec<usize> = (0..)
+            .map(|i| 20 * RATE + (2 * i + 1) * turn)
+            .take_while(|s| s + turn <= len)
+            .collect();
+        for i in 0..len {
+            let alone_far = i < 14 * RATE;
+            let alone_near = (14 * RATE..20 * RATE).contains(&i);
+            let talking = starts.iter().any(|s| (*s..s + turn).contains(&i));
+            if alone_near {
+                far[i] = 0.0;
+            }
+            if alone_far || !(alone_near || talking) {
+                near[i] = 0.0;
+            }
+        }
+        let echo = room_echo(&high_pass(&far, 300.0), (0.150 * RATE as f64) as usize, 0.5);
+        let floor = noise(len, 5);
+        let mic: Vec<f32> = (0..len)
+            .map(|i| near[i] + echo[i] + 0.0005 * floor[i])
+            .collect();
 
-        // Double-talk half, split exactly: `near_out` is the near end through the same gains,
-        // and the output minus it is what is left of the echo.
-        let c = len / 2 + RATE;
-        let left: Vec<f32> = (c..len).map(|i| out[i] - near_out[i]).collect();
-        let echo_reduction = db(power(&echo[c..]), power(&left));
-        let kept_db = db(power(&near_out[c..]), power(&near[c..]));
+        let gate_off = Tuning {
+            near_gate: false,
+            ..Strength::Normal.tuning()
+        };
+        let (plain, plain_near, _) = run_with_probe_tuned(&mic, &far, &near, gate_off);
+        let normal = Tuning {
+            near_calibration: (600, 300),
+            ..Strength::Normal.tuning()
+        };
+        let (out, near_out, report) = run_with_probe_tuned(&mic, &far, &near, normal);
+        assert!(report.gate_closed_share > 0.2, "{report:?}");
+
+        // The speakers alone, from 300 ms after each turn of the user (the gate's hold) to the
+        // next: at least 20 dB under what stages 1–3 leave, within 15 dB of the noise floor (the
+        // floor tracker reads what is left of the echo in its short pauses as floor too).
+        let noise_floor = power(&floor) * 0.0005f64.powi(2);
+        let mut echo_alone = Vec::new();
+        let mut gated = Vec::new();
+        for s in &starts {
+            let from = s - turn + RATE * 2 / 5;
+            echo_alone.extend_from_slice(&plain[from..*s - RATE / 10]);
+            gated.extend_from_slice(&out[from..*s - RATE / 10]);
+        }
+        let reduction = db(power(&echo_alone), power(&gated));
+        let over_floor = db(power(&gated), noise_floor);
         eprintln!(
-            "double-talk: echo reduced {echo_reduction:.1} dB, near end kept at {kept_db:.2} dB"
+            "speakers alone: {reduction:.1} dB under stages 1–3, {over_floor:.1} dB over the floor"
         );
-        // During double-talk only the linear filter works on the echo (the suppressor backs off to
-        // keep the voice): less than on its own, but never more echo than before.
+        assert!(reduction > 20.0, "only {reduction:.1} dB under stages 1–3");
+        assert!(over_floor < 15.0, "{over_floor:.1} dB over the noise floor");
+
+        // The user's turns: their voice through the gate no worse than through stages 1–3 alone
+        // (better: there the suppressor knows they are talking), its first 50 ms included (the
+        // gate opened ahead).
+        let gate_kept = |range: std::ops::Range<usize>| {
+            db(power(&near_out[range.clone()]), power(&near[range]))
+        };
+        let mut worst_onset = 0.0f64;
+        let mut kept = Vec::new();
+        let mut kept_plain = Vec::new();
+        let mut voice = Vec::new();
+        for s in &starts {
+            // The talker's first syllable starts where its own cycle does: find it.
+            let onset = (*s..s + turn).find(|i| near[*i].abs() > 1e-3).unwrap();
+            worst_onset = worst_onset.min(gate_kept(onset..onset + RATE / 20));
+            kept.extend_from_slice(&near_out[*s..s + turn]);
+            kept_plain.extend_from_slice(&plain_near[*s..s + turn]);
+            voice.extend_from_slice(&near[*s..s + turn]);
+        }
+        let kept_db = db(power(&kept), power(&voice));
+        let plain_db = db(power(&kept_plain), power(&voice));
+        eprintln!(
+            "user's turns kept at {kept_db:.2} dB (stages 1–3: {plain_db:.2} dB), worst first 50 ms {worst_onset:.2} dB"
+        );
         assert!(
-            echo_reduction > 2.0,
-            "echo reduced only {echo_reduction:.1} dB during double-talk"
+            kept_db > plain_db - 0.25,
+            "the gate took {:.2} dB of the user's turns",
+            plain_db - kept_db
         );
-        assert!(kept_db.abs() < 1.0, "near end changed by {kept_db:.2} dB");
+        assert!(kept_db > -2.0, "the user's turns lost {kept_db:.2} dB");
+        assert!(worst_onset > -3.0, "an onset lost {worst_onset:.2} dB");
+    }
+
+    #[test]
+    fn the_strength_names_are_the_editor_setting() {
+        assert_eq!(Strength::parse("gentle"), Strength::Gentle);
+        assert_eq!(Strength::parse("normal"), Strength::Normal);
+        assert_eq!(Strength::parse("strong"), Strength::Strong);
+        assert_eq!(Strength::parse(""), Strength::Normal);
+        assert_eq!(Strength::parse("loud"), Strength::Normal);
+        assert_eq!(
+            Tuning::default().over_double_talk,
+            Strength::Normal.tuning().over_double_talk
+        );
+        // Suave keeps 2.8.0's suppressor; the gate's depth orders the three.
+        assert!(!Strength::Gentle.tuning().near_res);
+        assert!(Strength::Gentle.tuning().near_depth_db.is_finite());
+        assert!(Strength::Normal.tuning().near_depth_db.is_infinite());
+        assert!(
+            Strength::Strong.tuning().over_double_talk > Strength::Normal.tuning().over_double_talk
+        );
     }
 
     /// `cancel_echo_pcm` with the near end as a probe (see `push_with_probe`).
@@ -1599,11 +2440,20 @@ mod tests {
         far: &[f32],
         near: &[f32],
     ) -> (Vec<f32>, Vec<f32>, EchoReport) {
+        run_with_probe_tuned(mic, far, near, Tuning::from_env())
+    }
+
+    fn run_with_probe_tuned(
+        mic: &[f32],
+        far: &[f32],
+        near: &[f32],
+        tuning: Tuning,
+    ) -> (Vec<f32>, Vec<f32>, EchoReport) {
         let len = mic.len();
         let mut tracker = DelayTracker::new();
         tracker.push(far, mic);
         let estimate = tracker.finish();
-        let mut canceller = EchoCanceller::with_tuning(estimate, Tuning::from_env());
+        let mut canceller = EchoCanceller::with_tuning(estimate, tuning);
         let warm = len.min((WARM_UP_SEC * RATE as f64) as usize);
         let mut scratch = Vec::new();
         canceller.push(&mic[..warm], &far[..warm], &mut scratch);
@@ -1639,7 +2489,11 @@ mod tests {
         let mut meter = TruePeakMeter::default();
         meter.push(&[x]);
         assert!(samples < -0.6);
-        assert!(meter.dbfs() > -0.2 && meter.dbfs() <= 0.1, "{}", meter.dbfs());
+        assert!(
+            meter.dbfs() > -0.2 && meter.dbfs() <= 0.1,
+            "{}",
+            meter.dbfs()
+        );
     }
 
     #[test]
@@ -1701,8 +2555,9 @@ mod tests {
 /// Measurement on real stems, not part of the suite (`--ignored`). Environment:
 /// `AEC_VOICE` and `AEC_SYSTEM`, the two stems (any format ffmpeg reads); `AEC_OUT`, a WAV to
 /// write the cleaned voice to; `AEC_NEAR`, optionally, the near end alone when the voice stem is
-/// that near end mixed over a real echo — then the double-talk split is printed too. The
-/// `AEC_*` tuning variables of `Tuning::from_env` apply.
+/// that near end mixed over a real echo — then the double-talk split is printed, and
+/// `AEC_NEAR_OUT` gets the near end as the processing left it. `AEC_STRENGTH` picks the preset
+/// and the `AEC_*` knobs of `Tuning::from_env` override it.
 #[cfg(test)]
 mod measure {
     use super::*;
@@ -1724,6 +2579,16 @@ mod measure {
         10.0 * (p(a) / p(b)).log10()
     }
 
+    fn write_wav(path: &str, x: &[f32]) {
+        let mut file = std::io::BufWriter::new(std::fs::File::create(path).unwrap());
+        wav_header(&mut file, x.len()).unwrap();
+        for v in x {
+            let pcm = ((v.clamp(-1.0, 1.0) * 32767.0).round() as i16).to_le_bytes();
+            file.write_all(&pcm).unwrap();
+            file.write_all(&pcm).unwrap();
+        }
+    }
+
     #[test]
     #[ignore]
     fn measure_real_take() {
@@ -1732,7 +2597,7 @@ mod measure {
         let len = mic.len().min(reference.len());
         let (mic, reference) = (&mic[..len], &reference[..len]);
         let started = std::time::Instant::now();
-        let (out, near_out, report) = match std::env::var("AEC_NEAR") {
+        let (out, report) = match std::env::var("AEC_NEAR") {
             Ok(path) => {
                 let mut near = read_mono(&path);
                 near.resize(len, 0.0);
@@ -1744,7 +2609,7 @@ mod measure {
                             .map(|v| v * v)
                             .sum::<f32>()
                             / 4800.0
-                            > 1e-4
+                            > 1e-6
                     })
                     .collect();
                 let pick = |x: &[f32]| -> Vec<f32> {
@@ -1761,28 +2626,20 @@ mod measure {
                     db_of(&pick(&echo), &pick(&left)),
                     db_of(&pick(&n), &pick(&near)),
                 );
-                (o, Some(n), r)
+                if let Ok(path) = std::env::var("AEC_NEAR_OUT") {
+                    write_wav(&path, &n);
+                }
+                (o, r)
             }
-            Err(_) => {
-                let (o, r) = cancel_echo_pcm(mic, reference);
-                (o, None, r)
-            }
+            Err(_) => cancel_echo_pcm(mic, reference),
         };
-        let _ = near_out;
         eprintln!(
-            "{:.1} s for {:.1} s of audio
-{report:#?}",
+            "{:.1} s for {:.1} s of audio\n{report:#?}",
             started.elapsed().as_secs_f64(),
             len as f64 / RATE as f64
         );
         if let Ok(path) = std::env::var("AEC_OUT") {
-            let mut file = std::io::BufWriter::new(std::fs::File::create(path).unwrap());
-            wav_header(&mut file, out.len()).unwrap();
-            for v in &out {
-                let pcm = ((v.clamp(-1.0, 1.0) * 32767.0).round() as i16).to_le_bytes();
-                file.write_all(&pcm).unwrap();
-                file.write_all(&pcm).unwrap();
-            }
+            write_wav(&path, &out);
         }
     }
 }

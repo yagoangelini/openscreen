@@ -3,7 +3,10 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { app, sharedTexture, type WebFrameMain } from "electron";
-import type { EchoCancelReport } from "../../../src/lib/ai-edition/echoCancelReport";
+import type {
+	EchoCancelReport,
+	EchoCancelStrength,
+} from "../../../src/lib/ai-edition/echoCancelReport";
 import {
 	type CursorKind,
 	readCursorAsArrow,
@@ -1005,12 +1008,13 @@ export class CompositorViewService {
 		voice: string,
 		system: string,
 		output: string,
+		strength: EchoCancelStrength,
 	): Promise<EchoCancelReport | null> {
 		const addon = this.ensureAddon();
 		if (!addon?.cancelEchoFile) {
 			return null;
 		}
-		return JSON.parse(await addon.cancelEchoFile(voice, system, output));
+		return JSON.parse(await addon.cancelEchoFile(voice, system, output, strength));
 	}
 
 	/** "Melhorar a voz": writes `input` enhanced as the export enhances it, to `output` (a WAV
