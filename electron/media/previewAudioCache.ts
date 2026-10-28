@@ -29,7 +29,8 @@ export async function removeLegacyPreviewAudio(userDataDir: string): Promise<boo
 	} catch {
 		return false;
 	}
-	await fs.rm(legacy, { recursive: true, force: true });
+	// A WAV a scanner still holds leaves the folder "not empty" for a moment on Windows.
+	await fs.rm(legacy, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 	return true;
 }
 
