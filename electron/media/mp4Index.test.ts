@@ -33,7 +33,9 @@ describe("hasMp4Index", () => {
 		dir = await fs.mkdtemp(path.join(os.tmpdir(), "mp4-index-"));
 	});
 	afterAll(async () => {
-		await fs.rm(dir, { recursive: true, force: true });
+		// Windows keeps a just-unlinked file "delete pending" while a scanner holds it, and the folder
+		// reads as not empty for a moment: retry instead of failing the test on its cleanup.
+		await fs.rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 	});
 
 	it("finds the index a finished writer leaves at the end", async () => {

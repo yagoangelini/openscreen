@@ -17,7 +17,9 @@ describe("RecordingsDirManager", () => {
 	});
 
 	afterEach(async () => {
-		await rm(userDataDir, { recursive: true, force: true });
+		// Windows keeps a just-unlinked file "delete pending" while a scanner holds it, and the folder
+		// reads as not empty for a moment: retry instead of failing the test on its cleanup.
+		await rm(userDataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 	});
 
 	it("starts at the default dir when nothing was persisted before", () => {

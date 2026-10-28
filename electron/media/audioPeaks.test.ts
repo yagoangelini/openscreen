@@ -155,7 +155,9 @@ describe("ffmpeg resolution", () => {
 
 			expect(resolveFfmpeg(here)).toBeNull();
 		} finally {
-			rmSync(here, { recursive: true, force: true });
+			// Windows keeps a just-unlinked file "delete pending" while a scanner holds it, and the
+			// folder reads as not empty for a moment: retry instead of failing the test on its cleanup.
+			rmSync(here, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 		}
 	});
 
@@ -170,7 +172,7 @@ describe("ffmpeg resolution", () => {
 
 			expect(resolveFfmpeg(here)).toBe(staged);
 		} finally {
-			rmSync(here, { recursive: true, force: true });
+			rmSync(here, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 		}
 	});
 
@@ -194,7 +196,7 @@ describe("ffmpeg resolution", () => {
 
 				expect(resolveFfmpeg(here)).toBeNull();
 			} finally {
-				rmSync(here, { recursive: true, force: true });
+				rmSync(here, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 			}
 		},
 	);
@@ -230,7 +232,7 @@ describe("ffmpeg resolution", () => {
 
 		afterEach(() => {
 			delete process.env.OPENSCREEN_FFMPEG_PATH;
-			rmSync(here, { recursive: true, force: true });
+			rmSync(here, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 		});
 
 		it("passes over a leading candidate that does not exist", () => {
@@ -404,7 +406,8 @@ describe.skipIf(!ffmpegOnPath)("peaks on the media clock, with real FFmpeg", () 
 	});
 
 	afterAll(() => {
-		if (fixtureDir) rmSync(fixtureDir, { recursive: true, force: true });
+		if (fixtureDir)
+			rmSync(fixtureDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 	});
 
 	it("draws audio that starts after the video where it plays, not at zero", async () => {

@@ -37,7 +37,9 @@ describe("recording re-index", () => {
 
 	afterEach(async () => {
 		setPlatform(REAL_PLATFORM);
-		await rm(dir, { recursive: true, force: true });
+		// Windows keeps a just-unlinked file "delete pending" while a scanner holds it, and the folder
+		// reads as not empty for a moment: retry instead of failing the test on its cleanup.
+		await rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 		vi.restoreAllMocks();
 	});
 

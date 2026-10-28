@@ -133,7 +133,9 @@ afterEach(async () => {
 	await running?.close();
 	client = null;
 	running = null;
-	rmSync(dir, { recursive: true, force: true });
+	// Windows keeps a just-unlinked file "delete pending" while a scanner holds it, and the folder
+	// reads as not empty for a moment: retry instead of failing the test on its cleanup.
+	rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 });
 
 async function connect(

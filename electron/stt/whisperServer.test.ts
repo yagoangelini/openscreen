@@ -29,7 +29,9 @@ describe("wav.writeSamplesAsWav", () => {
 		dir = await mkdtemp(path.join(tmpdir(), "stt-wav-"));
 	});
 	afterEach(async () => {
-		await rm(dir, { recursive: true, force: true });
+		// Windows keeps a just-unlinked file "delete pending" while a scanner holds it, and the folder
+		// reads as not empty for a moment: retry instead of failing the test on its cleanup.
+		await rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 	});
 
 	it("writes a 16 kHz mono 16-bit PCM WAV with a valid RIFF header", async () => {
@@ -559,7 +561,7 @@ describe("WhisperServerManager", () => {
 				vi.unstubAllGlobals();
 			}
 		} finally {
-			await rm(dir, { recursive: true, force: true });
+			await rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 		}
 	});
 
@@ -603,7 +605,7 @@ describe("WhisperServerManager", () => {
 				vi.unstubAllGlobals();
 			}
 		} finally {
-			await rm(dir, { recursive: true, force: true });
+			await rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 		}
 	});
 
@@ -663,7 +665,7 @@ describe("WhisperServerManager", () => {
 		} finally {
 			if (originalPlatform) Object.defineProperty(process, "platform", originalPlatform);
 			vi.unstubAllGlobals();
-			await rm(dir, { recursive: true, force: true });
+			await rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 		}
 	});
 
@@ -703,7 +705,7 @@ describe("WhisperServerManager", () => {
 		} finally {
 			if (originalPlatform) Object.defineProperty(process, "platform", originalPlatform);
 			vi.unstubAllGlobals();
-			await rm(dir, { recursive: true, force: true });
+			await rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 		}
 	});
 
@@ -753,7 +755,7 @@ describe("WhisperServerManager", () => {
 			expect(mgr.status.lastError).toMatch(/exited during startup \(3\)/);
 		} finally {
 			errors.mockRestore();
-			await rm(dir, { recursive: true, force: true });
+			await rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 		}
 	});
 
@@ -798,7 +800,7 @@ describe("WhisperServerManager", () => {
 			expect(mgr.status.running).toBe(false);
 		} finally {
 			errors.mockRestore();
-			await rm(dir, { recursive: true, force: true });
+			await rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 		}
 	});
 
@@ -858,7 +860,7 @@ describe("WhisperServerManager", () => {
 			nowSpy.mockRestore();
 			errors.mockRestore();
 			vi.unstubAllGlobals();
-			await rm(dir, { recursive: true, force: true });
+			await rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 		}
 	});
 
@@ -879,7 +881,7 @@ describe("WhisperServerManager", () => {
 				}),
 			).rejects.toThrow(/Whisper GGML model not found/);
 		} finally {
-			await rm(dir, { recursive: true, force: true });
+			await rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 		}
 	});
 
@@ -932,7 +934,7 @@ describe("WhisperServerManager", () => {
 		} finally {
 			if (originalPlatform) Object.defineProperty(process, "platform", originalPlatform);
 			vi.unstubAllGlobals();
-			await rm(dir, { recursive: true, force: true });
+			await rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 		}
 	});
 });

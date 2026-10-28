@@ -183,7 +183,7 @@ describe("mediaLinksRegistry", () => {
 				const resolved = await findMediaLinksByFingerprint(tempDir, importedPath);
 				expect(resolved?.webcamVideoPath).toBe(webcamPath);
 			} finally {
-				await fs.rm(originalDir, { recursive: true, force: true });
+				await rmBestEffort(originalDir);
 			}
 		});
 

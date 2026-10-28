@@ -12,7 +12,9 @@ describe("checkDiskSpace", () => {
 	});
 
 	afterEach(async () => {
-		await rm(dir, { recursive: true, force: true });
+		// Windows keeps a just-unlinked file "delete pending" while a scanner holds it, and the folder
+		// reads as not empty for a moment: retry instead of failing the test on its cleanup.
+		await rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 	});
 
 	it("reports the real filesystem as not low, using a near-zero threshold", async () => {
@@ -40,7 +42,7 @@ describe("recordingStorageProblem", () => {
 	});
 
 	afterEach(async () => {
-		await rm(dir, { recursive: true, force: true });
+		await rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 	});
 
 	it("makes a deleted folder again and lets the take start", async () => {

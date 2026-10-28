@@ -95,7 +95,10 @@ describe.skipIf(!ffmpegAvailable)("extractMono16kPcm with real FFmpeg", () => {
 	});
 
 	afterAll(() => {
-		if (fixtureDir) rmSync(fixtureDir, { recursive: true, force: true });
+		// Windows keeps a just-unlinked file "delete pending" while a scanner holds it, and the folder
+		// reads as not empty for a moment: retry instead of failing the test on its cleanup.
+		if (fixtureDir)
+			rmSync(fixtureDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 	});
 
 	it("keeps delayed audio on the video's clock", async () => {

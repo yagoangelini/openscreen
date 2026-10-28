@@ -11,7 +11,9 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-	await fs.rm(dir, { recursive: true, force: true });
+	// Windows keeps a just-unlinked file "delete pending" while a scanner holds it, and the folder
+	// reads as not empty for a moment: retry instead of failing the test on its cleanup.
+	await fs.rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 });
 
 describe("removeEmptyCaptureOutput", () => {

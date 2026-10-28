@@ -41,7 +41,9 @@ afterEach(async () => {
 	controller = null;
 	await new Promise<void>((resolve) => (blocker ? blocker.close(() => resolve()) : resolve()));
 	blocker = null;
-	rmSync(dir, { recursive: true, force: true });
+	// Windows keeps a just-unlinked file "delete pending" while a scanner holds it, and the folder
+	// reads as not empty for a moment: retry instead of failing the test on its cleanup.
+	rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 });
 
 /** A free port, found by binding one and letting it go. */

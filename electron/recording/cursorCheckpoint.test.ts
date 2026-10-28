@@ -100,7 +100,9 @@ describe("cursor checkpoint", () => {
 		dir = await fs.mkdtemp(path.join(os.tmpdir(), "cursor-checkpoint-"));
 	});
 	afterEach(async () => {
-		await fs.rm(dir, { recursive: true, force: true });
+		// Windows keeps a just-unlinked file "delete pending" while a scanner holds it, and the folder
+		// reads as not empty for a moment: retry instead of failing the test on its cleanup.
+		await fs.rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 	});
 
 	it("writes nothing once discarded, even from a flush scheduled before", async () => {
