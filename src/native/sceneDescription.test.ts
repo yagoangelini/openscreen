@@ -1718,6 +1718,28 @@ describe("buildSceneDescription.audio", () => {
 		]);
 	});
 
+	it("reads the echo-free voice made at the project's strength", () => {
+		resetEchoCancelCache();
+		seedEchoCancelState(
+			"/take.voice.m4a",
+			"/take.system.m4a",
+			{ path: "/cache/take.echo-free.3-strong.wav" },
+			"strong",
+		);
+		const asset = {
+			...makeAsset({ id: "a", originalPath: "/take.mp4" }),
+			audioStems: { voicePath: "/take.voice.m4a", systemPath: "/take.system.m4a" },
+		};
+		const at = (strength: string) =>
+			buildSceneDescription(
+				makeDoc({ assets: [asset], legacyEditor: { echoCancelStrength: strength } }),
+			).audioStems[0].echoFreeVoicePath;
+		expect(at("strong")).toBe("/cache/take.echo-free.3-strong.wav");
+		// Not made at Normal yet: the export would play the voice as recorded, not another strength.
+		expect(at("normal")).toBeUndefined();
+		resetEchoCancelCache();
+	});
+
 	it("reads the echo-free voice once the canceller has one, and only with the toggle on", () => {
 		resetEchoCancelCache();
 		seedEchoCancelState("/take.voice.m4a", "/take.system.m4a", {

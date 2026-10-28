@@ -1640,8 +1640,14 @@ export function buildSceneDescription(
 		audioStems: document.assets.flatMap((asset) => {
 			if (!asset.audioStems || !asset.originalPath) return [];
 			const { voicePath, systemPath } = asset.audioStems;
-			const echoFree = settings.echoCancel ? echoFreeVoicePath(voicePath, systemPath) : undefined;
-			const compensation = systemCompensationDb(settings, echoCancelState(voicePath, systemPath));
+			const strength = settings.echoCancelStrength;
+			const echoFree = settings.echoCancel
+				? echoFreeVoicePath(voicePath, systemPath, strength)
+				: undefined;
+			const compensation = systemCompensationDb(
+				settings,
+				echoCancelState(voicePath, systemPath, strength),
+			);
 			const voiceMutes = sceneStemMutes(document, asset.id, "voice");
 			const systemMutes = sceneStemMutes(document, asset.id, "system");
 			return [

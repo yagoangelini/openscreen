@@ -733,6 +733,7 @@
 			"cameraLookAll": "Aparência da câmera em todos os trechos",
 			"audio": "Editar áudio",
 			"mute": "Silenciar trecho",
+			"echo": "Eco do alto-falante",
 			"transcript": "Editar transcrição",
 			"settings": "Mudar ajustes",
 			"media": "Editar mídia",

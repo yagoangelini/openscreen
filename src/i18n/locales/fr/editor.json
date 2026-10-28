@@ -733,6 +733,7 @@
 			"cameraLookAll": "Camera look on all pieces",
 			"audio": "Edit audio",
 			"mute": "Mute section",
+			"echo": "Écho des haut-parleurs",
 			"transcript": "Edit transcript",
 			"settings": "Change settings",
 			"media": "Edit media",

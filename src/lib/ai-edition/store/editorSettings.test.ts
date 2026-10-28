@@ -139,6 +139,16 @@ describe("getEditorSettings", () => {
 		expect(snap.cursor.smoothing).toBe(0.8);
 	});
 
+	it("reads the echo removal's strength, Normal by default and for a name it does not know", () => {
+		expect(getEditorSettings(baseDoc).echoCancelStrength).toBe("normal");
+		for (const strength of ["gentle", "normal", "strong"] as const) {
+			const doc = patchEditorSettings(baseDoc, { echoCancelStrength: strength });
+			expect(getEditorSettings(doc).echoCancelStrength).toBe(strength);
+		}
+		const newer = { ...baseDoc, legacyEditor: { echoCancelStrength: "extreme" } };
+		expect(getEditorSettings(newer).echoCancelStrength).toBe("normal");
+	});
+
 	it("falls back to defaults for unknown or wrong-type values", () => {
 		const doc: AxcutDocument = {
 			...baseDoc,

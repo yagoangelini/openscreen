@@ -530,6 +530,7 @@ interface Window {
 		prepareEchoCancelledVoice: (
 			voicePath: string,
 			systemPath: string,
+			strength: import("../src/lib/ai-edition/echoCancelReport").EchoCancelStrength,
 		) => Promise<import("../src/lib/ai-edition/echoCancelReport").EchoCancelResult>;
 		prepareEnhancedVoice: (
 			filePath: string,

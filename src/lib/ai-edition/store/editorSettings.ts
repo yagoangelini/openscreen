@@ -36,6 +36,7 @@ import {
 	type WebcamMask,
 } from "@/lib/projectDefaults";
 import type { AspectRatio } from "@/utils/aspectRatioUtils";
+import { type EchoCancelStrength, isEchoCancelStrength } from "../echoCancelReport";
 import type { AxcutDocument } from "../schema";
 import {
 	type AutoZoomSettings,
@@ -145,6 +146,9 @@ export interface EditorSettingsSnapshot {
 	/** "Remover eco do alto-falante": the speaker echo taken out of the voice stem, with the
 	 *  computer stem as the reference (`echo_cancel.rs`). Only acts where an echo is detected. */
 	echoCancel: boolean;
+	/** "Intensidade": how hard the canceller works where the user is silent and where they talk
+	 *  over the computer (Rust `Strength`). */
+	echoCancelStrength: EchoCancelStrength;
 	/** Once the echo is removed, the computer lane raised by the echo path's gain
 	 *  (`systemCompensationDb` in `echoCancel.ts`), so the guest stays as loud as before. */
 	systemCompensation: boolean;
@@ -179,6 +183,7 @@ export const DEFAULT_EDITOR_SETTINGS: EditorSettingsSnapshot = {
 	voiceMuted: false,
 	systemMuted: false,
 	echoCancel: true,
+	echoCancelStrength: "normal",
 	systemCompensation: true,
 	dollyAmount: 0,
 	leanToClicks: false,
@@ -224,6 +229,8 @@ interface LegacyShape {
 	voiceMuted?: boolean;
 	systemMuted?: boolean;
 	echoCancel?: boolean;
+	/** `unknown`: read through `isEchoCancelStrength`, a value from a newer build reads as Normal. */
+	echoCancelStrength?: unknown;
 	systemCompensation?: boolean;
 	webcamBackgroundMode?: WebcamBackgroundMode;
 	webcamWallpaper?: string;
@@ -401,6 +408,9 @@ export function getEditorSettings(doc: AxcutDocument | null | undefined): Editor
 		// On by default, a project from before the toggle included: the canceller only touches a
 		// take whose voice stem carries an echo of the computer stem (`echo_cancel.rs`).
 		echoCancel: bool(legacy?.echoCancel, DEFAULT_EDITOR_SETTINGS.echoCancel),
+		echoCancelStrength: isEchoCancelStrength(legacy?.echoCancelStrength)
+			? legacy.echoCancelStrength
+			: DEFAULT_EDITOR_SETTINGS.echoCancelStrength,
 		systemCompensation: bool(
 			legacy?.systemCompensation,
 			DEFAULT_EDITOR_SETTINGS.systemCompensation,
@@ -460,6 +470,7 @@ export interface EditorSettingsPatch {
 	voiceMuted?: boolean;
 	systemMuted?: boolean;
 	echoCancel?: boolean;
+	echoCancelStrength?: EchoCancelStrength;
 	systemCompensation?: boolean;
 	webcamBackgroundMode?: WebcamBackgroundMode;
 	webcamWallpaper?: string;

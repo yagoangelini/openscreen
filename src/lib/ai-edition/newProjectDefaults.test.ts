@@ -41,6 +41,13 @@ describe("pickEditorDefaults", () => {
 		expect(picked).toEqual({ captions: { fontSize: 60, color: "#ff0" } });
 	});
 
+	it("carries the speaker-echo removal and its strength into a default", () => {
+		expect(pickEditorDefaults({ echoCancel: false, echoCancelStrength: "strong" })).toEqual({
+			echoCancel: false,
+			echoCancelStrength: "strong",
+		});
+	});
+
 	it("covers every look field a style preset carries", () => {
 		for (const key of LOOK_LEGACY_EDITOR_KEYS) expect(DEFAULTABLE_EDITOR_KEYS).toContain(key);
 	});

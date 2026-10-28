@@ -2,6 +2,9 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
 	clampSystemCompensationDb,
 	type EchoCancelState,
+	echoCancelState,
+	echoFreeVoicePath,
+	prepareEchoCancelledVoice,
 	resetEchoCancelCache,
 	seedEchoCancelState,
 	systemCompensationDb,
@@ -78,6 +81,45 @@ describe("systemCompensationDb", () => {
 				report: report({ echoPathGainDb: undefined, systemTruePeakDbfs: undefined }),
 			}),
 		).toBe(0);
+	});
+});
+
+describe("the strength", () => {
+	it("is part of what an answer is for: each strength is its own file", () => {
+		const voice = "/take.voice.m4a";
+		const system = "/take.system.m4a";
+		seedEchoCancelState(voice, system, { path: "/cache/take.echo-free.3-strong.wav" }, "strong");
+		expect(echoFreeVoicePath(voice, system, "strong")).toBe("/cache/take.echo-free.3-strong.wav");
+		expect(echoFreeVoicePath(voice, system, "normal")).toBeUndefined();
+		expect(echoCancelState(voice, system, "gentle")).toBeUndefined();
+		// Without a strength (who spoke only needs the echo out): any one made, Normal first.
+		expect(echoFreeVoicePath(voice, system)).toBe("/cache/take.echo-free.3-strong.wav");
+		seedEchoCancelState(voice, system, { path: "/cache/take.echo-free.3-normal.wav" });
+		expect(echoFreeVoicePath(voice, system)).toBe("/cache/take.echo-free.3-normal.wav");
+	});
+
+	it("goes to the main process with the request", async () => {
+		const asked: unknown[][] = [];
+		const api = {
+			prepareEchoCancelledVoice: async (...args: unknown[]) => {
+				asked.push(args);
+				return { success: true, path: "/cache/x.wav", report: report() };
+			},
+		};
+		const previous = (globalThis as { window?: unknown }).window;
+		(globalThis as { window?: unknown }).window = { electronAPI: api };
+		try {
+			const state = await prepareEchoCancelledVoice("/v.m4a", "/s.m4a", "gentle");
+			expect(state?.path).toBe("/cache/x.wav");
+			expect(asked).toEqual([["/v.m4a", "/s.m4a", "gentle"]]);
+			// Answered once per strength: the same ask again is the cache.
+			await prepareEchoCancelledVoice("/v.m4a", "/s.m4a", "gentle");
+			expect(asked).toHaveLength(1);
+			await prepareEchoCancelledVoice("/v.m4a", "/s.m4a", "strong");
+			expect(asked).toHaveLength(2);
+		} finally {
+			(globalThis as { window?: unknown }).window = previous;
+		}
 	});
 });
 

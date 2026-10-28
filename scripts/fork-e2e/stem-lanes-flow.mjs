@@ -2,6 +2,7 @@
 // CDP only (no OS mouse or keyboard):
 //
 //   node scripts/fork-e2e/stem-lanes-flow.mjs --take <dir> --out <folder> [--port 9291]
+//        [--guest 22,32]
 //
 // <dir> holds one take: `<name>.mp4` with its `<name>.voice.m4a` and `<name>.system.m4a`. It is
 // copied into a recordings folder inside --out; a fresh profile is made there too (the user's
@@ -11,10 +12,13 @@
 // The flow: the take arrives as a fresh recording (`setCurrentRecordingSession`); the timeline
 // must show the two stem lanes; the microphone lane's pane must report the echo the canceller
 // found, and the preview must play the echo-free voice; the computer lane is muted from its chip,
-// 2 s of the microphone are silenced at 10 s, the echo removal is switched off and on again.
-// Then the project is exported twice through the CLI (each in a profile of its own), as edited
-// and with the echo removal off, and both files are measured with ffmpeg: the silenced 2 s,
-// the muted computer sound, and the echo removed from the voice.
+// 2 s of the microphone are silenced at 10 s, the echo removal is switched off and on again, and
+// its "Intensidade" is set to Forte (the preview must switch to that strength's file) and back.
+// Then the project is exported through the CLI (each export in a profile of its own): as edited,
+// with the echo removal off, compensated, and as edited at Suave and at Forte. The files are
+// measured with ffmpeg: the silenced 2 s, the muted computer sound, the echo removed from the
+// voice, the guest's level, and — over --guest (seconds of the take where only the guest talks)
+// — what each strength leaves of the echo there.
 import { execFileSync, spawn, spawnSync } from "node:child_process";
 import {
 	copyFileSync,
@@ -35,6 +39,7 @@ const option = (name, fallback) => {
 };
 const out = path.resolve(option("out", "."));
 const port = option("port", "9291");
+const [guestFrom, guestTo] = option("guest", "22,32").split(",").map(Number);
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const stamp = Date.now();
 const profile = path.join(out, `profile-${stamp}`);
@@ -275,6 +280,40 @@ try {
 	);
 	await shot("04-echo-toggle-on");
 
+	// 5b. "Intensidade": Normal by default; Forte switches the preview to that strength's file.
+	const strengthGroup = page.getByRole("group", { name: /^(Intensidade|Strength)$/ }).first();
+	const pressed = async (name) =>
+		(await strengthGroup.getByRole("button", { name }).getAttribute("aria-pressed")) === "true";
+	check("the echo removal's strength starts at Normal", await pressed(/^Normal$/));
+	const voiceSrc = async (pattern) => {
+		let src = "";
+		for (let i = 0; i < 120; i++) {
+			src = (await page.locator("[data-testid='preview-audio-primary']").getAttribute("src")) ?? "";
+			if (pattern.test(src)) break;
+			await wait(500);
+		}
+		return src;
+	};
+	await strengthGroup.getByRole("button", { name: /^(Forte|Strong)$/ }).click();
+	await wait(800);
+	check(
+		"Forte is stored in the project",
+		project()?.legacyEditor?.echoCancelStrength === "strong",
+		String(project()?.legacyEditor?.echoCancelStrength),
+	);
+	const strongSrc = await voiceSrc(/-strong\./);
+	check("the preview plays the Forte file", /echo-free\.3-strong\./.test(strongSrc), strongSrc);
+	await shot("04b-strength-strong");
+	await strengthGroup.getByRole("button", { name: /^Normal$/ }).click();
+	await wait(800);
+	const normalSrc = await voiceSrc(/-normal\./);
+	check(
+		"back at Normal, the preview plays the Normal file again",
+		/echo-free\.3-normal\./.test(normalSrc) &&
+			project()?.legacyEditor?.echoCancelStrength === "normal",
+		normalSrc,
+	);
+
 	// 6. The computer lane's pane: the automatic compensation, on by default.
 	await page.locator("[data-testid='stem-lane-system']").click({ position: { x: 40, y: 15 } });
 	const compensation =
@@ -317,6 +356,19 @@ try {
 	const compensated = path.join(out, "export-compensated.mp4");
 	const d = cliExport(compensatedFile, compensated);
 	check("export with the echo removed and the computer lane compensated", d.ok, d.stdout);
+	// As edited (computer muted), at Suave and at Forte.
+	const atStrength = (strength) => {
+		const file = path.join(out, `project-${strength}.openscreen`);
+		const doc = structuredClone(entry.doc);
+		doc.legacyEditor = { ...doc.legacyEditor, echoCancelStrength: strength };
+		writeFileSync(file, JSON.stringify(doc));
+		const exported = path.join(out, `export-${strength}.mp4`);
+		const result = cliExport(file, exported);
+		check(`export as edited at ${strength}`, result.ok, result.stdout);
+		return result.ok ? exported : null;
+	};
+	const gentleExport = atStrength("gentle");
+	const strongExport = atStrength("strong");
 
 	if (a.ok && b.ok) {
 		const x = decode(edited);
@@ -348,21 +400,61 @@ try {
 		);
 		// The compensated export against the one with the echo, in whole seconds: per-frame levels
 		// would pick the ~180 ms where the guest has started and the echo has not arrived yet. Over
-		// the export, and over the stretch where only the guest talks (22..32 s of this cut).
+		// the export, and over the stretch where only the guest talks (--guest).
 		const z = d.ok ? decode(compensated) : null;
 		let guestMedian = null;
 		if (z) {
-			guestMedian = levelDb(z, 22, 32) - levelDb(y, 22, 32);
+			guestMedian = levelDb(z, guestFrom, guestTo) - levelDb(y, guestFrom, guestTo);
 			check(
 				"the guest keeps its level once the echo is gone (compensated vs echo + stem)",
 				Math.abs(guestMedian) < 3,
-				`${guestMedian.toFixed(1)} dB over 22..32 s; whole export ${(levelDb(z, 0, 60) - levelDb(y, 0, 60)).toFixed(1)} dB`,
+				`${guestMedian.toFixed(1)} dB over ${guestFrom}..${guestTo} s; whole export ${(levelDb(z, 0, 60) - levelDb(y, 0, 60)).toFixed(1)} dB`,
+			);
+		}
+		// What each strength leaves where only the guest talks (the computer muted: the voice
+		// alone): the share of 50 ms frames down at the noise floor, and the level.
+		const floorShare = (x) => {
+			let low = 0;
+			let n = 0;
+			for (let t = guestFrom; t + 0.05 <= guestTo; t += 0.05) {
+				n++;
+				if (levelDb(x, t, t + 0.05) < -60) low++;
+			}
+			return low / Math.max(1, n);
+		};
+		const byStrength = { normal: { share: floorShare(x), level: levelDb(x, guestFrom, guestTo) } };
+		for (const [name, file] of [
+			["gentle", gentleExport],
+			["strong", strongExport],
+		]) {
+			if (!file) continue;
+			const w = decode(file);
+			byStrength[name] = { share: floorShare(w), level: levelDb(w, guestFrom, guestTo) };
+		}
+		const describe = Object.entries(byStrength)
+			.map(
+				([k, v]) => `${k} ${(100 * v.share).toFixed(0)}% at the floor, ${v.level.toFixed(1)} dBFS`,
+			)
+			.join("; ");
+		if (byStrength.gentle && byStrength.strong) {
+			check(
+				"where only the guest talks, Normal and Forte take the voice down to the floor, Suave less",
+				byStrength.normal.share > 0.5 &&
+					byStrength.strong.share > 0.5 &&
+					byStrength.normal.share > byStrength.gentle.share + 0.2,
+				describe,
+			);
+			check(
+				"the strength changes the export: Forte leaves less echo than Suave",
+				byStrength.gentle.level - byStrength.strong.level > 3,
+				describe,
 			);
 		}
 		writeFileSync(
 			path.join(out, "measurements.json"),
 			JSON.stringify(
 				{
+					strengths: byStrength,
 					silencedDbfs: silenced,
 					sameStretchPlainDbfs: around,
 					medianDropWhereComputerPlaysDb: median,
