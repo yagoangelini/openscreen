@@ -192,6 +192,9 @@ const DECLARED: WritePath[] = [
 		"save",
 		"gesture",
 	),
+	// The stem lanes (Microfone / Áudio do sistema): a silenced stretch added, moved, resized,
+	// faded or removed by the user, on the lane or in its pane.
+	w("src/components/ai-edition/v4/StemLanes.tsx", "writeStemEdit", "save", "gesture"),
 	// "Salvar como padrão" on one of them: the project goes back to following the default.
 	w(
 		"src/components/ai-edition/v4/ProjectTranscriptionSettings.tsx",

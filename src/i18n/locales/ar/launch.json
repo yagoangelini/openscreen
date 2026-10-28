@@ -148,7 +148,8 @@
 		"micChannelRight": "يمين",
 		"micChannelMix": "مزج",
 		"broadcastTip": "نصيحة: اختر ميكروفون \"NVIDIA Broadcast\" لإزالة الضوضاء الخلفية.",
-		"micSilenceWarning": "Warn if the microphone seems muted"
+		"micSilenceWarning": "Warn if the microphone seems muted",
+		"headphonesHint": "ذكّرني باستخدام سماعات الرأس"
 	},
 	"permissions": {
 		"title": "يحتاج OpenScreen إلى بعض الأذونات",
@@ -204,5 +205,9 @@
 			"screenRequired": "تسجيل الشاشة مطلوب للتسجيل.",
 			"ready": "كل شيء جاهز."
 		}
+	},
+	"headphonesHint": {
+		"title": "استخدم سماعات الرأس",
+		"body": "عند تشغيل الميكروفون وصوت الحاسوب معًا، يدخل صوت مكبرات الصوت إلى الميكروفون. تمنع سماعات الرأس ذلك (ويمكن للمحرر أيضًا إزالة هذا الصدى لاحقًا)."
 	}
 }

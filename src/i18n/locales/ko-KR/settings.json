@@ -462,7 +462,25 @@
 		"voiceEnhance": "Enhance voice",
 		"voiceEnhanceTip": "Removes background noise from the voice and adds a little clarity, on this computer. Applied to the voice track only; the computer sound is left as recorded.",
 		"voiceEnhanceTipNoStems": "Removes background noise from the recording's audio and adds a little clarity, on this computer. Without a separate voice track, sounds that are not speech are reduced too.",
-		"voiceEnhanceStrength": "Strength"
+		"voiceEnhanceStrength": "Strength",
+		"echoCancel": "스피커 에코 제거",
+		"echoCancelTip": "컴퓨터 소리가 스피커로 나오고 마이크에 들어갔을 때, 녹음된 컴퓨터 소리를 기준으로 그 에코를 목소리에서 제거합니다. 에코가 없는 녹음은 그대로 둡니다.",
+		"echoStatusWorking": "스피커 에코를 찾는 중…",
+		"echoStatusFound": "스피커 에코를 찾아(지연 {{delay}} ms) 제거했습니다: 약 {{reduction}} dB 작아졌습니다.",
+		"echoStatusNone": "이 녹음에는 스피커 에코가 없습니다.",
+		"lanes": {
+			"voice": "마이크",
+			"system": "컴퓨터 소리",
+			"mute": "트랙 음소거",
+			"unmute": "음소거 해제",
+			"volume": "볼륨",
+			"help": "이 녹음의 마이크와 컴퓨터 소리를 각각 따로 편집합니다. 영상을 자르면 둘 다 잘립니다. 트랙은 전체 또는 구간별로 음소거만 할 수 있고, 화면에 대해 이동할 수는 없습니다.",
+			"addMute": "재생 헤드에서 {{seconds}}초 음소거",
+			"removeMute": "음소거 구간 삭제",
+			"fade": "페이드",
+			"muteLabel": "음소거 구간: 끌어서 이동, 가장자리를 끌어서 조정",
+			"noTakeHere": "마이크와 컴퓨터 소리가 따로 녹음된 부분에 재생 헤드를 두세요."
+		}
 	},
 	"language": {
 		"title": "언어"

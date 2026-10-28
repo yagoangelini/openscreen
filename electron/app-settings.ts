@@ -57,6 +57,12 @@ export interface RecordingPreferences {
 	 * silence during a take (electron/recording/micSilence.ts). On by default.
 	 */
 	micSilenceWarningEnabled: boolean;
+	/**
+	 * Whether the HUD reminds "Use fones…" when the microphone and the computer sound are both
+	 * turned on: the speakers' sound would reach the microphone (`echo_cancel.rs` removes it
+	 * afterwards, but headphones keep it out). On by default.
+	 */
+	headphonesHintEnabled: boolean;
 }
 
 export const MIC_CHANNEL_MODES = ["auto", "left", "right", "mix"] as const;
@@ -86,6 +92,7 @@ export const DEFAULT_RECORDING_PREFERENCES: RecordingPreferences = {
 	micChannelMode: "auto",
 	cameraLayout: DEFAULT_RECORDING_CAMERA_LAYOUT,
 	micSilenceWarningEnabled: true,
+	headphonesHintEnabled: true,
 };
 
 export interface RecordingSourceDescriptor {
@@ -183,6 +190,10 @@ function parseRecording(raw: RawSettings): RecordingPreferences {
 		micSilenceWarningEnabled: bool(
 			raw.micSilenceWarningEnabled,
 			DEFAULT_RECORDING_PREFERENCES.micSilenceWarningEnabled,
+		),
+		headphonesHintEnabled: bool(
+			raw.headphonesHintEnabled,
+			DEFAULT_RECORDING_PREFERENCES.headphonesHintEnabled,
 		),
 	};
 }

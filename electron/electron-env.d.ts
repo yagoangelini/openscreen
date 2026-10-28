@@ -527,6 +527,10 @@ interface Window {
 			gainDb: number;
 			message?: string;
 		}>;
+		prepareEchoCancelledVoice: (
+			voicePath: string,
+			systemPath: string,
+		) => Promise<import("../src/lib/ai-edition/echoCancelReport").EchoCancelResult>;
 		prepareEnhancedVoice: (
 			filePath: string,
 			strength: number,

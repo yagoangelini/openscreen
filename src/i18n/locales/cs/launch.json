@@ -148,7 +148,8 @@
 		"micChannelRight": "Pravý",
 		"micChannelMix": "Mix",
 		"broadcastTip": "Tip: zvolte mikrofon „NVIDIA Broadcast“ pro odstranění šumu v pozadí.",
-		"micSilenceWarning": "Warn if the microphone seems muted"
+		"micSilenceWarning": "Warn if the microphone seems muted",
+		"headphonesHint": "Připomínat použití sluchátek"
 	},
 	"permissions": {
 		"title": "OpenScreen potřebuje několik oprávnění",
@@ -204,5 +205,9 @@
 			"screenRequired": "K nahrávání je potřeba nahrávání obrazovky.",
 			"ready": "Vše je připraveno."
 		}
+	},
+	"headphonesHint": {
+		"title": "Použijte sluchátka",
+		"body": "Když je zapnutý mikrofon i zvuk počítače, zvuk z reproduktorů se dostane do mikrofonu. Sluchátka tomu zabrání (editor tuto ozvěnu umí odstranit i později)."
 	}
 }

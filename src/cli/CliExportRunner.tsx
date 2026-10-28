@@ -22,6 +22,7 @@ import {
 	resolveAspectRatioValue,
 } from "@/lib/ai-edition/document/outputFormat";
 import { applyProbedDuration } from "@/lib/ai-edition/document/timeline";
+import { prepareEchoCancel } from "@/lib/ai-edition/echoCancel";
 import { type AxcutDocument, isAxcutDocumentFile } from "@/lib/ai-edition/schema";
 import { getEditorSettings } from "@/lib/ai-edition/store/editorSettings";
 import {
@@ -292,6 +293,9 @@ async function runExport(request: CliExportRequest): Promise<CliDoneResult> {
 	// scene build cannot await — without this a cold CLI export builds its scene from empty
 	// caches and comes out silent. Clicks that will not load must not cost the export.
 	await prepareClickSound(axcutDocument).catch(() => undefined);
+	// The echo-free voice ("Remover eco do alto-falante") is read off a file the canceller writes;
+	// a scene build cannot wait for it. Seconds on a long take, nothing once it is cached.
+	await prepareEchoCancel(axcutDocument).catch(() => undefined);
 	// The same delivery loudness as the editor's export: without it a CLI export came out 2 dB
 	// softer than the one the user made from the dialog.
 	const builtScene = buildSceneDescription(axcutDocument);

@@ -667,6 +667,26 @@ export const audioTrackSchema = endGteStart(
 	"startMs",
 );
 
+// A silenced stretch of ONE of a take's two stems (`asset.audioStems`): the microphone ("voice")
+// or the computer sound ("system"), on the stem's lane of the timeline. Anchored like a trim, to
+// the asset in SOURCE seconds, so it applies to every clip cut from the take and follows the
+// sound through cuts, reorders and speed changes: the stems stay locked to the picture, and a
+// lane edit only ever silences, never shifts. `fadeMs` ramps the level down before `startSec`
+// and back up after `endSec` (the stretch itself is fully silent), so a cut never clicks.
+export const stemMuteSchema = endGteStart(
+	z.object({
+		id: z.string().min(1),
+		assetId: z.string().min(1),
+		stem: z.enum(["voice", "system"]),
+		startSec: z.number().nonnegative(),
+		endSec: z.number().nonnegative(),
+		fadeMs: z.number().int().min(0).max(2000).default(30),
+		origin: z.enum(["system", "agent", "user"]).default("user"),
+	}),
+	"endSec",
+	"startSec",
+);
+
 // A piece of the camera track (v9). The camera stays locked to the screen in time: its
 // webcam file plays wherever the screen clip under it plays. What a piece changes is how
 // the camera is SHOWN there: as the picture-in-picture, filling the frame, or not at all.
@@ -772,6 +792,10 @@ const documentSchemaShape = z.object({
 	// Imported audio tracks (issue #350). Defaulted so every document written
 	// before this loads unchanged; an older build simply strips the key on save.
 	audioTracks: z.array(audioTrackSchema).default([]),
+	// The silenced stretches of the stem lanes (see `stemMuteSchema`). Optional rather than
+	// defaulted, so a document without any stays byte-for-byte what it was; additive, no
+	// schemaVersion bump: an older build drops the key on save, and the stretches play again.
+	audioStemMutes: z.array(stemMuteSchema).optional(),
 	// The camera track's pieces (v9). Defaulted: a document with no piece shows the camera
 	// as the picture-in-picture over the whole timeline, as before the track existed.
 	cameraSegments: z.array(cameraSegmentSchema).default([]),
@@ -1488,6 +1512,8 @@ export type AxcutAnnotationRegion = z.infer<typeof annotationRegionSchema>;
 export type AxcutZoomRegion = z.infer<typeof zoomRegionSchema>;
 export type AxcutCameraTrack = z.infer<typeof cameraTrackSchema>;
 export type AxcutAudioTrack = z.infer<typeof audioTrackSchema>;
+export type AxcutStemMute = z.infer<typeof stemMuteSchema>;
+export type AxcutStemKind = AxcutStemMute["stem"];
 export type AxcutCameraSegment = z.infer<typeof cameraSegmentSchema>;
 export type AxcutCameraMode = z.infer<typeof cameraSegmentModeSchema>;
 export type AxcutCameraLook = z.infer<typeof cameraLookSchema>;

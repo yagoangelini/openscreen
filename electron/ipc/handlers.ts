@@ -19,6 +19,7 @@ import {
 	systemPreferences,
 } from "electron";
 import { DEFAULT_WEBCAM_QUALITY, type WebcamQualityId } from "../../src/hooks/webcamCaptureTarget";
+import type { EchoCancelReport, EchoCancelResult } from "../../src/lib/ai-edition/echoCancelReport";
 import {
 	type AxcutDocument,
 	isAxcutDocumentFile,
@@ -225,7 +226,15 @@ const ALLOWED_IMPORT_VIDEO_EXTENSIONS = new Set([
 	".flv",
 	".ts",
 ]);
-const PREVIEW_AUDIO_DIR = path.join(app.getPath("userData"), "preview-audio");
+// The audio the preview plays from files the app renders (the enhanced and the echo-free voice,
+// a second track): in the temp folder, NOT under userData. userData is Chromium's profile
+// directory, and Chromium refuses file:// reads inside it (net::ERR_FILE_NOT_FOUND), so a copy
+// there never played: the preview fell back to the take's mixed track. Measured with
+// scripts/fork-e2e/stem-lanes-flow.mjs. Everything here is a cache, rebuilt when missing.
+const PREVIEW_AUDIO_DIR = path.join(app.getPath("temp"), "openscreen-preview-audio");
+/** Part of the echo-free voice's cache key: bump it when `echo_cancel.rs` changes its output. */
+const ECHO_CANCEL_VERSION = 1;
+
 // See the save-recorded-voiceover handler: an upper bound on renderer-supplied
 // bytes written to disk, well past any plausible take.
 const MAX_RECORDED_VOICEOVER_BYTES = 512 * 1024 * 1024;
@@ -801,6 +810,8 @@ export interface RecordingPrefs {
 	cameraLayout: RecordingCameraLayout;
 	/** The HUD warns when the microphone records only silence during a take. */
 	micSilenceWarningEnabled: boolean;
+	/** The HUD reminds to use headphones when the microphone and the computer sound are both on. */
+	headphonesHintEnabled: boolean;
 }
 const defaultRecordingPrefs: RecordingPrefs = {
 	micEnabled: false,
@@ -820,6 +831,7 @@ const defaultRecordingPrefs: RecordingPrefs = {
 	micChannelMode: "auto",
 	cameraLayout: DEFAULT_RECORDING_CAMERA_LAYOUT,
 	micSilenceWarningEnabled: true,
+	headphonesHintEnabled: true,
 };
 
 // Cached source from the user's pick. Used by setDisplayMediaRequestHandler in main.ts for cursor-free capture.
@@ -5692,6 +5704,62 @@ export function registerIpcHandlers(
 			}
 		},
 	);
+
+	// "Remover eco do alto-falante": the take's voice stem with the speaker echo of its computer
+	// stem removed (`echo_cancel.rs`), for the preview AND the export (both read this file in
+	// place of the voice stem, so they cannot differ). Cached in `preview-audio` by both stems'
+	// sizes and mtimes; the canceller's report is cached beside it as JSON, also when it found no
+	// echo (then there is no WAV and the voice plays as recorded). One run per take at a time.
+	const echoCancelJobs = new Map<string, Promise<EchoCancelResult>>();
+	ipcMain.handle(
+		"prepare-echo-cancelled-voice",
+		async (_, voicePath: string, systemPath: string): Promise<EchoCancelResult> => {
+			try {
+				const voice = readableApprovedPath(voicePath);
+				const system = readableApprovedPath(systemPath);
+				if (!voice || !system) return { success: false, message: "File path is not approved" };
+				const [voiceStat, systemStat] = await Promise.all([fs.stat(voice), fs.stat(system)]);
+				const base = path.join(
+					PREVIEW_AUDIO_DIR,
+					`${path.parse(voice).name}.echo-free.${ECHO_CANCEL_VERSION}.${voiceStat.size}-${Math.round(voiceStat.mtimeMs)}.${systemStat.size}-${Math.round(systemStat.mtimeMs)}`,
+				);
+				let job = echoCancelJobs.get(base);
+				if (!job) {
+					job = runEchoCancel(voice, system, base);
+					echoCancelJobs.set(base, job);
+					void job.finally(() => echoCancelJobs.delete(base)).catch(() => undefined);
+				}
+				return await job;
+			} catch (error) {
+				return { success: false, message: String(error) };
+			}
+		},
+	);
+	const runEchoCancel = async (
+		voice: string,
+		system: string,
+		base: string,
+	): Promise<EchoCancelResult> => {
+		const reportPath = `${base}.json`;
+		const wavPath = `${base}.wav`;
+		try {
+			const report = JSON.parse(await fs.readFile(reportPath, "utf8")) as EchoCancelReport;
+			if (!report.detected) return { success: true, report };
+			await fs.access(wavPath);
+			// The preview may hand it back to "Melhorar a voz", which reads approved files only.
+			approveFilePath(wavPath);
+			return { success: true, path: wavPath, report };
+		} catch {
+			// Not cached (or half-cached): run it.
+		}
+		await fs.mkdir(PREVIEW_AUDIO_DIR, { recursive: true });
+		const report = await loudnessService.cancelEchoFile(voice, system, wavPath);
+		if (!report) return { success: false, message: "addon" };
+		await fs.writeFile(reportPath, JSON.stringify(report));
+		if (!report.detected) return { success: true, report };
+		approveFilePath(wavPath);
+		return { success: true, path: wavPath, report };
+	};
 
 	// "Melhorar a voz" in the preview: the voice file enhanced by the compositor exactly as the
 	// export will (`voice_enhance.rs`), cached in `preview-audio` by file, size, mtime and

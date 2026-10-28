@@ -462,7 +462,25 @@
 		"voiceEnhance": "Enhance voice",
 		"voiceEnhanceTip": "Removes background noise from the voice and adds a little clarity, on this computer. Applied to the voice track only; the computer sound is left as recorded.",
 		"voiceEnhanceTipNoStems": "Removes background noise from the recording's audio and adds a little clarity, on this computer. Without a separate voice track, sounds that are not speech are reduced too.",
-		"voiceEnhanceStrength": "Strength"
+		"voiceEnhanceStrength": "Strength",
+		"echoCancel": "Remove speaker echo",
+		"echoCancelTip": "When the computer's sound played on the speakers and your microphone picked it up, removes that echo from your voice, using the recorded computer sound as the reference. Takes without an echo are left as recorded.",
+		"echoStatusWorking": "Looking for speaker echo…",
+		"echoStatusFound": "Speaker echo found ({{delay}} ms late) and removed: about {{reduction}} dB quieter.",
+		"echoStatusNone": "No speaker echo in this recording.",
+		"lanes": {
+			"voice": "Microphone",
+			"system": "Computer sound",
+			"mute": "Mute track",
+			"unmute": "Unmute track",
+			"volume": "Volume",
+			"help": "The microphone and the computer sound of this recording, edited on their own. Cutting the video cuts both; a track can only be muted or silenced in places, never shifted against the picture.",
+			"addMute": "Silence {{seconds}} s at the playhead",
+			"removeMute": "Remove silenced section",
+			"fade": "Fade",
+			"muteLabel": "Silenced section: drag to move, drag the edges to resize",
+			"noTakeHere": "Put the playhead over a recording with separate microphone and computer sound."
+		}
 	},
 	"language": {
 		"title": "Language"

@@ -148,7 +148,8 @@
 		"micChannelRight": "Des.",
 		"micChannelMix": "Mix",
 		"broadcastTip": "Suggerimento: scegli il microfono \"NVIDIA Broadcast\" per eliminare il rumore di fondo.",
-		"micSilenceWarning": "Warn if the microphone seems muted"
+		"micSilenceWarning": "Warn if the microphone seems muted",
+		"headphonesHint": "Ricordami di usare le cuffie"
 	},
 	"permissions": {
 		"title": "OpenScreen ha bisogno di alcuni permessi",
@@ -204,5 +205,9 @@
 			"screenRequired": "Per registrare serve la registrazione dello schermo.",
 			"ready": "È tutto pronto."
 		}
+	},
+	"headphonesHint": {
+		"title": "Usa le cuffie",
+		"body": "Con microfono e audio del computer attivi, ciò che esce dagli altoparlanti entra nel microfono. Le cuffie lo evitano (l'editor può anche togliere quell'eco dopo)."
 	}
 }

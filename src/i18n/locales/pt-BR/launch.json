@@ -148,7 +148,8 @@
 		"micChannelRight": "Dir.",
 		"micChannelMix": "Mixar",
 		"broadcastTip": "Dica: escolha o microfone \"NVIDIA Broadcast\" para remover o ruído de fundo.",
-		"micSilenceWarning": "Avisar se o microfone parecer mudo"
+		"micSilenceWarning": "Avisar se o microfone parecer mudo",
+		"headphonesHint": "Lembrar de usar fones"
 	},
 	"permissions": {
 		"title": "O OpenScreen precisa de algumas permissões",
@@ -204,5 +205,9 @@
 			"screenRequired": "A gravação de tela é necessária para gravar.",
 			"ready": "Tudo pronto."
 		}
+	},
+	"headphonesHint": {
+		"title": "Use fones de ouvido",
+		"body": "Use fones para não gravar o som do computador no microfone. Com o microfone e o som do computador ligados, o que sai dos alto-falantes entra no microfone (o editor também consegue tirar esse eco depois)."
 	}
 }

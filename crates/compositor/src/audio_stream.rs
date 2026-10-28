@@ -34,7 +34,9 @@ use crate::audio::{
 use crate::ffi::*;
 use crate::ffi::{AVERROR_EAGAIN, AVERROR_EOF};
 use crate::regions::SpeedSegment;
-use crate::scene::{SceneAudio, SceneAudioTrack, SceneAudioTrackKind, SceneClickHit, SceneClickSound};
+use crate::scene::{
+    SceneAudio, SceneAudioTrack, SceneAudioTrackKind, SceneClickHit, SceneClickSound, SceneStemMute,
+};
 use anyhow::{bail, Result};
 use std::collections::VecDeque;
 use std::f32::consts::PI;
@@ -155,6 +157,79 @@ pub struct ClipStems<'a> {
     pub voice_gain_db: f32,
     pub system_path: &'a str,
     pub system_gain_db: f32,
+    /// The echo-free voice (`SceneAudioStems::echo_free_voice_path`), read in place of the
+    /// voice stem; its loudness gain is still `voice_path`'s.
+    pub echo_free_voice_path: Option<&'a str>,
+    pub voice_muted: bool,
+    pub system_muted: bool,
+    pub voice_mutes: &'a [SceneStemMute],
+    pub system_mutes: &'a [SceneStemMute],
+}
+
+/// A stem lane's gain at source time `t` (seconds): 0 inside a silenced stretch, a linear ramp
+/// over its fade on each side, 1 elsewhere; overlapping ramps multiply. `stemMuteGain` in
+/// `src/lib/ai-edition/document/stemLanes.ts` is the same function: the preview applies it to
+/// the source file it seeks, the export here.
+pub fn stem_mute_gain(mutes: &[SceneStemMute], t: f64) -> f32 {
+    let mut gain = 1.0f64;
+    for mute in mutes {
+        if t >= mute.start_sec && t <= mute.end_sec {
+            return 0.0;
+        }
+        if mute.fade_sec <= 0.0 {
+            continue;
+        }
+        if t < mute.start_sec && t > mute.start_sec - mute.fade_sec {
+            gain *= (mute.start_sec - t) / mute.fade_sec;
+        } else if t > mute.end_sec && t < mute.end_sec + mute.fade_sec {
+            gain *= (t - mute.end_sec) / mute.fade_sec;
+        }
+    }
+    gain as f32
+}
+
+/// A stem's silenced stretches applied to its source, before the speed stretch: `first_sec` is
+/// the source time of the stream's first sample.
+pub struct MuteStream<S> {
+    inner: S,
+    mutes: Vec<SceneStemMute>,
+    first_sec: f64,
+    pos: usize,
+}
+
+impl<S> MuteStream<S> {
+    pub fn new(inner: S, mutes: &[SceneStemMute], first_sec: f64) -> Self {
+        Self { inner, mutes: mutes.to_vec(), first_sec, pos: 0 }
+    }
+}
+
+impl<S: PcmStream> PcmStream for MuteStream<S> {
+    fn pull(&mut self, n: usize, out: &mut PlanarPcm) {
+        let starts: Vec<usize> = out.iter().map(Vec::len).collect();
+        self.inner.pull(n, out);
+        if !self.mutes.is_empty() {
+            // Only the stretches this block can reach, so a long list costs nothing elsewhere.
+            let from = self.first_sec + self.pos as f64 / RATE;
+            let to = self.first_sec + (self.pos + n) as f64 / RATE;
+            let near: Vec<SceneStemMute> = self
+                .mutes
+                .iter()
+                .filter(|m| m.end_sec + m.fade_sec >= from && m.start_sec - m.fade_sec <= to)
+                .copied()
+                .collect();
+            if !near.is_empty() {
+                for i in 0..n {
+                    let g = stem_mute_gain(&near, self.first_sec + (self.pos + i) as f64 / RATE);
+                    if g != 1.0 {
+                        for (plane, start) in out.iter_mut().zip(&starts) {
+                            plane[start + i] *= g;
+                        }
+                    }
+                }
+            }
+        }
+        self.pos += n;
+    }
 }
 
 /// `apply_gain_db` on a stream: the per-file loudness normalisation of a clip.
@@ -1253,20 +1328,51 @@ impl ProgrammeAudio {
             }
         };
         if let Some(stems) = stems {
-            let open = |path: &str, gain_db: f32, enhance: Option<f32>| -> Option<Box<dyn PcmStream>> {
-                match ClipAudioReader::open(path, source_start_sec, source_end_sec) {
-                    Ok(Some(reader)) => Some(Box::new(GainStream::new(stretch(reader, enhance), gain_db))),
-                    _ => None,
-                }
+            // Each lane: its silenced stretches on the source, then the voice's enhancement, then
+            // the speed stretch; its volume last. A muted lane is not read at all.
+            let open = |path: &str,
+                        gain_db: f32,
+                        enhance: Option<f32>,
+                        mutes: &[SceneStemMute]|
+             -> Option<Box<dyn PcmStream>> {
+                let reader = match ClipAudioReader::open(path, source_start_sec, source_end_sec) {
+                    Ok(Some(reader)) => reader,
+                    _ => return None,
+                };
+                let total = reader.len();
+                let muted = MuteStream::new(reader, mutes, source_start_sec);
+                let stretched: Box<dyn PcmStream> = match enhance {
+                    Some(strength) => Box::new(SpeedStretchStream::new(
+                        crate::voice_enhance::EnhanceStream::new(muted, strength),
+                        speed_segments,
+                        output_fps,
+                        total,
+                    )),
+                    None => Box::new(SpeedStretchStream::new(muted, speed_segments, output_fps, total)),
+                };
+                Some(Box::new(GainStream::new(stretched, gain_db)))
             };
-            let voice = open(
-                stems.voice_path,
-                loudness_gain_db(stems.voice_path) + stems.voice_gain_db,
-                voice_enhance,
-            );
-            let system = open(stems.system_path, stems.system_gain_db, None);
+            let voice_read = stems.echo_free_voice_path.unwrap_or(stems.voice_path);
+            let voice = if stems.voice_muted {
+                Some(None)
+            } else {
+                open(
+                    voice_read,
+                    loudness_gain_db(stems.voice_path) + stems.voice_gain_db,
+                    voice_enhance,
+                    stems.voice_mutes,
+                )
+                .map(Some)
+            };
+            let system = if stems.system_muted {
+                Some(None)
+            } else {
+                open(stems.system_path, stems.system_gain_db, None, stems.system_mutes).map(Some)
+            };
+            // Both lanes readable (or muted): the take plays from its stems. A lane that fails to
+            // open makes the whole take fall back to the video's own track, as before.
             if let (Some(voice), Some(system)) = (voice, system) {
-                return Some(Box::new(SumStream::new(vec![voice, system])));
+                return Some(Box::new(SumStream::new(voice.into_iter().chain(system).collect())));
             }
             eprintln!(
                 "[pipeline] warning: clip #{clip_index}: audio stems unreadable, using the video's own track"
@@ -2042,5 +2148,120 @@ mod tests {
             .unwrap();
         assert_eq!(calls, 0);
         assert_eq!(programme.total_samples(), Some(0));
+    }
+
+    // --- stem lanes ------------------------------------------------------------------------
+
+    fn mute(start_sec: f64, end_sec: f64, fade_sec: f64) -> SceneStemMute {
+        SceneStemMute { start_sec, end_sec, fade_sec }
+    }
+
+    #[test]
+    fn the_stem_mute_envelope_is_silent_inside_and_ramps_outside() {
+        let mutes = [mute(1.0, 2.0, 0.1)];
+        assert_eq!(stem_mute_gain(&mutes, 0.5), 1.0);
+        assert!((stem_mute_gain(&mutes, 0.95) - 0.5).abs() < 1e-5);
+        assert_eq!(stem_mute_gain(&mutes, 1.0), 0.0);
+        assert_eq!(stem_mute_gain(&mutes, 1.5), 0.0);
+        assert!((stem_mute_gain(&mutes, 2.025) - 0.25).abs() < 1e-5);
+        assert_eq!(stem_mute_gain(&mutes, 2.2), 1.0);
+        // Two ramps over one instant multiply.
+        let close = [mute(1.0, 2.0, 0.2), mute(2.3, 3.0, 0.2)];
+        let t = 2.15;
+        assert!((stem_mute_gain(&close, t) - 0.75 * 0.75).abs() < 1e-5);
+    }
+
+    #[test]
+    fn a_mute_stream_reads_the_envelope_on_source_time() {
+        // A window that starts at 10 s of source: the stretch at 10.5..10.6 s is silent there.
+        let len = 48_000;
+        let ones: PlanarPcm = vec![vec![1.0; len], vec![1.0; len]];
+        let mut stream = MuteStream::new(MemoryPcm::new(ones), &[mute(10.5, 10.6, 0.0)], 10.0);
+        let out = pull_all(&mut stream, len, 1000);
+        assert_eq!(out[0][24_000 - 1], 1.0);
+        assert_eq!(out[0][24_000 + 10], 0.0);
+        assert_eq!(out[1][28_800 - 10], 0.0);
+        assert_eq!(out[1][28_800 + 10], 1.0);
+    }
+
+    /// A 16-bit WAV (the same signal on both channels) of `samples` in the temp folder, for the readers below.
+    fn temp_wav(name: &str, samples: &[f32]) -> String {
+        use std::io::Write;
+        let path = std::env::temp_dir().join(format!("openscreen-stems-{}-{name}.wav", std::process::id()));
+        let mut file = std::io::BufWriter::new(std::fs::File::create(&path).unwrap());
+        crate::echo_cancel::wav_header(&mut file, samples.len()).unwrap();
+        for s in samples {
+            let pcm = ((s * 32767.0).round() as i16).to_le_bytes();
+            file.write_all(&pcm).unwrap();
+            file.write_all(&pcm).unwrap();
+        }
+        file.flush().unwrap();
+        path.to_string_lossy().into_owned()
+    }
+
+    fn tone(len: usize, freq: f32, level: f32) -> Vec<f32> {
+        (0..len).map(|i| level * (std::f32::consts::TAU * freq * i as f32 / RATE as f32).sin()).collect()
+    }
+
+    fn stems_source(stems: ClipStems<'_>, start: f64, end: f64) -> PlanarPcm {
+        // One 1x span over the window, as the walk hands every clip.
+        let speed = segments(&[(start, end, ((end - start) * 60.0).round() as u64, 1.0)]);
+        let mut source =
+            ProgrammeAudio::clip_source(0, "missing-screen.mp4", Some(stems), start, end, &speed, 60.0, None)
+                .expect("the stems play");
+        let n = ((end - start) * RATE).round() as usize;
+        pull_all(source.as_mut(), n, 4096)
+    }
+
+    #[test]
+    fn each_stem_lane_mutes_and_silences_on_its_own() {
+        let len = 2 * RATE as usize;
+        let voice = temp_wav("voice", &tone(len, 220.0, 0.25));
+        let system = temp_wav("system", &tone(len, 660.0, 0.25));
+        let echo_free = temp_wav("echo-free", &tone(len, 330.0, 0.25));
+        let voice_gain = 10f32.powf(loudness_gain_db(&voice) / 20.0);
+        let base = ClipStems {
+            voice_path: &voice,
+            voice_gain_db: 0.0,
+            system_path: &system,
+            system_gain_db: 0.0,
+            echo_free_voice_path: None,
+            voice_muted: false,
+            system_muted: false,
+            voice_mutes: &[],
+            system_mutes: &[],
+        };
+        let at = |pcm: &PlanarPcm, i: usize| pcm[0][i];
+        let sys = tone(len, 660.0, 0.25);
+        let v = tone(len, 220.0, 0.25);
+        let clean = tone(len, 330.0, 0.25);
+        let close = |a: f32, b: f32| (a - b).abs() < 2e-3;
+
+        // Both lanes: the sum, the voice at its loudness gain.
+        let both = stems_source(ClipStems { ..base }, 0.0, 2.0);
+        assert!(close(at(&both, 1000), v[1000] * voice_gain + sys[1000]));
+
+        // The microphone lane muted: the computer sound alone, not the video's mixed track.
+        let no_voice = stems_source(ClipStems { voice_muted: true, ..base }, 0.0, 2.0);
+        assert!(close(at(&no_voice, 1000), sys[1000]));
+        let no_system = stems_source(ClipStems { system_muted: true, ..base }, 0.0, 2.0);
+        assert!(close(at(&no_system, 1000), v[1000] * voice_gain));
+
+        // A silenced stretch of the computer lane, 0.5..1.0 s of source, read from a window that
+        // starts at 0.25 s: silent at 0.75 s of source (0.5 s into the window), untouched at 1.5 s.
+        let stretch = [mute(0.5, 1.0, 0.0)];
+        let window = stems_source(ClipStems { system_mutes: &stretch, ..base }, 0.25, 2.0);
+        let i = (0.5 * RATE) as usize;
+        assert!(close(at(&window, i), v[i + 12_000] * voice_gain));
+        let j = (1.25 * RATE) as usize;
+        assert!(close(at(&window, j), v[j + 12_000] * voice_gain + sys[j + 12_000]));
+
+        // The echo-free voice is read in place of the stem, at the stem's loudness gain.
+        let cleaned = stems_source(ClipStems { echo_free_voice_path: Some(&echo_free), ..base }, 0.0, 2.0);
+        assert!(close(at(&cleaned, 1000), clean[1000] * voice_gain + sys[1000]));
+
+        for path in [&voice, &system, &echo_free] {
+            let _ = std::fs::remove_file(path);
+        }
     }
 }

@@ -178,6 +178,7 @@ export function inferHistoryLabel(prev: AxcutDocument, next: AxcutDocument): His
 	if (annotations) return "editAnnotation";
 	if (!same(prev.audioTracks, next.audioTracks)) return "audio";
 	if (!same(prev.timeline?.muteRanges, next.timeline?.muteRanges)) return "mute";
+	if (!same(prev.audioStemMutes, next.audioStemMutes)) return "mute";
 	if (!same(prev.transcript, next.transcript) || !same(prev.transcripts, next.transcripts)) {
 		return "transcript";
 	}

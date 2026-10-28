@@ -148,7 +148,8 @@
 		"micChannelRight": "Rechts",
 		"micChannelMix": "Mix",
 		"broadcastTip": "Tipp: Wähle das Mikrofon „NVIDIA Broadcast“, um Hintergrundgeräusche zu entfernen.",
-		"micSilenceWarning": "Warn if the microphone seems muted"
+		"micSilenceWarning": "Warn if the microphone seems muted",
+		"headphonesHint": "An Kopfhörer erinnern"
 	},
 	"permissions": {
 		"title": "OpenScreen benötigt einige Berechtigungen",
@@ -204,5 +205,9 @@
 			"screenRequired": "Zum Aufnehmen ist die Bildschirmaufnahme erforderlich.",
 			"ready": "Alles bereit."
 		}
+	},
+	"headphonesHint": {
+		"title": "Kopfhörer verwenden",
+		"body": "Wenn Mikrofon und Computerton beide an sind, gelangt der Lautsprecherton ins Mikrofon. Kopfhörer verhindern das (der Editor kann dieses Echo auch später entfernen)."
 	}
 }

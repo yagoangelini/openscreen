@@ -13,6 +13,7 @@ import {
 	ZOOM_DEPTH_SCALES,
 } from "@/components/video-editor/types";
 import { prepareClickSound } from "@/lib/ai-edition/clickSound";
+import { resetEchoCancelCache, seedEchoCancelState } from "@/lib/ai-edition/echoCancel";
 import type {
 	AxcutAsset,
 	AxcutClip,
@@ -107,6 +108,7 @@ function makeDoc(
 		zoomRanges: overrides.zoomRanges ?? [],
 		audioTracks: overrides.audioTracks ?? [],
 		cameraSegments: overrides.cameraSegments ?? [],
+		...(overrides.audioStemMutes ? { audioStemMutes: overrides.audioStemMutes } : {}),
 		legacyEditor: overrides.legacyEditor ?? null,
 	};
 }
@@ -1655,6 +1657,87 @@ describe("buildSceneDescription.audio", () => {
 		expect(buildSceneDescription(doc).audioStems).toEqual([
 			{ screenPath: "/take.mp4", voicePath: "/take.voice.m4a", systemPath: "/take.system.m4a" },
 		]);
+	});
+
+	it("carries the stem lanes: lane mutes and the silenced stretches, in source seconds", () => {
+		const doc = makeDoc({
+			assets: [
+				{
+					...makeAsset({ id: "a", originalPath: "/take.mp4" }),
+					audioStems: { voicePath: "/take.voice.m4a", systemPath: "/take.system.m4a" },
+				},
+			],
+			legacyEditor: { systemMuted: true },
+			audioStemMutes: [
+				{
+					id: "m2",
+					assetId: "a",
+					stem: "voice",
+					startSec: 9,
+					endSec: 10,
+					fadeMs: 0,
+					origin: "user",
+				},
+				{
+					id: "m1",
+					assetId: "a",
+					stem: "voice",
+					startSec: 2,
+					endSec: 3.5,
+					fadeMs: 30,
+					origin: "user",
+				},
+				{
+					id: "m3",
+					assetId: "other",
+					stem: "voice",
+					startSec: 0,
+					endSec: 1,
+					fadeMs: 30,
+					origin: "user",
+				},
+			],
+		});
+		expect(buildSceneDescription(doc).audioStems).toEqual([
+			{
+				screenPath: "/take.mp4",
+				voicePath: "/take.voice.m4a",
+				systemPath: "/take.system.m4a",
+				systemMuted: true,
+				voiceMutes: [
+					{ startSec: 2, endSec: 3.5, fadeSec: 0.03 },
+					{ startSec: 9, endSec: 10, fadeSec: 0 },
+				],
+			},
+		]);
+		// The lanes are stem fields, not `audio`: that one stays linear gains (see above).
+		expect(Object.keys(buildSceneDescription(doc).audio)).toEqual([
+			"gainDb",
+			"voiceGainDb",
+			"systemGainDb",
+		]);
+	});
+
+	it("reads the echo-free voice once the canceller has one, and only with the toggle on", () => {
+		resetEchoCancelCache();
+		seedEchoCancelState("/take.voice.m4a", "/take.system.m4a", {
+			path: "/cache/take.echo-free.wav",
+		});
+		const asset = {
+			...makeAsset({ id: "a", originalPath: "/take.mp4" }),
+			audioStems: { voicePath: "/take.voice.m4a", systemPath: "/take.system.m4a" },
+		};
+		expect(
+			buildSceneDescription(makeDoc({ assets: [asset] })).audioStems[0].echoFreeVoicePath,
+		).toBe("/cache/take.echo-free.wav");
+		expect(
+			buildSceneDescription(makeDoc({ assets: [asset], legacyEditor: { echoCancel: false } }))
+				.audioStems[0].echoFreeVoicePath,
+		).toBeUndefined();
+		resetEchoCancelCache();
+		expect(
+			buildSceneDescription(makeDoc({ assets: [asset] })).audioStems[0].echoFreeVoicePath,
+		).toBeUndefined();
 	});
 });
 

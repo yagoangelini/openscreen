@@ -462,7 +462,25 @@
 		"voiceEnhance": "Enhance voice",
 		"voiceEnhanceTip": "Removes background noise from the voice and adds a little clarity, on this computer. Applied to the voice track only; the computer sound is left as recorded.",
 		"voiceEnhanceTipNoStems": "Removes background noise from the recording's audio and adds a little clarity, on this computer. Without a separate voice track, sounds that are not speech are reduced too.",
-		"voiceEnhanceStrength": "Strength"
+		"voiceEnhanceStrength": "Strength",
+		"echoCancel": "去除扬声器回声",
+		"echoCancelTip": "电脑声音从扬声器播放并被麦克风收录时，以录下的电脑声音为参考，把这段回声从你的声音中去除。没有回声的录音保持原样。",
+		"echoStatusWorking": "正在查找扬声器回声…",
+		"echoStatusFound": "已找到扬声器回声（延迟 {{delay}} 毫秒）并去除：约降低 {{reduction}} dB。",
+		"echoStatusNone": "这段录音中没有扬声器回声。",
+		"lanes": {
+			"voice": "麦克风",
+			"system": "电脑声音",
+			"mute": "静音轨道",
+			"unmute": "取消静音",
+			"volume": "音量",
+			"help": "这段录音的麦克风和电脑声音，分别编辑。剪切视频会同时剪切两者；轨道只能整体或分段静音，不能相对画面移动。",
+			"addMute": "在播放头处静音 {{seconds}} 秒",
+			"removeMute": "删除静音片段",
+			"fade": "淡入淡出",
+			"muteLabel": "静音片段：拖动以移动，拖动边缘以调整",
+			"noTakeHere": "请把播放头放在麦克风和电脑声音分开录制的录音上。"
+		}
 	},
 	"language": {
 		"title": "语言"

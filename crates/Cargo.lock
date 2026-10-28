@@ -214,6 +214,7 @@ dependencies = [
  "napi-build",
  "napi-derive",
  "openscreen-compositor",
+ "serde_json",
  "windows",
 ]
 
@@ -1045,6 +1046,7 @@ dependencies = [
  "objc",
  "ort",
  "pollster",
+ "realfft",
  "serde",
  "serde_json",
  "wgpu",

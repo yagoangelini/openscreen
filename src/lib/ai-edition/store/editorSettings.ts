@@ -139,6 +139,12 @@ export interface EditorSettingsSnapshot {
 	voiceEnhance: boolean;
 	/** 0..1. */
 	voiceEnhanceStrength: number;
+	/** The stem lanes' own mutes: the whole microphone or computer stem silenced. */
+	voiceMuted: boolean;
+	systemMuted: boolean;
+	/** "Remover eco do alto-falante": the speaker echo taken out of the voice stem, with the
+	 *  computer stem as the reference (`echo_cancel.rs`). Only acts where an echo is detected. */
+	echoCancel: boolean;
 	webcamBackgroundMode: WebcamBackgroundMode;
 	webcamWallpaper: string;
 	webcamBlurIntensity: number;
@@ -167,6 +173,9 @@ export const DEFAULT_EDITOR_SETTINGS: EditorSettingsSnapshot = {
 	systemGainDb: 0,
 	voiceEnhance: false,
 	voiceEnhanceStrength: 0.8,
+	voiceMuted: false,
+	systemMuted: false,
+	echoCancel: true,
 	dollyAmount: 0,
 	leanToClicks: false,
 	formatFollowCursor: null,
@@ -208,6 +217,9 @@ interface LegacyShape {
 	systemGainDb?: number;
 	voiceEnhance?: boolean;
 	voiceEnhanceStrength?: number;
+	voiceMuted?: boolean;
+	systemMuted?: boolean;
+	echoCancel?: boolean;
 	webcamBackgroundMode?: WebcamBackgroundMode;
 	webcamWallpaper?: string;
 	webcamBlurIntensity?: number;
@@ -379,6 +391,11 @@ export function getEditorSettings(doc: AxcutDocument | null | undefined): Editor
 			1,
 			Math.max(0, num(legacy?.voiceEnhanceStrength, DEFAULT_EDITOR_SETTINGS.voiceEnhanceStrength)),
 		),
+		voiceMuted: bool(legacy?.voiceMuted, false),
+		systemMuted: bool(legacy?.systemMuted, false),
+		// On by default, a project from before the toggle included: the canceller only touches a
+		// take whose voice stem carries an echo of the computer stem (`echo_cancel.rs`).
+		echoCancel: bool(legacy?.echoCancel, DEFAULT_EDITOR_SETTINGS.echoCancel),
 		webcamBackgroundMode: isWebcamBackgroundMode(legacy?.webcamBackgroundMode)
 			? legacy.webcamBackgroundMode
 			: DEFAULT_EDITOR_SETTINGS.webcamBackgroundMode,
@@ -431,6 +448,9 @@ export interface EditorSettingsPatch {
 	systemGainDb?: number;
 	voiceEnhance?: boolean;
 	voiceEnhanceStrength?: number;
+	voiceMuted?: boolean;
+	systemMuted?: boolean;
+	echoCancel?: boolean;
 	webcamBackgroundMode?: WebcamBackgroundMode;
 	webcamWallpaper?: string;
 	webcamBlurIntensity?: number;

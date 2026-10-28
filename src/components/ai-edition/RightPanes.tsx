@@ -28,6 +28,7 @@ import {
 	Undo2,
 	Users,
 	Video,
+	VolumeX,
 	WandSparkles,
 	X,
 } from "lucide-react";
@@ -62,13 +63,21 @@ import { formatDecimal } from "@/i18n/format";
 import { currentLocale } from "@/i18n/toastText";
 import { resolveCaptionLane } from "@/lib/ai-edition/captions/settings";
 import { collapseTracksToPills, trackGroupId } from "@/lib/ai-edition/document/audioTracks";
+import { createId } from "@/lib/ai-edition/document/ids";
 import {
 	collectNativeFormats,
 	formatFillAvailability,
 	isAutoFormatAvailable,
 	pickOutputDims,
 } from "@/lib/ai-edition/document/outputFormat";
+import {
+	addStemMute,
+	removeStemMute,
+	STEM_MUTE_DEFAULT_SEC,
+	setStemMuteFade,
+} from "@/lib/ai-edition/document/stemLanes";
 import type { InsertSide } from "@/lib/ai-edition/document/transcript";
+import { type EchoCancelState, useEchoCancel } from "@/lib/ai-edition/echoCancel";
 import {
 	type AxcutAsset,
 	type AxcutAudioTrack,
@@ -166,6 +175,7 @@ import { SpeechCleanupPanel } from "./SpeechCleanupPanel";
 import { TranscriptAutoZoomBar } from "./TranscriptAutoZoomBar";
 import { useTranscriptionLabel } from "./TranscriptionStatus";
 import { transcriptionBusyLabel } from "./transcriptionBusyLabel";
+import { writeStemEdit } from "./v4/StemLanes";
 
 interface PaneProps {
 	title: string;
@@ -3701,6 +3711,9 @@ export function AudioPane() {
 					) : null}
 				</div>
 			)}
+			{/* The speaker echo out of the voice stem, with the computer stem as the reference: only
+			    for a take recorded with both (and in the defaults, where it is the new projects' value). */}
+			{hasStems || editingDefaults ? <EchoCancelRow /> : null}
 			{/* On-device noise reduction and gentle EQ on the voice (the voice stem, or the take's
 			    own track without one), the same in the preview and the export. */}
 			<div className={styles.paneRow}>
@@ -3739,6 +3752,203 @@ export function AudioPane() {
 					{ts("audio.reset")}
 				</button>
 			)}
+		</Pane>
+	);
+}
+
+/** The first take of the timeline with both stems: the one the echo status speaks for. */
+function useFirstStemTake(): { voicePath: string; systemPath: string } | undefined {
+	const document = useProjectStore((s) => s.document);
+	if (!document) return undefined;
+	for (const clip of document.timeline.clips) {
+		const stems = document.assets.find((a) => a.id === clip.assetId)?.audioStems;
+		if (stems) return stems;
+	}
+	return undefined;
+}
+
+/** What the canceller found, in a line under the toggle. */
+function echoStatusText(
+	ts: (key: string, vars?: Record<string, string | number>) => string,
+	state: EchoCancelState | undefined,
+	running: boolean,
+): string | null {
+	if (running && !state) return ts("audio.echoStatusWorking");
+	if (!state?.report) return null;
+	if (!state.report.detected) return ts("audio.echoStatusNone");
+	return ts("audio.echoStatusFound", {
+		delay: Math.round(state.report.delayMs),
+		reduction: Math.max(0, Math.round(state.report.erleDb)),
+	});
+}
+
+/** "Remover eco do alto-falante": the toggle and what the canceller found on this project. */
+function EchoCancelRow() {
+	const ts = useScopedT("settings");
+	const { settings, set, hasDocument, editingDefaults } = useEditorSettings();
+	const take = useFirstStemTake();
+	const echo = useEchoCancel(
+		take?.voicePath,
+		take?.systemPath,
+		settings.echoCancel && !editingDefaults,
+	);
+	const status =
+		editingDefaults || !settings.echoCancel ? null : echoStatusText(ts, echo.state, echo.running);
+	return (
+		<>
+			<div className={styles.paneRow}>
+				<span className={styles.label}>{ts("audio.echoCancel")}</span>
+				<Toggle
+					checked={settings.echoCancel}
+					ariaLabel={ts("audio.echoCancel")}
+					tooltip={ts("audio.echoCancelTip")}
+					disabled={!hasDocument}
+					onChange={(echoCancel) => void set({ echoCancel })}
+				/>
+			</div>
+			{status ? (
+				<p className={styles.framingHint} data-testid="echo-cancel-status">
+					{status}
+				</p>
+			) : null}
+		</>
+	);
+}
+
+/**
+ * The selected stem lane ("Microfone" or "Áudio do sistema", `v4/StemLanes.tsx`): its volume and
+ * mute, the voice's processing, and its silenced stretches. Shown by the inspector in place of
+ * the facet while a lane is selected, like the audio track pane.
+ */
+export function StemLanePane({ onClose }: { onClose: () => void }) {
+	const ts = useScopedT("settings");
+	const selected = useProjectStore((s) => s.selectedStem);
+	const document = useProjectStore((s) => s.document);
+	const { settings, set, setLive, commit, hasDocument } = useEditorSettings();
+	const mute = selected?.muteId
+		? document?.audioStemMutes?.find((m) => m.id === selected.muteId)
+		: undefined;
+	const [liveFade, setLiveFade] = useState<number | null>(null);
+	// biome-ignore lint/correctness/useExhaustiveDependencies: the stretch is the trigger, not a read.
+	useEffect(() => {
+		setLiveFade(null);
+	}, [mute?.id]);
+	if (!selected || !document) return null;
+	const lane = selected.lane;
+	const voice = lane === "voice";
+	const muted = voice ? settings.voiceMuted : settings.systemMuted;
+	const addAtPlayhead = () => {
+		const doc = useProjectStore.getState().document;
+		if (!doc) return;
+		const added = addStemMute(
+			doc,
+			lane,
+			useProjectStore.getState().currentTimeSec,
+			() => createId("stem-mute"),
+			STEM_MUTE_DEFAULT_SEC,
+		);
+		if (!added) {
+			toast(ts("audio.lanes.noTakeHere"));
+			return;
+		}
+		void writeStemEdit(added.document).then((ok) => {
+			if (ok) useProjectStore.getState().setSelectedStem({ lane, muteId: added.id });
+		});
+	};
+	return (
+		<Pane
+			title={voice ? ts("audio.lanes.voice") : ts("audio.lanes.system")}
+			icon={voice ? <Mic size={16} /> : <Monitor size={16} />}
+			helpText={ts("audio.lanes.help")}
+			onClose={onClose}
+		>
+			<div className={styles.sliderGrid}>
+				<SliderCell
+					label={ts("audio.lanes.volume")}
+					value={voice ? settings.voiceGainDb : settings.systemGainDb}
+					min={-AUDIO_GAIN_DB_LIMIT}
+					max={AUDIO_GAIN_DB_LIMIT}
+					defaultValue={0}
+					step={0.5}
+					decimals={1}
+					suffix=" dB"
+					disabled={!hasDocument || muted}
+					onChange={(value) => setLive(voice ? { voiceGainDb: value } : { systemGainDb: value })}
+					onCommit={() => void commit()}
+				/>
+			</div>
+			<div className={styles.paneRow}>
+				<span className={styles.label}>{ts("audio.lanes.mute")}</span>
+				<Toggle
+					checked={muted}
+					ariaLabel={ts("audio.lanes.mute")}
+					disabled={!hasDocument}
+					onChange={(next) => void set(voice ? { voiceMuted: next } : { systemMuted: next })}
+				/>
+			</div>
+			{voice ? (
+				<>
+					<EchoCancelRow />
+					<div className={styles.paneRow}>
+						<span className={styles.label}>{ts("audio.voiceEnhance")}</span>
+						<Toggle
+							checked={settings.voiceEnhance}
+							ariaLabel={ts("audio.voiceEnhance")}
+							tooltip={ts("audio.voiceEnhanceTip")}
+							disabled={!hasDocument}
+							onChange={(voiceEnhance) => void set({ voiceEnhance })}
+						/>
+					</div>
+				</>
+			) : null}
+			<button
+				type="button"
+				className={styles.secondaryBtn}
+				data-testid="stem-add-mute"
+				style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+				disabled={!hasDocument}
+				onClick={addAtPlayhead}
+			>
+				<VolumeX size={14} /> {ts("audio.lanes.addMute", { seconds: STEM_MUTE_DEFAULT_SEC })}
+			</button>
+			{mute ? (
+				<>
+					<div className={styles.sliderGrid}>
+						<SliderCell
+							label={ts("audio.lanes.fade")}
+							value={liveFade ?? mute.fadeMs}
+							min={0}
+							max={500}
+							step={10}
+							suffix=" ms"
+							defaultValue={30}
+							disabled={!hasDocument}
+							onChange={(value) => setLiveFade(value)}
+							onCommit={() => {
+								const doc = useProjectStore.getState().document;
+								if (doc && liveFade !== null && liveFade !== mute.fadeMs) {
+									void writeStemEdit(setStemMuteFade(doc, mute.id, liveFade));
+								}
+							}}
+						/>
+					</div>
+					<button
+						type="button"
+						className={styles.secondaryBtn}
+						data-testid="stem-remove-mute"
+						style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+						onClick={() => {
+							const doc = useProjectStore.getState().document;
+							if (!doc) return;
+							void writeStemEdit(removeStemMute(doc, mute.id)).then((ok) => {
+								if (ok) useProjectStore.getState().setSelectedStem({ lane, muteId: null });
+							});
+						}}
+					>
+						<Trash2 size={14} /> {ts("audio.lanes.removeMute")}
+					</button>
+				</>
+			) : null}
 		</Pane>
 	);
 }

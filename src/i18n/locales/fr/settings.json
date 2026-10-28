@@ -462,7 +462,25 @@
 		"voiceEnhance": "Enhance voice",
 		"voiceEnhanceTip": "Removes background noise from the voice and adds a little clarity, on this computer. Applied to the voice track only; the computer sound is left as recorded.",
 		"voiceEnhanceTipNoStems": "Removes background noise from the recording's audio and adds a little clarity, on this computer. Without a separate voice track, sounds that are not speech are reduced too.",
-		"voiceEnhanceStrength": "Strength"
+		"voiceEnhanceStrength": "Strength",
+		"echoCancel": "Supprimer l'écho des haut-parleurs",
+		"echoCancelTip": "Quand le son de l'ordinateur passait par les haut-parleurs et que le micro l'a capté, retire cet écho de votre voix en prenant le son de l'ordinateur enregistré comme référence. Les enregistrements sans écho restent tels quels.",
+		"echoStatusWorking": "Recherche d'un écho des haut-parleurs…",
+		"echoStatusFound": "Écho des haut-parleurs trouvé ({{delay}} ms de retard) et supprimé : environ {{reduction}} dB plus bas.",
+		"echoStatusNone": "Aucun écho des haut-parleurs dans cet enregistrement.",
+		"lanes": {
+			"voice": "Micro",
+			"system": "Son de l'ordinateur",
+			"mute": "Couper la piste",
+			"unmute": "Réactiver la piste",
+			"volume": "Volume",
+			"help": "Le micro et le son de l'ordinateur de cet enregistrement, modifiés séparément. Couper la vidéo coupe les deux ; une piste peut seulement être coupée en entier ou par passages, jamais décalée par rapport à l'image.",
+			"addMute": "Couper {{seconds}} s à la tête de lecture",
+			"removeMute": "Supprimer le passage coupé",
+			"fade": "Fondu",
+			"muteLabel": "Passage coupé : faites glisser pour le déplacer, ses bords pour l'ajuster",
+			"noTakeHere": "Placez la tête de lecture sur un enregistrement dont le micro et le son de l'ordinateur sont séparés."
+		}
 	},
 	"language": {
 		"title": "Langue"

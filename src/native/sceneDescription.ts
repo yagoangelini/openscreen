@@ -42,12 +42,14 @@ import {
 } from "@/lib/ai-edition/document/cameraSegments";
 import { createId } from "@/lib/ai-edition/document/ids";
 import { isFormatFillActive, pickOutputDims } from "@/lib/ai-edition/document/outputFormat";
+import { type SceneStemMute, sceneStemMutes } from "@/lib/ai-edition/document/stemLanes";
 import {
 	type PlaybackSegment,
 	projectRawTimelineSecToPlayback,
 	readSpeedRegions,
 	resolvePlaybackSegments,
 } from "@/lib/ai-edition/document/timeline";
+import { echoFreeVoicePath } from "@/lib/ai-edition/echoCancel";
 import { keystrokeTextRegions } from "@/lib/ai-edition/keystrokeRegions";
 import type { AxcutAudioTrack, AxcutClip, AxcutDocument } from "@/lib/ai-edition/schema";
 import { getEditorSettings } from "@/lib/ai-edition/store/editorSettings";
@@ -598,7 +600,21 @@ export interface SceneDescription {
 	 * stems in place of the video's mixed track (`SceneAudioStems`, Rust). Keyed by the
 	 * screen file, the same path every clip of that take carries as `screenPath`.
 	 */
-	audioStems: Array<{ screenPath: string; voicePath: string; systemPath: string }>;
+	audioStems: Array<{
+		screenPath: string;
+		voicePath: string;
+		systemPath: string;
+		/** "Remover eco do alto-falante": read in place of `voicePath` (whose loudness gain still
+		 *  applies). Present only once the canceller found and removed an echo
+		 *  (`prepareEchoCancel`). */
+		echoFreeVoicePath?: string;
+		/** The stem lanes: a whole lane muted, and the silenced stretches of each, in the take's
+		 *  source seconds (`stemLanes.ts`; Rust `stem_mute_gain`). Omitted when empty. */
+		voiceMuted?: true;
+		systemMuted?: true;
+		voiceMutes?: SceneStemMute[];
+		systemMutes?: SceneStemMute[];
+	}>;
 	/**
 	 * "Melhorar a voz" (`voice_enhance.rs`): each take's voice stem, or its own track without
 	 * stems, denoised and lightly equalised. Not a field of `audio`, which stays linear gains: the
@@ -1613,11 +1629,25 @@ export function buildSceneDescription(
 		...(settings.voiceEnhance
 			? { voiceEnhance: { strength: roundedVoiceEnhanceStrength(settings.voiceEnhanceStrength) } }
 			: {}),
-		audioStems: document.assets.flatMap((asset) =>
-			asset.audioStems && asset.originalPath
-				? [{ screenPath: asset.originalPath, ...asset.audioStems }]
-				: [],
-		),
+		audioStems: document.assets.flatMap((asset) => {
+			if (!asset.audioStems || !asset.originalPath) return [];
+			const { voicePath, systemPath } = asset.audioStems;
+			const echoFree = settings.echoCancel ? echoFreeVoicePath(voicePath, systemPath) : undefined;
+			const voiceMutes = sceneStemMutes(document, asset.id, "voice");
+			const systemMutes = sceneStemMutes(document, asset.id, "system");
+			return [
+				{
+					screenPath: asset.originalPath,
+					voicePath,
+					systemPath,
+					...(echoFree ? { echoFreeVoicePath: echoFree } : {}),
+					...(settings.voiceMuted ? { voiceMuted: true as const } : {}),
+					...(settings.systemMuted ? { systemMuted: true as const } : {}),
+					...(voiceMutes.length > 0 ? { voiceMutes } : {}),
+					...(systemMutes.length > 0 ? { systemMutes } : {}),
+				},
+			];
+		}),
 		audioTracks,
 		...(clickSound ? { clickSound } : {}),
 		background: sceneBackground(settings.wallpaper, settings.wallpaperMotion),

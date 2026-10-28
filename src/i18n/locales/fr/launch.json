@@ -148,7 +148,8 @@
 		"micChannelRight": "D",
 		"micChannelMix": "Mixte",
 		"broadcastTip": "Astuce : choisissez le micro « NVIDIA Broadcast » pour supprimer le bruit de fond.",
-		"micSilenceWarning": "Warn if the microphone seems muted"
+		"micSilenceWarning": "Warn if the microphone seems muted",
+		"headphonesHint": "Me rappeler d'utiliser un casque"
 	},
 	"permissions": {
 		"title": "OpenScreen a besoin de quelques autorisations",
@@ -204,5 +205,9 @@
 			"screenRequired": "L'enregistrement de l'écran est nécessaire pour enregistrer.",
 			"ready": "Tout est prêt."
 		}
+	},
+	"headphonesHint": {
+		"title": "Utilisez un casque",
+		"body": "Avec le micro et le son de l'ordinateur activés, ce qui sort des haut-parleurs entre dans le micro. Un casque l'évite (l'éditeur peut aussi retirer cet écho ensuite)."
 	}
 }

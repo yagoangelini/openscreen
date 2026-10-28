@@ -103,6 +103,7 @@ import {
 	CursorPane,
 	LayoutPane,
 	SliderCell,
+	StemLanePane,
 	TranscriptPane,
 	VideoEffectsPane,
 } from "../RightPanes";
@@ -187,7 +188,9 @@ export function FloatingInspector({
 	// An imported audio track is selected (issue #350) — like a region selection it
 	// takes over the inspector body with its own pane (see AudioTrackPane).
 	const audioTrackSelected = Boolean(tl.selectedAudioTrackId);
-	const effectiveOpen = open || selection !== null || audioTrackSelected;
+	// A stem lane ("Microfone" / "Áudio do sistema") is selected: its own pane, the same way.
+	const stemSelected = useProjectStore((s) => s.selectedStem !== null) && !audioTrackSelected;
+	const effectiveOpen = open || selection !== null || audioTrackSelected || stemSelected;
 	return (
 		<div className={styles.inspectorWrap}>
 			{effectiveOpen ? (
@@ -196,6 +199,8 @@ export function FloatingInspector({
 						<SelectionPane tl={tl} onClose={() => tl.clearSelection()} />
 					) : audioTrackSelected ? (
 						<AudioTrackPane tl={tl} onClose={() => tl.clearSelection()} />
+					) : stemSelected ? (
+						<StemLanePane onClose={() => tl.clearSelection()} />
 					) : (
 						<FacetBody facet={facet} onCollapse={onToggleOpen} transcriptProps={transcriptProps} />
 					)}
@@ -209,11 +214,13 @@ export function FloatingInspector({
 						<button
 							type="button"
 							aria-label={ts(labelKey)}
-							aria-pressed={!selection && !audioTrackSelected && open && facet === id}
+							aria-pressed={
+								!selection && !audioTrackSelected && !stemSelected && open && facet === id
+							}
 							onClick={() => {
 								// Switching facets while an element is selected should show
 								// the facet, not leave the selection pane on top of it.
-								if (selection || audioTrackSelected) tl.clearSelection();
+								if (selection || audioTrackSelected || stemSelected) tl.clearSelection();
 								if (facet === id && open) {
 									onToggleOpen();
 								} else {

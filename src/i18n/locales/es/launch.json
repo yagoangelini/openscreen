@@ -148,7 +148,8 @@
 		"micChannelRight": "Der.",
 		"micChannelMix": "Mezcla",
 		"broadcastTip": "Consejo: elige el micrófono \"NVIDIA Broadcast\" para quitar el ruido de fondo.",
-		"micSilenceWarning": "Warn if the microphone seems muted"
+		"micSilenceWarning": "Warn if the microphone seems muted",
+		"headphonesHint": "Recordarme usar auriculares"
 	},
 	"permissions": {
 		"title": "OpenScreen necesita algunos permisos",
@@ -204,5 +205,9 @@
 			"screenRequired": "Se necesita la grabación de pantalla para grabar.",
 			"ready": "Todo listo."
 		}
+	},
+	"headphonesHint": {
+		"title": "Usa auriculares",
+		"body": "Con el micrófono y el sonido del ordenador activados, lo que sale por los altavoces entra en el micrófono. Los auriculares lo evitan (el editor también puede quitar ese eco después)."
 	}
 }

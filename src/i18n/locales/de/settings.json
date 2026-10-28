@@ -462,7 +462,25 @@
 		"voiceEnhance": "Enhance voice",
 		"voiceEnhanceTip": "Removes background noise from the voice and adds a little clarity, on this computer. Applied to the voice track only; the computer sound is left as recorded.",
 		"voiceEnhanceTipNoStems": "Removes background noise from the recording's audio and adds a little clarity, on this computer. Without a separate voice track, sounds that are not speech are reduced too.",
-		"voiceEnhanceStrength": "Strength"
+		"voiceEnhanceStrength": "Strength",
+		"echoCancel": "Lautsprecher-Echo entfernen",
+		"echoCancelTip": "Wenn der Computerton über die Lautsprecher lief und das Mikrofon ihn aufgenommen hat, wird dieses Echo aus deiner Stimme entfernt; der aufgenommene Computerton dient als Referenz. Aufnahmen ohne Echo bleiben unverändert.",
+		"echoStatusWorking": "Lautsprecher-Echo wird gesucht…",
+		"echoStatusFound": "Lautsprecher-Echo gefunden ({{delay}} ms Verzögerung) und entfernt: etwa {{reduction}} dB leiser.",
+		"echoStatusNone": "Kein Lautsprecher-Echo in dieser Aufnahme.",
+		"lanes": {
+			"voice": "Mikrofon",
+			"system": "Computerton",
+			"mute": "Spur stummschalten",
+			"unmute": "Spur einschalten",
+			"volume": "Lautstärke",
+			"help": "Mikrofon und Computerton dieser Aufnahme, getrennt bearbeitet. Ein Schnitt im Video schneidet beide; eine Spur lässt sich nur ganz oder abschnittsweise stummschalten, nie gegen das Bild verschieben.",
+			"addMute": "{{seconds}} s am Abspielkopf stummschalten",
+			"removeMute": "Stummen Abschnitt entfernen",
+			"fade": "Blende",
+			"muteLabel": "Stummer Abschnitt: ziehen zum Verschieben, Ränder ziehen zum Anpassen",
+			"noTakeHere": "Setze den Abspielkopf auf eine Aufnahme mit getrenntem Mikrofon und Computerton."
+		}
 	},
 	"language": {
 		"title": "Sprache"

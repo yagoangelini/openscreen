@@ -1265,6 +1265,47 @@ impl Task for EnhanceVoiceTask {
     }
 }
 
+pub struct CancelEchoTask {
+    voice_path: String,
+    system_path: String,
+    output_path: String,
+}
+
+impl Task for CancelEchoTask {
+    type Output = String;
+    type JsValue = String;
+
+    fn compute(&mut self) -> Result<Self::Output> {
+        guarded("cancelEchoFile", || {
+            let report = openscreen_compositor::echo_cancel::cancel_echo_file(
+                &self.voice_path,
+                &self.system_path,
+                &self.output_path,
+            )
+            .map_err(|error| Error::from_reason(format!("{error:#}")))?;
+            serde_json::to_string(&report).map_err(|error| Error::from_reason(error.to_string()))
+        })
+    }
+
+    fn resolve(&mut self, _env: Env, out: Self::Output) -> Result<Self::JsValue> {
+        Ok(out)
+    }
+}
+
+/// "Remover eco do alto-falante": the voice stem with the speaker echo of the computer stem
+/// removed (`openscreen_compositor::echo_cancel`), written to `output_path` as a 16-bit stereo
+/// 48 kHz WAV aligned sample for sample with the stem. Resolves to the report as JSON
+/// (`EchoReport`); without a detected echo nothing is written and `detected` is false.
+/// `AsyncTask`: three passes over both stems, seconds on a long take.
+#[napi]
+pub fn cancel_echo_file(
+    voice_path: String,
+    system_path: String,
+    output_path: String,
+) -> AsyncTask<CancelEchoTask> {
+    AsyncTask::new(CancelEchoTask { voice_path, system_path, output_path })
+}
+
 /// "Melhorar a voz" for the editor preview: `input_path`'s audio enhanced exactly as the export
 /// enhances it (`openscreen_compositor::voice_enhance`), written to `output_path` as a 16-bit
 /// 48 kHz WAV aligned sample for sample with it. Resolves to the samples per channel written.

@@ -462,7 +462,25 @@
 		"voiceEnhance": "Enhance voice",
 		"voiceEnhanceTip": "Removes background noise from the voice and adds a little clarity, on this computer. Applied to the voice track only; the computer sound is left as recorded.",
 		"voiceEnhanceTipNoStems": "Removes background noise from the recording's audio and adds a little clarity, on this computer. Without a separate voice track, sounds that are not speech are reduced too.",
-		"voiceEnhanceStrength": "Strength"
+		"voiceEnhanceStrength": "Strength",
+		"echoCancel": "إزالة صدى مكبرات الصوت",
+		"echoCancelTip": "عندما يخرج صوت الحاسوب من مكبرات الصوت ويلتقطه الميكروفون، تزيل هذه الميزة ذلك الصدى من صوتك باستخدام صوت الحاسوب المسجل مرجعًا. تبقى التسجيلات التي لا صدى فيها كما هي.",
+		"echoStatusWorking": "جارٍ البحث عن صدى مكبرات الصوت…",
+		"echoStatusFound": "تم العثور على صدى مكبرات الصوت (تأخير {{delay}} مللي ثانية) وإزالته: أخفض بنحو {{reduction}} ديسيبل.",
+		"echoStatusNone": "لا يوجد صدى لمكبرات الصوت في هذا التسجيل.",
+		"lanes": {
+			"voice": "الميكروفون",
+			"system": "صوت الحاسوب",
+			"mute": "كتم المسار",
+			"unmute": "إلغاء كتم المسار",
+			"volume": "مستوى الصوت",
+			"help": "ميكروفون هذا التسجيل وصوت الحاسوب فيه، يُحرَّر كل منهما وحده. قص الفيديو يقص الاثنين؛ يمكن كتم المسار كله أو أجزاء منه فقط، ولا يُزاح أبدًا عن الصورة.",
+			"addMute": "كتم {{seconds}} ث عند مؤشر التشغيل",
+			"removeMute": "إزالة الجزء المكتوم",
+			"fade": "تلاشٍ",
+			"muteLabel": "جزء مكتوم: اسحبه لنقله، واسحب حافتيه لتعديله",
+			"noTakeHere": "ضع مؤشر التشغيل على تسجيل فيه الميكروفون وصوت الحاسوب منفصلان."
+		}
 	},
 	"language": {
 		"title": "اللغة"

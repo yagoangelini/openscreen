@@ -7,7 +7,13 @@ import { placeAudioTrackInDocument } from "../document/audioTracks";
 import { createId } from "../document/ids";
 import { type Interval, replaceTimeline as replaceTimelineOp } from "../document/timeline";
 import { loadEditorDefaults } from "../editorDefaultsStore";
-import { type AxcutAsset, type AxcutDocument, createAudioTrack, documentSchema } from "../schema";
+import {
+	type AxcutAsset,
+	type AxcutDocument,
+	type AxcutStemKind,
+	createAudioTrack,
+	documentSchema,
+} from "../schema";
 import { probeAudioDuration, probeVideoDimensions } from "../timeline/duration";
 import { type HistoryLabel, inferHistoryLabel } from "./historyLabels";
 import { clearHistory, currentWriteEpoch, pushHistory } from "./undoStack";
@@ -149,6 +155,10 @@ export interface ProjectState {
 	 *  file) and the inspector (which edits it) sit in different component subtrees
 	 *  and both need to read/set it; the region/clip selection stays hook-local. */
 	selectedAudioTrackId: string | null;
+	/** The selected stem lane ("Microfone" / "Áudio do sistema", `stemLanes.ts`) and, inside
+	 *  it, the selected silenced stretch. In the store for the same reason as the audio track:
+	 *  the timeline selects it, the inspector edits it. */
+	selectedStem: { lane: AxcutStemKind; muteId: string | null } | null;
 	/** Single source of truth for "is the timeline transport playing?" — previously
 	 *  duplicated as separate local state in NewEditorShell AND VirtualPreview, each
 	 *  independently wired to the same raw <video> DOM events, which let one advance
@@ -194,6 +204,7 @@ export interface ProjectState {
 		},
 	) => Promise<string | null>;
 	setSelectedAudioTrackId: (id: string | null) => void;
+	setSelectedStem: (stem: { lane: AxcutStemKind; muteId: string | null } | null) => void;
 	removeAsset: (assetId: string) => Promise<void>;
 	/**
 	 * Write the document to disk. Resolves `true` when it took effect, `false` when it
@@ -286,6 +297,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 	sourceDurationSec: 0,
 	currentTimeSec: 0,
 	selectedAudioTrackId: null,
+	selectedStem: null,
 	playing: false,
 	dirty: false,
 	lastSavedAt: null,
@@ -307,6 +319,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 				dirty: false,
 				lastSavedAt: new Date(),
 				selectedAudioTrackId: null,
+				selectedStem: null,
 			});
 			clearHistory();
 		} catch (error) {
@@ -503,6 +516,10 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 		set({ selectedAudioTrackId: id });
 	},
 
+	setSelectedStem(stem) {
+		set({ selectedStem: stem });
+	},
+
 	async addAudioTrack(assetId, timelineStartSec, options) {
 		const document = get().document;
 		if (!document) return null;
@@ -676,6 +693,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 			sourceDurationSec: 0,
 			currentTimeSec: 0,
 			selectedAudioTrackId: null,
+			selectedStem: null,
 			playing: false,
 			dirty: false,
 			lastSavedAt: null,

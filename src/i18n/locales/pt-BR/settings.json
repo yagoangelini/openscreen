@@ -462,7 +462,25 @@
 		"voiceEnhance": "Melhorar a voz",
 		"voiceEnhanceTip": "Tira o ruído de fundo da voz e dá um pouco de clareza, neste computador. Vale só para a faixa da voz; o som do computador fica como foi gravado.",
 		"voiceEnhanceTipNoStems": "Tira o ruído de fundo do áudio da gravação e dá um pouco de clareza, neste computador. Sem uma faixa de voz separada, sons que não são fala também diminuem.",
-		"voiceEnhanceStrength": "Intensidade"
+		"voiceEnhanceStrength": "Intensidade",
+		"echoCancel": "Remover eco do alto-falante",
+		"echoCancelTip": "Quando o som do computador saiu pelos alto-falantes e o microfone captou, tira esse eco da sua voz usando o som do computador gravado como referência. Gravações sem eco ficam como foram gravadas.",
+		"echoStatusWorking": "Procurando eco do alto-falante…",
+		"echoStatusFound": "Eco do alto-falante encontrado ({{delay}} ms de atraso) e removido: cerca de {{reduction}} dB mais baixo.",
+		"echoStatusNone": "Nenhum eco do alto-falante nesta gravação.",
+		"lanes": {
+			"voice": "Microfone",
+			"system": "Áudio do sistema",
+			"mute": "Silenciar faixa",
+			"unmute": "Ativar faixa",
+			"volume": "Volume",
+			"help": "O microfone e o som do computador desta gravação, editados cada um por si. Cortar o vídeo corta os dois; uma faixa só pode ser silenciada inteira ou em trechos, nunca deslocada em relação à imagem.",
+			"addMute": "Silenciar {{seconds}} s no cursor",
+			"removeMute": "Remover trecho silenciado",
+			"fade": "Rampa",
+			"muteLabel": "Trecho silenciado: arraste para mover, arraste as bordas para ajustar",
+			"noTakeHere": "Coloque o cursor sobre uma gravação com microfone e som do computador separados."
+		}
 	},
 	"language": {
 		"title": "Idioma"

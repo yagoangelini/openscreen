@@ -22,6 +22,7 @@ import {
 	referenceClipDims,
 	resolveAspectRatioValue,
 } from "@/lib/ai-edition/document/outputFormat";
+import { prepareEchoCancel } from "@/lib/ai-edition/echoCancel";
 import type { AxcutDocument } from "@/lib/ai-edition/schema";
 import { getEditorSettings } from "@/lib/ai-edition/store/editorSettings";
 import { assetCameraSource } from "@/lib/ai-edition/timeline/camera";
@@ -420,6 +421,9 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 		// reads synchronously, so the read happens here — before anything is composed. Clicks
 		// that will not load must not cost the user their export.
 		await prepareClickSound(document).catch(() => undefined);
+		// The echo-free voice ("Remover eco do alto-falante") is read off a file the canceller writes;
+		// a scene build cannot wait for it. Seconds on a long take, nothing once it is cached.
+		await prepareEchoCancel(document).catch(() => undefined);
 		// A close during that read has already run the cleanup, which had no job to cancel yet.
 		if (generation !== pickerGeneration.current) return;
 		{

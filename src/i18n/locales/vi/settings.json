@@ -462,7 +462,25 @@
 		"voiceEnhance": "Enhance voice",
 		"voiceEnhanceTip": "Removes background noise from the voice and adds a little clarity, on this computer. Applied to the voice track only; the computer sound is left as recorded.",
 		"voiceEnhanceTipNoStems": "Removes background noise from the recording's audio and adds a little clarity, on this computer. Without a separate voice track, sounds that are not speech are reduced too.",
-		"voiceEnhanceStrength": "Strength"
+		"voiceEnhanceStrength": "Strength",
+		"echoCancel": "Loại bỏ tiếng vọng từ loa",
+		"echoCancelTip": "Khi âm thanh máy tính phát ra loa và micrô thu lại, tính năng này loại bỏ tiếng vọng đó khỏi giọng nói của bạn, dùng âm thanh máy tính đã ghi làm tham chiếu. Bản ghi không có tiếng vọng được giữ nguyên.",
+		"echoStatusWorking": "Đang tìm tiếng vọng từ loa…",
+		"echoStatusFound": "Đã tìm thấy và loại bỏ tiếng vọng từ loa (trễ {{delay}} ms): nhỏ hơn khoảng {{reduction}} dB.",
+		"echoStatusNone": "Bản ghi này không có tiếng vọng từ loa.",
+		"lanes": {
+			"voice": "Micrô",
+			"system": "Âm thanh máy tính",
+			"mute": "Tắt tiếng bản âm",
+			"unmute": "Bật tiếng bản âm",
+			"volume": "Âm lượng",
+			"help": "Micrô và âm thanh máy tính của bản ghi này, chỉnh sửa riêng. Cắt video sẽ cắt cả hai; mỗi bản âm chỉ có thể tắt tiếng toàn bộ hoặc từng đoạn, không bao giờ bị dịch so với hình.",
+			"addMute": "Tắt tiếng {{seconds}} giây tại đầu phát",
+			"removeMute": "Xóa đoạn đã tắt tiếng",
+			"fade": "Chuyển dần",
+			"muteLabel": "Đoạn đã tắt tiếng: kéo để di chuyển, kéo các cạnh để điều chỉnh",
+			"noTakeHere": "Đặt đầu phát lên một bản ghi có micrô và âm thanh máy tính tách riêng."
+		}
 	},
 	"language": {
 		"title": "Ngôn ngữ"

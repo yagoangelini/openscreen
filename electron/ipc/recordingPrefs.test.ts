@@ -29,6 +29,7 @@ const defaults: RecordingPrefs = {
 	micChannelMode: "auto",
 	cameraLayout: "screen",
 	micSilenceWarningEnabled: true,
+	headphonesHintEnabled: true,
 };
 let dir: string;
 beforeEach(() => {

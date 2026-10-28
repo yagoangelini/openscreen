@@ -148,7 +148,8 @@
 		"micChannelRight": "Phải",
 		"micChannelMix": "Trộn",
 		"broadcastTip": "Mẹo: chọn micrô \"NVIDIA Broadcast\" để loại bỏ tiếng ồn nền.",
-		"micSilenceWarning": "Warn if the microphone seems muted"
+		"micSilenceWarning": "Warn if the microphone seems muted",
+		"headphonesHint": "Nhắc tôi dùng tai nghe"
 	},
 	"permissions": {
 		"title": "OpenScreen cần một vài quyền",
@@ -204,5 +205,9 @@
 			"screenRequired": "Cần quyền ghi màn hình để ghi.",
 			"ready": "Mọi thứ đã sẵn sàng."
 		}
+	},
+	"headphonesHint": {
+		"title": "Hãy dùng tai nghe",
+		"body": "Khi bật cả micrô và âm thanh máy tính, tiếng từ loa sẽ lọt vào micrô. Tai nghe giúp tránh điều đó (trình chỉnh sửa cũng có thể loại bỏ tiếng vọng đó sau)."
 	}
 }

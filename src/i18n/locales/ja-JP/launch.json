@@ -148,7 +148,8 @@
 		"micChannelRight": "右",
 		"micChannelMix": "ミックス",
 		"broadcastTip": "ヒント: 「NVIDIA Broadcast」マイクを選ぶと背景ノイズが除去されます。",
-		"micSilenceWarning": "Warn if the microphone seems muted"
+		"micSilenceWarning": "Warn if the microphone seems muted",
+		"headphonesHint": "ヘッドホンの使用を通知する"
 	},
 	"permissions": {
 		"title": "OpenScreen にはいくつかの許可が必要です",
@@ -204,5 +205,9 @@
 			"screenRequired": "録画には画面収録が必要です。",
 			"ready": "準備が整いました。"
 		}
+	},
+	"headphonesHint": {
+		"title": "ヘッドホンを使いましょう",
+		"body": "マイクとパソコンの音を両方オンにすると、スピーカーの音がマイクに入ります。ヘッドホンなら防げます（エコーはあとからエディターで取り除くこともできます）。"
 	}
 }

@@ -462,7 +462,25 @@
 		"voiceEnhance": "Enhance voice",
 		"voiceEnhanceTip": "Removes background noise from the voice and adds a little clarity, on this computer. Applied to the voice track only; the computer sound is left as recorded.",
 		"voiceEnhanceTipNoStems": "Removes background noise from the recording's audio and adds a little clarity, on this computer. Without a separate voice track, sounds that are not speech are reduced too.",
-		"voiceEnhanceStrength": "Strength"
+		"voiceEnhanceStrength": "Strength",
+		"echoCancel": "Quitar el eco de los altavoces",
+		"echoCancelTip": "Cuando el sonido del ordenador salió por los altavoces y el micrófono lo captó, quita ese eco de tu voz usando como referencia el sonido del ordenador grabado. Las grabaciones sin eco quedan como se grabaron.",
+		"echoStatusWorking": "Buscando eco de los altavoces…",
+		"echoStatusFound": "Eco de los altavoces encontrado ({{delay}} ms de retraso) y eliminado: unos {{reduction}} dB más bajo.",
+		"echoStatusNone": "No hay eco de los altavoces en esta grabación.",
+		"lanes": {
+			"voice": "Micrófono",
+			"system": "Sonido del ordenador",
+			"mute": "Silenciar pista",
+			"unmute": "Activar pista",
+			"volume": "Volumen",
+			"help": "El micrófono y el sonido del ordenador de esta grabación, editados por separado. Cortar el vídeo corta los dos; una pista solo puede silenciarse entera o por tramos, nunca desplazarse respecto a la imagen.",
+			"addMute": "Silenciar {{seconds}} s en el cursor",
+			"removeMute": "Quitar tramo silenciado",
+			"fade": "Fundido",
+			"muteLabel": "Tramo silenciado: arrastra para moverlo, arrastra los bordes para ajustarlo",
+			"noTakeHere": "Coloca el cursor sobre una grabación con el micrófono y el sonido del ordenador separados."
+		}
 	},
 	"language": {
 		"title": "Idioma"

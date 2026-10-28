@@ -462,7 +462,25 @@
 		"voiceEnhance": "Enhance voice",
 		"voiceEnhanceTip": "Removes background noise from the voice and adds a little clarity, on this computer. Applied to the voice track only; the computer sound is left as recorded.",
 		"voiceEnhanceTipNoStems": "Removes background noise from the recording's audio and adds a little clarity, on this computer. Without a separate voice track, sounds that are not speech are reduced too.",
-		"voiceEnhanceStrength": "Strength"
+		"voiceEnhanceStrength": "Strength",
+		"echoCancel": "Odstranit ozvěnu z reproduktorů",
+		"echoCancelTip": "Když zvuk počítače hrál z reproduktorů a mikrofon ho zachytil, odstraní tuto ozvěnu z vašeho hlasu; jako referenci použije nahraný zvuk počítače. Nahrávky bez ozvěny zůstanou beze změny.",
+		"echoStatusWorking": "Hledá se ozvěna z reproduktorů…",
+		"echoStatusFound": "Ozvěna z reproduktorů nalezena (zpoždění {{delay}} ms) a odstraněna: přibližně o {{reduction}} dB tišší.",
+		"echoStatusNone": "V této nahrávce není ozvěna z reproduktorů.",
+		"lanes": {
+			"voice": "Mikrofon",
+			"system": "Zvuk počítače",
+			"mute": "Ztlumit stopu",
+			"unmute": "Zapnout stopu",
+			"volume": "Hlasitost",
+			"help": "Mikrofon a zvuk počítače této nahrávky, upravované každý zvlášť. Střih videa stříhá obojí; stopu lze jen ztlumit celou nebo po úsecích, nikdy ji posunout vůči obrazu.",
+			"addMute": "Ztlumit {{seconds}} s u přehrávací hlavy",
+			"removeMute": "Odebrat ztlumený úsek",
+			"fade": "Prolínání",
+			"muteLabel": "Ztlumený úsek: tažením přesunete, tažením okrajů upravíte",
+			"noTakeHere": "Umístěte přehrávací hlavu na nahrávku s odděleným mikrofonem a zvukem počítače."
+		}
 	},
 	"language": {
 		"title": "Jazyk"

@@ -18,9 +18,15 @@ import {
 	trackGroupId,
 } from "@/lib/ai-edition/document/audioTracks";
 import {
+	type SceneStemMute,
+	sceneStemMutes,
+	stemMuteGain,
+} from "@/lib/ai-edition/document/stemLanes";
+import {
 	projectRawTimelineSecToPlayback,
 	resolvePlaybackSegments,
 } from "@/lib/ai-edition/document/timeline";
+import { useEchoCancel } from "@/lib/ai-edition/echoCancel";
 import type {
 	AxcutAudioTrack,
 	AxcutClip,
@@ -28,6 +34,7 @@ import type {
 	AxcutZoomRegion,
 } from "@/lib/ai-edition/schema";
 import { audioGainScalar } from "@/lib/ai-edition/store/editorSettings";
+import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
 import { useEditorSettings } from "@/lib/ai-edition/store/useEditorSettings";
 import { removedRawSpans } from "@/lib/ai-edition/timeline/programme-time";
 import { findActiveSpeedRegion, type SpeedRegion } from "@/lib/ai-edition/timeline/speed";
@@ -70,7 +77,7 @@ export interface VideoSource {
 	label: string;
 	/** The take's voice and computer sound on their own (`asset.audioStems`), played in place
 	 *  of the video's mixed track so the Voice and Computer volumes apply. */
-	stems?: { voicePath: string; voiceSrc: string; systemSrc: string };
+	stems?: { voicePath: string; systemPath?: string; voiceSrc: string; systemSrc: string };
 }
 
 /** Drift tolerated before an audio element that is NOT free-running gets placed
@@ -699,17 +706,28 @@ export function VirtualPreview({
 	// (`prepare-enhanced-voice`) and played in place of the voice once ready; until then, and
 	// whenever it fails, the voice as recorded. Same samples, same length: the clock is unchanged,
 	// and the loudness gain above stays the original file's, which is what the export applies.
+	// "Remover eco do alto-falante": the voice stem without the speaker echo, the very file the
+	// export reads (`prepare-echo-cancelled-voice`). Until it is ready, or when the canceller
+	// found no echo, the stem as recorded.
+	const echoCancel = useEchoCancel(
+		activeStems?.voicePath,
+		activeStems?.systemPath,
+		settings.echoCancel && Boolean(activeStems?.systemPath),
+	);
+	const echoFreeVoicePath = settings.echoCancel ? echoCancel.state?.path : undefined;
+	// What "Melhorar a voz" enhances: the echo-free voice when there is one, as the export does.
+	const enhanceInputPath = echoFreeVoicePath ?? activeVoicePath;
 	const enhanceStrength = settings.voiceEnhance
 		? roundedVoiceEnhanceStrength(settings.voiceEnhanceStrength)
 		: null;
 	const [enhancedVoice, setEnhancedVoice] = useState<{ key: string; src: string } | null>(null);
 	const enhanceKey =
-		activeVoicePath && enhanceStrength !== null ? `${activeVoicePath}|${enhanceStrength}` : null;
+		enhanceInputPath && enhanceStrength !== null ? `${enhanceInputPath}|${enhanceStrength}` : null;
 	useEffect(() => {
 		const prepare = window.electronAPI?.prepareEnhancedVoice;
-		if (!enhanceKey || !activeVoicePath || enhanceStrength === null || !prepare) return;
+		if (!enhanceKey || !enhanceInputPath || enhanceStrength === null || !prepare) return;
 		let cancelled = false;
-		void prepare(activeVoicePath, enhanceStrength).then(
+		void prepare(enhanceInputPath, enhanceStrength).then(
 			(result) => {
 				if (cancelled || !result.success || !result.path) return;
 				setEnhancedVoice({ key: enhanceKey, src: toFileUrl(result.path) });
@@ -719,7 +737,7 @@ export function VirtualPreview({
 		return () => {
 			cancelled = true;
 		};
-	}, [enhanceKey, activeVoicePath, enhanceStrength]);
+	}, [enhanceKey, enhanceInputPath, enhanceStrength]);
 	const enhancedVoiceSrc =
 		enhancedVoice && enhancedVoice.key === enhanceKey ? enhancedVoice.src : null;
 	// Loudness, plus the Voice volume when the voice plays on its own.
@@ -909,6 +927,58 @@ export function VirtualPreview({
 		const node = systemGainNodeRef.current;
 		if (node) node.gain.value = audioGainScalar(settings.systemGainDb);
 	}, [settings.systemGainDb]);
+
+	// The stem lanes: a muted lane, and the silenced stretches of each, applied on top of the
+	// lanes' volumes. The envelope is a function of the take's SOURCE time, the clock the stem
+	// elements play on, and the export's own (`stemMuteGain` = Rust `stem_mute_gain`), so the
+	// preview silences exactly what the export will. Read every frame while there is anything to
+	// apply; otherwise the static volumes above stand alone.
+	const activeAssetId = activeStems ? activeSource?.id : undefined;
+	const laneDocument = useProjectStore((s) => s.document);
+	const laneMutes = useMemo((): { voice: SceneStemMute[]; system: SceneStemMute[] } | null => {
+		if (!activeAssetId || !laneDocument) return null;
+		return {
+			voice: sceneStemMutes(laneDocument, activeAssetId, "voice"),
+			system: sceneStemMutes(laneDocument, activeAssetId, "system"),
+		};
+	}, [activeAssetId, laneDocument]);
+	const laneEdited = Boolean(
+		laneMutes &&
+			(settings.voiceMuted ||
+				settings.systemMuted ||
+				laneMutes.voice.length > 0 ||
+				laneMutes.system.length > 0),
+	);
+	useEffect(() => {
+		if (!laneEdited || !laneMutes) {
+			// Back to the static volumes once the last lane edit is gone.
+			applyPreviewAudioSettings(
+				audioGraphRef.current,
+				[primaryAudioRef.current, supplementalAudioRef.current],
+				audioGainDbRef.current,
+				voiceGainDbRef.current,
+			);
+			const node = systemGainNodeRef.current;
+			if (node) node.gain.value = audioGainScalar(systemGainDbRef.current);
+			return;
+		}
+		let frame = 0;
+		const tick = () => {
+			const graph = audioGraphRef.current;
+			const element = primaryAudioRef.current;
+			if (graph && element) {
+				const t = element.currentTime;
+				const voice = settings.voiceMuted ? 0 : stemMuteGain(laneMutes.voice, t);
+				const system = settings.systemMuted ? 0 : stemMuteGain(laneMutes.system, t);
+				graph.voice.gain.value = audioGainScalar(voiceGainDbRef.current) * voice;
+				const node = systemGainNodeRef.current;
+				if (node) node.gain.value = audioGainScalar(systemGainDbRef.current) * system;
+			}
+			frame = requestAnimationFrame(tick);
+		};
+		frame = requestAnimationFrame(tick);
+		return () => cancelAnimationFrame(frame);
+	}, [laneEdited, laneMutes, settings.voiceMuted, settings.systemMuted]);
 
 	const setPrimaryAudioElement = useCallback((element: HTMLAudioElement | null) => {
 		primaryAudioRef.current = element;
@@ -1928,9 +1998,14 @@ export function VirtualPreview({
 						<audio
 							// A new element when the stems give way to the mixed track: the Web Audio
 							// source node is bound to its element for good.
-							key={`${activeSource.id}:primary-audio${activeStems ? ":stem" : ""}${enhancedVoiceSrc ? ":enhanced" : ""}`}
+							key={`${activeSource.id}:primary-audio${activeStems ? ":stem" : ""}${echoFreeVoicePath ? ":echo-free" : ""}${enhancedVoiceSrc ? ":enhanced" : ""}`}
 							ref={setPrimaryAudioElement}
-							src={enhancedVoiceSrc ?? activeStems?.voiceSrc ?? activeSource.src}
+							src={
+								enhancedVoiceSrc ??
+								(echoFreeVoicePath ? toFileUrl(echoFreeVoicePath) : undefined) ??
+								activeStems?.voiceSrc ??
+								activeSource.src
+							}
 							preload="metadata"
 							aria-hidden="true"
 							data-testid="preview-audio-primary"
