@@ -141,7 +141,9 @@ describe("fetch-onnxruntime staged library", () => {
 		dest = path.join(dir, "libonnxruntime.dylib");
 		stamp = path.join(dir, ".onnxruntime-darwin-arm64.json");
 	});
-	afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
+	// Windows keeps a just-unlinked file "delete pending" while a scanner holds it, and the folder
+	// reads as not empty for a moment: retry instead of failing the test on its cleanup.
+	afterEach(() => fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }));
 
 	it("keeps the library it vendored", () => {
 		stage("floor-pinned");

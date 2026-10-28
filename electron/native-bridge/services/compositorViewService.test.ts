@@ -299,7 +299,9 @@ describe("ffmpegSharedBinCandidates", () => {
 	});
 
 	afterEach(() => {
-		fs.rmSync(tmpRoot, { recursive: true, force: true });
+		// Windows keeps a just-unlinked file "delete pending" while a scanner holds it, and the folder
+		// reads as not empty for a moment: retry instead of failing the test on its cleanup.
+		fs.rmSync(tmpRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 	});
 
 	it("reads the dev-vendored dir off the cargo pin instead of a second hardcoded copy of the name", () => {
@@ -379,7 +381,7 @@ describe("buildCandidatePaths", () => {
 	});
 
 	afterEach(() => {
-		fs.rmSync(tmpRoot, { recursive: true, force: true });
+		fs.rmSync(tmpRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 	});
 
 	const norm = (p: string) => p.replace(/\\/g, "/");
@@ -453,7 +455,7 @@ describe("CompositorViewService ffmpeg PATH prepend", () => {
 	});
 
 	afterEach(() => {
-		fs.rmSync(tmpRoot, { recursive: true, force: true });
+		fs.rmSync(tmpRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 		process.env.PATH = originalPath;
 		if (originalPlatform) {
 			Object.defineProperty(process, "platform", originalPlatform);
@@ -555,8 +557,8 @@ describe("CompositorViewService text fonts", () => {
 		} else {
 			process.env.OPENSCREEN_FONTS_DIR = originalFontsDir;
 		}
-		fs.rmSync(tmpRoot, { recursive: true, force: true });
-		fs.rmSync(resources, { recursive: true, force: true });
+		fs.rmSync(tmpRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
+		fs.rmSync(resources, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 	});
 
 	it("points the compositor at the extraResources copy before the addon loads", () => {
@@ -630,7 +632,7 @@ describe("resolveSceneAssetPaths", () => {
 		} else {
 			process.env.VITE_PUBLIC = originalVitePublic;
 		}
-		fs.rmSync(resources, { recursive: true, force: true });
+		fs.rmSync(resources, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 	});
 
 	function resolved(scene: Record<string, unknown>) {

@@ -37,7 +37,9 @@ beforeEach(() => {
 	electron.getPath.mockReturnValue(dir);
 	electron.handle.mockClear();
 });
-afterEach(() => rmSync(dir, { recursive: true, force: true }));
+// Windows keeps a just-unlinked file "delete pending" while a scanner holds it, and the folder
+// reads as not empty for a moment: retry instead of failing the test on its cleanup.
+afterEach(() => rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }));
 
 function start(
 	getWindow: () => BrowserWindow | null = () => null,
@@ -129,7 +131,7 @@ describe("recording preferences IPC", () => {
 		session.set({ micEnabled: true });
 		session.set({ micEnabled: undefined, camEnabled: true });
 		expect(session.get().micEnabled).toBe(true);
-		rmSync(dir, { recursive: true, force: true });
+		rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 		expect(() => session.set({ micEnabled: false })).toThrow();
 		expect(session.get().micEnabled).toBe(true);
 	});

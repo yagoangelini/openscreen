@@ -9,7 +9,9 @@ import {
 } from "./generate-third-party-licenses.mjs";
 
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), "openscreen-licenses-"));
-afterAll(() => fs.rmSync(TMP, { recursive: true, force: true }));
+// Windows keeps a just-unlinked file "delete pending" while a scanner holds it, and the folder
+// reads as not empty for a moment: retry instead of failing the test on its cleanup.
+afterAll(() => fs.rmSync(TMP, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }));
 
 function write(root, files) {
 	for (const [file, content] of Object.entries(files)) {

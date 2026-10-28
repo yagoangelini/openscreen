@@ -26,8 +26,10 @@ describe("importProjectFile", () => {
 	});
 
 	afterEach(async () => {
-		await fs.rm(projectsDir, { recursive: true, force: true });
-		await fs.rm(otherDir, { recursive: true, force: true });
+		// Windows keeps a just-unlinked file "delete pending" while a scanner holds it, and the folder
+		// reads as not empty for a moment: retry instead of failing the test on its cleanup.
+		await fs.rm(projectsDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
+		await fs.rm(otherDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 	});
 
 	it("keeps an MCP edit made between the dialog reading a project's own file and opening it", async () => {

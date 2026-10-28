@@ -48,7 +48,9 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-	rmSync(dir, { recursive: true, force: true });
+	// Windows keeps a just-unlinked file "delete pending" while a scanner holds it, and the folder
+	// reads as not empty for a moment: retry instead of failing the test on its cleanup.
+	rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 });
 
 const read = (name) => readFileSync(join(dir, name), "utf8");

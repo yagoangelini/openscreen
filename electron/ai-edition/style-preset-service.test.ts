@@ -55,7 +55,9 @@ beforeEach(async () => {
 
 afterEach(async () => {
 	vi.restoreAllMocks();
-	await fs.rm(root, { recursive: true, force: true });
+	// Windows keeps a just-unlinked file "delete pending" while a scanner holds it, and the folder
+	// reads as not empty for a moment: retry instead of failing the test on its cleanup.
+	await fs.rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 });
 
 async function expectCode(promise: Promise<unknown>, code: string) {

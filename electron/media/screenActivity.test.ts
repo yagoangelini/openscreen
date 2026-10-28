@@ -19,7 +19,9 @@ describe("screenActivityArgs", () => {
 
 const ffmpeg = resolveFfmpeg();
 const dir = mkdtempSync(path.join(tmpdir(), "screen-activity-"));
-afterAll(() => rmSync(dir, { recursive: true, force: true }));
+// Windows keeps a just-unlinked file "delete pending" while a scanner holds it, and the folder
+// reads as not empty for a moment: retry instead of failing the test on its cleanup.
+afterAll(() => rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }));
 
 describe.skipIf(!ffmpeg)("getScreenActivity (real ffmpeg)", () => {
 	// The app runs the scan below normal priority so the preview comes first. Under the full
