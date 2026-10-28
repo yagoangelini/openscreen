@@ -31,7 +31,7 @@ As decisões e o porquê de cada fase estão em [`PLANO-FORK.md`](PLANO-FORK.md)
 
 ## Estado atual
 
-`main` do fork = **v2.8.0**, publicada e marcada como Latest. Desde a 2.1.0 o fork contém o **OpenScreen 2.0** do upstream (veja "Sincronizar com o upstream" abaixo). O histórico do fork, em ordem:
+`main` do fork = **v2.9.0**, publicada e marcada como Latest. Desde a 2.1.0 o fork contém o **OpenScreen 2.0** do upstream (veja "Sincronizar com o upstream" abaixo). O histórico do fork, em ordem:
 
 | Versão | Como entrou | Conteúdo |
 |---|---|---|
@@ -52,6 +52,7 @@ As decisões e o porquê de cada fase estão em [`PLANO-FORK.md`](PLANO-FORK.md)
 | 2.7.0 | PRs yagoangelini/openscreen#39 a #48 | gravação na hora (contagem 5 s, câmera em paralelo), parar no aperto sem o clique, Rosto/Tela no aperto, primeiros quadros limpos, pedaços da câmera na importação, biblioteca de gravações (subpasta por take, nome ao terminar, renomear e excluir), Padrões globais, avisos do HUD e prévia da câmera, Todos os trechos, Restaurar e histórico do desfazer |
 | 2.7.1 | PRs yagoangelini/openscreen#50 a #52 | ímã na timeline (agulha, cortes, bordas; Alt solta), aba Mídia (excluir o take aberto sem prompt do Windows, sem timeline, um card por gravação) |
 | 2.8.0 | PRs yagoangelini/openscreen#54 a #56 | trilhas Microfone e Áudio do sistema separadas na timeline (volume, mudo, trechos silenciados), remoção do eco do alto-falante pelo stem do sistema com compensação automática do volume do convidado, aviso de fones no HUD, cache da prévia em %TEMP% com teto de 2 GB |
+| 2.9.0 | PRs yagoangelini/openscreen#58 e #59 | remoção do eco: portão "Silêncio quando só o outro fala" (o eco que sobrava cai de −34 para −68 dBFS no take de 27/10) e Intensidade Suave / Normal / Forte no Microfone e em Padrões |
 
 **O que a 1.16.0 trouxe:**
 
@@ -913,6 +914,7 @@ Valide com `record-take.mjs`, com um take que comece no rosto e passe para a tel
     - ~~eco baixinho no fundo quando só o convidado fala~~ **resolvido** pelo portão (`feat/aec-gate-strength`): Normal −68 dBFS no trecho só do convidado, 49 dB abaixo dele;
     - na fala dupla o eco por baixo da voz continua (Normal −25 dBFS com a voz a −16; Forte −31, com a voz colorida). Ir além pede um modelo que separe as duas vozes, não um nível: um AEC neural offline (DTLN-aec, MIT, ONNX, roda pelo onnxruntime que o app já traz) como estágio depois deste, só nos trechos em que o portão ouve você;
     - o portão depende de uma banda que o alto-falante poupe (fundamental de voz masculina, alto-falante de notebook): com caixas com grave ou voz aguda ele fica aberto e o take sai como na 2.8.0;
+    - quando o convidado começa a tocar enquanto você fala, a detecção pode atrasar: no take de 27/10, em 300,25–300,60 s, o Normal levou ao piso uns 300 ms da sua fala (um trecho surdo e ~100 ms com F0 de 136 Hz) que a 2.8.0 deixava. É o único caso desses no take: nos quadros em que o microfone fica ≥ 6 dB acima do eco possível (stem do sistema atrasado + 21 dB), o Normal corta mais de 10 dB em 19 quadros de 50 ms, contra 20 da 2.8.0. A medida está em `scratchpad/aec2/dominant.mjs` da sessão de 28/10. Uma saída é a banda de fala do teste deixar de fora o que o eco previsto explica;
     - saber se a saída é alto-falante ou fone (form factor do endpoint, no C++) para o aviso do HUD só aparecer com alto-falante;
 20. Ouvir os clipes do take de 27/10 (`clips-v2`: antes, 2.8.0, Suave, Normal, Forte) e confirmar a intensidade padrão (Normal).
 19. ~~Um início que estoura o prazo de 12 s deixava a limpeza atrasada parar o leitor do cursor do take seguinte.~~ **Corrigido** em `feat/recording-extras` (dono do leitor por take, e a morte do helper esperada pelo próximo take). O timeout em si não foi reproduzido; a guarda tem teste (`takeOwnership.test.ts`).
