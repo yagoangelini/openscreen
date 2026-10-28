@@ -145,6 +145,9 @@ export interface EditorSettingsSnapshot {
 	/** "Remover eco do alto-falante": the speaker echo taken out of the voice stem, with the
 	 *  computer stem as the reference (`echo_cancel.rs`). Only acts where an echo is detected. */
 	echoCancel: boolean;
+	/** Once the echo is removed, the computer lane raised by the echo path's gain
+	 *  (`systemCompensationDb` in `echoCancel.ts`), so the guest stays as loud as before. */
+	systemCompensation: boolean;
 	webcamBackgroundMode: WebcamBackgroundMode;
 	webcamWallpaper: string;
 	webcamBlurIntensity: number;
@@ -176,6 +179,7 @@ export const DEFAULT_EDITOR_SETTINGS: EditorSettingsSnapshot = {
 	voiceMuted: false,
 	systemMuted: false,
 	echoCancel: true,
+	systemCompensation: true,
 	dollyAmount: 0,
 	leanToClicks: false,
 	formatFollowCursor: null,
@@ -220,6 +224,7 @@ interface LegacyShape {
 	voiceMuted?: boolean;
 	systemMuted?: boolean;
 	echoCancel?: boolean;
+	systemCompensation?: boolean;
 	webcamBackgroundMode?: WebcamBackgroundMode;
 	webcamWallpaper?: string;
 	webcamBlurIntensity?: number;
@@ -396,6 +401,10 @@ export function getEditorSettings(doc: AxcutDocument | null | undefined): Editor
 		// On by default, a project from before the toggle included: the canceller only touches a
 		// take whose voice stem carries an echo of the computer stem (`echo_cancel.rs`).
 		echoCancel: bool(legacy?.echoCancel, DEFAULT_EDITOR_SETTINGS.echoCancel),
+		systemCompensation: bool(
+			legacy?.systemCompensation,
+			DEFAULT_EDITOR_SETTINGS.systemCompensation,
+		),
 		webcamBackgroundMode: isWebcamBackgroundMode(legacy?.webcamBackgroundMode)
 			? legacy.webcamBackgroundMode
 			: DEFAULT_EDITOR_SETTINGS.webcamBackgroundMode,
@@ -451,6 +460,7 @@ export interface EditorSettingsPatch {
 	voiceMuted?: boolean;
 	systemMuted?: boolean;
 	echoCancel?: boolean;
+	systemCompensation?: boolean;
 	webcamBackgroundMode?: WebcamBackgroundMode;
 	webcamWallpaper?: string;
 	webcamBlurIntensity?: number;

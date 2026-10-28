@@ -19,6 +19,12 @@ export interface EchoCancelReport {
 	processedShare: number;
 	adaptShare: number;
 	durationSec: number;
+	/** How loud the speakers reached the microphone relative to the computer stem, in dB. */
+	echoPathGainDb?: number;
+	/** The computer stem's true peak, in dBFS. */
+	systemTruePeakDbfs?: number;
+	/** The computer lane's automatic compensation (`system_compensation_db`), in dB. */
+	systemCompensationDb?: number;
 }
 
 export interface EchoCancelResult {

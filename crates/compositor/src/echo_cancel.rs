@@ -116,6 +116,78 @@ pub struct EchoReport {
     /// Mean adaptation gate over the processed frames (1: speakers alone, 0: double-talk).
     pub adapt_share: f64,
     pub duration_sec: f64,
+    /// How loud the speakers' sound reached the microphone, relative to the computer stem, in dB
+    /// (K-weighted, frames where only the speakers were heard): the echo path's gain.
+    pub echo_path_gain_db: f64,
+    /// True peak of the computer stem (4× interpolated), in dBFS.
+    pub system_true_peak_dbfs: f64,
+    /// The gain the "Áudio do sistema" lane gets once the echo is gone, so the guest is heard at
+    /// the level the microphone heard them, once and clean (`system_compensation_db`).
+    pub system_compensation_db: f64,
+}
+
+/// Most a compensation may add: past this a quiet stem is noise, not a guest.
+pub const MAX_SYSTEM_COMPENSATION_DB: f64 = 30.0;
+
+/// The computer lane's compensation for an echo path of `echo_path_gain_db`: that gain, but
+/// never below 0 dB, never above `MAX_SYSTEM_COMPENSATION_DB`, and never past what keeps the
+/// stem's true peak at −1 dBFS. `clampSystemCompensationDb` (`src/lib/ai-edition/echoCancel.ts`)
+/// is the same function, with the same test points.
+pub fn system_compensation_db(echo_path_gain_db: f64, system_true_peak_dbfs: f64) -> f64 {
+    if !echo_path_gain_db.is_finite() {
+        return 0.0;
+    }
+    let headroom = if system_true_peak_dbfs.is_finite() {
+        -1.0 - system_true_peak_dbfs
+    } else {
+        0.0
+    };
+    echo_path_gain_db
+        .min(MAX_SYSTEM_COMPENSATION_DB)
+        .min(headroom)
+        .max(0.0)
+}
+
+/// A true-peak meter: each channel's samples and three points between each pair, Catmull-Rom
+/// (a 4× oversampling, close to BS.1770's for speech and music).
+#[derive(Default)]
+pub struct TruePeakMeter {
+    history: Vec<[f32; 4]>,
+    peak: f32,
+}
+
+impl TruePeakMeter {
+    pub fn push(&mut self, planes: &[Vec<f32>]) {
+        if self.history.len() < planes.len() {
+            self.history.resize(planes.len(), [0.0; 4]);
+        }
+        for (plane, h) in planes.iter().zip(self.history.iter_mut()) {
+            for &s in plane {
+                h.rotate_left(1);
+                h[3] = s;
+                let [p0, p1, p2, p3] = *h;
+                self.peak = self.peak.max(p2.abs());
+                for t in [0.25f32, 0.5, 0.75] {
+                    let t2 = t * t;
+                    let t3 = t2 * t;
+                    let v = 0.5
+                        * ((2.0 * p1)
+                            + (-p0 + p2) * t
+                            + (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3) * t2
+                            + (-p0 + 3.0 * p1 - 3.0 * p2 + p3) * t3);
+                    self.peak = self.peak.max(v.abs());
+                }
+            }
+        }
+    }
+
+    pub fn dbfs(&self) -> f64 {
+        if self.peak > 0.0 {
+            20.0 * (self.peak as f64).log10()
+        } else {
+            f64::NEG_INFINITY
+        }
+    }
 }
 
 // --------------------------------------------------------------------------------------------
@@ -415,6 +487,32 @@ fn fit_delay_line(points: &[LagPoint], active_windows: usize, duration_sec: f64)
 // Stages 2 and 3: cancellation and suppression
 // --------------------------------------------------------------------------------------------
 
+/// BS.1770's K-weighting (its 48 kHz pre-filter and RLB high-pass) as a power gain per STFT bin.
+fn k_weighting() -> Vec<f32> {
+    let stages: [([f64; 3], [f64; 3]); 2] = [
+        (
+            [1.53512485958697, -2.69169618940638, 1.19839281085285],
+            [1.0, -1.69065929318241, 0.73248077421585],
+        ),
+        ([1.0, -2.0, 1.0], [1.0, -1.99004745483398, 0.99007225036621]),
+    ];
+    (0..BINS)
+        .map(|k| {
+            let w = std::f64::consts::PI * k as f64 / (BINS - 1) as f64;
+            let z1 = Complex::new(w.cos(), -w.sin());
+            let z2 = z1 * z1;
+            stages
+                .iter()
+                .map(|(b, a)| {
+                    let num = Complex::new(b[0], 0.0) + z1 * b[1] + z2 * b[2];
+                    let den = Complex::new(a[0], 0.0) + z1 * a[1] + z2 * a[2];
+                    (num / den).norm_sqr()
+                })
+                .product::<f64>() as f32
+        })
+        .collect()
+}
+
 fn sqrt_hann() -> Vec<f32> {
     (0..FRAME)
         .map(|i| {
@@ -436,6 +534,8 @@ struct Totals {
     voice_energy: f64,
     voice_frames: usize,
     gate_sum: f64,
+    path_mic: f64,
+    path_ref: f64,
 }
 
 /// The canceller's knobs. The defaults are what the app runs; tests may vary them.
@@ -542,6 +642,7 @@ pub struct EchoCanceller {
     s_ee: Vec<f32>,
     noise: Vec<f32>,
     adapted: f32,
+    k_weights: Vec<f32>,
     path_gain: Vec<f32>,
     leak_bins: Vec<f32>,
     gain: Vec<f32>,
@@ -600,6 +701,7 @@ impl EchoCanceller {
             s_ee: vec![0.0; BINS],
             noise: vec![0.0; BINS],
             adapted: 0.0,
+            k_weights: k_weighting(),
             path_gain: vec![0.0; ADAPT_BINS],
             leak_bins: vec![1.0; ADAPT_BINS],
             gain: vec![1.0; BINS],
@@ -1021,6 +1123,14 @@ impl EchoCanceller {
             self.totals.echo_only_mic += mic as f64;
             self.totals.echo_only_linear += linear as f64;
             self.totals.echo_only_out += after as f64;
+            // The echo path's gain: the microphone against the reference at the filter's main tap
+            // (where most of the echo lives), K-weighted like a loudness meter (a laptop speaker
+            // drops the bass a loudness meter still counts), over frames of speakers alone.
+            let main = &self.history[(self.head + self.main_tap) % self.taps];
+            for (k, w) in self.k_weights.iter().enumerate() {
+                self.totals.path_mic += (w * self.spec_d[k].norm_sqr()) as f64;
+                self.totals.path_ref += (w * main[k].norm_sqr()) as f64;
+            }
         }
         if mic_power > 0.0 {
             // Echo energy, in the same per-sample units as the voice level (Parseval, window).
@@ -1081,7 +1191,23 @@ impl EchoCanceller {
                 0.0
             },
             duration_sec: self.estimate.duration_sec,
+            echo_path_gain_db: if t.path_mic > 0.0 && t.path_ref > 0.0 {
+                10.0 * (t.path_mic / t.path_ref).log10()
+            } else {
+                0.0
+            },
+            system_true_peak_dbfs: 0.0,
+            system_compensation_db: 0.0,
         }
+    }
+
+    /// The report, with the compensation for a computer stem of that true peak.
+    pub fn report_for(&self, system_true_peak_dbfs: f64) -> EchoReport {
+        let mut report = self.report();
+        report.system_true_peak_dbfs = system_true_peak_dbfs;
+        report.system_compensation_db =
+            system_compensation_db(report.echo_path_gain_db, system_true_peak_dbfs);
+        report
     }
 }
 
@@ -1126,7 +1252,9 @@ pub fn cancel_echo_pcm(mic: &[f32], reference: &[f32]) -> (Vec<f32>, EchoReport)
     let mut out = Vec::with_capacity(len);
     canceller.push(mic, reference, &mut out);
     canceller.finish(&mut out);
-    (out, canceller.report())
+    let mut meter = TruePeakMeter::default();
+    meter.push(&[reference.to_vec()]);
+    (out, canceller.report_for(meter.dbfs()))
 }
 
 /// Opens a stem for the whole of its length.
@@ -1143,7 +1271,7 @@ fn for_each_block(
     voice_path: &str,
     system_path: &str,
     limit: Option<usize>,
-    mut each: impl FnMut(&[f32], &[f32]),
+    mut each: impl FnMut(&[f32], &[f32], &PlanarPcm),
 ) -> Result<usize> {
     let mut voice = open_stem(voice_path)?;
     let mut system = open_stem(system_path)?;
@@ -1168,7 +1296,7 @@ fn for_each_block(
         sm.clear();
         vm.extend(vbuf[0].iter().zip(&vbuf[1]).map(|(l, r)| 0.5 * (l + r)));
         sm.extend(sbuf[0].iter().zip(&sbuf[1]).map(|(l, r)| 0.5 * (l + r)));
-        each(&vm, &sm);
+        each(&vm, &sm, &sbuf);
         done += step;
     }
     Ok(total)
@@ -1200,8 +1328,10 @@ pub(crate) fn wav_header(file: &mut impl Write, samples: usize) -> std::io::Resu
 /// file is written and the report says `detected: false`.
 pub fn cancel_echo_file(voice_path: &str, system_path: &str, output: &str) -> Result<EchoReport> {
     let mut tracker = DelayTracker::new();
-    for_each_block(voice_path, system_path, None, |mic, reference| {
-        tracker.push(reference, mic)
+    let mut meter = TruePeakMeter::default();
+    for_each_block(voice_path, system_path, None, |mic, reference, system| {
+        tracker.push(reference, mic);
+        meter.push(system);
     })?;
     let estimate = tracker.finish();
     if !estimate.detected {
@@ -1213,7 +1343,7 @@ pub fn cancel_echo_file(voice_path: &str, system_path: &str, output: &str) -> Re
         voice_path,
         system_path,
         Some((WARM_UP_SEC * RATE as f64) as usize),
-        |mic, reference| {
+        |mic, reference, _| {
             scratch.clear();
             canceller.push(mic, reference, &mut scratch);
         },
@@ -1240,7 +1370,7 @@ pub fn cancel_echo_file(voice_path: &str, system_path: &str, output: &str) -> Re
             file.write_all(&bytes)
         };
     let mut io_error = None;
-    let processed = for_each_block(voice_path, system_path, None, |mic, reference| {
+    let processed = for_each_block(voice_path, system_path, None, |mic, reference, _| {
         out.clear();
         canceller.push(mic, reference, &mut out);
         if io_error.is_none() {
@@ -1284,7 +1414,7 @@ pub fn cancel_echo_file(voice_path: &str, system_path: &str, output: &str) -> Re
     file.flush()?;
     drop(file);
     std::fs::rename(&partial, output).with_context(|| format!("renaming {partial}"))?;
-    Ok(canceller.report())
+    Ok(canceller.report_for(meter.dbfs()))
 }
 
 #[cfg(test)]
@@ -1427,6 +1557,14 @@ mod tests {
 
         let (out, near_out, report) = run_with_probe(&mic, &far, &near);
         assert!(report.detected, "{report:?}");
+        // The room's direct path is 0.5 (−6 dB) and its reflections add about 1.5 dB of energy:
+        // the measured echo path gain is that, within a couple of dB.
+        let expected = 10.0 * (0.25f64 * 1.4325).log10();
+        assert!(
+            (report.echo_path_gain_db - expected).abs() < 2.5,
+            "echo path {:.1} dB, expected {expected:.1}",
+            report.echo_path_gain_db
+        );
         assert_eq!(out.len(), mic.len());
         assert_eq!(near_out.len(), mic.len());
 
@@ -1474,8 +1612,34 @@ mod tests {
         canceller.push_with_probe(mic, far, near, &mut out);
         canceller.finish(&mut out);
         let near_out = canceller.take_probe();
-        let report = canceller.report();
+        let report = canceller.report_for(0.0);
         (out, near_out, report)
+    }
+
+    /// The same points as `clampSystemCompensationDb`'s test in `echoCancel.test.ts`.
+    #[test]
+    fn the_compensation_is_the_echo_path_gain_within_its_bounds() {
+        // The take of 27/10: system stem at −26.1 dBTP, so at most +25.1 dB.
+        assert!((system_compensation_db(25.3, -26.1) - 25.1).abs() < 1e-9);
+        assert!((system_compensation_db(18.0, -26.1) - 18.0).abs() < 1e-9);
+        assert!((system_compensation_db(40.0, -60.0) - 30.0).abs() < 1e-9);
+        assert_eq!(system_compensation_db(-3.0, -20.0), 0.0);
+        assert_eq!(system_compensation_db(10.0, 0.5), 0.0);
+        assert_eq!(system_compensation_db(f64::NAN, -20.0), 0.0);
+    }
+
+    #[test]
+    fn the_true_peak_meter_sees_between_samples() {
+        // A sine at an eighth of the rate, sampled half-way off its crests: the samples peak at
+        // cos(π/8) (−0.69 dBFS), the wave at 0 dBFS.
+        let x: Vec<f32> = (0..4800)
+            .map(|i| (std::f32::consts::TAU * 0.125 * i as f32 + std::f32::consts::PI / 8.0).sin())
+            .collect();
+        let samples = 20.0 * (x.iter().fold(0.0f32, |m, v| m.max(v.abs())) as f64).log10();
+        let mut meter = TruePeakMeter::default();
+        meter.push(&[x]);
+        assert!(samples < -0.6);
+        assert!(meter.dbfs() > -0.2 && meter.dbfs() <= 0.1, "{}", meter.dbfs());
     }
 
     #[test]

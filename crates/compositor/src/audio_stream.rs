@@ -164,6 +164,21 @@ pub struct ClipStems<'a> {
     pub system_muted: bool,
     pub voice_mutes: &'a [SceneStemMute],
     pub system_mutes: &'a [SceneStemMute],
+    /// See `SceneAudioStems::system_compensation_db`.
+    pub system_compensation_db: f32,
+}
+
+/// The computer lane's gain: its own volume, plus, when it is compensated, the echo path's gain
+/// AND the voice's loudness gain — the echo the compensation stands in for lived in the voice
+/// stem and was levelled with it, so the guest keeps the level it had next to the user.
+/// `systemLaneGainDb` in `src/lib/ai-edition/echoCancel.ts` is the same sum, which the preview
+/// applies.
+pub fn system_lane_gain_db(lane_gain_db: f32, compensation_db: f32, voice_loudness_db: f32) -> f32 {
+    if compensation_db > 0.0 {
+        lane_gain_db + compensation_db + voice_loudness_db
+    } else {
+        lane_gain_db
+    }
 }
 
 /// A stem lane's gain at source time `t` (seconds): 0 inside a silenced stretch, a linear ramp
@@ -1353,12 +1368,13 @@ impl ProgrammeAudio {
                 Some(Box::new(GainStream::new(stretched, gain_db)))
             };
             let voice_read = stems.echo_free_voice_path.unwrap_or(stems.voice_path);
+            let voice_loudness = loudness_gain_db(stems.voice_path);
             let voice = if stems.voice_muted {
                 Some(None)
             } else {
                 open(
                     voice_read,
-                    loudness_gain_db(stems.voice_path) + stems.voice_gain_db,
+                    voice_loudness + stems.voice_gain_db,
                     voice_enhance,
                     stems.voice_mutes,
                 )
@@ -1367,7 +1383,17 @@ impl ProgrammeAudio {
             let system = if stems.system_muted {
                 Some(None)
             } else {
-                open(stems.system_path, stems.system_gain_db, None, stems.system_mutes).map(Some)
+                open(
+                    stems.system_path,
+                    system_lane_gain_db(
+                        stems.system_gain_db,
+                        stems.system_compensation_db,
+                        voice_loudness,
+                    ),
+                    None,
+                    stems.system_mutes,
+                )
+                .map(Some)
             };
             // Both lanes readable (or muted): the take plays from its stems. A lane that fails to
             // open makes the whole take fall back to the video's own track, as before.
@@ -2230,6 +2256,7 @@ mod tests {
             system_muted: false,
             voice_mutes: &[],
             system_mutes: &[],
+            system_compensation_db: 0.0,
         };
         let at = |pcm: &PlanarPcm, i: usize| pcm[0][i];
         let sys = tone(len, 660.0, 0.25);
@@ -2255,6 +2282,20 @@ mod tests {
         assert!(close(at(&window, i), v[i + 12_000] * voice_gain));
         let j = (1.25 * RATE) as usize;
         assert!(close(at(&window, j), v[j + 12_000] * voice_gain + sys[j + 12_000]));
+
+        // The compensation raises the computer lane, on top of its own volume, and follows the
+        // voice's loudness gain.
+        let raised = stems_source(
+            ClipStems { system_gain_db: -6.0, system_compensation_db: 12.0, ..base },
+            0.0,
+            2.0,
+        );
+        let lifted = 10f32.powf(6.0 / 20.0) * voice_gain;
+        assert!(close(at(&raised, 1000), v[1000] * voice_gain + sys[1000] * lifted));
+        // The same points as `systemLaneGainDb`'s test in `echoCancel.test.ts`.
+        assert_eq!(system_lane_gain_db(-6.0, 12.0, 2.5), 8.5);
+        assert_eq!(system_lane_gain_db(3.0, 0.0, 2.5), 3.0);
+        assert_eq!(system_lane_gain_db(3.0, -4.0, 2.5), 3.0);
 
         // The echo-free voice is read in place of the stem, at the stem's loudness gain.
         let cleaned = stems_source(ClipStems { echo_free_voice_path: Some(&echo_free), ..base }, 0.0, 2.0);

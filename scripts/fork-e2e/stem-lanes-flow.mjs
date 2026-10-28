@@ -275,6 +275,21 @@ try {
 	);
 	await shot("04-echo-toggle-on");
 
+	// 6. The computer lane's pane: the automatic compensation, on by default.
+	await page.locator("[data-testid='stem-lane-system']").click({ position: { x: 40, y: 15 } });
+	const compensation =
+		(await page
+			.locator("[data-testid='system-compensation-status']")
+			.first()
+			.textContent({ timeout: 10_000 })
+			.catch(() => "")) ?? "";
+	check(
+		"the computer lane shows its automatic compensation",
+		/[+] ?[0-9]/.test(compensation),
+		compensation,
+	);
+	await shot("05-computer-lane-compensated");
+
 	// Close the instance: the CLI exports run in their own profiles.
 	stopInstances();
 	child.kill();
@@ -293,6 +308,15 @@ try {
 	const plain = path.join(out, "export-plain.mp4");
 	const b = cliExport(plainFile, plain);
 	check("export with the echo kept and the computer sound on", b.ok, b.stdout);
+	// And as a user opening the take gets it: echo removed, computer lane on and compensated.
+	const compensatedFile = path.join(out, "project-compensated.openscreen");
+	const compensatedDoc = structuredClone(entry.doc);
+	compensatedDoc.legacyEditor = { ...compensatedDoc.legacyEditor, systemMuted: false };
+	compensatedDoc.audioStemMutes = undefined;
+	writeFileSync(compensatedFile, JSON.stringify(compensatedDoc));
+	const compensated = path.join(out, "export-compensated.mp4");
+	const d = cliExport(compensatedFile, compensated);
+	check("export with the echo removed and the computer lane compensated", d.ok, d.stdout);
 
 	if (a.ok && b.ok) {
 		const x = decode(edited);
@@ -322,6 +346,19 @@ try {
 			median > 10,
 			`median ${median.toFixed(1)} dB over ${frames.length} frames`,
 		);
+		// The compensated export against the one with the echo, in whole seconds: per-frame levels
+		// would pick the ~180 ms where the guest has started and the echo has not arrived yet. Over
+		// the export, and over the stretch where only the guest talks (22..32 s of this cut).
+		const z = d.ok ? decode(compensated) : null;
+		let guestMedian = null;
+		if (z) {
+			guestMedian = levelDb(z, 22, 32) - levelDb(y, 22, 32);
+			check(
+				"the guest keeps its level once the echo is gone (compensated vs echo + stem)",
+				Math.abs(guestMedian) < 3,
+				`${guestMedian.toFixed(1)} dB over 22..32 s; whole export ${(levelDb(z, 0, 60) - levelDb(y, 0, 60)).toFixed(1)} dB`,
+			);
+		}
 		writeFileSync(
 			path.join(out, "measurements.json"),
 			JSON.stringify(
@@ -329,6 +366,8 @@ try {
 					silencedDbfs: silenced,
 					sameStretchPlainDbfs: around,
 					medianDropWhereComputerPlaysDb: median,
+					guestCompensatedVsPlainDb: guestMedian,
+					compensatedDbfs: z ? levelDb(z, 0, 60) : null,
 					frames: frames.length,
 					voiceStemDbfs: levelDb(voiceStem, 0, 60),
 					editedDbfs: levelDb(x, 0, 60),

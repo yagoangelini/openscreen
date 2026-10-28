@@ -479,7 +479,10 @@
 			"removeMute": "Odebrat ztlumený úsek",
 			"fade": "Prolínání",
 			"muteLabel": "Ztlumený úsek: tažením přesunete, tažením okrajů upravíte",
-			"noTakeHere": "Umístěte přehrávací hlavu na nahrávku s odděleným mikrofonem a zvukem počítače."
+			"noTakeHere": "Umístěte přehrávací hlavu na nahrávku s odděleným mikrofonem a zvukem počítače.",
+			"compensation": "Automaticky vyrovnat hlasitost",
+			"compensationOn": "Hlasitost automaticky vyrovnána: +{{db}} dB (zvuk počítače v hlasitosti, v jaké ho zachytil mikrofon).",
+			"compensationOff": "Vypnuto: zvuk počítače tak, jak byl nahrán."
 		}
 	},
 	"language": {

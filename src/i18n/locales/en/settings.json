@@ -479,7 +479,10 @@
 			"removeMute": "Remove silenced section",
 			"fade": "Fade",
 			"muteLabel": "Silenced section: drag to move, drag the edges to resize",
-			"noTakeHere": "Put the playhead over a recording with separate microphone and computer sound."
+			"noTakeHere": "Put the playhead over a recording with separate microphone and computer sound.",
+			"compensation": "Compensate volume automatically",
+			"compensationOn": "Volume compensated automatically: +{{db}} dB (the computer sound plays at the level the microphone picked it up).",
+			"compensationOff": "Off: the computer sound as it was recorded."
 		}
 	},
 	"language": {

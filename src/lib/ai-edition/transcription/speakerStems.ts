@@ -2,6 +2,7 @@
 // (and caches on disk) for the timeline waveform, over the take's duration so both stems
 // land on the same blocks.
 
+import { echoFreeVoicePath } from "../echoCancel";
 import type { AxcutAsset, AxcutTranscript } from "../schema";
 import { labelSpeakers, type SpeakerLabelling } from "./speakers";
 
@@ -31,8 +32,11 @@ export async function readStemPeaks(
 	const durationSec = asset.durationSec;
 	if (!stems || !durationSec || durationSec <= 0) return null;
 	try {
+		// The voice without the speaker echo when the canceller has made it: with the echo, the
+		// guest's words are loud in the voice stem too and could count as the user's.
+		const voicePath = echoFreeVoicePath(stems.voicePath, stems.systemPath) ?? stems.voicePath;
 		const [voice, system] = await Promise.all([
-			readPeaks(stems.voicePath, durationSec),
+			readPeaks(voicePath, durationSec),
 			readPeaks(stems.systemPath, durationSec),
 		]);
 		return voice && system ? { voice, system, durationSec } : null;

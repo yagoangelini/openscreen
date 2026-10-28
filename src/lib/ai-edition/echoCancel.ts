@@ -24,6 +24,57 @@ function keyOf(voicePath: string, systemPath: string): string {
 	return `${voicePath}\n${systemPath}`;
 }
 
+/** Most a compensation may add (Rust `MAX_SYSTEM_COMPENSATION_DB`). */
+export const MAX_SYSTEM_COMPENSATION_DB = 30;
+
+/**
+ * The computer lane's compensation for an echo path of `echoPathGainDb`: that gain, but never
+ * below 0 dB, never above `MAX_SYSTEM_COMPENSATION_DB`, and never past what keeps the stem's
+ * true peak at −1 dBFS. Rust `system_compensation_db` (`echo_cancel.rs`) is the same function,
+ * with the same test points.
+ */
+export function clampSystemCompensationDb(
+	echoPathGainDb: number,
+	systemTruePeakDbfs: number,
+): number {
+	if (!Number.isFinite(echoPathGainDb)) return 0;
+	const headroom = Number.isFinite(systemTruePeakDbfs) ? -1 - systemTruePeakDbfs : 0;
+	return Math.max(0, Math.min(echoPathGainDb, MAX_SYSTEM_COMPENSATION_DB, headroom));
+}
+
+/**
+ * The computer lane's gain: its own volume, plus, when it is compensated, the echo path's gain AND
+ * the voice's loudness gain (the echo it stands in for lived in the voice stem and was levelled
+ * with it). Rust `system_lane_gain_db` (`audio_stream.rs`) is the same sum: the export applies
+ * that one, the preview this one.
+ */
+export function systemLaneGainDb(
+	laneGainDb: number,
+	compensationDb: number,
+	voiceLoudnessDb: number,
+): number {
+	return compensationDb > 0 ? laneGainDb + compensationDb + voiceLoudnessDb : laneGainDb;
+}
+
+/**
+ * What the computer lane is raised by: once the echo is removed, the guest is only in the
+ * computer stem, usually far quieter than the microphone heard them (the take of 27/10: −41.5
+ * LUFS against the voice's −18.3). The compensation puts them back at the level the microphone
+ * heard, once and clean. 0 with the echo removal off, with the switch off, when no echo was
+ * found, or with a report from before the field.
+ */
+export function systemCompensationDb(
+	settings: { echoCancel: boolean; systemCompensation: boolean },
+	state: EchoCancelState | undefined,
+): number {
+	const report = state?.report;
+	if (!settings.echoCancel || !settings.systemCompensation || !state?.path || !report?.detected) {
+		return 0;
+	}
+	if (report.echoPathGainDb === undefined || report.systemTruePeakDbfs === undefined) return 0;
+	return clampSystemCompensationDb(report.echoPathGainDb, report.systemTruePeakDbfs);
+}
+
 /** What is known so far about a take's stems; undefined until the canceller has answered. */
 export function echoCancelState(
 	voicePath: string,

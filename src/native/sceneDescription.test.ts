@@ -1739,6 +1739,46 @@ describe("buildSceneDescription.audio", () => {
 			buildSceneDescription(makeDoc({ assets: [asset] })).audioStems[0].echoFreeVoicePath,
 		).toBeUndefined();
 	});
+
+	it("raises the computer lane by the measured echo path once the echo is removed", () => {
+		resetEchoCancelCache();
+		seedEchoCancelState("/take.voice.m4a", "/take.system.m4a", {
+			path: "/cache/take.echo-free.wav",
+			report: {
+				detected: true,
+				delayMs: 180,
+				delayEndMs: 207,
+				driftPpm: 20.7,
+				windows: 186,
+				consistentWindows: 171,
+				echoToVoiceDb: -6.6,
+				erleDb: 14.2,
+				linearErleDb: 6.6,
+				processedShare: 0.55,
+				adaptShare: 0.81,
+				durationSec: 1308.7,
+				echoPathGainDb: 20.2,
+				systemTruePeakDbfs: -26.1,
+				systemCompensationDb: 20.2,
+			},
+		});
+		const asset = {
+			...makeAsset({ id: "a", originalPath: "/take.mp4" }),
+			audioStems: { voicePath: "/take.voice.m4a", systemPath: "/take.system.m4a" },
+		};
+		const scene = buildSceneDescription(
+			makeDoc({ assets: [asset], legacyEditor: { systemGainDb: -3 } }),
+		);
+		expect(scene.audioStems[0].systemCompensationDb).toBeCloseTo(20.2, 9);
+		// The lane's own volume stays in `audio`, linear gains only; the export adds the two.
+		expect(scene.audio.systemGainDb).toBe(-3);
+		expect(
+			buildSceneDescription(
+				makeDoc({ assets: [asset], legacyEditor: { systemCompensation: false } }),
+			).audioStems[0].systemCompensationDb,
+		).toBeUndefined();
+		resetEchoCancelCache();
+	});
 });
 
 // --- settings mapping ------------------------------------------------------

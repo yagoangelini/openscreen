@@ -77,7 +77,11 @@ import {
 	setStemMuteFade,
 } from "@/lib/ai-edition/document/stemLanes";
 import type { InsertSide } from "@/lib/ai-edition/document/transcript";
-import { type EchoCancelState, useEchoCancel } from "@/lib/ai-edition/echoCancel";
+import {
+	clampSystemCompensationDb,
+	type EchoCancelState,
+	useEchoCancel,
+} from "@/lib/ai-edition/echoCancel";
 import {
 	type AxcutAsset,
 	type AxcutAudioTrack,
@@ -3816,6 +3820,40 @@ function EchoCancelRow() {
 }
 
 /**
+ * The computer lane's automatic compensation: shown once the echo removal has found and removed an
+ * echo, since only then is the guest left in the computer stem alone, at its raw (low) level.
+ */
+function SystemCompensationRow() {
+	const ts = useScopedT("settings");
+	const { settings, set, hasDocument } = useEditorSettings();
+	const take = useFirstStemTake();
+	const echo = useEchoCancel(take?.voicePath, take?.systemPath, settings.echoCancel);
+	const report = echo.state?.report;
+	if (!settings.echoCancel || !echo.state?.path || !report?.detected) return null;
+	if (report.echoPathGainDb === undefined || report.systemTruePeakDbfs === undefined) return null;
+	const db = clampSystemCompensationDb(report.echoPathGainDb, report.systemTruePeakDbfs);
+	if (db <= 0) return null;
+	return (
+		<>
+			<div className={styles.paneRow}>
+				<span className={styles.label}>{ts("audio.lanes.compensation")}</span>
+				<Toggle
+					checked={settings.systemCompensation}
+					ariaLabel={ts("audio.lanes.compensation")}
+					disabled={!hasDocument}
+					onChange={(systemCompensation) => void set({ systemCompensation })}
+				/>
+			</div>
+			<p className={styles.framingHint} data-testid="system-compensation-status">
+				{settings.systemCompensation
+					? ts("audio.lanes.compensationOn", { db: formatDecimal(db, 1, currentLocale()) })
+					: ts("audio.lanes.compensationOff")}
+			</p>
+		</>
+	);
+}
+
+/**
  * The selected stem lane ("Microfone" or "Áudio do sistema", `v4/StemLanes.tsx`): its volume and
  * mute, the voice's processing, and its silenced stretches. Shown by the inspector in place of
  * the facet while a lane is selected, like the audio track pane.
@@ -3900,7 +3938,9 @@ export function StemLanePane({ onClose }: { onClose: () => void }) {
 						/>
 					</div>
 				</>
-			) : null}
+			) : (
+				<SystemCompensationRow />
+			)}
 			<button
 				type="button"
 				className={styles.secondaryBtn}

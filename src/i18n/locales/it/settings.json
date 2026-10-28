@@ -479,7 +479,10 @@
 			"removeMute": "Rimuovi il tratto silenziato",
 			"fade": "Dissolvenza",
 			"muteLabel": "Tratto silenziato: trascina per spostarlo, trascina i bordi per regolarlo",
-			"noTakeHere": "Porta la testina su una registrazione con microfono e audio del computer separati."
+			"noTakeHere": "Porta la testina su una registrazione con microfono e audio del computer separati.",
+			"compensation": "Compensa il volume automaticamente",
+			"compensationOn": "Volume compensato automaticamente: +{{db}} dB (l'audio del computer al volume a cui lo captava il microfono).",
+			"compensationOff": "Disattivato: l'audio del computer come è stato registrato."
 		}
 	},
 	"language": {

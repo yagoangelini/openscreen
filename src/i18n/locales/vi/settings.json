@@ -479,7 +479,10 @@
 			"removeMute": "Xóa đoạn đã tắt tiếng",
 			"fade": "Chuyển dần",
 			"muteLabel": "Đoạn đã tắt tiếng: kéo để di chuyển, kéo các cạnh để điều chỉnh",
-			"noTakeHere": "Đặt đầu phát lên một bản ghi có micrô và âm thanh máy tính tách riêng."
+			"noTakeHere": "Đặt đầu phát lên một bản ghi có micrô và âm thanh máy tính tách riêng.",
+			"compensation": "Tự động bù âm lượng",
+			"compensationOn": "Đã tự động bù âm lượng: +{{db}} dB (âm thanh máy tính ở mức micrô đã thu được).",
+			"compensationOff": "Tắt: âm thanh máy tính như khi ghi."
 		}
 	},
 	"language": {

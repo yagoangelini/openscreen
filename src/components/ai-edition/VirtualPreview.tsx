@@ -26,7 +26,7 @@ import {
 	projectRawTimelineSecToPlayback,
 	resolvePlaybackSegments,
 } from "@/lib/ai-edition/document/timeline";
-import { useEchoCancel } from "@/lib/ai-edition/echoCancel";
+import { systemCompensationDb, systemLaneGainDb, useEchoCancel } from "@/lib/ai-edition/echoCancel";
 import type {
 	AxcutAudioTrack,
 	AxcutClip,
@@ -744,8 +744,15 @@ export function VirtualPreview({
 	const voiceGainDb =
 		(activeVoicePath ? (loudnessGainDbByPath.get(activeVoicePath) ?? 0) : 0) +
 		(activeStems ? settings.voiceGainDb : 0);
-	const systemGainDbRef = useRef(settings.systemGainDb);
-	systemGainDbRef.current = settings.systemGainDb;
+	// The computer lane's volume plus its compensation once the echo is gone: the same sum the
+	// export makes (`systemLaneGainDb` = Rust `system_lane_gain_db`).
+	const systemGainDb = systemLaneGainDb(
+		settings.systemGainDb,
+		activeStems ? systemCompensationDb(settings, echoCancel.state) : 0,
+		activeVoicePath ? (loudnessGainDbByPath.get(activeVoicePath) ?? 0) : 0,
+	);
+	const systemGainDbRef = useRef(systemGainDb);
+	systemGainDbRef.current = systemGainDb;
 	const systemGainNodeRef = useRef<GainNode | null>(null);
 	const hasStemsRef = useRef(Boolean(activeStems));
 	hasStemsRef.current = Boolean(activeStems);
@@ -925,8 +932,8 @@ export function VirtualPreview({
 
 	useEffect(() => {
 		const node = systemGainNodeRef.current;
-		if (node) node.gain.value = audioGainScalar(settings.systemGainDb);
-	}, [settings.systemGainDb]);
+		if (node) node.gain.value = audioGainScalar(systemGainDb);
+	}, [systemGainDb]);
 
 	// The stem lanes: a muted lane, and the silenced stretches of each, applied on top of the
 	// lanes' volumes. The envelope is a function of the take's SOURCE time, the clock the stem

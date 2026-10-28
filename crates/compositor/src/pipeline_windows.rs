@@ -2006,6 +2006,7 @@ unsafe fn run_multi_inner(
                         system_muted: s.system_muted,
                         voice_mutes: &s.voice_mutes,
                         system_mutes: &s.system_mutes,
+                        system_compensation_db: s.system_compensation_db,
                     }),
                     clip.source_start_sec,
                     source_end_sec,

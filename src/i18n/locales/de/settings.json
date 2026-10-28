@@ -479,7 +479,10 @@
 			"removeMute": "Stummen Abschnitt entfernen",
 			"fade": "Blende",
 			"muteLabel": "Stummer Abschnitt: ziehen zum Verschieben, Ränder ziehen zum Anpassen",
-			"noTakeHere": "Setze den Abspielkopf auf eine Aufnahme mit getrenntem Mikrofon und Computerton."
+			"noTakeHere": "Setze den Abspielkopf auf eine Aufnahme mit getrenntem Mikrofon und Computerton.",
+			"compensation": "Lautstärke automatisch ausgleichen",
+			"compensationOn": "Lautstärke automatisch ausgeglichen: +{{db}} dB (der Computerton so laut, wie das Mikrofon ihn aufgenommen hat).",
+			"compensationOff": "Aus: der Computerton wie aufgenommen."
 		}
 	},
 	"language": {

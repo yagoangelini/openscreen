@@ -95,6 +95,7 @@ import {
 	readCursorTelemetryFile as readCursorTelemetryFileFrom,
 } from "../media/cursorSidecar";
 import { findMediaLinksByFingerprint, registerMediaLinks } from "../media/mediaLinksRegistry";
+import { evictPreviewAudioCache, removeLegacyPreviewAudio } from "../media/previewAudioCache";
 import { relinkProjectMedia } from "../media/projectMediaRelinker";
 import { getScreenActivity } from "../media/screenActivity";
 import { showOpenDialogOver, showSaveDialogOver } from "../messageBox";
@@ -233,7 +234,8 @@ const ALLOWED_IMPORT_VIDEO_EXTENSIONS = new Set([
 // scripts/fork-e2e/stem-lanes-flow.mjs. Everything here is a cache, rebuilt when missing.
 const PREVIEW_AUDIO_DIR = path.join(app.getPath("temp"), "openscreen-preview-audio");
 /** Part of the echo-free voice's cache key: bump it when `echo_cancel.rs` changes its output. */
-const ECHO_CANCEL_VERSION = 1;
+// 2: the report carries the computer lane's compensation (echoPathGainDb, systemTruePeakDbfs).
+const ECHO_CANCEL_VERSION = 2;
 
 // See the save-recorded-voiceover handler: an upper bound on renderer-supplied
 // bytes written to disk, well past any plausible take.
@@ -2375,6 +2377,9 @@ export function registerIpcHandlers(
 	editorPrewarm?: { open: () => void; discard: (afterMs?: number) => void },
 ) {
 	const appSettings = new AppSettingsStore(app.getPath("userData"));
+	// The preview audio cache's old home inside userData (see PREVIEW_AUDIO_DIR): nothing reads it
+	// any more, and it can hold hundreds of MB. In the background; a failure only leaves it there.
+	void removeLegacyPreviewAudio(app.getPath("userData")).catch(() => undefined);
 	const broadcastSelectedSource = (source: SelectedSource | null) => {
 		for (const window of BrowserWindow.getAllWindows()) {
 			if (!window.isDestroyed()) {
@@ -5711,6 +5716,18 @@ export function registerIpcHandlers(
 	// sizes and mtimes; the canceller's report is cached beside it as JSON, also when it found no
 	// echo (then there is no WAV and the voice plays as recorded). One run per take at a time.
 	const echoCancelJobs = new Map<string, Promise<EchoCancelResult>>();
+	const enhancedVoiceJobs = new Map<string, Promise<string | null>>();
+	/** After a new file in the cache: the oldest go until it is under its cap, never the new one
+	 *  (`justWritten`) nor what a running job is writing. In the background. */
+	const trimPreviewAudioCache = (justWritten: (filePath: string) => boolean) => {
+		const running = (filePath: string) =>
+			[...echoCancelJobs.keys()].some((base) => filePath.startsWith(base)) ||
+			[...enhancedVoiceJobs.keys()].some((output) => filePath.startsWith(output));
+		void evictPreviewAudioCache(
+			PREVIEW_AUDIO_DIR,
+			(filePath) => justWritten(filePath) || running(filePath),
+		).catch(() => undefined);
+	};
 	ipcMain.handle(
 		"prepare-echo-cancelled-voice",
 		async (_, voicePath: string, systemPath: string): Promise<EchoCancelResult> => {
@@ -5756,6 +5773,7 @@ export function registerIpcHandlers(
 		const report = await loudnessService.cancelEchoFile(voice, system, wavPath);
 		if (!report) return { success: false, message: "addon" };
 		await fs.writeFile(reportPath, JSON.stringify(report));
+		trimPreviewAudioCache((filePath) => filePath.startsWith(base));
 		if (!report.detected) return { success: true, report };
 		approveFilePath(wavPath);
 		return { success: true, path: wavPath, report };
@@ -5765,7 +5783,6 @@ export function registerIpcHandlers(
 	// export will (`voice_enhance.rs`), cached in `preview-audio` by file, size, mtime and
 	// strength. The preview plays it in place of the voice; the export enhances on the fly and
 	// never reads this copy. One render per output at a time, shared by concurrent asks.
-	const enhancedVoiceJobs = new Map<string, Promise<string | null>>();
 	ipcMain.handle(
 		"prepare-enhanced-voice",
 		async (
@@ -5796,6 +5813,7 @@ export function registerIpcHandlers(
 								output,
 								level / 100,
 							);
+							if (ok) trimPreviewAudioCache((filePath) => filePath === output);
 							return ok ? output : null;
 						}
 					})();

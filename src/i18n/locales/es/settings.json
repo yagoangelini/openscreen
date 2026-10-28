@@ -479,7 +479,10 @@
 			"removeMute": "Quitar tramo silenciado",
 			"fade": "Fundido",
 			"muteLabel": "Tramo silenciado: arrastra para moverlo, arrastra los bordes para ajustarlo",
-			"noTakeHere": "Coloca el cursor sobre una grabación con el micrófono y el sonido del ordenador separados."
+			"noTakeHere": "Coloca el cursor sobre una grabación con el micrófono y el sonido del ordenador separados.",
+			"compensation": "Compensar el volumen automáticamente",
+			"compensationOn": "Volumen compensado automáticamente: +{{db}} dB (el sonido del ordenador suena al volumen al que lo captaba el micrófono).",
+			"compensationOff": "Desactivado: el sonido del ordenador tal como se grabó."
 		}
 	},
 	"language": {

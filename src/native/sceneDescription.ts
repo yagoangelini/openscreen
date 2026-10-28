@@ -49,7 +49,11 @@ import {
 	readSpeedRegions,
 	resolvePlaybackSegments,
 } from "@/lib/ai-edition/document/timeline";
-import { echoFreeVoicePath } from "@/lib/ai-edition/echoCancel";
+import {
+	echoCancelState,
+	echoFreeVoicePath,
+	systemCompensationDb,
+} from "@/lib/ai-edition/echoCancel";
 import { keystrokeTextRegions } from "@/lib/ai-edition/keystrokeRegions";
 import type { AxcutAudioTrack, AxcutClip, AxcutDocument } from "@/lib/ai-edition/schema";
 import { getEditorSettings } from "@/lib/ai-edition/store/editorSettings";
@@ -614,6 +618,10 @@ export interface SceneDescription {
 		systemMuted?: true;
 		voiceMutes?: SceneStemMute[];
 		systemMutes?: SceneStemMute[];
+		/** The computer lane raised by the echo path's gain once the echo is removed
+		 *  (`systemCompensationDb`, `echoCancel.ts`), on top of `audio.systemGainDb`. A linear
+		 *  gain the preview applies the same way. Omitted when 0. */
+		systemCompensationDb?: number;
 	}>;
 	/**
 	 * "Melhorar a voz" (`voice_enhance.rs`): each take's voice stem, or its own track without
@@ -1633,6 +1641,7 @@ export function buildSceneDescription(
 			if (!asset.audioStems || !asset.originalPath) return [];
 			const { voicePath, systemPath } = asset.audioStems;
 			const echoFree = settings.echoCancel ? echoFreeVoicePath(voicePath, systemPath) : undefined;
+			const compensation = systemCompensationDb(settings, echoCancelState(voicePath, systemPath));
 			const voiceMutes = sceneStemMutes(document, asset.id, "voice");
 			const systemMutes = sceneStemMutes(document, asset.id, "system");
 			return [
@@ -1645,6 +1654,7 @@ export function buildSceneDescription(
 					...(settings.systemMuted ? { systemMuted: true as const } : {}),
 					...(voiceMutes.length > 0 ? { voiceMutes } : {}),
 					...(systemMutes.length > 0 ? { systemMutes } : {}),
+					...(compensation > 0 ? { systemCompensationDb: compensation } : {}),
 				},
 			];
 		}),

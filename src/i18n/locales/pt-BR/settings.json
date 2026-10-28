@@ -479,7 +479,10 @@
 			"removeMute": "Remover trecho silenciado",
 			"fade": "Rampa",
 			"muteLabel": "Trecho silenciado: arraste para mover, arraste as bordas para ajustar",
-			"noTakeHere": "Coloque o cursor sobre uma gravação com microfone e som do computador separados."
+			"noTakeHere": "Coloque o cursor sobre uma gravação com microfone e som do computador separados.",
+			"compensation": "Compensar volume automaticamente",
+			"compensationOn": "Volume compensado automaticamente: +{{db}} dB (o som do computador fica no volume em que o microfone captava).",
+			"compensationOff": "Desligado: o som do computador como foi gravado."
 		}
 	},
 	"language": {

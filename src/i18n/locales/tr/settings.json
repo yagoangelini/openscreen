@@ -479,7 +479,10 @@
 			"removeMute": "Susturulan bölümü kaldır",
 			"fade": "Geçiş",
 			"muteLabel": "Susturulan bölüm: taşımak için sürükle, ayarlamak için kenarlarını sürükle",
-			"noTakeHere": "Oynatma imlecini mikrofonu ve bilgisayar sesi ayrı olan bir kaydın üzerine getir."
+			"noTakeHere": "Oynatma imlecini mikrofonu ve bilgisayar sesi ayrı olan bir kaydın üzerine getir.",
+			"compensation": "Ses düzeyini otomatik dengele",
+			"compensationOn": "Ses düzeyi otomatik dengelendi: +{{db}} dB (bilgisayar sesi, mikrofonun duyduğu düzeyde).",
+			"compensationOff": "Kapalı: bilgisayar sesi kaydedildiği gibi."
 		}
 	},
 	"language": {

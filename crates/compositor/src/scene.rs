@@ -809,6 +809,10 @@ pub struct SceneAudioStems {
     pub voice_mutes: Vec<SceneStemMute>,
     #[serde(default)]
     pub system_mutes: Vec<SceneStemMute>,
+    /// The computer lane's automatic compensation once the echo is removed (`echo_cancel.rs`,
+    /// `system_compensation_db`), in dB, added to the lane's own volume. 0 when off.
+    #[serde(default)]
+    pub system_compensation_db: f32,
 }
 
 /// One silenced stretch of a stem lane: silent over `[start_sec, end_sec]` of the take's source,
