@@ -1,7 +1,7 @@
 // The folder of audio the preview plays from files the app renders: the echo-free voice
 // ("Remover eco do alto-falante", ~250 MB per 20 min take), the enhanced voice ("Melhorar a
 // voz"), a take's second track. All of it is cache, rebuilt when missing, so it is kept under a
-// size cap, and the folder that held it before 2.7.2 (inside userData, where Chromium could not
+// size cap, and the folder that held it before 2.8.0 (inside userData, where Chromium could not
 // read it) is removed.
 //
 // No `electron` import: the folders are handed in, so the tests run on temp dirs.
