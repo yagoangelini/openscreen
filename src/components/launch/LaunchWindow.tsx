@@ -69,6 +69,7 @@ const AVAILABLE_LOCALES = getAvailableLocales();
 
 /** One toast for the muted-microphone warning, replaced and dismissed by id. */
 const MIC_SILENT_TOAST_ID = "hud-mic-silent";
+const HEADPHONES_HINT_TOAST_ID = "hud-headphones-hint";
 
 // Used only when the renderer can't see a real display (tests, headless).
 const FALLBACK_SCREEN_HEIGHT = 1080;
@@ -1058,12 +1059,46 @@ export function LaunchWindow() {
 		[],
 	);
 
+	// "Use fones": the microphone and the computer sound on together mean the speakers will be
+	// in the microphone. Said once per HUD session, when the second of the two is turned on, and
+	// never once switched off in the device settings. Whether the output really is a speaker is not
+	// known here; the reminder is cheap and the echo is removed in the editor anyway.
+	const headphonesHintShown = useRef(false);
+	const remindHeadphones = useCallback(() => {
+		if (headphonesHintShown.current) return;
+		headphonesHintShown.current = true;
+		void window.electronAPI
+			?.getRecordingPrefs?.()
+			.then((prefs) => {
+				if (
+					(prefs as { headphonesHintEnabled?: boolean } | undefined)?.headphonesHintEnabled ===
+					false
+				) {
+					return;
+				}
+				toast(t("headphonesHint.title"), {
+					id: HEADPHONES_HINT_TOAST_ID,
+					description: t("headphonesHint.body"),
+					duration: 6000,
+				});
+			})
+			.catch(() => undefined);
+	}, [t]);
+
 	const toggleSystemAudio = useCallback(() => {
 		if (controlsLocked) return;
 		const next = !systemAudioEnabled;
 		setSystemAudioEnabled(next);
 		persistRecordingPrefs({ systemAudioEnabled: next });
-	}, [controlsLocked, persistRecordingPrefs, setSystemAudioEnabled, systemAudioEnabled]);
+		if (next && microphoneEnabled) remindHeadphones();
+	}, [
+		controlsLocked,
+		persistRecordingPrefs,
+		setSystemAudioEnabled,
+		systemAudioEnabled,
+		microphoneEnabled,
+		remindHeadphones,
+	]);
 
 	const toggleCursorMode = useCallback(() => {
 		if (controlsLocked) return;
@@ -1097,8 +1132,17 @@ export function LaunchWindow() {
 			if (!ok || !wanted) return;
 			setMicrophoneEnabled(true);
 			persistRecordingPrefs({ micEnabled: true });
+			if (systemAudioEnabled) remindHeadphones();
 		});
-	}, [controlsLocked, microphoneEnabled, persistRecordingPrefs, setMicrophoneEnabled, tEditor]);
+	}, [
+		controlsLocked,
+		microphoneEnabled,
+		persistRecordingPrefs,
+		setMicrophoneEnabled,
+		tEditor,
+		remindHeadphones,
+		systemAudioEnabled,
+	]);
 
 	const toggleWebcam = useCallback(() => {
 		if (controlsLocked) return;
@@ -1295,6 +1339,7 @@ export function LaunchWindow() {
 			micChannelMix: t("deviceSettings.micChannelMix"),
 			broadcastTip: t("deviceSettings.broadcastTip"),
 			micSilenceWarning: t("deviceSettings.micSilenceWarning"),
+			headphonesHint: t("deviceSettings.headphonesHint"),
 			cameraQuality: t("webcam.quality"),
 			cameraQualityOptions: {
 				"1080p": t("webcam.quality1080p"),

@@ -148,7 +148,8 @@
 		"micChannelRight": "Прав.",
 		"micChannelMix": "Микс",
 		"broadcastTip": "Совет: выберите микрофон «NVIDIA Broadcast», чтобы убрать фоновый шум.",
-		"micSilenceWarning": "Warn if the microphone seems muted"
+		"micSilenceWarning": "Warn if the microphone seems muted",
+		"headphonesHint": "Напоминать о наушниках"
 	},
 	"permissions": {
 		"title": "OpenScreen нужны некоторые разрешения",
@@ -204,5 +205,9 @@
 			"screenRequired": "Для записи нужна запись экрана.",
 			"ready": "Всё готово."
 		}
+	},
+	"headphonesHint": {
+		"title": "Используйте наушники",
+		"body": "Когда включены и микрофон, и звук компьютера, звук из динамиков попадает в микрофон. Наушники этого не допустят (редактор также может убрать это эхо позже)."
 	}
 }

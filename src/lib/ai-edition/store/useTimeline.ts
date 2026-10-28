@@ -1474,6 +1474,7 @@ export function useTimeline() {
 		setMultiSelection([]);
 		setClipSelection(null);
 		setSelectedAudioTrackId(null);
+		useProjectStore.getState().setSelectedStem(null);
 	}, [setSelectedAudioTrackId]);
 
 	// The Edit Clip dialog's Apply, as ONE document and ONE save.

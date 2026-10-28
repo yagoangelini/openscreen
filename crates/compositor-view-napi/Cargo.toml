@@ -13,6 +13,7 @@ napi = { version = "2", default-features = false, features = ["napi6"] }
 napi-derive = "2"
 openscreen-compositor.workspace = true
 anyhow.workspace = true
+serde_json.workspace = true
 
 # Le crate n'utilise pas directement l'API Windows — c'est transitif via le
 # moteur de composition (qui expose la même surface publique cross-platform via

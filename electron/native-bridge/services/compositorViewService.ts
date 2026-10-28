@@ -3,6 +3,7 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { app, sharedTexture, type WebFrameMain } from "electron";
+import type { EchoCancelReport } from "../../../src/lib/ai-edition/echoCancelReport";
 import {
 	type CursorKind,
 	readCursorAsArrow,
@@ -994,6 +995,22 @@ export class CompositorViewService {
 			return null;
 		}
 		return addon.loudnessGainDb(filePath);
+	}
+
+	/** "Remover eco do alto-falante": writes `voice` without the speaker echo of `system` to
+	 *  `output` (a WAV both the preview and the export read in place of the voice stem). Resolves
+	 *  to the canceller's report (`detected: false`: nothing written), or null when the addon
+	 *  predates it. */
+	async cancelEchoFile(
+		voice: string,
+		system: string,
+		output: string,
+	): Promise<EchoCancelReport | null> {
+		const addon = this.ensureAddon();
+		if (!addon?.cancelEchoFile) {
+			return null;
+		}
+		return JSON.parse(await addon.cancelEchoFile(voice, system, output));
 	}
 
 	/** "Melhorar a voz": writes `input` enhanced as the export enhances it, to `output` (a WAV

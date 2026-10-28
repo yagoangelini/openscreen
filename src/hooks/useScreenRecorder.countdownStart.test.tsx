@@ -39,6 +39,7 @@ const prefs: RecordingPrefs = {
 	micChannelMode: "auto",
 	cameraLayout: "screen",
 	micSilenceWarningEnabled: true,
+	headphonesHintEnabled: true,
 };
 
 function stub(startResult: () => Promise<unknown>) {

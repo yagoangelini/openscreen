@@ -25,6 +25,7 @@ const BEHAVIOUR_KEYS = [
 	"webcamAnchor",
 	"voiceEnhance",
 	"voiceEnhanceStrength",
+	"echoCancel",
 	"cursorShowKeystrokes",
 	"cursorClickRing",
 	"cursorSpotlight",

@@ -793,6 +793,37 @@ pub struct SceneAudioStems {
     pub screen_path: String,
     pub voice_path: String,
     pub system_path: String,
+    /// "Remover eco do alto-falante": the voice stem with the speaker echo removed
+    /// (`echo_cancel.rs`), read in place of `voice_path`. The loudness gain stays the one
+    /// measured on `voice_path`, so the toggle never moves the voice's level. Absent: the stem
+    /// as recorded (off, no echo found, or a scene from before the canceller).
+    #[serde(default)]
+    pub echo_free_voice_path: Option<String>,
+    /// The stem lanes' own mutes. `#[serde(default)]`: absent from every older scene.
+    #[serde(default)]
+    pub voice_muted: bool,
+    #[serde(default)]
+    pub system_muted: bool,
+    /// Silenced stretches of each stem, in the take's source seconds (`stem_mute_gain`).
+    #[serde(default)]
+    pub voice_mutes: Vec<SceneStemMute>,
+    #[serde(default)]
+    pub system_mutes: Vec<SceneStemMute>,
+    /// The computer lane's automatic compensation once the echo is removed (`echo_cancel.rs`,
+    /// `system_compensation_db`), in dB, added to the lane's own volume. 0 when off.
+    #[serde(default)]
+    pub system_compensation_db: f32,
+}
+
+/// One silenced stretch of a stem lane: silent over `[start_sec, end_sec]` of the take's source,
+/// ramped over `fade_sec` on each side, outside the stretch.
+#[derive(Debug, Clone, Copy, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SceneStemMute {
+    pub start_sec: f64,
+    pub end_sec: f64,
+    #[serde(default)]
+    pub fade_sec: f64,
 }
 
 /// One imported audio track (issue #350) mixed over the assembled programme —

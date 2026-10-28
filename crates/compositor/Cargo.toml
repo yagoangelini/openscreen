@@ -41,6 +41,9 @@ image.workspace = true
 # model weights included, no C, nothing fetched at run time). `default-features = false` drops
 # its command-line tool and the `dasp` resampler: the export is already 48 kHz, RNNoise's rate.
 nnnoiseless = { version = "0.5", default-features = false }
+# "Remover eco do alto-falante" (`echo_cancel.rs`): the real FFTs of the subband echo canceller.
+# MIT/Apache-2.0, pure Rust, already in the tree through `nnnoiseless` (`easyfft`).
+realfft = "3.5"
 
 # Acces Vulkan brut, UNIQUEMENT pour ouvrir le device avec les extensions de
 # memoire externe (cf. `d3d_linux::open_device_with_dmabuf_export`). Les versions

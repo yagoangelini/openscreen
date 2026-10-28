@@ -38,6 +38,8 @@ export interface HudDeviceSettingsLabels {
 	broadcastTip: string;
 	/** "Seu microfone parece mudo" during a take, on or off. */
 	micSilenceWarning: string;
+	/** The "use headphones" reminder's switch. Optional: absent, the switch is not shown. */
+	headphonesHint?: string;
 }
 
 type MicChannelMode = "auto" | "left" | "right" | "mix";
@@ -91,34 +93,41 @@ function MicChannelPicker({ labels }: { labels: HudDeviceSettingsLabels }) {
 	);
 }
 
-/** The muted-microphone warning's switch, read and saved straight through the recording prefs. */
-function MicSilenceWarningToggle({ label }: { label: string }) {
+/** A HUD notice's switch (on by default), read and saved straight through the recording prefs. */
+function PrefToggle({
+	label,
+	pref,
+	testId,
+}: {
+	label: string;
+	pref: "micSilenceWarningEnabled" | "headphonesHintEnabled";
+	testId: string;
+}) {
 	const [enabled, setEnabled] = useState(true);
 	useEffect(() => {
 		let cancelled = false;
 		void window.electronAPI
 			?.getRecordingPrefs?.()
 			.then((prefs) => {
-				const value = (prefs as { micSilenceWarningEnabled?: boolean } | undefined)
-					?.micSilenceWarningEnabled;
+				const value = prefs?.[pref];
 				if (!cancelled && typeof value === "boolean") setEnabled(value);
 			})
 			.catch(() => undefined);
 		return () => {
 			cancelled = true;
 		};
-	}, []);
+	}, [pref]);
 	return (
 		<button
 			type="button"
 			role="switch"
 			aria-checked={enabled}
-			data-testid="hud-mic-silence-warning"
+			data-testid={testId}
 			className={`${styles.languageMenuItem} ${enabled ? styles.languageMenuItemActive : ""}`}
 			onClick={() => {
 				const next = !enabled;
 				setEnabled(next);
-				void window.electronAPI?.setRecordingPrefs?.({ micSilenceWarningEnabled: next });
+				void window.electronAPI?.setRecordingPrefs?.({ [pref]: next });
 			}}
 		>
 			<span className="truncate">{label}</span>
@@ -291,7 +300,18 @@ export const HudDeviceSettings = memo(function HudDeviceSettings({
 						<LevelMeter level={level} />
 					</div>
 					<MicChannelPicker labels={labels} />
-					<MicSilenceWarningToggle label={labels.micSilenceWarning} />
+					<PrefToggle
+						label={labels.micSilenceWarning}
+						pref="micSilenceWarningEnabled"
+						testId="hud-mic-silence-warning"
+					/>
+					{labels.headphonesHint ? (
+						<PrefToggle
+							label={labels.headphonesHint}
+							pref="headphonesHintEnabled"
+							testId="hud-headphones-hint"
+						/>
+					) : null}
 					<div className={styles.hudModalHint}>{labels.micHint}</div>
 					{micDevices.some(
 						(device) => /nvidia broadcast/i.test(device.label) && device.deviceId !== activeMicId,

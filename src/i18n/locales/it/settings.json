@@ -462,7 +462,28 @@
 		"voiceEnhance": "Enhance voice",
 		"voiceEnhanceTip": "Removes background noise from the voice and adds a little clarity, on this computer. Applied to the voice track only; the computer sound is left as recorded.",
 		"voiceEnhanceTipNoStems": "Removes background noise from the recording's audio and adds a little clarity, on this computer. Without a separate voice track, sounds that are not speech are reduced too.",
-		"voiceEnhanceStrength": "Strength"
+		"voiceEnhanceStrength": "Strength",
+		"echoCancel": "Rimuovi l'eco degli altoparlanti",
+		"echoCancelTip": "Quando il suono del computer usciva dagli altoparlanti e il microfono lo ha captato, toglie quell'eco dalla tua voce usando come riferimento il suono del computer registrato. Le registrazioni senza eco restano come sono.",
+		"echoStatusWorking": "Ricerca dell'eco degli altoparlanti…",
+		"echoStatusFound": "Eco degli altoparlanti trovato ({{delay}} ms di ritardo) e rimosso: circa {{reduction}} dB più basso.",
+		"echoStatusNone": "Nessuna eco degli altoparlanti in questa registrazione.",
+		"lanes": {
+			"voice": "Microfono",
+			"system": "Audio del computer",
+			"mute": "Silenzia traccia",
+			"unmute": "Riattiva traccia",
+			"volume": "Volume",
+			"help": "Il microfono e l'audio del computer di questa registrazione, modificati separatamente. Tagliare il video taglia entrambi; una traccia si può solo silenziare tutta o a tratti, mai spostare rispetto all'immagine.",
+			"addMute": "Silenzia {{seconds}} s alla testina",
+			"removeMute": "Rimuovi il tratto silenziato",
+			"fade": "Dissolvenza",
+			"muteLabel": "Tratto silenziato: trascina per spostarlo, trascina i bordi per regolarlo",
+			"noTakeHere": "Porta la testina su una registrazione con microfono e audio del computer separati.",
+			"compensation": "Compensa il volume automaticamente",
+			"compensationOn": "Volume compensato automaticamente: +{{db}} dB (l'audio del computer al volume a cui lo captava il microfono).",
+			"compensationOff": "Disattivato: l'audio del computer come è stato registrato."
+		}
 	},
 	"language": {
 		"title": "Lingua"

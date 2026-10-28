@@ -35,6 +35,7 @@ function prefs(micEnabled: boolean): RecordingPrefs {
 		micChannelMode: "auto",
 		cameraLayout: "screen",
 		micSilenceWarningEnabled: true,
+		headphonesHintEnabled: true,
 	};
 }
 

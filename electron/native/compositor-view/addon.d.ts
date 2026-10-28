@@ -294,6 +294,9 @@ export interface CompositorViewAddon {
 	/** "Melhorar a voz" for the preview: `input` enhanced as the export does, to a 16-bit WAV.
 	 *  Resolves to the samples per channel written. */
 	enhanceVoiceFile?(input: string, output: string, strength: number): Promise<number>;
+	/** "Remover eco do alto-falante": `voice` without the speaker echo of `system`, to a 16-bit
+	 *  WAV aligned with it. Resolves to the report as JSON; nothing is written when no echo is found. */
+	cancelEchoFile?(voice: string, system: string, output: string): Promise<string>;
 }
 
 /**

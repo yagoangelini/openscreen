@@ -501,6 +501,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	getLoudnessGain: (filePath: string) => {
 		return ipcRenderer.invoke("get-loudness-gain", filePath);
 	},
+	/** "Remover eco do alto-falante": the voice stem without the speaker echo. See the handler. */
+	prepareEchoCancelledVoice: (voicePath: string, systemPath: string) => {
+		return ipcRenderer.invoke("prepare-echo-cancelled-voice", voicePath, systemPath);
+	},
 	/** "Melhorar a voz": the voice file enhanced for the preview. See the handler. */
 	prepareEnhancedVoice: (filePath: string, strength: number) => {
 		return ipcRenderer.invoke("prepare-enhanced-voice", filePath, strength);

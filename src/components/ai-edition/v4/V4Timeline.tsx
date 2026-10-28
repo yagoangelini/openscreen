@@ -106,6 +106,7 @@ import { nativeBridgeClient } from "@/native/client";
 import { TransportBar } from "../TransportBar";
 import type { VideoSource } from "../VirtualPreview";
 import styles from "./EditorShellV4.module.css";
+import { StemLanes } from "./StemLanes";
 import { useTrackResetMenu } from "./TrackResetMenu";
 
 // The AI option's prompt — sent straight to the chat agent via the prompt-bus.
@@ -3112,6 +3113,11 @@ export function V4Timeline({
 								</div>
 							) : null}
 						</div>
+						{/* The take's microphone and computer sound as two lanes under the clips, each
+						    editable on its own (only for takes recorded with both). */}
+						{showLanes ? (
+							<StemLanes pctOf={pctOf} pxPerSec={pxPerSec} visibleStartPct={nav.start * 100} />
+						) : null}
 					</div>
 				</div>
 

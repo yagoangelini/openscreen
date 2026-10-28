@@ -148,7 +148,8 @@
 		"micChannelRight": "右",
 		"micChannelMix": "混合",
 		"broadcastTip": "提示：选择 “NVIDIA Broadcast” 麦克风可去除背景噪音。",
-		"micSilenceWarning": "Warn if the microphone seems muted"
+		"micSilenceWarning": "Warn if the microphone seems muted",
+		"headphonesHint": "提醒我使用耳机"
 	},
 	"permissions": {
 		"title": "OpenScreen 需要一些权限",
@@ -204,5 +205,9 @@
 			"screenRequired": "录制需要屏幕录制权限。",
 			"ready": "一切就绪。"
 		}
+	},
+	"headphonesHint": {
+		"title": "请使用耳机",
+		"body": "同时开启麦克风和电脑声音时，扬声器的声音会进入麦克风。使用耳机可以避免（之后也可以在编辑器中去除回声）。"
 	}
 }

@@ -462,7 +462,28 @@
 		"voiceEnhance": "Enhance voice",
 		"voiceEnhanceTip": "Removes background noise from the voice and adds a little clarity, on this computer. Applied to the voice track only; the computer sound is left as recorded.",
 		"voiceEnhanceTipNoStems": "Removes background noise from the recording's audio and adds a little clarity, on this computer. Without a separate voice track, sounds that are not speech are reduced too.",
-		"voiceEnhanceStrength": "Strength"
+		"voiceEnhanceStrength": "Strength",
+		"echoCancel": "Убрать эхо динамиков",
+		"echoCancelTip": "Если звук компьютера шёл через динамики и микрофон его записал, это эхо убирается из вашего голоса; эталоном служит записанный звук компьютера. Записи без эха остаются как есть.",
+		"echoStatusWorking": "Поиск эха динамиков…",
+		"echoStatusFound": "Эхо динамиков найдено (задержка {{delay}} мс) и убрано: примерно на {{reduction}} дБ тише.",
+		"echoStatusNone": "В этой записи нет эха динамиков.",
+		"lanes": {
+			"voice": "Микрофон",
+			"system": "Звук компьютера",
+			"mute": "Выключить дорожку",
+			"unmute": "Включить дорожку",
+			"volume": "Громкость",
+			"help": "Микрофон и звук компьютера этой записи, редактируются по отдельности. Разрез видео режет обе дорожки; дорожку можно только заглушить целиком или фрагментами, но не сдвинуть относительно изображения.",
+			"addMute": "Заглушить {{seconds}} с у курсора",
+			"removeMute": "Удалить заглушённый фрагмент",
+			"fade": "Затухание",
+			"muteLabel": "Заглушённый фрагмент: перетащите, чтобы сдвинуть, края — чтобы изменить",
+			"noTakeHere": "Поставьте курсор на запись с раздельными микрофоном и звуком компьютера.",
+			"compensation": "Выравнивать громкость автоматически",
+			"compensationOn": "Громкость выровнена автоматически: +{{db}} дБ (звук компьютера на том уровне, на котором его слышал микрофон).",
+			"compensationOff": "Выключено: звук компьютера как записан."
+		}
 	},
 	"language": {
 		"title": "Язык"

@@ -462,7 +462,28 @@
 		"voiceEnhance": "Enhance voice",
 		"voiceEnhanceTip": "Removes background noise from the voice and adds a little clarity, on this computer. Applied to the voice track only; the computer sound is left as recorded.",
 		"voiceEnhanceTipNoStems": "Removes background noise from the recording's audio and adds a little clarity, on this computer. Without a separate voice track, sounds that are not speech are reduced too.",
-		"voiceEnhanceStrength": "Strength"
+		"voiceEnhanceStrength": "Strength",
+		"echoCancel": "移除喇叭回音",
+		"echoCancelTip": "電腦聲音從喇叭播放並被麥克風收錄時，以錄下的電腦聲音為參考，把這段回音從你的聲音中移除。沒有回音的錄音保持原樣。",
+		"echoStatusWorking": "正在尋找喇叭回音…",
+		"echoStatusFound": "已找到喇叭回音（延遲 {{delay}} 毫秒）並移除：約降低 {{reduction}} dB。",
+		"echoStatusNone": "這段錄音中沒有喇叭回音。",
+		"lanes": {
+			"voice": "麥克風",
+			"system": "電腦聲音",
+			"mute": "靜音軌道",
+			"unmute": "取消靜音",
+			"volume": "音量",
+			"help": "這段錄音的麥克風和電腦聲音，分別編輯。剪輯影片會同時剪輯兩者；軌道只能整體或分段靜音，不能相對畫面移動。",
+			"addMute": "在播放頭處靜音 {{seconds}} 秒",
+			"removeMute": "刪除靜音片段",
+			"fade": "淡入淡出",
+			"muteLabel": "靜音片段：拖曳以移動，拖曳邊緣以調整",
+			"noTakeHere": "請把播放頭放在麥克風和電腦聲音分開錄製的錄音上。",
+			"compensation": "自動補償音量",
+			"compensationOn": "已自動補償音量：+{{db}} dB（電腦聲音維持在麥克風收錄時的音量）。",
+			"compensationOff": "已關閉：電腦聲音維持錄製原樣。"
+		}
 	},
 	"language": {
 		"title": "語言"

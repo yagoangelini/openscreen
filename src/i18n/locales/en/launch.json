@@ -148,7 +148,8 @@
 		"micChannelRight": "Right",
 		"micChannelMix": "Mix",
 		"broadcastTip": "Tip: pick the \"NVIDIA Broadcast\" microphone to have background noise removed.",
-		"micSilenceWarning": "Warn if the microphone seems muted"
+		"micSilenceWarning": "Warn if the microphone seems muted",
+		"headphonesHint": "Remind me to use headphones"
 	},
 	"permissions": {
 		"title": "OpenScreen needs a few permissions",
@@ -204,5 +205,9 @@
 			"screenRequired": "Screen recording is needed to record.",
 			"ready": "You're all set."
 		}
+	},
+	"headphonesHint": {
+		"title": "Use headphones",
+		"body": "With the microphone and the computer sound both on, the speakers' sound reaches the microphone. Headphones keep it out (the editor can also remove that echo later)."
 	}
 }

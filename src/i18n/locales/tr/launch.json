@@ -148,7 +148,8 @@
 		"micChannelRight": "Sağ",
 		"micChannelMix": "Karışık",
 		"broadcastTip": "İpucu: arka plan gürültüsünü kaldırmak için \"NVIDIA Broadcast\" mikrofonunu seçin.",
-		"micSilenceWarning": "Warn if the microphone seems muted"
+		"micSilenceWarning": "Warn if the microphone seems muted",
+		"headphonesHint": "Kulaklık kullanmayı hatırlat"
 	},
 	"permissions": {
 		"title": "OpenScreen'in birkaç izne ihtiyacı var",
@@ -204,5 +205,9 @@
 			"screenRequired": "Kayıt için ekran kaydı gereklidir.",
 			"ready": "Her şey hazır."
 		}
+	},
+	"headphonesHint": {
+		"title": "Kulaklık kullan",
+		"body": "Mikrofon ve bilgisayar sesi birlikte açıkken hoparlörlerden çıkan ses mikrofona girer. Kulaklık bunu önler (düzenleyici bu yankıyı sonradan da kaldırabilir)."
 	}
 }

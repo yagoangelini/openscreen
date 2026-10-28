@@ -11,6 +11,7 @@ import {
 	computeAudioRowCount,
 } from "@/lib/ai-edition/document/audioTracks";
 import { createId } from "@/lib/ai-edition/document/ids";
+import { removeStemMute } from "@/lib/ai-edition/document/stemLanes";
 import {
 	documentAfterProbedDuration,
 	PLACEHOLDER_DURATION_SEC,
@@ -90,6 +91,7 @@ import { type EditorMode, EditorTopBar } from "./v4/EditorTopBar";
 import { type Facet, FloatingInspector } from "./v4/FloatingInspector";
 import { MediaStage } from "./v4/MediaStage";
 import { RecStage } from "./v4/RecStage";
+import { writeStemEdit } from "./v4/StemLanes";
 import { V4Timeline } from "./v4/V4Timeline";
 
 interface SeekTarget {
@@ -553,6 +555,7 @@ export function NewEditorShell() {
 				? {
 						stems: {
 							voicePath: asset.audioStems.voicePath,
+							systemPath: asset.audioStems.systemPath,
 							voiceSrc: toFileUrl(asset.audioStems.voicePath),
 							systemSrc: toFileUrl(asset.audioStems.systemPath),
 						},
@@ -1481,6 +1484,15 @@ export function NewEditorShell() {
 				// exactly like every other.
 				if (tl.selectedAudioTrackId) {
 					void tl.removeAudioTrack(tl.selectedAudioTrackId);
+					return;
+				}
+				// A silenced stretch of a stem lane, the same way.
+				const stem = useProjectStore.getState().selectedStem;
+				const doc = useProjectStore.getState().document;
+				if (stem?.muteId && doc) {
+					void writeStemEdit(removeStemMute(doc, stem.muteId)).then((ok) => {
+						if (ok) useProjectStore.getState().setSelectedStem({ lane: stem.lane, muteId: null });
+					});
 				}
 			};
 

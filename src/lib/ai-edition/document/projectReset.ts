@@ -163,8 +163,10 @@ export function resetAnnotationTrack(document: AxcutDocument): AxcutDocument {
  */
 export function resetProjectToImport(document: AxcutDocument): AxcutDocument {
 	const restored = resetAnnotationTrack(resetCameraTrack(resetVideoTrack(document)));
+	// The stem lanes' silenced stretches go with the other silenced stretches.
+	const { audioStemMutes: _stemMutes, ...withoutStemMutes } = restored;
 	return dropUnusedGeneratedMedia({
-		...restored,
+		...withoutStemMutes,
 		zoomRanges: [],
 		audioTracks: [],
 		timeline: { ...restored.timeline, muteRanges: [] },

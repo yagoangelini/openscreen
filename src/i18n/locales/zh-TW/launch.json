@@ -148,7 +148,8 @@
 		"micChannelRight": "右",
 		"micChannelMix": "混合",
 		"broadcastTip": "提示：選擇「NVIDIA Broadcast」麥克風可去除背景噪音。",
-		"micSilenceWarning": "Warn if the microphone seems muted"
+		"micSilenceWarning": "Warn if the microphone seems muted",
+		"headphonesHint": "提醒我使用耳機"
 	},
 	"permissions": {
 		"title": "OpenScreen 需要一些權限",
@@ -204,5 +205,9 @@
 			"screenRequired": "錄製需要螢幕錄製權限。",
 			"ready": "一切就緒。"
 		}
+	},
+	"headphonesHint": {
+		"title": "請使用耳機",
+		"body": "同時開啟麥克風和電腦聲音時，喇叭的聲音會進入麥克風。使用耳機可以避免（之後也可以在編輯器中移除回音）。"
 	}
 }
